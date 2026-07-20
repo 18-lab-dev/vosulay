@@ -32,6 +32,7 @@
     saveTimer: 0,
     saveRevision: 0,
     latestSaveId: "",
+    pendingSaveId: "",
     renderPending: false,
     pointer: null,
     resizeFrame: 0,
@@ -207,18 +208,26 @@
     });
   }
 
+  function flushPendingSave() {
+    if (!state.pendingSaveId) return;
+    const saveId = state.pendingSaveId;
+    state.pendingSaveId = "";
+    if (state.saveTimer) {
+      clearTimeout(state.saveTimer);
+      state.saveTimer = 0;
+    }
+    ipc({ type: "save-config", save_id: saveId, config: state.config });
+  }
+
   function scheduleSave(immediate = false) {
     if (!state.config) return;
     const saveId = String(++state.saveRevision);
     state.latestSaveId = saveId;
+    state.pendingSaveId = saveId;
     clearTimeout(state.saveTimer);
     status.textContent = "Saving…";
-    const save = () => {
-      state.saveTimer = 0;
-      ipc({ type: "save-config", save_id: saveId, config: state.config });
-    };
-    if (immediate) save();
-    else state.saveTimer = window.setTimeout(save, 240);
+    if (immediate) flushPendingSave();
+    else state.saveTimer = window.setTimeout(flushPendingSave, 240);
   }
 
   function setError(message) {
@@ -533,13 +542,31 @@
     requestRender("stageStructure", "stageGeometry", "catalog", "inspector");
   }
 
+  function flushEditingChanges() {
+    const operation = state.pointer;
+    if (operation) {
+      if (operation.frame) {
+        cancelAnimationFrame(operation.frame);
+        operation.frame = 0;
+        flushPointer(operation);
+      }
+      state.pointer = null;
+      if (operation.root.hasPointerCapture(operation.id)) operation.root.releasePointerCapture(operation.id);
+    }
+    flushPendingSave();
+  }
+
   function setEditing(editing, notify = true) {
     const next = Boolean(editing);
-    if (state.editing === next) return;
-    state.editing = next;
-    if (!state.editing) state.selected = null;
-    if (notify) ipc({ type: "set-editing", editing: state.editing });
-    requestRender("chrome", "stageGeometry", "inspector");
+    const changed = state.editing !== next;
+    if (!next) flushEditingChanges();
+    if (changed) {
+      state.editing = next;
+      if (!next) state.selected = null;
+      requestRender("chrome", "stageGeometry", "inspector");
+    }
+    if (notify && changed) ipc({ type: "set-editing", editing: next });
+    else if (!notify && !next) ipc({ type: "editing-applied", editing: false });
   }
 
   function startPointer(event, root, edge) {

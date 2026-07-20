@@ -727,9 +727,13 @@ private:
   void updatePageLifecycle() {
     using LifecycleState = QWebEnginePage::LifecycleState;
     LifecycleState desired = LifecycleState::Active;
-    if (!editing_ && !activeProfileHasOverlays_) {
+    const bool canDiscard =
+        editingOffApplied_ && saveWorker_ == nullptr &&
+        !pendingSave_.has_value() && !persistenceError_;
+    if (!editing_ && !activeProfileHasOverlays_ && canDiscard) {
       desired = LifecycleState::Discarded;
-    } else if (!editing_ && !isVisible()) {
+    } else if (!editing_ && !persistenceError_ && editingOffApplied_ &&
+               !isVisible()) {
       desired = LifecycleState::Frozen;
     }
 
@@ -751,7 +755,11 @@ private:
 
   void setEditing(bool editing) {
     editing_ = editing;
-    updatePageLifecycle();
+    if (editing) {
+      updatePageLifecycle();
+    } else {
+      editingOffApplied_ = false;
+    }
     QWindow *window = windowHandleOrCreate();
     if (QApplication::platformName() == QStringLiteral("xcb")) {
       window->setFlag(Qt::WindowTransparentForInput, !editing);
@@ -773,6 +781,11 @@ private:
     sendEnvelope(QJsonObject{{QStringLiteral("type"),
                               QStringLiteral("editing")},
                              {QStringLiteral("editing"), editing}});
+    if (editing &&
+        initializationAwaitingEditingAppliedDocumentId_.has_value()) {
+      initializationAwaitingEditingAppliedDocumentId_.reset();
+      fetchCounters();
+    }
   }
 
   void setOverlayGeometry(const QRect &geometry) {
@@ -920,6 +933,22 @@ private:
                         saveIdValue.toString());
     } else if (type == QStringLiteral("refresh-counters")) {
       fetchCounters();
+    } else if (type == QStringLiteral("editing-applied")) {
+      if (!request.value(QStringLiteral("editing")).toBool(true) &&
+          !editing_) {
+        editingOffApplied_ = true;
+        updatePageLifecycle();
+        if (initializationAwaitingEditingAppliedDocumentId_.has_value() &&
+            managerDocumentId_.has_value() &&
+            *initializationAwaitingEditingAppliedDocumentId_ ==
+                *managerDocumentId_) {
+          initializationAwaitingEditingAppliedDocumentId_.reset();
+          if (page_->lifecycleState() !=
+              QWebEnginePage::LifecycleState::Discarded) {
+            fetchCounters();
+          }
+        }
+      }
     } else if (type == QStringLiteral("set-editing")) {
       setEditing(request.value(QStringLiteral("editing")).toBool());
     } else if (type == QStringLiteral("choose-overlay-file")) {
@@ -980,20 +1009,35 @@ private:
       return true;
     }
     const QJsonObject object = config.toObject();
-    const QString activeProfile =
-        object.value(QStringLiteral("active_profile")).toString();
-    const QJsonArray profiles =
-        object.value(QStringLiteral("profiles")).toArray();
-    for (const QJsonValue &profile : profiles) {
+    const QJsonValue activeProfileValue =
+        object.value(QStringLiteral("active_profile"));
+    const QJsonValue profilesValue = object.value(QStringLiteral("profiles"));
+    if (!activeProfileValue.isString() ||
+        activeProfileValue.toString().isEmpty() || !profilesValue.isArray()) {
+      return true;
+    }
+
+    const QString activeProfile = activeProfileValue.toString();
+    std::optional<bool> activeProfileHasOverlays;
+    for (const QJsonValue &profile : profilesValue.toArray()) {
+      if (!profile.isObject()) {
+        return true;
+      }
       const QJsonObject profileObject = profile.toObject();
-      if (profileObject.value(QStringLiteral("id")).toString() ==
-          activeProfile) {
-        return !profileObject.value(QStringLiteral("overlays"))
-                    .toArray()
-                    .isEmpty();
+      const QJsonValue id = profileObject.value(QStringLiteral("id"));
+      const QJsonValue overlays =
+          profileObject.value(QStringLiteral("overlays"));
+      if (!id.isString() || id.toString().isEmpty() || !overlays.isArray()) {
+        return true;
+      }
+      if (id.toString() == activeProfile) {
+        if (activeProfileHasOverlays.has_value()) {
+          return true;
+        }
+        activeProfileHasOverlays = !overlays.toArray().isEmpty();
       }
     }
-    return true;
+    return activeProfileHasOverlays.value_or(true);
   }
 
   void loadConfiguration() {
@@ -1024,13 +1068,16 @@ private:
       }
       sendEnvelope(QJsonObject{{QStringLiteral("type"),
                                 QStringLiteral("config")},
-                               {QStringLiteral("config"),
-                                object.value(QStringLiteral("config"))}});
+                               {QStringLiteral("config"), config}});
       const auto loadError = object.value(QStringLiteral("error"));
-      if (loadError.isString() && !loadError.toString().isEmpty()) {
+      const bool hasLoadError =
+          loadError.isString() && !loadError.toString().isEmpty();
+      persistenceError_ = hasLoadError;
+      if (hasLoadError) {
         sendEnvelope(errorEnvelope(loadError.toString()));
       }
     } catch (const std::exception &error) {
+      persistenceError_ = true;
       sendEnvelope(errorEnvelope(QString::fromUtf8(error.what())));
     }
   }
@@ -1052,13 +1099,18 @@ private:
       return;
     }
     pendingInitializationDocumentId_.reset();
+    initializationAwaitingEditingAppliedDocumentId_.reset();
     loadConfiguration();
+    if (editing_) {
+      updatePageLifecycle();
+    } else {
+      editingOffApplied_ = false;
+      initializationAwaitingEditingAppliedDocumentId_ = documentId;
+    }
     sendEnvelope(QJsonObject{{QStringLiteral("type"),
                               QStringLiteral("editing")},
                              {QStringLiteral("editing"), editing_}});
-    updatePageLifecycle();
-    if (page_->lifecycleState() !=
-        QWebEnginePage::LifecycleState::Discarded) {
+    if (editing_) {
       fetchCounters();
     }
   }
@@ -1127,10 +1179,13 @@ private:
         return;
       }
       if (!result->error.isEmpty()) {
+        persistenceError_ = true;
         initializePendingManagerDocument();
+        updatePageLifecycle();
         sendEnvelope(errorEnvelope(result->error));
       } else {
         activeProfileHasOverlays_ = savedActiveProfileHasOverlays;
+        persistenceError_ = false;
         sendEnvelope(QJsonObject{{QStringLiteral("type"),
                                   QStringLiteral("saved")},
                                  {QStringLiteral("save_id"), saveId}});
@@ -1354,12 +1409,15 @@ private:
   std::optional<QRect> appliedGeometry_;
   std::optional<QString> managerDocumentId_;
   std::optional<QString> pendingInitializationDocumentId_;
+  std::optional<QString> initializationAwaitingEditingAppliedDocumentId_;
   bool geometryApplyScheduled_ = false;
   quint64 fetchGeneration_ = 0;
   bool fetchPending_ = false;
   bool shuttingDown_ = false;
   bool editing_ = false;
   bool activeProfileHasOverlays_ = true;
+  bool editingOffApplied_ = false;
+  bool persistenceError_ = false;
   bool ipcReady_ = false;
 };
 
