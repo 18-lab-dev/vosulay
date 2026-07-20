@@ -169,6 +169,7 @@ QString limiterScript(double initialFps, double nativeRefreshRate) {
 (() => {
   const initialMaxFps = __VOSULAY_MAX_FPS__;
   const nativeFrameIntervalMs = __VOSULAY_NATIVE_FRAME_INTERVAL_MS__;
+  const unboundedScheduler = __VOSULAY_UNBOUNDED_SCHEDULER__;
   if (Number.isFinite(initialMaxFps) && initialMaxFps > 0) {
     let requestedFrameRate = initialMaxFps;
     let applyFrameRate = () => {};
@@ -198,7 +199,9 @@ QString limiterScript(double initialFps, double nativeRefreshRate) {
       const frameIntervalToleranceMs = 0.5;
 
       const nativeFrameLeadMs = () =>
-        Math.max(1, Math.min(nativeFrameIntervalMs, minFrameIntervalMs));
+        unboundedScheduler
+          ? 1
+          : Math.max(1, Math.min(nativeFrameIntervalMs, minFrameIntervalMs));
 
       const clearScheduledTimeout = () => {
         if (scheduledTimeout === null) return;
@@ -300,6 +303,12 @@ QString limiterScript(double initialFps, double nativeRefreshRate) {
                  QString::number(initialFps, 'f', 3));
   source.replace(QStringLiteral("__VOSULAY_NATIVE_FRAME_INTERVAL_MS__"),
                  QString::number(1000.0 / nativeRefreshRate, 'f', 3));
+  source.replace(
+      QStringLiteral("__VOSULAY_UNBOUNDED_SCHEDULER__"),
+      hasChromiumFlag(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS"),
+                      kChromiumUnlimitedFps)
+          ? QStringLiteral("true")
+          : QStringLiteral("false"));
   return source;
 }
 
