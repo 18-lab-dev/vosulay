@@ -92,9 +92,7 @@ fn validate_base_url(value: &str) -> Result<Url> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        available_url_for_qt, save_config_for_qt, settings_url_for_qt, validate_base_url,
-    };
+    use super::{available_url_for_qt, save_config_for_qt, settings_url_for_qt, validate_base_url};
 
     #[test]
     fn settings_url_encodes_counter_identifier() {
@@ -129,5 +127,4 @@ mod tests {
 
         assert!(error.to_string().contains("failed to parse configuration"));
     }
-
 }
