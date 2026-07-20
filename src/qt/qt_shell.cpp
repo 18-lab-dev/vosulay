@@ -555,7 +555,6 @@ struct ParsedOptions {
   QScreen *screen = nullptr;
   int fpsLimit = -1;
   bool attach = false;
-  bool edit = false;
 };
 
 class ShellWindow final : public QWidget {
@@ -666,7 +665,7 @@ public:
       }
     }
 
-    setEditing(options_.edit);
+    setEditing(false);
     showMaximized();
     tray_.show();
   }
@@ -1534,12 +1533,6 @@ std::int32_t run_qt_application(rust::Str arguments_json) {
     arguments.push_back(QStringLiteral("vosulay"));
   }
 
-#if QT_VERSION < QT_VERSION_CHECK(6, 5, 0)
-  qputenv("QT_WAYLAND_SHELL_INTEGRATION", "layer-shell");
-#endif
-  configureChromium(arguments);
-  registerOverlayScheme();
-
   std::vector<QByteArray> encodedArguments;
   encodedArguments.reserve(static_cast<std::size_t>(arguments.size()));
   for (const auto &argument : arguments) {
@@ -1551,12 +1544,6 @@ std::int32_t run_qt_application(rust::Str arguments_json) {
     argv.push_back(argument.data());
   }
   int argc = static_cast<int>(argv.size());
-  QApplication application(argc, argv.data());
-  QCoreApplication::setApplicationName(QString::fromLatin1(kApplicationName));
-  QCoreApplication::setApplicationVersion(QString::fromLatin1(kApplicationVersion));
-  QApplication::setApplicationDisplayName(QStringLiteral("vosulay"));
-  QApplication::setQuitOnLastWindowClosed(false);
-
   QCommandLineParser parser;
   parser.setApplicationDescription(
       QStringLiteral("Native vosu overlay manager"));
@@ -1578,9 +1565,7 @@ std::int32_t run_qt_application(rust::Str arguments_json) {
       {QStringLiteral("a"), QStringLiteral("attach")},
       QStringLiteral("Attach vosulay to geometry received over IPC"));
   const QCommandLineOption edit(
-      QStringLiteral("edit"), QStringLiteral("Start vosulay in edit mode"));
-  const QCommandLineOption ipcEdit(
-      {QStringLiteral("e"), QStringLiteral("ipc-toggle-edit")},
+      {QStringLiteral("e"), QStringLiteral("edit")},
       QStringLiteral("Toggle editing in the running vosulay"));
   const QCommandLineOption ipcOverlay(
       {QStringLiteral("i"), QStringLiteral("ipc-toggle-overlay")},
@@ -1592,74 +1577,73 @@ std::int32_t run_qt_application(rust::Str arguments_json) {
       QStringLiteral("ipc-geometry"),
       QStringLiteral("Set attached vosulay geometry as x,y,w,h"),
       QStringLiteral("x,y,w,h"));
-  parser.addOptions({url, monitor, fps, attach, edit, ipcEdit, ipcOverlay,
-                     ipcQuit, ipcGeometry});
+  parser.addOptions(
+      {url, monitor, fps, attach, edit, ipcOverlay, ipcQuit, ipcGeometry});
 
-  if (!parser.parse(QCoreApplication::arguments())) {
+  if (!parser.parse(arguments)) {
     QTextStream(stderr) << "vosulay: " << parser.errorText() << '\n';
     return 2;
   }
-  if (parser.isSet(help)) {
-    QTextStream(stdout) << parser.helpText();
-    return 0;
-  }
-  if (parser.isSet(version)) {
-    QTextStream(stdout) << "vosulay " << kApplicationVersion << '\n';
-    return 0;
-  }
-
-  if (parser.isSet(ipcEdit)) {
-    return sendIpcCommand(
-               QJsonObject{{QStringLiteral("command"),
-                            QStringLiteral("toggle-edit")}})
-               ? 0
-               : 1;
-  }
-  if (parser.isSet(ipcOverlay)) {
-    return sendIpcCommand(
-               QJsonObject{{QStringLiteral("command"),
-                            QStringLiteral("toggle-overlay")}})
-               ? 0
-               : 1;
-  }
-  if (parser.isSet(ipcQuit)) {
-    return sendIpcCommand(QJsonObject{{QStringLiteral("command"),
-                                      QStringLiteral("quit")}})
-               ? 0
-               : 1;
-  }
-  if (parser.isSet(ipcGeometry)) {
-    const auto geometry = parseGeometry(parser.value(ipcGeometry));
-    if (!geometry.has_value()) {
-      QTextStream(stderr)
-          << "vosulay: --ipc-geometry expects x,y,w,h with positive size\n";
-      return 2;
+  const bool immediate =
+      parser.isSet(help) || parser.isSet(version) || parser.isSet(edit) ||
+      parser.isSet(ipcOverlay) || parser.isSet(ipcQuit) ||
+      parser.isSet(ipcGeometry);
+  if (immediate) {
+    QCoreApplication application(argc, argv.data());
+    QCoreApplication::setApplicationName(QString::fromLatin1(kApplicationName));
+    QCoreApplication::setApplicationVersion(
+        QString::fromLatin1(kApplicationVersion));
+    if (parser.isSet(help)) {
+      QTextStream(stdout) << parser.helpText();
+      return 0;
     }
-    return sendIpcCommand(
-               QJsonObject{{QStringLiteral("command"),
-                            QStringLiteral("geometry")},
-                           {QStringLiteral("x"), geometry->x()},
-                           {QStringLiteral("y"), geometry->y()},
-                           {QStringLiteral("width"), geometry->width()},
-                           {QStringLiteral("height"), geometry->height()}})
-               ? 0
-               : 1;
+    if (parser.isSet(version)) {
+      QTextStream(stdout) << "vosulay " << kApplicationVersion << '\n';
+      return 0;
+    }
+
+    if (parser.isSet(edit)) {
+      return sendIpcCommand(
+                 QJsonObject{{QStringLiteral("command"),
+                              QStringLiteral("toggle-edit")}})
+                 ? 0
+                 : 1;
+    }
+    if (parser.isSet(ipcOverlay)) {
+      return sendIpcCommand(
+                 QJsonObject{{QStringLiteral("command"),
+                              QStringLiteral("toggle-overlay")}})
+                 ? 0
+                 : 1;
+    }
+    if (parser.isSet(ipcQuit)) {
+      return sendIpcCommand(QJsonObject{{QStringLiteral("command"),
+                                        QStringLiteral("quit")}})
+                 ? 0
+                 : 1;
+    }
+    if (parser.isSet(ipcGeometry)) {
+      const auto geometry = parseGeometry(parser.value(ipcGeometry));
+      if (!geometry.has_value()) {
+        QTextStream(stderr)
+            << "vosulay: --ipc-geometry expects x,y,w,h with positive size\n";
+        return 2;
+      }
+      return sendIpcCommand(
+                 QJsonObject{{QStringLiteral("command"),
+                              QStringLiteral("geometry")},
+                             {QStringLiteral("x"), geometry->x()},
+                             {QStringLiteral("y"), geometry->y()},
+                             {QStringLiteral("width"), geometry->width()},
+                             {QStringLiteral("height"), geometry->height()}})
+                 ? 0
+                 : 1;
+    }
   }
 
   ParsedOptions options;
   options.vosuUrl = parser.value(url);
   options.attach = parser.isSet(attach);
-  options.edit = parser.isSet(edit);
-  options.screen = QApplication::primaryScreen();
-
-  if (!options.attach && parser.isSet(monitor)) {
-    QString error;
-    options.screen = parseScreen(parser.value(monitor), &error);
-    if (options.screen == nullptr) {
-      QTextStream(stderr) << "vosulay: " << error << '\n';
-      return 2;
-    }
-  }
 
   if (parser.isSet(fps)) {
     const QString value = parser.value(fps).trimmed();
@@ -1674,6 +1658,29 @@ std::int32_t run_qt_application(rust::Str arguments_json) {
             << "vosulay: invalid fps limit; expected auto, 0, or a positive integer\n";
         return 2;
       }
+    }
+  }
+
+#if QT_VERSION < QT_VERSION_CHECK(6, 5, 0)
+  qputenv("QT_WAYLAND_SHELL_INTEGRATION", "layer-shell");
+#endif
+  configureChromium(arguments);
+  registerOverlayScheme();
+
+  QApplication application(argc, argv.data());
+  QCoreApplication::setApplicationName(QString::fromLatin1(kApplicationName));
+  QCoreApplication::setApplicationVersion(
+      QString::fromLatin1(kApplicationVersion));
+  QApplication::setApplicationDisplayName(QStringLiteral("vosulay"));
+  QApplication::setQuitOnLastWindowClosed(false);
+
+  options.screen = QApplication::primaryScreen();
+  if (!options.attach && parser.isSet(monitor)) {
+    QString error;
+    options.screen = parseScreen(parser.value(monitor), &error);
+    if (options.screen == nullptr) {
+      QTextStream(stderr) << "vosulay: " << error << '\n';
+      return 2;
     }
   }
 

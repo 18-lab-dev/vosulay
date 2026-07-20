@@ -37,7 +37,7 @@ cargo build --release
 ./target/release/vosulay
 ```
 
-Start directly in edit mode:
+Toggle edit mode on an already-running instance and exit:
 
 ```sh
 ./target/release/vosulay --edit
