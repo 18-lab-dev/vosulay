@@ -1,0 +1,277 @@
+use std::time::Duration;
+
+use anyhow::{Context, Result, anyhow, bail};
+use scraper::{ElementRef, Html, Selector};
+use serde::{Deserialize, Serialize};
+use url::Url;
+
+const MAX_COUNTER_PAGE_BYTES: usize = 2 * 1024 * 1024;
+const FETCH_DEADLINE: Duration = Duration::from_secs(10);
+const DEFAULT_WIDTH: f64 = 500.0;
+const DEFAULT_HEIGHT: f64 = 300.0;
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct InstalledCounter {
+    pub id: String,
+    pub name: String,
+    pub author: String,
+    pub version: String,
+    pub width: f64,
+    pub height: f64,
+    pub has_settings: bool,
+    pub url: Url,
+}
+
+pub fn fetch_installed_counters(base_url: &Url) -> Result<Vec<InstalledCounter>> {
+    fetch_installed_counters_with_timeout(base_url, FETCH_DEADLINE)
+}
+
+fn fetch_installed_counters_with_timeout(
+    base_url: &Url,
+    timeout: Duration,
+) -> Result<Vec<InstalledCounter>> {
+    let endpoint = base_url
+        .join("/api/counters/search/")
+        .with_context(|| format!("failed to construct counter search URL from {base_url}"))?;
+    let mut response = ureq::get(endpoint.as_str())
+        .config()
+        .http_status_as_error(false)
+        .timeout_global(Some(timeout))
+        .build()
+        .call()
+        .with_context(|| format!("failed to request installed counters from {endpoint}"))?;
+
+    if !response.status().is_success() {
+        bail!(
+            "counter search at {} returned HTTP status {}",
+            endpoint,
+            response.status()
+        );
+    }
+
+    let mime_type = response.body().mime_type();
+    if !matches!(mime_type, Some("text/html" | "application/xhtml+xml")) {
+        bail!(
+            "counter search at {} returned non-HTML content type {}",
+            endpoint,
+            mime_type.unwrap_or("missing")
+        );
+    }
+
+    if response
+        .body()
+        .content_length()
+        .is_some_and(|length| length > MAX_COUNTER_PAGE_BYTES as u64)
+    {
+        bail!(
+            "counter search response at {} exceeds the {} byte limit",
+            endpoint,
+            MAX_COUNTER_PAGE_BYTES
+        );
+    }
+
+    let bytes = response
+        .body_mut()
+        .with_config()
+        .limit(MAX_COUNTER_PAGE_BYTES as u64 + 1)
+        .read_to_vec()
+        .with_context(|| format!("failed to read counter search response from {endpoint}"))?;
+    if bytes.len() > MAX_COUNTER_PAGE_BYTES {
+        bail!(
+            "counter search response at {} exceeds the {} byte limit",
+            endpoint,
+            MAX_COUNTER_PAGE_BYTES
+        );
+    }
+    let document = String::from_utf8(bytes)
+        .with_context(|| format!("counter search response from {endpoint} is not UTF-8"))?;
+
+    parse_installed_counters(base_url, &document)
+        .with_context(|| format!("failed to parse installed counters from {endpoint}"))
+}
+
+fn parse_installed_counters(base_url: &Url, source: &str) -> Result<Vec<InstalledCounter>> {
+    let card_selector = selector(".result-item[data-overlay-id]")?;
+    let metadata_selector = selector(".calu[n][a][v]")?;
+    let settings_selector = selector(".settings-button")?;
+    let width_selector = selector(r#"[nft="width"]"#)?;
+    let height_selector = selector(r#"[nft="height"]"#)?;
+    let document = Html::parse_document(source);
+    let mut counters = Vec::new();
+
+    for card in document.select(&card_selector) {
+        let id = required_attribute(card, "data-overlay-id", "counter card")?.to_owned();
+        if id.is_empty() {
+            bail!("counter card has an empty data-overlay-id");
+        }
+        let metadata = card
+            .select(&metadata_selector)
+            .next()
+            .with_context(|| format!("counter {id:?} is missing metadata"))?;
+        let name = required_attribute(metadata, "n", &id)?.to_owned();
+        let author = required_attribute(metadata, "a", &id)?.to_owned();
+        let version = required_attribute(metadata, "v", &id)?.to_owned();
+        let resolution = resolution(&card, &width_selector, &height_selector);
+
+        counters.push(InstalledCounter {
+            url: counter_url(base_url, &id)?,
+            id,
+            name,
+            author,
+            version,
+            width: resolution.0,
+            height: resolution.1,
+            has_settings: card.select(&settings_selector).next().is_some(),
+        });
+    }
+
+    Ok(counters)
+}
+
+fn selector(source: &str) -> Result<Selector> {
+    Selector::parse(source)
+        .map_err(|error| anyhow!("invalid built-in selector {source:?}: {error:?}"))
+}
+
+fn required_attribute<'a>(element: ElementRef<'a>, name: &str, counter: &str) -> Result<&'a str> {
+    element
+        .value()
+        .attr(name)
+        .with_context(|| format!("{counter:?} is missing the {name:?} attribute"))
+}
+
+fn resolution(card: &ElementRef<'_>, width: &Selector, height: &Selector) -> (f64, f64) {
+    let width = numeric_attribute(card, width);
+    let height = numeric_attribute(card, height);
+    match (width, height) {
+        (Some(width), Some(height)) if width > 10.0 && height > 10.0 => (width, height),
+        _ => (DEFAULT_WIDTH, DEFAULT_HEIGHT),
+    }
+}
+
+fn numeric_attribute(card: &ElementRef<'_>, selector: &Selector) -> Option<f64> {
+    card.select(selector)
+        .next()?
+        .value()
+        .attr("nfv")?
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite())
+}
+
+fn counter_url(base_url: &Url, id: &str) -> Result<Url> {
+    let mut url = base_url.clone();
+    url.set_query(None);
+    url.set_fragment(None);
+    url.set_path("/");
+    url.path_segments_mut()
+        .map_err(|()| anyhow!("base URL {base_url} cannot contain counter paths"))?
+        .push(id)
+        .push("");
+    Ok(url)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
+    use std::time::Instant;
+
+    #[test]
+    fn parse_decodes_escaped_metadata_and_preserves_source_order() {
+        let source = r#"
+            <div class="result-item" data-overlay-id="folder/&amp;&quot;">
+              <div class="calu" n="First &amp; Best" a="A &quot;Name&quot;" v="1.2"></div>
+              <button class="settings-button"></button>
+              <span nft="width" nfv="640"></span><span nft="height" nfv="360"></span>
+            </div>
+            <div class="result-item" data-overlay-id="second">
+              <div class="calu" n="Second" a="Author" v="2"></div>
+              <span nft="width" nfv="800"></span><span nft="height" nfv="600"></span>
+            </div>
+        "#;
+        let base = Url::parse("http://127.0.0.1:24050/base?old=1#fragment")
+            .expect("fixture URL should parse");
+
+        let counters = parse_installed_counters(&base, source).expect("fixture should parse");
+
+        assert_eq!(
+            counters,
+            vec![
+                InstalledCounter {
+                    id: "folder/&\"".to_owned(),
+                    name: "First & Best".to_owned(),
+                    author: "A \"Name\"".to_owned(),
+                    version: "1.2".to_owned(),
+                    width: 640.0,
+                    height: 360.0,
+                    has_settings: true,
+                    url: Url::parse("http://127.0.0.1:24050/folder%2F&%22/")
+                        .expect("expected URL should parse"),
+                },
+                InstalledCounter {
+                    id: "second".to_owned(),
+                    name: "Second".to_owned(),
+                    author: "Author".to_owned(),
+                    version: "2".to_owned(),
+                    width: 800.0,
+                    height: 600.0,
+                    has_settings: false,
+                    url: Url::parse("http://127.0.0.1:24050/second/")
+                        .expect("expected URL should parse"),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_defaults_dynamic_resolution() {
+        let source = r#"
+            <div class="result-item" data-overlay-id="dynamic">
+              <div class="calu" n="Dynamic" a="Author" v="1"></div>
+              <span nft="width" nfv="ANY"></span><span nft="height" nfv="-2"></span>
+            </div>
+        "#;
+        let base = Url::parse("http://127.0.0.1:24050").expect("fixture URL should parse");
+
+        let counter = parse_installed_counters(&base, source)
+            .expect("fixture should parse")
+            .pop()
+            .expect("fixture should contain one counter");
+
+        assert_eq!((counter.width, counter.height), (500.0, 300.0));
+    }
+    #[test]
+    fn fetch_stops_reading_when_global_deadline_expires() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("fixture server should bind");
+        let address = listener
+            .local_addr()
+            .expect("fixture server should have an address");
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("fixture request should connect");
+            let mut request = [0_u8; 1024];
+            let bytes_read = stream
+                .read(&mut request)
+                .expect("fixture request should be readable");
+            assert!(bytes_read > 0, "fixture request should not be empty");
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 100\r\n\r\n<",
+                )
+                .expect("fixture response headers should be writable");
+            thread::sleep(Duration::from_millis(250));
+        });
+        let base = Url::parse(&format!("http://{address}")).expect("fixture URL should parse");
+        let started = Instant::now();
+
+        let error = fetch_installed_counters_with_timeout(&base, Duration::from_millis(50))
+            .expect_err("stalled response body must time out");
+
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "request exceeded its global deadline: {error:#}"
+        );
+    }
+}

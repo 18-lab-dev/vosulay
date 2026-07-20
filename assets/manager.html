@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="color-scheme" content="dark">
+  <title>vosulay</title>
+</head>
+<body>
+  <main id="stage" aria-label="Overlay canvas"></main>
+
+  <section id="editor" hidden>
+    <header class="toolbar">
+      <div class="brand"><span class="brand-mark">v</span><strong>vosulay</strong></div>
+      <label class="profile-field">Profile
+        <select id="profile-select" aria-label="Active profile"></select>
+      </label>
+      <button id="profile-add" class="icon-button" title="Add profile" aria-label="Add profile">+</button>
+      <button id="profile-delete" class="icon-button danger" title="Delete profile" aria-label="Delete profile">−</button>
+      <span class="toolbar-spacer"></span>
+      <span id="status" role="status" aria-live="polite"></span>
+      <button id="open-available" class="quiet-button">Browse counters</button>
+      <button id="quit" class="icon-button danger" title="Quit vosulay" aria-label="Quit vosulay">×</button>
+      <button id="done" class="primary-button">Done</button>
+    </header>
+
+    <aside class="sidebar" aria-label="Installed counters">
+      <div class="panel-heading">
+        <div><strong>Installed</strong><small id="catalog-summary">Waiting for vosu…</small></div>
+        <button id="refresh" class="icon-button" title="Refresh counters" aria-label="Refresh counters">↻</button>
+      </div>
+      <div class="source-actions" aria-label="Add custom overlay">
+        <button id="add-url" class="quiet-button" type="button">Add URL</button>
+        <button id="add-html-file" class="quiet-button" type="button">HTML file</button>
+      </div>
+      <div id="catalog" class="catalog"></div>
+    </aside>
+
+    <aside id="inspector" class="inspector" aria-label="Counter properties" hidden>
+      <div class="panel-heading">
+        <div class="truncate"><strong id="selection-name">Counter</strong><small id="selection-meta"></small></div>
+        <button id="remove" class="icon-button danger" title="Remove counter" aria-label="Remove counter">×</button>
+      </div>
+      <div class="field-grid">
+        <label>X<input id="field-left" type="number" step="1"></label>
+        <label>Y<input id="field-top" type="number" step="1"></label>
+        <label>Width<input id="field-width" type="number" min="10" step="1"></label>
+        <label>Height<input id="field-height" type="number" min="10" step="1"></label>
+        <label>Scale<input id="field-scale" type="number" min="0.1" step="0.05"></label>
+        <label>Layer<input id="field-z" type="number" min="0" max="999" step="1"></label>
+        <label>Opacity %<input id="field-opacity" type="number" min="0" max="100" step="1"></label>
+        <label>Rotation<input id="field-rotation" type="number" min="-180" max="180" step="1"></label>
+      </div>
+      <div class="inspector-actions">
+        <button id="reset" class="quiet-button">Reset size</button>
+        <button id="settings" class="quiet-button">Settings</button>
+      </div>
+      <small class="hint">Drag to move · handles resize · wheel changes layer</small>
+    </aside>
+  </section>
+
+  <div id="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <script>__VOSULAY_BOOTSTRAP__</script>
+</body>
+</html>

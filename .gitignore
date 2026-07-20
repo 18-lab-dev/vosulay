@@ -1,0 +1,20 @@
+# Rust build output
+/target/
+/CMakeFiles/
+
+# Editor and operating-system metadata
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local runtime and environment noise
+*.log
+*.pid
+*.sock
+.env
+.env.*
+!.env.example
