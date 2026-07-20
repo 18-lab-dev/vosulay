@@ -12,11 +12,22 @@
   <section id="editor" hidden>
     <header class="toolbar">
       <div class="brand"><span class="brand-mark">v</span><strong>vosulay</strong></div>
-      <label class="profile-field">Profile
-        <select id="profile-select" aria-label="Active profile"></select>
-      </label>
+      <div class="profile-field">
+        <span id="profile-field-label">Profile</span>
+        <div class="profile-picker">
+          <button id="profile-select" type="button" aria-labelledby="profile-field-label profile-select-label" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
+            <span id="profile-select-label"></span>
+          </button>
+          <div id="profile-menu" role="menu" aria-label="Profiles" hidden></div>
+        </div>
+      </div>
       <button id="profile-add" class="icon-button" title="Add profile" aria-label="Add profile">+</button>
       <button id="profile-delete" class="icon-button danger" title="Delete profile" aria-label="Delete profile">−</button>
+      <form id="profile-create" class="profile-create" hidden>
+        <input id="profile-name" type="text" aria-label="Profile name" autocomplete="off">
+        <button type="submit" class="primary-button">Create</button>
+        <button id="profile-create-cancel" type="button" class="quiet-button">Cancel</button>
+      </form>
       <span class="toolbar-spacer"></span>
       <span id="status" role="status" aria-live="polite"></span>
       <button id="open-available" class="quiet-button">Browse counters</button>

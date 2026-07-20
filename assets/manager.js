@@ -6,6 +6,13 @@
   const editor = $("editor");
   const inspector = $("inspector");
   const profileSelect = $("profile-select");
+  const profileSelectLabel = $("profile-select-label");
+  const profileMenu = $("profile-menu");
+  const profilePicker = profileSelect.closest(".profile-picker");
+  const profileAdd = $("profile-add");
+  const profileCreate = $("profile-create");
+  const profileName = $("profile-name");
+  const profileCreateCancel = $("profile-create-cancel");
   const catalog = $("catalog");
   const status = $("status");
   const fields = {
@@ -359,14 +366,60 @@
     }
   }
 
+  function closeProfileMenu(refocus = false) {
+    profileMenu.hidden = true;
+    profileSelect.setAttribute("aria-expanded", "false");
+    if (refocus) profileSelect.focus();
+  }
+
+  function openProfileMenu(focusTarget = "") {
+    const options = [...profileMenu.querySelectorAll(".profile-option")];
+    if (!options.length) return;
+    profileMenu.hidden = false;
+    profileSelect.setAttribute("aria-expanded", "true");
+    if (!focusTarget) return;
+    const active = options.find((option) => option.getAttribute("aria-checked") === "true");
+    const target = focusTarget === "first"
+      ? options[0]
+      : focusTarget === "last"
+        ? options[options.length - 1]
+        : active || options[0];
+    options.forEach((option) => { option.tabIndex = option === target ? 0 : -1; });
+    target.focus();
+  }
+
+  function toggleProfileMenu(focusTarget = "") {
+    if (profileMenu.hidden) openProfileMenu(focusTarget);
+    else closeProfileMenu();
+  }
+
+  function activateProfile(id) {
+    if (!state.config || !state.config.profiles.some((profile) => profile.id === id)) return;
+    state.config.active_profile = id;
+    state.selected = null;
+    scheduleSave(true);
+    closeProfileMenu(true);
+    requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
+  }
+
   function renderProfiles() {
-    profileSelect.replaceChildren();
-    if (!state.config) return;
+    closeProfileMenu();
+    profileMenu.replaceChildren();
+    if (!state.config) {
+      profileSelectLabel.textContent = "";
+      return;
+    }
+    const current = activeProfile();
+    profileSelectLabel.textContent = current ? current.name : "";
     for (const profile of state.config.profiles) {
-      const option = makeElement("option", "", profile.name);
-      option.value = profile.id;
-      option.selected = profile.id === state.config.active_profile;
-      profileSelect.append(option);
+      const option = makeElement("button", "profile-option", profile.name);
+      const active = profile === current;
+      option.type = "button";
+      option.dataset.profileId = profile.id;
+      option.setAttribute("role", "menuitemradio");
+      option.setAttribute("aria-checked", String(active));
+      option.tabIndex = active ? 0 : -1;
+      profileMenu.append(option);
     }
     $("profile-delete").disabled = state.config.profiles.length <= 1;
   }
@@ -556,9 +609,27 @@
     flushPendingSave();
   }
 
+  function closeProfileCreator(restoreFocus = false) {
+    if (profileCreate.hidden) return;
+    profileCreate.hidden = true;
+    if (restoreFocus) profileAdd.focus();
+  }
+
+  function openProfileCreator() {
+    if (!state.config) return;
+    profileName.value = `Profile ${state.config.profiles.length + 1}`;
+    profileCreate.hidden = false;
+    profileName.focus();
+    profileName.select();
+  }
+
   function setEditing(editing, notify = true) {
     const next = Boolean(editing);
     const changed = state.editing !== next;
+    if (!next) {
+      closeProfileMenu();
+      closeProfileCreator();
+    }
     if (!next) flushEditingChanges();
     if (changed) {
       state.editing = next;
@@ -703,28 +774,73 @@
     if (counter) addCounter(counter);
   });
 
-  profileSelect.addEventListener("change", () => {
-    if (!state.config) return;
-    state.config.active_profile = profileSelect.value;
-    state.selected = null;
-    scheduleSave(true);
-    requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
+  profileSelect.addEventListener("click", () => toggleProfileMenu());
+  profileSelect.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (event.repeat) return;
+      toggleProfileMenu("active");
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      openProfileMenu(event.key === "ArrowUp" ? "last" : "first");
+    } else if (event.key === "Escape" && !profileMenu.hidden) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeProfileMenu();
+    }
   });
-  $("profile-add").addEventListener("click", () => {
+  profileMenu.addEventListener("click", (event) => {
+    const option = event.target.closest(".profile-option");
+    if (option) activateProfile(option.dataset.profileId);
+  });
+  profileMenu.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeProfileMenu(true);
+      return;
+    }
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    const options = [...profileMenu.querySelectorAll(".profile-option")];
+    if (!options.length) return;
+    event.preventDefault();
+    const current = options.indexOf(document.activeElement);
+    let next = 0;
+    if (event.key === "End") next = options.length - 1;
+    else if (event.key === "ArrowUp") next = current <= 0 ? options.length - 1 : current - 1;
+    else if (event.key === "ArrowDown") next = current < 0 || current === options.length - 1 ? 0 : current + 1;
+    options.forEach((option, index) => { option.tabIndex = index === next ? 0 : -1; });
+    options[next].focus();
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!profileMenu.hidden && !profilePicker.contains(event.target)) closeProfileMenu();
+  }, true);
+  profilePicker.addEventListener("focusout", (event) => {
+    if (!profileMenu.hidden && !profilePicker.contains(event.relatedTarget)) closeProfileMenu();
+  });
+  profileAdd.addEventListener("click", openProfileCreator);
+  profileCreate.addEventListener("submit", (event) => {
+    event.preventDefault();
     if (!state.config) return;
-    const proposed = window.prompt("Profile name", `Profile ${state.config.profiles.length + 1}`);
-    if (proposed === null) return;
-    const name = proposed.trim();
+    const name = profileName.value.trim();
     if (!name) {
       toast("Profile name cannot be empty", true);
+      profileName.focus();
+      profileName.select();
       return;
     }
     const profile = { id: uniqueProfileId(), name, overlays: [] };
     state.config.profiles.push(profile);
     state.config.active_profile = profile.id;
     state.selected = null;
+    closeProfileCreator();
     scheduleSave(true);
     requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
+    (profileSelect.getClientRects().length ? profileSelect : profileAdd).focus();
+  });
+  profileCreateCancel.addEventListener("click", (event) => {
+    event.preventDefault();
+    closeProfileCreator(true);
   });
   $("profile-delete").addEventListener("click", () => {
     if (!state.config || state.config.profiles.length <= 1) return;
@@ -803,7 +919,18 @@
   $("done").addEventListener("click", () => setEditing(false));
 
   window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && state.editing) {
+    if (event.key !== "Escape") return;
+    if (event.repeat) {
+      if (!profileMenu.hidden || state.editing) event.preventDefault();
+      return;
+    }
+    if (!profileMenu.hidden) {
+      event.preventDefault();
+      closeProfileMenu(true);
+    } else if (!profileCreate.hidden) {
+      event.preventDefault();
+      closeProfileCreator(true);
+    } else if (state.editing) {
       event.preventDefault();
       setEditing(false);
     }
@@ -812,6 +939,7 @@
     if (state.resizeFrame) return;
     state.resizeFrame = requestAnimationFrame(() => {
       state.resizeFrame = 0;
+      if (!profileMenu.hidden && profilePicker.getClientRects().length === 0) closeProfileMenu();
       const profile = activeProfile();
       if (!profile) return;
       let changed = false;
