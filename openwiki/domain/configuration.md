@@ -10,7 +10,7 @@ tags: [domain, configuration, profiles, overlays, persistence]
 
 ## Concepts
 
-`AppConfig` contains a schema `version`, an `active_profile` ID, and a non-empty list of `Profile` values. Each profile has an ID, display name, and overlay `Placement` values. A placement identifies a counter or custom source and stores position (`top`, `left`), size, scale, opacity, rotation, and z-order. Optional `url` and `name` fields preserve custom overlay metadata.
+`AppConfig` contains a schema `version`, an `active_profile` ID, and a non-empty list of `Profile` values. Each profile has an ID, display name, and an ordered list of overlay `Placement` values. A placement references an installed counter through `counter_id` or describes a custom source; `counter_id` is not a unique placement identifier. A profile may contain multiple placements for the same installed counter, and the placement object together with its position in the list constitutes that runtime instance's identity. Each placement stores position (`top`, `left`), size, scale, opacity, rotation, and z-order. Optional `url` and `name` fields preserve custom overlay metadata.
 
 The default state is version 1, one profile named `Default`, and no placements. The config file is located at the platform user configuration directory under `vosulay/config.json`; [`src/config.rs`](../../src/config.rs) uses the `directories` crate to resolve that location.
 
@@ -20,7 +20,7 @@ The default state is version 1, one profile named `Default`, and no placements. 
 
 - Version is reset to the supported `CONFIG_VERSION` (currently `1`); other versions are rejected during load.
 - At least one profile exists, profile IDs are unique, and blank names receive generated names.
-- Duplicate placement `counter_id` values within a profile are removed.
+- Placements are normalized independently in list order. Repeated `counter_id` values are preserved, allowing multiple ordered instances of the same installed counter.
 - The active profile falls back to the first profile if its ID is missing.
 - Placement URLs are restricted to `http`, `https`, and `vosulay-overlay`.
 - Non-finite geometry is replaced with defaults; width/height are at least `10`, scale is at least `0.1`, opacity is clamped to `0..1`, rotation to `-180..180`, and z-index to `0..999`.
@@ -35,4 +35,4 @@ The Qt bridge in [`src/ffi.rs`](../../src/ffi.rs) exposes load/save as JSON enve
 
 ## Change guidance
 
-Start with `src/config.rs` tests when changing schema or normalization, then inspect the corresponding `normalizeConfig` and `normalizeOverlay` functions in `assets/manager.js`. Preserve duplicate prevention and active-profile repair, and add round-trip/error tests for any new serialized field. See the [testing guidance](../testing/guidance.md) for the existing coverage map.
+Start with `src/config.rs` tests when changing schema or normalization, then inspect the corresponding `normalizeConfig` and `normalizeOverlay` functions in `assets/manager.js`. `AppConfig::normalize` iterates every placement without deduplicating, and `normalize_preserves_duplicate_counter_placements_in_order_and_normalizes_each` is the regression test for preserving repeated counters while repairing each placement independently. Preserve this behavior and active-profile repair, and add round-trip/error tests for any new serialized field. See the [testing guidance](../testing/guidance.md) for the existing coverage map.

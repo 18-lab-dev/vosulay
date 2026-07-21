@@ -15,20 +15,7 @@ vosulay displays vosu counters in a frameless overlay and provides an edit mode 
 
 ## Requirements
 
-- Linux with Wayland or X11
-- Rust 1.96.1 (installed automatically by `rustup` from `rust-toolchain.toml`)
-- A C++17 compiler
-- CMake and pkg-config
-- Qt 6.8 or newer with:
-  - Core
-  - Widgets
-  - WebEngineWidgets
-  - WebChannel
-  - Network
-- LayerShellQt development files
-- A running vosu instance for discovering and using vosu counters; the default URL is `http://127.0.0.1:24050`
-
-Package names vary by distribution. The build also accepts `Qt6_DIR`, `Qt6_ROOT`, `LayerShellQt_DIR`, `LayerShellQt_ROOT`, `CMAKE_PREFIX_PATH`, `CMAKE_TOOLCHAIN_FILE`, and `QT_MOC` for non-system installations.
+See [Build and run](openwiki/operations/build-and-run.md) for supported platforms, native dependencies, and setup instructions.
 
 ## Build and run
 
@@ -37,41 +24,23 @@ cargo build --release
 ./target/release/vosulay
 ```
 
-Toggle edit mode on an already-running instance and exit:
-
-```sh
-./target/release/vosulay --edit
-```
-
-Use a different vosu endpoint:
-
-```sh
-./target/release/vosulay --vosu-url http://127.0.0.1:24050
-```
-
-Run `./target/release/vosulay --help` for monitor selection, frame limiting, attachment mode, and IPC controls.
+For command-line options, monitor selection, frame limiting, attachment mode, and IPC controls, see [Build and run](openwiki/operations/build-and-run.md).
 
 ## Development
 
-The native Qt dependencies are required even for Rust tests because `build.rs` compiles the C++ shell.
+See [Testing guidance](openwiki/testing/guidance.md) for the development and verification workflow.
 
-```sh
-cargo fmt --check
-cargo test
-cargo clippy --all-targets --all-features -- -D warnings
-```
+## Engineering documentation
 
-Start with the [OpenWiki quickstart](openwiki/quickstart.md) for architecture, workflows, integrations, testing guidance, and the source map.
+[OpenWiki](openwiki/quickstart.md) is the canonical source for detailed engineering documentation. Start with the [quickstart](openwiki/quickstart.md) for architecture, workflows, integrations, testing guidance, and the source map.
 
 ## Security
 
-Overlays are active web content. Remote URLs, vosu counters, and local HTML files can execute JavaScript inside Qt WebEngine and may make network requests. Only add overlays from sources you trust.
-
-Selecting a local HTML file authorizes that overlay to load readable files from the selected file's directory. vosulay blocks access outside that directory, but the restriction does not make untrusted HTML safe. Avoid selecting files from directories that contain sensitive data.
+Overlays are active web content and may execute JavaScript or make network requests. Only add overlays from sources you trust. See [vosu and overlays](openwiki/integrations/vosu-and-overlays.md) for the security model and local-file authorization boundaries.
 
 ## Configuration
 
-Configuration is stored in the platform user configuration directory under `vosulay/config.json`. Writes are atomic. A missing configuration starts with an empty `Default` profile.
+See [Configuration](openwiki/domain/configuration.md) for the configuration model, storage, and persistence behavior.
 
 ## License
 

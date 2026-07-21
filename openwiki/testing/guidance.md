@@ -23,7 +23,7 @@ Because [`build.rs`](../../build.rs) always performs Qt discovery, MOC, CXX comp
 ## Test coverage by module
 
 - [`src/api.rs`](../../src/api.rs): HTML counter-card parsing, escaped attributes, source ordering, dimensions and defaults, HTTP status/content-type/size handling, and global request deadlines.
-- [`src/config.rs`](../../src/config.rs): defaults, profile and placement normalization, duplicate IDs, URL scheme filtering, malformed/unsupported files, atomic persistence, and round trips.
+- [`src/config.rs`](../../src/config.rs): defaults, profile and placement normalization, duplicate profile-ID handling, preservation of repeated counter placements, URL scheme filtering, malformed/unsupported files, atomic persistence, and round trips.
 - [`src/ffi.rs`](../../src/ffi.rs): settings URL encoding, base-path behavior, credential rejection, and contextual invalid-JSON errors.
 - [`src/ui.rs`](../../src/ui.rs): self-contained document generation, FPS bootstrap values, and escaping of script-closing characters.
 

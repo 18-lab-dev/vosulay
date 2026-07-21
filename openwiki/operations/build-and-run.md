@@ -10,7 +10,7 @@ tags: [operations, build, runbook, qt, wayland, x11]
 
 ## Native build prerequisites
 
-[`build.rs`](../../build.rs) requires Qt 6.8 or newer with `Qt6Core`, `Qt6Widgets`, `Qt6WebEngineWidgets`, `Qt6WebChannel`, and `Qt6Network`, plus `moc`, CMake, and a LayerShellQt development package exposing `LayerShellQt::Interface`. It uses pkg-config for Qt and a generated CMake project for LayerShellQt, then compiles the bridge and shell as C++17.
+[`build.rs`](../../build.rs) requires Qt 6.8 or newer with `Qt6Core`, `Qt6Widgets`, `Qt6WebEngineWidgets`, `Qt6WebChannel`, `Qt6Network`, and `Qt6DBus`, plus `moc`, CMake, and a LayerShellQt development package exposing `LayerShellQt::Interface`. It uses pkg-config for Qt and a generated CMake project for LayerShellQt, then compiles the bridge and shell as C++17.
 
 For non-system installations, the build script recognizes CMake/Qt/LayerShellQt environment variables such as `Qt6_DIR`, `Qt6_ROOT`, `LayerShellQt_DIR`, `LayerShellQt_ROOT`, `CMAKE_PREFIX_PATH`, `CMAKE_TOOLCHAIN_FILE`, and `QT_MOC`. [`Cargo.toml`](../../Cargo.toml) records the Rust, HTTP, parser, serialization, CXX, and build dependencies; [`rust-toolchain.toml`](../../rust-toolchain.toml) pins the Rust toolchain.
 
@@ -24,8 +24,8 @@ The Qt command-line parser in [`src/qt/qt_shell.cpp`](../../src/qt/qt_shell.cpp)
 - `--monitor`/`-m`: monitor index or exact screen name when not attached.
 - `--fps-limit`/`-f`: `auto`, `0`, or a positive integer.
 - `--attach`/`-a`: accept geometry over IPC.
-- `--edit`: start in editing mode.
-- `--ipc-toggle-edit`/`-e`, `--ipc-toggle-overlay`/`-i`, `--ipc-quit`/`-q`: control a running instance.
+- `--edit`/`-e`: toggle editing in an already-running instance, then exit; normal startup creates the instance in display mode.
+- `--ipc-toggle-overlay`/`-i` and `--ipc-quit`/`-q`: control a running instance.
 - `--ipc-geometry x,y,w,h`: set geometry on an attached instance.
 
 A second normal instance exits with an error if the user-scoped IPC endpoint is already owned. IPC behavior and security limits are detailed in the [integration boundary](../integrations/vosu-and-overlays.md).

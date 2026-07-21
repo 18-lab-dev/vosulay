@@ -11,11 +11,11 @@ tags: [vosulay, quickstart, rust, qt, overlays]
 
 `vosulay` is a Rust application with a Qt 6/C++ shell for managing `vosu` in-game overlays. The process starts in [`src/main.rs`](../src/main.rs), crosses a generated CXX boundary, and runs a frameless Qt WebEngine window whose manager HTML/CSS/JavaScript is compiled into the binary. The product’s central state is a set of profiles containing positioned overlay placements.
 
-Start with the [architecture overview](architecture/overview.md) for runtime boundaries, then use the [source map](source-map.md) when changing code.
+Use this OpenWiki as the engineering entry point: start with the [architecture overview](architecture/overview.md) for runtime boundaries, then use the [source map](source-map.md) when changing code.
 
 ## Build and run at a glance
 
-The project is Cargo-based (`Cargo.toml`, Rust 2024, Rust 1.96.1). A native build also requires Qt 6.8+ development modules, `moc`, CMake, and LayerShellQt; [`build.rs`](../build.rs) probes these dependencies and compiles the C++ shell. See [build and run operations](operations/build-and-run.md) for dependency discovery, CLI options, platform behavior, and failure modes.
+The project is Cargo-based (`Cargo.toml`, Rust 2024, Rust 1.96.1). A native build also requires Qt 6.8+ development modules—including `Qt6DBus`—plus `moc`, CMake, and LayerShellQt; [`build.rs`](../build.rs) probes these dependencies and compiles the C++ shell. See [build and run operations](operations/build-and-run.md) for dependency discovery, CLI options, platform behavior, and failure modes.
 
 Typical checks are:
 
@@ -42,12 +42,11 @@ For a UI or bridge change, begin with [`src/qt/qt_shell.cpp`](../src/qt/qt_shell
 
 Preserve the documented constraints: custom overlay paths must remain within their authorized roots; IPC is local, bounded, and user-scoped; configuration writes are atomic; and embedded frontend content must remain safely encoded.
 
-## Repository state and history caveat
+## Repository history
 
-The inspected repository has no commits yet (`git log` reports an unborn `main` branch), so there is no reliable historical progression or commit rationale to summarize. All claims in this initial wiki are grounded in the current uncommitted source tree. The repository does include a scheduled OpenWiki workflow at [`.github/workflows/openwiki-update.yml`](../.github/workflows/openwiki-update.yml), which refreshes generated documentation through a pull request.
+The current history begins with the initial repository commit (`e438c3c`) and project README (`7b2e59a`), then records scheduler tuning (`ddae95f`), save-before-idle persistence (`6f45961`), FFI test formatting (`74d25c7`), and profile-switching fixes (`d476f2f`). More recent commits improve the running-instance edit command (`7515875`), inject the counter path into vosu frames (`435cc1d`), refine overlay editor controls (`7301d19`), and move overlay file selection to the desktop portal (`e8d9040`). The scheduled [OpenWiki workflow](../.github/workflows/openwiki-update.yml) keeps this engineering documentation updated through pull requests.
 
 ## Backlog
 
 - **Qt/C++ and frontend integration tests — `src/qt/qt_shell.cpp`, `assets/manager.js`:** no dedicated C++ or browser test suite was found; behavior beyond Rust unit tests needs manual or future automated coverage.
 - **Release and distribution runbook — `extra/com.vosu.vosulay.desktop`, `LICENSE`:** packaging metadata is present, but no release process or installation documentation exists in the repository.
-- **Historical design rationale — repository git history:** deferred because the repository has no commits yet.
