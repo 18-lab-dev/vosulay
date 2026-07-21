@@ -15,8 +15,15 @@
 #include <QDeadlineTimer>
 #include <QDir>
 #include <QFile>
-#include <QFileDialog>
+#include <QDBusArgument>
+#include <QDBusConnection>
+#include <QDBusInterface>
+#include <QDBusMetaType>
+#include <QDBusObjectPath>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QFileInfo>
+#include <QEventLoop>
 #include <QHash>
 #include <QGuiApplication>
 #include <QIcon>
@@ -33,6 +40,7 @@
 #include <QPointer>
 #include <QRegion>
 #include <QScreen>
+#include <QScopeGuard>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QStyle>
@@ -69,7 +77,69 @@
 #include <unistd.h>
 #endif
 
+namespace vosulay::portal {
+
+struct FilterCondition {
+  uint type;
+  QString pattern;
+};
+
+using FilterConditions = QList<FilterCondition>;
+
+struct Filter {
+  QString name;
+  FilterConditions conditions;
+};
+
+using Filters = QList<Filter>;
+
+QDBusArgument &operator<<(QDBusArgument &argument,
+                          const FilterCondition &condition) {
+  argument.beginStructure();
+  argument << condition.type << condition.pattern;
+  argument.endStructure();
+  return argument;
+}
+
+const QDBusArgument &operator>>(const QDBusArgument &argument,
+                                FilterCondition &condition) {
+  argument.beginStructure();
+  argument >> condition.type >> condition.pattern;
+  argument.endStructure();
+  return argument;
+}
+
+QDBusArgument &operator<<(QDBusArgument &argument, const Filter &filter) {
+  argument.beginStructure();
+  argument << filter.name << filter.conditions;
+  argument.endStructure();
+  return argument;
+}
+
+const QDBusArgument &operator>>(const QDBusArgument &argument, Filter &filter) {
+  argument.beginStructure();
+  argument >> filter.name >> filter.conditions;
+  argument.endStructure();
+  return argument;
+}
+
+} // namespace vosulay::portal
+
+Q_DECLARE_METATYPE(vosulay::portal::FilterCondition)
+Q_DECLARE_METATYPE(vosulay::portal::FilterConditions)
+Q_DECLARE_METATYPE(vosulay::portal::Filter)
+Q_DECLARE_METATYPE(vosulay::portal::Filters)
+
 namespace vosulay {
+
+PortalResponseReceiver::PortalResponseReceiver(
+    std::function<void(uint, const QVariantMap &)> callback, QObject *parent)
+    : QObject(parent), callback_(std::move(callback)) {}
+
+void PortalResponseReceiver::response(uint response,
+                                      const QVariantMap &results) {
+  callback_(response, results);
+}
 
 ManagerBridge::ManagerBridge(std::function<void(const QString &)> handler,
                              QObject *parent)
@@ -784,6 +854,23 @@ private:
       view_->show();
     }
   }
+  void applyInputCapture(bool capture) {
+    QWindow *window = windowHandleOrCreate();
+    if (QApplication::platformName() == QStringLiteral("xcb")) {
+      window->setFlag(Qt::WindowTransparentForInput, !capture);
+    } else if (capture) {
+      window->setMask(QRegion());
+    } else {
+      window->setMask(QRegion(-1, -1, 1, 1));
+    }
+
+    if (layerWindow_ != nullptr) {
+      layerWindow_->setKeyboardInteractivity(
+          capture ? LayerShellQt::Window::KeyboardInteractivityExclusive
+                  : LayerShellQt::Window::KeyboardInteractivityNone);
+    }
+  }
+
 
   void setEditing(bool editing) {
     editing_ = editing;
@@ -792,20 +879,7 @@ private:
     } else {
       editingOffApplied_ = false;
     }
-    QWindow *window = windowHandleOrCreate();
-    if (QApplication::platformName() == QStringLiteral("xcb")) {
-      window->setFlag(Qt::WindowTransparentForInput, !editing);
-    } else if (editing) {
-      window->setMask(QRegion());
-    } else {
-      window->setMask(QRegion(-1, -1, 1, 1));
-    }
-
-    if (layerWindow_ != nullptr) {
-      layerWindow_->setKeyboardInteractivity(
-          editing ? LayerShellQt::Window::KeyboardInteractivityExclusive
-                  : LayerShellQt::Window::KeyboardInteractivityNone);
-    }
+    applyInputCapture(editing);
     if (editAction_ != nullptr) {
       editAction_->setText(editing ? QStringLiteral("Finish editing vosulay")
                                    : QStringLiteral("Edit vosulay"));
@@ -998,10 +1072,196 @@ private:
   }
 
   void chooseOverlayFile() {
-    const QString path = QFileDialog::getOpenFileName(
-        this, QStringLiteral("Choose HTML overlay"), QString(),
-        QStringLiteral("HTML files (*.html *.htm)"));
+    const bool overlayWasVisible = view_->isVisible();
+    view_->hide();
+    applyInputCapture(false);
+
+    bool restored = false;
+    const auto restoreOverlay = [&] {
+      if (restored) {
+        return;
+      }
+      restored = true;
+      view_->setVisible(overlayWasVisible);
+      applyInputCapture(editing_);
+    };
+    const auto restorationGuard = qScopeGuard(restoreOverlay);
+
+    static const bool portalTypesRegistered = [] {
+      qDBusRegisterMetaType<portal::FilterCondition>();
+      qDBusRegisterMetaType<portal::FilterConditions>();
+      qDBusRegisterMetaType<portal::Filter>();
+      qDBusRegisterMetaType<portal::Filters>();
+      return true;
+    }();
+    Q_UNUSED(portalTypesRegistered);
+
+    constexpr auto portalService = "org.freedesktop.portal.Desktop";
+    constexpr auto portalPath = "/org/freedesktop/portal/desktop";
+    constexpr auto fileChooserInterface =
+        "org.freedesktop.portal.FileChooser";
+    constexpr auto requestInterface = "org.freedesktop.portal.Request";
+
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    QString senderName = bus.baseService();
+    senderName.remove(QLatin1Char(':'));
+    senderName.replace(QLatin1Char('.'), QLatin1Char('_'));
+    if (!bus.isConnected() || senderName.isEmpty()) {
+      restoreOverlay();
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Could not connect to the desktop portal")));
+      return;
+    }
+
+    const QString handleToken =
+        QUuid::createUuid().toString(QUuid::Id128);
+    const QString predictedRequestPath =
+        QStringLiteral("/org/freedesktop/portal/desktop/request/%1/%2")
+            .arg(senderName, handleToken);
+
+    QEventLoop responseLoop;
+    bool responseFinished = false;
+    uint responseCode = 2;
+    QVariantMap responseResults;
+    QString portalError;
+    PortalResponseReceiver receiver(
+        [&](uint code, const QVariantMap &results) {
+          if (responseFinished) {
+            return;
+          }
+          responseFinished = true;
+          responseCode = code;
+          responseResults = results;
+          responseLoop.quit();
+        });
+
+    QStringList subscribedPaths;
+    const auto subscribe = [&](const QString &requestPath) {
+      if (!bus.connect(QString::fromLatin1(portalService), requestPath,
+                       QString::fromLatin1(requestInterface),
+                       QStringLiteral("Response"), &receiver,
+                       SLOT(response(uint,QVariantMap)))) {
+        return false;
+      }
+      subscribedPaths.append(requestPath);
+      return true;
+    };
+    const auto unsubscribe = [&](const QString &requestPath) {
+      bus.disconnect(QString::fromLatin1(portalService), requestPath,
+                     QString::fromLatin1(requestInterface),
+                     QStringLiteral("Response"), &receiver,
+                     SLOT(response(uint,QVariantMap)));
+      subscribedPaths.removeAll(requestPath);
+    };
+    const auto connectionGuard = qScopeGuard([&] {
+      const QStringList paths = subscribedPaths;
+      for (const QString &requestPath : paths) {
+        unsubscribe(requestPath);
+      }
+    });
+
+    if (!subscribe(predictedRequestPath)) {
+      restoreOverlay();
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Could not monitor the desktop file chooser")));
+      return;
+    }
+
+    QVariantMap options;
+    options.insert(QStringLiteral("handle_token"), handleToken);
+    options.insert(QStringLiteral("modal"), true);
+    options.insert(QStringLiteral("multiple"), false);
+    const portal::Filters filters{
+        {QStringLiteral("HTML files"),
+         {{0, QStringLiteral("*.html")}, {0, QStringLiteral("*.htm")}}}};
+    options.insert(QStringLiteral("filters"), QVariant::fromValue(filters));
+
+    QDBusInterface portal(QString::fromLatin1(portalService),
+                          QString::fromLatin1(portalPath),
+                          QString::fromLatin1(fileChooserInterface), bus);
+    if (!portal.isValid()) {
+      restoreOverlay();
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Desktop file chooser is unavailable")));
+      return;
+    }
+
+    QDBusPendingCallWatcher openCall(
+        portal.asyncCall(QStringLiteral("OpenFile"), QString(),
+                         QStringLiteral("Choose HTML overlay"), options));
+    QObject::connect(
+        &openCall, &QDBusPendingCallWatcher::finished, &receiver,
+        [&](QDBusPendingCallWatcher *watcher) {
+          if (responseFinished) {
+            return;
+          }
+          const QDBusPendingReply<QDBusObjectPath> reply = *watcher;
+          if (reply.isError()) {
+            portalError = reply.error().message();
+            if (portalError.isEmpty()) {
+              portalError =
+                  QStringLiteral("Desktop file chooser request failed");
+            }
+            responseFinished = true;
+            responseLoop.quit();
+            return;
+          }
+
+          const QString returnedRequestPath = reply.value().path();
+          if (returnedRequestPath.isEmpty()) {
+            portalError =
+                QStringLiteral("Desktop file chooser returned an invalid request");
+            responseFinished = true;
+            responseLoop.quit();
+            return;
+          }
+          if (returnedRequestPath != predictedRequestPath) {
+            if (!subscribe(returnedRequestPath)) {
+              portalError =
+                  QStringLiteral("Could not monitor the desktop file chooser");
+              responseFinished = true;
+              responseLoop.quit();
+              return;
+            }
+            unsubscribe(predictedRequestPath);
+          }
+        });
+
+    if (!responseFinished) {
+      responseLoop.exec();
+    }
+    restoreOverlay();
+
+    if (!portalError.isEmpty()) {
+      sendEnvelope(errorEnvelope(portalError));
+      return;
+    }
+    if (responseCode == 1) {
+      return;
+    }
+    if (responseCode != 0) {
+      sendEnvelope(
+          errorEnvelope(QStringLiteral("Desktop file chooser reported an error")));
+      return;
+    }
+
+    const QStringList uris =
+        responseResults.value(QStringLiteral("uris")).toStringList();
+    if (uris.isEmpty()) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Desktop file chooser returned no file")));
+      return;
+    }
+    const QUrl chosenUri(uris.constFirst());
+    if (!chosenUri.isValid() || !chosenUri.isLocalFile()) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Desktop file chooser returned a non-local file")));
+      return;
+    }
+    const QString path = chosenUri.toLocalFile();
     if (path.isEmpty()) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Desktop file chooser returned an invalid file")));
       return;
     }
 

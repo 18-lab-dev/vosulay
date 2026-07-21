@@ -12,6 +12,7 @@ const QT_MODULES: &[&str] = &[
     "Qt6WebEngineWidgets",
     "Qt6WebChannel",
     "Qt6Network",
+    "Qt6DBus",
 ];
 
 const CMAKE_ENVIRONMENT: &[&str] = &[
