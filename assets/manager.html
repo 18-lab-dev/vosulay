@@ -20,8 +20,12 @@
           <div id="profile-menu" role="menu" aria-label="Profiles" hidden></div>
         </div>
       </div>
-      <button id="profile-add" class="icon-button" title="Add profile" aria-label="Add profile">+</button>
-      <button id="profile-delete" class="icon-button danger" title="Delete profile" aria-label="Delete profile">−</button>
+      <div id="profile-actions" class="profile-actions" role="group" aria-label="Profile actions">
+        <button id="profile-add" class="icon-button" type="button" title="Add profile" aria-label="Add profile">+</button>
+        <button id="profile-delete" class="icon-button danger" type="button" title="Delete profile" aria-label="Delete profile">−</button>
+        <button id="profile-import" class="quiet-button profile-file-button" type="button" title="Import profile from JSON" disabled>Import</button>
+        <button id="profile-export" class="quiet-button profile-file-button" type="button" title="Export active profile to JSON" disabled>Export</button>
+      </div>
       <form id="profile-create" class="profile-create" hidden>
         <input id="profile-name" type="text" aria-label="Profile name" autocomplete="off">
         <button type="submit" class="primary-button">Create</button>

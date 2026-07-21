@@ -113,6 +113,9 @@ body.editing .overlay.selected .resize-handle { display: block; }
 .profile-option:hover, .profile-option:focus-visible { background: rgba(255,255,255,.1); }
 .profile-option[aria-checked="true"] { color: #fff; background: rgba(139,124,255,.24); }
 .profile-option[aria-checked="true"]:hover, .profile-option[aria-checked="true"]:focus-visible { background: rgba(139,124,255,.34); }
+.profile-actions { display: flex; align-items: center; gap: 6px; }
+.profile-actions[hidden] { display: none; }
+.profile-file-button { padding-inline: 9px; }
 .profile-create { display: flex; align-items: center; gap: 6px; }
 .profile-create input { width: clamp(110px, 16vw, 180px); max-width: 180px; }
 .profile-create[hidden] { display: none; }

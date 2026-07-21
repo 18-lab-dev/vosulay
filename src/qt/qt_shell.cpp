@@ -44,6 +44,7 @@
 #include <QShortcut>
 #include <QScopeGuard>
 #include <QStandardPaths>
+#include <QSaveFile>
 #include <QStringList>
 #include <QStyle>
 #include <QSystemTrayIcon>
@@ -156,6 +157,7 @@ constexpr auto kApplicationVersion = "0.1.0";
 constexpr auto kChromiumUnlimitedFps = "--disable-frame-rate-limit";
 constexpr auto kOverlayScheme = "vosulay-overlay";
 constexpr qsizetype kMaximumIpcBytes = 4096;
+constexpr qsizetype kMaximumProfileBytes = 1024 * 1024;
 
 QString rustStringToQString(const rust::String &value) {
   return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
@@ -590,6 +592,30 @@ public:
       return false;
     }
     authorizedRoots_.insert(url.host(), *root);
+    return true;
+  }
+
+  bool authorizeUrls(const QList<QUrl> &urls) {
+    QHash<QString, QString> additions;
+    for (const QUrl &url : urls) {
+      const auto root = overlayRootFromUrl(url);
+      if (!root) {
+        return false;
+      }
+      const auto authorized = authorizedRoots_.constFind(url.host());
+      if (authorized != authorizedRoots_.cend() && *authorized != *root) {
+        return false;
+      }
+      const auto addition = additions.constFind(url.host());
+      if (addition != additions.cend() && *addition != *root) {
+        return false;
+      }
+      additions.insert(url.host(), *root);
+    }
+    for (auto addition = additions.cbegin(); addition != additions.cend();
+         ++addition) {
+      authorizedRoots_.insert(addition.key(), addition.value());
+    }
     return true;
   }
 
@@ -1071,6 +1097,12 @@ private:
       setEditing(request.value(QStringLiteral("editing")).toBool());
     } else if (type == QStringLiteral("choose-overlay-file")) {
       chooseOverlayFile();
+    } else if (type == QStringLiteral("export-profile")) {
+      exportProfile(request.value(QStringLiteral("profile")));
+    } else if (type == QStringLiteral("import-profile")) {
+      importProfile();
+    } else if (type == QStringLiteral("authorize-profile-import")) {
+      authorizeProfileImport(request.value(QStringLiteral("profile")));
     } else if (type == QStringLiteral("open-settings")) {
       openSettings(request.value(QStringLiteral("counter_id")).toString());
     } else if (type == QStringLiteral("open-available")) {
@@ -1083,7 +1115,9 @@ private:
     }
   }
 
-  void chooseOverlayFile() {
+  QString choosePortalFile(const QString &method, const QString &title,
+                           const portal::Filters &filters,
+                           const QString &currentName = {}) {
     const bool overlayWasVisible = view_->isVisible();
     view_->hide();
     applyInputCapture(false);
@@ -1122,7 +1156,7 @@ private:
       restoreOverlay();
       sendEnvelope(errorEnvelope(
           QStringLiteral("Could not connect to the desktop portal")));
-      return;
+      return {};
     }
 
     const QString handleToken =
@@ -1176,17 +1210,19 @@ private:
       restoreOverlay();
       sendEnvelope(errorEnvelope(
           QStringLiteral("Could not monitor the desktop file chooser")));
-      return;
+      return {};
     }
 
     QVariantMap options;
     options.insert(QStringLiteral("handle_token"), handleToken);
     options.insert(QStringLiteral("modal"), true);
-    options.insert(QStringLiteral("multiple"), false);
-    const portal::Filters filters{
-        {QStringLiteral("HTML files"),
-         {{0, QStringLiteral("*.html")}, {0, QStringLiteral("*.htm")}}}};
     options.insert(QStringLiteral("filters"), QVariant::fromValue(filters));
+    if (method == QStringLiteral("OpenFile")) {
+      options.insert(QStringLiteral("multiple"), false);
+    }
+    if (!currentName.isEmpty()) {
+      options.insert(QStringLiteral("current_name"), currentName);
+    }
 
     QDBusInterface portal(QString::fromLatin1(portalService),
                           QString::fromLatin1(portalPath),
@@ -1195,14 +1231,13 @@ private:
       restoreOverlay();
       sendEnvelope(errorEnvelope(
           QStringLiteral("Desktop file chooser is unavailable")));
-      return;
+      return {};
     }
 
-    QDBusPendingCallWatcher openCall(
-        portal.asyncCall(QStringLiteral("OpenFile"), QString(),
-                         QStringLiteral("Choose HTML overlay"), options));
+    QDBusPendingCallWatcher portalCall(
+        portal.asyncCall(method, QString(), title, options));
     QObject::connect(
-        &openCall, &QDBusPendingCallWatcher::finished, &receiver,
+        &portalCall, &QDBusPendingCallWatcher::finished, &receiver,
         [&](QDBusPendingCallWatcher *watcher) {
           if (responseFinished) {
             return;
@@ -1246,15 +1281,15 @@ private:
 
     if (!portalError.isEmpty()) {
       sendEnvelope(errorEnvelope(portalError));
-      return;
+      return {};
     }
     if (responseCode == 1) {
-      return;
+      return {};
     }
     if (responseCode != 0) {
       sendEnvelope(
           errorEnvelope(QStringLiteral("Desktop file chooser reported an error")));
-      return;
+      return {};
     }
 
     const QStringList uris =
@@ -1262,18 +1297,31 @@ private:
     if (uris.isEmpty()) {
       sendEnvelope(errorEnvelope(
           QStringLiteral("Desktop file chooser returned no file")));
-      return;
+      return {};
     }
     const QUrl chosenUri(uris.constFirst());
     if (!chosenUri.isValid() || !chosenUri.isLocalFile()) {
       sendEnvelope(errorEnvelope(
           QStringLiteral("Desktop file chooser returned a non-local file")));
-      return;
+      return {};
     }
     const QString path = chosenUri.toLocalFile();
     if (path.isEmpty()) {
       sendEnvelope(errorEnvelope(
           QStringLiteral("Desktop file chooser returned an invalid file")));
+      return {};
+    }
+    return path;
+  }
+
+  void chooseOverlayFile() {
+    const portal::Filters filters{
+        {QStringLiteral("HTML files"),
+         {{0, QStringLiteral("*.html")}, {0, QStringLiteral("*.htm")}}}};
+    const QString path =
+        choosePortalFile(QStringLiteral("OpenFile"),
+                         QStringLiteral("Choose HTML overlay"), filters);
+    if (path.isEmpty()) {
       return;
     }
 
@@ -1306,6 +1354,196 @@ private:
         QJsonObject{{QStringLiteral("type"), QStringLiteral("overlay-file")},
                     {QStringLiteral("url"), selectedUrl.toString()},
                     {QStringLiteral("name"), fileInfo.completeBaseName()}});
+  }
+
+  static QString profileFilename(const QJsonObject &profile) {
+    const QString name =
+        profile.value(QStringLiteral("name")).toString().trimmed();
+    const QString forbidden = QStringLiteral("/\\:*?\"<>|");
+    QString filename;
+    filename.reserve(std::min<qsizetype>(name.size(), 96));
+    for (const QChar character : name) {
+      if (filename.size() == 96) {
+        break;
+      }
+      if (character.unicode() < 0x20 || character.unicode() == 0x7f ||
+          forbidden.contains(character)) {
+        filename.append(QLatin1Char('_'));
+      } else {
+        filename.append(character);
+      }
+    }
+    filename = filename.trimmed();
+    while (filename.endsWith(QLatin1Char('.'))) {
+      filename.chop(1);
+    }
+    if (filename.isEmpty()) {
+      filename = QStringLiteral("profile");
+    }
+    return filename + QStringLiteral(".json");
+  }
+
+  void exportProfile(const QJsonValue &profileValue) {
+    if (!profileValue.isObject()) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("The active profile is not a valid JSON object")));
+      return;
+    }
+    const QJsonObject profile = profileValue.toObject();
+    const QByteArray payload =
+        QJsonDocument(profile).toJson(QJsonDocument::Compact);
+    if (payload.size() > kMaximumProfileBytes) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("The profile is too large to export (maximum 1 MiB)")));
+      return;
+    }
+
+    const portal::Filters filters{
+        {QStringLiteral("JSON profile files"),
+         {{0, QStringLiteral("*.json")}}}};
+    const QString path =
+        choosePortalFile(QStringLiteral("SaveFile"),
+                         QStringLiteral("Export profile"), filters,
+                         profileFilename(profile));
+    if (path.isEmpty()) {
+      return;
+    }
+    const QFileInfo fileInfo(path);
+    if (fileInfo.suffix().compare(QStringLiteral("json"),
+                                  Qt::CaseInsensitive) != 0) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("The export filename must end with .json")));
+      return;
+    }
+
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Could not open the selected file for export")));
+      return;
+    }
+    if (file.write(payload) != payload.size()) {
+      file.cancelWriting();
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Could not write the exported profile")));
+      return;
+    }
+    if (!file.commit()) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Could not finish writing the exported profile")));
+      return;
+    }
+    sendEnvelope(QJsonObject{
+        {QStringLiteral("type"), QStringLiteral("profile-exported")}});
+  }
+
+  void importProfile() {
+    const portal::Filters filters{
+        {QStringLiteral("JSON profile files"),
+         {{0, QStringLiteral("*.json")}}}};
+    const QString path =
+        choosePortalFile(QStringLiteral("OpenFile"),
+                         QStringLiteral("Import profile"), filters);
+    if (path.isEmpty()) {
+      return;
+    }
+
+    const QFileInfo fileInfo(path);
+    if (!fileInfo.isFile() || !fileInfo.isReadable() ||
+        fileInfo.suffix().compare(QStringLiteral("json"),
+                                  Qt::CaseInsensitive) != 0) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Selected profile is not a readable JSON file")));
+      return;
+    }
+    if (fileInfo.size() > kMaximumProfileBytes) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Selected profile is too large (maximum 1 MiB)")));
+      return;
+    }
+
+    QFile file(fileInfo.absoluteFilePath());
+    if (!file.open(QIODevice::ReadOnly)) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Selected profile could not be opened")));
+      return;
+    }
+    const QByteArray payload = file.read(kMaximumProfileBytes + 1);
+    if (file.error() != QFileDevice::NoError) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Selected profile could not be read")));
+      return;
+    }
+    if (payload.size() > kMaximumProfileBytes) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Selected profile is too large (maximum 1 MiB)")));
+      return;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument document =
+        QJsonDocument::fromJson(payload, &parseError);
+    if (parseError.error != QJsonParseError::NoError ||
+        !document.isObject()) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Selected profile is not a valid JSON object")));
+      return;
+    }
+
+    const QJsonObject profile = document.object();
+
+    sendEnvelope(
+        QJsonObject{{QStringLiteral("type"), QStringLiteral("profile-import")},
+                    {QStringLiteral("profile"), profile}});
+  }
+
+  void authorizeProfileImport(const QJsonValue &profileValue) {
+    if (!profileValue.isObject()) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Imported profile is not a valid JSON object")));
+      return;
+    }
+
+    const QJsonObject profile = profileValue.toObject();
+    const QJsonValue overlaysValue = profile.value(QStringLiteral("overlays"));
+    if (!overlaysValue.isArray()) {
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Imported profile does not contain a valid overlays array")));
+      return;
+    }
+
+    const QJsonArray overlays = overlaysValue.toArray();
+    for (const QJsonValue &overlayValue : overlays) {
+      if (!overlayValue.isObject()) {
+        sendEnvelope(errorEnvelope(
+            QStringLiteral("Imported profile contains an invalid overlay")));
+        return;
+      }
+    }
+
+    QList<QUrl> localOverlayUrls;
+    for (const QJsonValue &overlayValue : overlays) {
+      const QJsonValue urlValue =
+          overlayValue.toObject().value(QStringLiteral("url"));
+      if (!urlValue.isString()) {
+        continue;
+      }
+      const QUrl url(urlValue.toString().trimmed());
+      if (url.scheme() == QString::fromLatin1(kOverlayScheme)) {
+        localOverlayUrls.append(url);
+      }
+    }
+
+    if (!overlaySchemeHandler_->authorizeUrls(localOverlayUrls)) {
+      sendEnvelope(errorEnvelope(QStringLiteral(
+          "Imported profile contains a local overlay that could not be authorized")));
+      return;
+    }
+
+    sendEnvelope(QJsonObject{
+        {QStringLiteral("type"),
+         QStringLiteral("profile-import-authorized")},
+        {QStringLiteral("profile"), profileValue}});
   }
 
   static bool configHasActiveOverlays(const QJsonValue &config) {

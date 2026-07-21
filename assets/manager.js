@@ -10,6 +10,9 @@
   const profileMenu = $("profile-menu");
   const profilePicker = profileSelect.closest(".profile-picker");
   const profileAdd = $("profile-add");
+  const profileActions = $("profile-actions");
+  const profileImport = $("profile-import");
+  const profileExport = $("profile-export");
   const profileCreate = $("profile-create");
   const profileName = $("profile-name");
   const profileCreateCancel = $("profile-create-cancel");
@@ -417,6 +420,8 @@
     profileMenu.replaceChildren();
     if (!state.config) {
       profileSelectLabel.textContent = "";
+      profileImport.disabled = true;
+      profileExport.disabled = true;
       return;
     }
     const current = activeProfile();
@@ -432,6 +437,8 @@
       profileMenu.append(option);
     }
     $("profile-delete").disabled = state.config.profiles.length <= 1;
+    profileImport.disabled = !current;
+    profileExport.disabled = !current;
   }
 
   function renderCatalog() {
@@ -584,6 +591,33 @@
     while (taken.has(id));
     return id;
   }
+  function prepareProfileImport(input) {
+    if (!state.config) throw new Error("Cannot import a profile before configuration is loaded");
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Imported profile must be an object");
+    const name = typeof input.name === "string" ? input.name.trim() : "";
+    if (!name) throw new Error("Imported profile name cannot be empty");
+    if (!Array.isArray(input.overlays)) throw new Error("Imported profile overlays must be an array");
+    if (input.overlays.some((overlay) => !overlay || typeof overlay !== "object" || Array.isArray(overlay))) {
+      throw new Error("Every imported overlay must be an object");
+    }
+
+    const overlays = input.overlays.map(normalizeOverlay);
+    const invalidSource = overlays.find((overlay) => overlay.url && !customSource(overlay));
+    if (invalidSource) throw new Error(`Unsupported custom overlay source: ${invalidSource.url}`);
+
+    ipc({ type: "authorize-profile-import", profile: { id: uniqueProfileId(), name, overlays } });
+  }
+
+  function commitProfileImport(profile) {
+    if (state.config.profiles.some((existing) => existing.id === profile.id)) profile = { ...profile, id: uniqueProfileId() };
+    state.config.profiles.push(profile);
+    state.config.active_profile = profile.id;
+    state.selected = null;
+    scheduleSave(true);
+    requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
+    status.textContent = "Profile imported";
+    toast(`Imported “${profile.name}”`);
+  }
 
   function addCounter(counter) {
     const profile = activeProfile();
@@ -701,12 +735,14 @@
   function closeProfileCreator(restoreFocus = false) {
     if (profileCreate.hidden) return;
     profileCreate.hidden = true;
+    profileActions.hidden = false;
     if (restoreFocus) profileAdd.focus();
   }
 
   function openProfileCreator() {
     if (!state.config) return;
     profileName.value = `Profile ${state.config.profiles.length + 1}`;
+    profileActions.hidden = true;
     profileCreate.hidden = false;
     profileName.focus();
     profileName.select();
@@ -911,6 +947,20 @@
     if (!profileMenu.hidden && !profilePicker.contains(event.relatedTarget)) closeProfileMenu();
   });
   profileAdd.addEventListener("click", openProfileCreator);
+  profileImport.addEventListener("click", () => {
+    if (!state.config) return;
+    closeProfileMenu();
+    closeProfileCreator();
+    ipc({ type: "import-profile" });
+  });
+  profileExport.addEventListener("click", () => {
+    flushEditingChanges();
+    const profile = activeProfile();
+    if (!profile) return;
+    closeProfileMenu();
+    closeProfileCreator();
+    ipc({ type: "export-profile", profile });
+  });
   profileCreate.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!state.config) return;
@@ -1198,6 +1248,13 @@
         state.error = null;
         status.textContent = "Catalog refreshed";
         requestRender("stageStructure", "catalog", "inspector");
+      } else if (envelope.type === "profile-exported") {
+        status.textContent = "Profile exported";
+        toast("Profile exported");
+      } else if (envelope.type === "profile-import") {
+        prepareProfileImport(envelope.profile);
+      } else if (envelope.type === "profile-import-authorized") {
+        commitProfileImport(envelope.profile);
       } else if (envelope.type === "overlay-file") {
         const source = parseSource(envelope.url, ["vosulay-overlay:"]);
         if (!source) {
