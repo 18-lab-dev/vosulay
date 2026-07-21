@@ -50,6 +50,10 @@ body.editing .overlay { cursor: move; }
 body.editing .overlay-frame { pointer-events: none; }
 .interaction-shield { display: none; position: absolute; inset: 0; z-index: 2; }
 body.editing .interaction-shield { display: block; }
+body.editing.interacting .overlay { cursor: default; }
+body.editing.interacting .overlay-frame { pointer-events: auto; }
+body.editing.interacting .interaction-shield,
+body.editing.interacting .overlay.selected .resize-handle { display: none; }
 body.editing .overlay::after {
   content: ""; position: absolute; inset: -1px; z-index: 3; pointer-events: none;
   border: 1px solid rgba(169, 159, 255, .82); border-radius: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,.35);
@@ -160,9 +164,14 @@ button:disabled { opacity: .42; cursor: default; }
 .inspector { position: absolute; top: 72px; right: 12px; width: 260px; border-radius: 12px; overflow: hidden; }
 .truncate { min-width: 0; }
 .truncate strong, .truncate small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-fields { display: grid; gap: 9px; padding: 12px 12px 0; }
+.source-fields label[hidden] { display: none; }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; padding: 12px; }
-.field-grid label { color: var(--muted); font-size: 11px; }
-.field-grid input { display: block; width: 100%; margin-top: 4px; color: var(--text); }
+.source-fields label, .field-grid label { color: var(--muted); font-size: 11px; }
+.source-fields input, .field-grid input { display: block; width: 100%; margin-top: 4px; color: var(--text); }
+.field-warning { display: block; max-width: 100%; margin-top: 3px; color: var(--danger); line-height: 1.2; white-space: normal; overflow-wrap: anywhere; }
+.field-warning[hidden] { display: none; }
+.field-grid input[aria-invalid="true"] { border-color: rgba(255, 111, 132, .65); }
 .inspector-actions { display: flex; gap: 8px; padding: 0 12px 10px; }
 .inspector-actions button { flex: 1; }
 .hint { display: block; padding: 0 12px 12px; color: var(--muted); text-align: center; }

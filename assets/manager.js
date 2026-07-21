@@ -18,8 +18,12 @@
   const addUrl = $("add-url");
   const urlModal = $("url-modal");
   const urlForm = $("url-form");
+  const urlName = $("url-name");
   const urlInput = $("url-input");
   const urlCancel = $("url-cancel");
+  const nameField = $("field-name");
+  const urlField = $("field-url");
+  const urlFieldLabel = $("field-url-label");
   const fields = {
     left: $("field-left"), top: $("field-top"), width: $("field-width"),
     height: $("field-height"), scale: $("field-scale"), z_index: $("field-z"),
@@ -40,6 +44,7 @@
     config: null,
     counters: null,
     editing: false,
+    interacting: false,
     selected: null,
     saveTimer: 0,
     saveRevision: 0,
@@ -180,8 +185,12 @@
     const sine = Math.sin(angle);
     const centerX = overlay.scale * (overlay.width * cosine - overlay.height * sine) / 2;
     const centerY = overlay.scale * (overlay.width * sine + overlay.height * cosine) / 2;
-    overlay.left = clamp(finite(overlay.left, 0), -centerX, window.innerWidth - centerX);
-    overlay.top = clamp(finite(overlay.top, 0), -centerY, window.innerHeight - centerY);
+    if (document.activeElement !== fields.left) {
+      overlay.left = clamp(finite(overlay.left, 0), -centerX, window.innerWidth - centerX);
+    }
+    if (document.activeElement !== fields.top) {
+      overlay.top = clamp(finite(overlay.top, 0), -centerY, window.innerHeight - centerY);
+    }
   }
 
   function applyOverlayStyle(root, overlay) {
@@ -275,7 +284,7 @@
     }
     return {
       available: Boolean(counter),
-      name: counter ? counter.name : `${overlay.counter_id} (missing)`,
+      name: safeId(overlay.name, counter ? counter.name : `${overlay.counter_id} (missing)`),
       url: counter ? counter.url : null,
       counter
     };
@@ -461,30 +470,88 @@
     return String(Math.round(overlay[name] * 100) / 100);
   }
 
+  function fieldWarning(input) {
+    return document.getElementById(`${input.id}-warning`);
+  }
+
+  function clearFieldWarning(input) {
+    const warning = fieldWarning(input);
+    input.removeAttribute("aria-invalid");
+    if (!warning) return;
+    warning.textContent = "";
+    warning.hidden = true;
+  }
+
+  function showFieldWarning(input, message) {
+    const warning = fieldWarning(input);
+    input.setAttribute("aria-invalid", "true");
+    if (!warning) return;
+    warning.textContent = message;
+    warning.hidden = false;
+  }
+
+  function clearInspectorWarnings() {
+    for (const input of Object.values(fields)) clearFieldWarning(input);
+  }
+
+  function inspectorFieldBounds(input) {
+    return {
+      minimum: input.min === "" ? -Infinity : finite(input.min, -Infinity),
+      maximum: input.max === "" ? Infinity : finite(input.max, Infinity)
+    };
+  }
+
+  function applyInspectorFieldValue(name, overlay, value) {
+    if (name === "z_index") overlay.z_index = Math.round(value);
+    else if (name === "opacity") overlay.opacity = value / 100;
+    else overlay[name] = value;
+    clampOverlay(overlay);
+  }
+
+  let inspectorWarningContext = null;
+  const positionFocusValues = new WeakMap();
+
   function renderInspectorNumbers(overlay, names = Object.keys(fields)) {
     for (const name of names) {
+      const input = fields[name];
+      if (document.activeElement === input) continue;
       const value = inspectorFieldValue(name, overlay);
-      if (fields[name].value !== value) fields[name].value = value;
+      if (input.value !== value) input.value = value;
     }
+  }
+
+  function renderInspectorText(input, value) {
+    if (document.activeElement !== input && input.value !== value) input.value = value;
   }
 
   function renderInspector() {
     const overlay = selectedOverlay();
+    const warningContext = state.editing ? overlay : null;
+    if (inspectorWarningContext !== warningContext) {
+      inspectorWarningContext = warningContext;
+      clearInspectorWarnings();
+    }
     inspector.hidden = !state.editing || !overlay;
     if (!overlay) return;
     const counter = findCounter(overlay.counter_id);
-    if (overlay.url) {
+    const details = overlayDetails(overlay);
+    const custom = Boolean(overlay.url);
+
+    $("selection-name").textContent = details.name;
+    if (custom) {
       const source = customSource(overlay);
-      $("selection-name").textContent = safeId(overlay.name, source ? source.hostname || "HTML overlay" : overlay.counter_id);
       $("selection-meta").textContent = source
         ? `${source.protocol === "vosulay-overlay:" ? "HTML file" : "URL"} · ${overlay.url}`
         : `Unsupported source · ${overlay.url}`;
     } else {
-      $("selection-name").textContent = counter ? counter.name : overlay.counter_id;
       $("selection-meta").textContent = counter ? [counter.author, counter.version].filter(Boolean).join(" · ") : "Counter is not installed";
     }
+
+    renderInspectorText(nameField, details.name);
+    urlFieldLabel.hidden = !custom;
+    renderInspectorText(urlField, custom ? overlay.url : "");
     renderInspectorNumbers(overlay);
-    $("settings").disabled = Boolean(overlay.url) || !counter || !counter.has_settings;
+    $("settings").disabled = custom || !counter || !counter.has_settings;
   }
 
   function render() {
@@ -492,6 +559,7 @@
     for (const name of Object.keys(dirty)) dirty[name] = false;
     if (regions.chrome) {
       document.body.classList.toggle("editing", state.editing);
+      document.body.classList.toggle("interacting", state.editing && state.interacting);
       editor.hidden = !state.editing;
     }
     if (regions.stageStructure || regions.stageGeometry) {
@@ -504,6 +572,7 @@
 
   function selectOverlay(overlay) {
     if (state.selected === overlay) return;
+    if (inspector.contains(document.activeElement)) document.activeElement.blur();
     state.selected = overlay;
     requestRender("stageGeometry", "inspector");
   }
@@ -599,6 +668,7 @@
   }
 
   function flushEditingChanges() {
+    if (inspector.contains(document.activeElement)) document.activeElement.blur();
     const operation = state.pointer;
     if (operation) {
       if (operation.frame) {
@@ -622,10 +692,10 @@
     if (!state.config) return;
     closeProfileMenu();
     closeProfileCreator();
+    urlName.value = "";
     urlInput.value = "https://";
     urlModal.hidden = false;
-    urlInput.focus();
-    urlInput.select();
+    urlName.focus();
   }
 
   function closeProfileCreator(restoreFocus = false) {
@@ -645,7 +715,9 @@
   function setEditing(editing, notify = true) {
     const next = Boolean(editing);
     const changed = state.editing !== next;
+    const interactionChanged = !next && state.interacting;
     if (!next) {
+      state.interacting = false;
       closeUrlModal();
       closeProfileMenu();
       closeProfileCreator();
@@ -654,8 +726,8 @@
     if (changed) {
       state.editing = next;
       if (!next) state.selected = null;
-      requestRender("chrome", "stageGeometry", "inspector");
     }
+    if (changed || interactionChanged) requestRender("chrome", "stageGeometry", "inspector");
     if (notify && changed) ipc({ type: "set-editing", editing: next });
     else if (!notify && !next) ipc({ type: "editing-applied", editing: false });
   }
@@ -873,28 +945,110 @@
     requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
   });
 
+  function commitTitle() {
+    const overlay = selectedOverlay();
+    if (!overlay) return;
+    const next = nameField.value.trim();
+    const current = typeof overlay.name === "string" ? overlay.name : "";
+    if (!next) {
+      setError("Overlay title cannot be empty");
+      nameField.value = current || overlayDetails(overlay).name;
+      return;
+    }
+    if (!current && next === overlayDetails(overlay).name) return;
+    if (next === current) return;
+    overlay.name = next;
+    scheduleSave();
+    requestRender("stageStructure", "inspector");
+  }
+
+  function commitUrl() {
+    const overlay = selectedOverlay();
+    if (!overlay || !overlay.url) return;
+    const raw = urlField.value.trim();
+    const source = parseSource(raw, ["http:", "https:", "vosulay-overlay:"]);
+    if (!raw || !source) {
+      setError(!raw ? "Overlay URL cannot be empty" : "Overlay URL must use http, https, or vosulay-overlay");
+      urlField.value = overlay.url;
+      return;
+    }
+    if (urlField.value !== source.href) urlField.value = source.href;
+    if (source.href === overlay.url) return;
+    overlay.url = source.href;
+    scheduleSave(true);
+    requestRender("stageStructure", "inspector");
+  }
+
+  function commitInspectorOnEnter(event, commit) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.repeat) commit();
+  }
+
+  nameField.addEventListener("change", commitTitle);
+  nameField.addEventListener("keydown", (event) => commitInspectorOnEnter(event, commitTitle));
+  urlField.addEventListener("change", commitUrl);
+  urlField.addEventListener("keydown", (event) => commitInspectorOnEnter(event, commitUrl));
+
   for (const [name, input] of Object.entries(fields)) {
-    input.addEventListener("input", () => {
+    input.addEventListener("focus", () => {
+      if (name !== "left" && name !== "top") return;
       const overlay = selectedOverlay();
-      if (!overlay || input.value === "") return;
+      if (overlay) positionFocusValues.set(input, overlay[name]);
+    });
+    input.addEventListener("input", () => {
+      clearFieldWarning(input);
+      const overlay = selectedOverlay();
+      if (!overlay || input.value.trim() === "") return;
       const value = Number(input.value);
-      if (!Number.isFinite(value)) return;
-      if (name === "width" || name === "height") overlay[name] = Math.max(10, value);
-      else if (name === "scale") overlay.scale = Math.max(0.1, value);
-      else if (name === "z_index") overlay.z_index = Math.round(clamp(value, 0, 999));
-      else if (name === "opacity") overlay.opacity = clamp(value / 100, 0, 1);
-      else if (name === "rotation") overlay.rotation = clamp(value, -180, 180);
-      else overlay[name] = value;
-      clampOverlay(overlay);
+      const { minimum, maximum } = inspectorFieldBounds(input);
+      if (!Number.isFinite(value) || value < minimum || value > maximum) return;
+      const positionField = name === "left" || name === "top";
+      if (positionField) {
+        overlay[name] = value;
+        const root = overlayRoots.get(overlay);
+        if (root) applyOverlayStyle(root, overlay);
+        return;
+      }
+      applyInspectorFieldValue(name, overlay, value);
       scheduleSave();
       requestRender("stageGeometry", "inspector");
     });
-    input.addEventListener("change", () => {
+    input.addEventListener("blur", () => {
       const overlay = selectedOverlay();
       if (!overlay) return;
-      clampOverlay(overlay);
+      const raw = input.value.trim();
+      const value = raw === "" ? NaN : Number(raw);
+      if (!Number.isFinite(value)) {
+        const previousPosition = positionFocusValues.get(input);
+        if (Number.isFinite(previousPosition)) {
+          applyInspectorFieldValue(name, overlay, previousPosition);
+          requestRender("stageGeometry", "inspector");
+        }
+        positionFocusValues.delete(input);
+        input.value = inspectorFieldValue(name, overlay);
+        showFieldWarning(input, "Enter a number.");
+        return;
+      }
+
+      const { minimum, maximum } = inspectorFieldBounds(input);
+      positionFocusValues.delete(input);
+      const adjusted = clamp(value, minimum, maximum);
+      applyInspectorFieldValue(name, overlay, adjusted);
+      const positionAdjusted = (name === "left" || name === "top") && overlay[name] !== value;
+      input.value = inspectorFieldValue(name, overlay);
       scheduleSave();
       requestRender("stageGeometry", "inspector");
+      if (value < minimum) {
+        showFieldWarning(input, `Value must be at least ${input.min}. Adjusted to ${input.min}.`);
+      } else if (value > maximum) {
+        showFieldWarning(input, `Value must be at most ${input.max}. Adjusted to ${input.max}.`);
+      } else if (positionAdjusted) {
+        showFieldWarning(input, `Value was adjusted to ${input.value} to keep the overlay in view.`);
+      } else {
+        clearFieldWarning(input);
+      }
     });
   }
 
@@ -919,14 +1073,22 @@
   urlCancel.addEventListener("click", () => closeUrlModal());
   urlForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    const source = parseSource(urlInput.value, ["http:", "https:"]);
-    if (!source) {
-      setError("Overlay URL must be a valid http or https URL");
+    const name = urlName.value.trim();
+    if (!name) {
+      setError("Overlay title cannot be empty");
+      urlName.focus();
+      urlName.select();
+      return;
+    }
+    const raw = urlInput.value.trim();
+    const source = parseSource(raw, ["http:", "https:"]);
+    if (!raw || !source) {
+      setError(!raw ? "Overlay URL cannot be empty" : "Overlay URL must be a valid http or https URL");
       urlInput.focus();
       urlInput.select();
       return;
     }
-    addCustomOverlay(source, deriveUrlName(source));
+    addCustomOverlay(source, name);
     closeUrlModal();
   });
   $("add-html-file").addEventListener("click", () => ipc({ type: "choose-overlay-file" }));
@@ -1046,6 +1208,11 @@
       } else if (envelope.type === "editing") {
         const value = envelope.editing !== undefined ? envelope.editing : envelope.payload;
         setEditing(Boolean(value), false);
+      } else if (envelope.type === "toggle-interaction") {
+        if (state.editing) {
+          state.interacting = !state.interacting;
+          requestRender("chrome");
+        }
       } else if (envelope.type === "error") {
         const value = envelope.message !== undefined ? envelope.message : envelope.error !== undefined ? envelope.error : envelope.payload;
         setError(typeof value === "string" ? value : "vosu could not refresh counters");

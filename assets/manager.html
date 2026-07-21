@@ -51,25 +51,31 @@
         <div class="truncate"><strong id="selection-name">Counter</strong><small id="selection-meta"></small></div>
         <button id="remove" class="icon-button danger" title="Remove counter" aria-label="Remove counter">×</button>
       </div>
+      <div class="source-fields">
+        <label>Title<input id="field-name" type="text" autocomplete="off"></label>
+        <label id="field-url-label">URL<input id="field-url" type="text" inputmode="url" autocomplete="url" spellcheck="false"></label>
+      </div>
       <div class="field-grid">
-        <label>X<input id="field-left" type="number" step="1"></label>
-        <label>Y<input id="field-top" type="number" step="1"></label>
-        <label>Width<input id="field-width" type="number" min="10" step="1"></label>
-        <label>Height<input id="field-height" type="number" min="10" step="1"></label>
-        <label>Scale<input id="field-scale" type="number" min="0.1" step="0.05"></label>
-        <label>Layer<input id="field-z" type="number" min="0" max="999" step="1"></label>
-        <label>Opacity %<input id="field-opacity" type="number" min="0" max="100" step="1"></label>
-        <label>Rotation<input id="field-rotation" type="number" min="-180" max="180" step="1"></label>
+        <label>X<input id="field-left" type="number" step="1" aria-describedby="field-left-warning"><small id="field-left-warning" class="field-warning" hidden></small></label>
+        <label>Y<input id="field-top" type="number" step="1" aria-describedby="field-top-warning"><small id="field-top-warning" class="field-warning" hidden></small></label>
+        <label>Width<input id="field-width" type="number" min="10" step="1" aria-describedby="field-width-warning"><small id="field-width-warning" class="field-warning" hidden></small></label>
+        <label>Height<input id="field-height" type="number" min="10" step="1" aria-describedby="field-height-warning"><small id="field-height-warning" class="field-warning" hidden></small></label>
+        <label>Scale<input id="field-scale" type="number" min="0.1" step="0.05" aria-describedby="field-scale-warning"><small id="field-scale-warning" class="field-warning" hidden></small></label>
+        <label>Layer<input id="field-z" type="number" min="0" max="999" step="1" aria-describedby="field-z-warning"><small id="field-z-warning" class="field-warning" hidden></small></label>
+        <label>Opacity %<input id="field-opacity" type="number" min="0" max="100" step="1" aria-describedby="field-opacity-warning"><small id="field-opacity-warning" class="field-warning" hidden></small></label>
+        <label>Rotation<input id="field-rotation" type="number" min="-180" max="180" step="1" aria-describedby="field-rotation-warning"><small id="field-rotation-warning" class="field-warning" hidden></small></label>
       </div>
       <div class="inspector-actions">
         <button id="reset" class="quiet-button">Reset size</button>
         <button id="settings" class="quiet-button">Settings</button>
       </div>
-      <small class="hint">Drag to move · handles resize · wheel changes layer</small>
+      <small class="hint">Drag move · handles resize · wheel changes layer · Ctrl+I interacts</small>
     </aside>
     <div id="url-modal" class="modal-backdrop" hidden>
       <form id="url-form" class="url-dialog" role="dialog" aria-modal="true" aria-labelledby="url-dialog-title" novalidate>
         <strong id="url-dialog-title">Add overlay URL</strong>
+        <label for="url-name">Title</label>
+        <input id="url-name" type="text" autocomplete="off">
         <label for="url-input">URL</label>
         <input id="url-input" type="url" value="https://" inputmode="url" autocomplete="url" spellcheck="false">
         <div class="url-dialog-actions">

@@ -37,9 +37,11 @@
 #include <QUuid>
 #include <QMimeDatabase>
 #include <QMenu>
+#include <QKeySequence>
 #include <QPointer>
 #include <QRegion>
 #include <QScreen>
+#include <QShortcut>
 #include <QScopeGuard>
 #include <QStandardPaths>
 #include <QStringList>
@@ -671,6 +673,16 @@ public:
     view_->setAttribute(Qt::WA_TranslucentBackground);
     view_->setContextMenuPolicy(Qt::NoContextMenu);
     layout->addWidget(view_);
+
+    auto *interactionShortcut =
+        new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_I), this);
+    interactionShortcut->setContext(Qt::WindowShortcut);
+    connect(interactionShortcut, &QShortcut::activated, this, [this] {
+      if (editing_) {
+        sendEnvelope(QJsonObject{{QStringLiteral("type"),
+                                  QStringLiteral("toggle-interaction")}});
+      }
+    });
 
     page_ = new QWebEnginePage(view_);
     page_->setBackgroundColor(Qt::transparent);
