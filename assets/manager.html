@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-  <meta name="color-scheme" content="dark">
   <title>vosulay</title>
 </head>
 <body>
@@ -68,6 +67,17 @@
       </div>
       <small class="hint">Drag to move · handles resize · wheel changes layer</small>
     </aside>
+    <div id="url-modal" class="modal-backdrop" hidden>
+      <form id="url-form" class="url-dialog" role="dialog" aria-modal="true" aria-labelledby="url-dialog-title" novalidate>
+        <strong id="url-dialog-title">Add overlay URL</strong>
+        <label for="url-input">URL</label>
+        <input id="url-input" type="url" value="https://" inputmode="url" autocomplete="url" spellcheck="false">
+        <div class="url-dialog-actions">
+          <button type="submit" class="primary-button">Add</button>
+          <button id="url-cancel" type="button" class="quiet-button">Cancel</button>
+        </div>
+      </form>
+    </div>
   </section>
 
   <div id="toast-region" aria-live="polite" aria-atomic="true"></div>

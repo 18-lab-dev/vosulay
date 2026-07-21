@@ -15,6 +15,11 @@
   const profileCreateCancel = $("profile-create-cancel");
   const catalog = $("catalog");
   const status = $("status");
+  const addUrl = $("add-url");
+  const urlModal = $("url-modal");
+  const urlForm = $("url-form");
+  const urlInput = $("url-input");
+  const urlCancel = $("url-cancel");
   const fields = {
     left: $("field-left"), top: $("field-top"), width: $("field-width"),
     height: $("field-height"), scale: $("field-scale"), z_index: $("field-z"),
@@ -43,7 +48,6 @@
     renderPending: false,
     pointer: null,
     resizeFrame: 0,
-    stageOrderKey: "",
     error: null
   };
 
@@ -160,7 +164,7 @@
 
   function selectedOverlay() {
     const profile = activeProfile();
-    return profile && state.selected ? profile.overlays.find((overlay) => overlay.counter_id === state.selected) || null : null;
+    return profile && state.selected && profile.overlays.includes(state.selected) ? state.selected : null;
   }
 
   function clampOverlay(overlay) {
@@ -278,8 +282,9 @@
   }
 
   function overlayElement(overlay, details = overlayDetails(overlay)) {
-    const root = makeElement("div", `overlay${details.available ? "" : " missing"}${state.selected === overlay.counter_id ? " selected" : ""}`);
+    const root = makeElement("div", `overlay${details.available ? "" : " missing"}${state.selected === overlay ? " selected" : ""}`);
     root.dataset.counterId = overlay.counter_id;
+    root._vosulayOverlay = overlay;
     root._vosulaySourceIdentity = `${details.available ? "available" : "missing"}\n${details.url || ""}\n${overlay.url ? "custom" : "counter"}`;
     applyOverlayStyle(root, overlay);
 
@@ -313,28 +318,28 @@
   function renderStage(structureDirty, geometryDirty) {
     const profile = activeProfile();
     const overlays = profile ? profile.overlays : [];
-    const expectedIds = new Set(overlays.map((overlay) => overlay.counter_id));
+    const expectedOverlays = new Set(overlays);
 
     if (structureDirty) {
-      for (const [id, root] of overlayRoots) {
-        if (!expectedIds.has(id)) {
+      for (const [overlay, root] of overlayRoots) {
+        if (!expectedOverlays.has(overlay)) {
           root.remove();
-          overlayRoots.delete(id);
+          overlayRoots.delete(overlay);
         }
       }
 
       for (const overlay of overlays) {
         const details = overlayDetails(overlay);
         const identity = `${details.available ? "available" : "missing"}\n${details.url || ""}\n${overlay.url ? "custom" : "counter"}`;
-        let root = overlayRoots.get(overlay.counter_id);
+        let root = overlayRoots.get(overlay);
         if (root && root._vosulaySourceIdentity !== identity) {
           const replacement = overlayElement(overlay, details);
           root.replaceWith(replacement);
           root = replacement;
-          overlayRoots.set(overlay.counter_id, root);
+          overlayRoots.set(overlay, root);
         } else if (!root) {
           root = overlayElement(overlay, details);
-          overlayRoots.set(overlay.counter_id, root);
+          overlayRoots.set(overlay, root);
           stage.append(root);
         }
         const tag = root.querySelector(".overlay-tag");
@@ -343,25 +348,21 @@
         if (frame && frame.title !== details.name) frame.title = details.name;
       }
 
-      const orderKey = JSON.stringify([profile ? profile.id : null, ...overlays.map((overlay) => overlay.counter_id)]);
-      if (orderKey !== state.stageOrderKey) {
-        let cursor = stage.firstElementChild;
-        for (const overlay of overlays) {
-          const root = overlayRoots.get(overlay.counter_id);
-          if (root !== cursor) stage.insertBefore(root, cursor);
-          cursor = root.nextElementSibling;
-        }
-        state.stageOrderKey = orderKey;
+      let cursor = stage.firstElementChild;
+      for (const overlay of overlays) {
+        const root = overlayRoots.get(overlay);
+        if (root !== cursor) stage.insertBefore(root, cursor);
+        cursor = root.nextElementSibling;
       }
     }
 
     if (structureDirty || geometryDirty) {
       for (const overlay of overlays) {
         clampOverlay(overlay);
-        const root = overlayRoots.get(overlay.counter_id);
+        const root = overlayRoots.get(overlay);
         if (!root) continue;
         applyOverlayStyle(root, overlay);
-        root.classList.toggle("selected", state.selected === overlay.counter_id);
+        root.classList.toggle("selected", state.selected === overlay);
       }
     }
   }
@@ -444,7 +445,7 @@
       const button = makeElement("button", `catalog-item${exists ? " used" : ""}`);
       button.type = "button";
       button.dataset.counterId = counter.id;
-      button.title = exists ? "Select this counter" : "Add this counter";
+      button.title = exists ? "Add another instance of this counter" : "Add this counter";
       const copy = makeElement("span", "catalog-copy");
       copy.append(makeElement("strong", "", counter.name));
       const detail = [counter.author, counter.version].filter(Boolean).join(" · ") || counter.id;
@@ -501,9 +502,9 @@
     if (regions.inspector) renderInspector();
   }
 
-  function selectCounter(id) {
-    if (state.selected === id) return;
-    state.selected = id;
+  function selectOverlay(overlay) {
+    if (state.selected === overlay) return;
+    state.selected = overlay;
     requestRender("stageGeometry", "inspector");
   }
 
@@ -518,11 +519,6 @@
   function addCounter(counter) {
     const profile = activeProfile();
     if (!profile) return;
-    const existing = profile.overlays.find((overlay) => overlay.counter_id === counter.id);
-    if (existing) {
-      selectCounter(existing.counter_id);
-      return;
-    }
     const width = Math.max(10, finite(counter.width, 500));
     const height = Math.max(10, finite(counter.height, 300));
     const highest = profile.overlays.reduce((value, overlay) => Math.max(value, overlay.z_index), -1);
@@ -535,7 +531,7 @@
     });
     clampOverlay(overlay);
     profile.overlays.push(overlay);
-    state.selected = counter.id;
+    state.selected = overlay;
     scheduleSave();
     requestRender("stageStructure", "stageGeometry", "catalog", "inspector");
   }
@@ -579,7 +575,7 @@
     });
     clampOverlay(overlay);
     profile.overlays.push(overlay);
-    state.selected = overlay.counter_id;
+    state.selected = overlay;
     scheduleSave();
     requestRender("stageStructure", "stageGeometry", "catalog", "inspector");
   }
@@ -587,12 +583,19 @@
   function removeSelected() {
     const profile = activeProfile();
     if (!profile || !state.selected) return;
-    const index = profile.overlays.findIndex((overlay) => overlay.counter_id === state.selected);
+    const index = profile.overlays.indexOf(state.selected);
     if (index < 0) return;
     profile.overlays.splice(index, 1);
     state.selected = null;
     scheduleSave(true);
     requestRender("stageStructure", "stageGeometry", "catalog", "inspector");
+  }
+
+  function refreshSelectedOverlay() {
+    const overlay = selectedOverlay();
+    const frame = overlay && overlayRoots.get(overlay)?.querySelector(".overlay-frame");
+    if (!frame) return;
+    frame.src = frame.src;
   }
 
   function flushEditingChanges() {
@@ -607,6 +610,22 @@
       if (operation.root.hasPointerCapture(operation.id)) operation.root.releasePointerCapture(operation.id);
     }
     flushPendingSave();
+  }
+
+  function closeUrlModal(restoreFocus = true) {
+    if (urlModal.hidden) return;
+    urlModal.hidden = true;
+    if (restoreFocus) addUrl.focus();
+  }
+
+  function openUrlModal() {
+    if (!state.config) return;
+    closeProfileMenu();
+    closeProfileCreator();
+    urlInput.value = "https://";
+    urlModal.hidden = false;
+    urlInput.focus();
+    urlInput.select();
   }
 
   function closeProfileCreator(restoreFocus = false) {
@@ -627,6 +646,7 @@
     const next = Boolean(editing);
     const changed = state.editing !== next;
     if (!next) {
+      closeUrlModal();
       closeProfileMenu();
       closeProfileCreator();
     }
@@ -643,7 +663,7 @@
   function startPointer(event, root, edge) {
     if (!state.editing || event.button !== 0) return;
     const overlay = selectedOverlay();
-    if (!overlay || root.dataset.counterId !== overlay.counter_id) return;
+    if (!overlay || root._vosulayOverlay !== overlay) return;
     event.preventDefault();
     root.setPointerCapture(event.pointerId);
     const angle = overlay.rotation * Math.PI / 180;
@@ -705,7 +725,7 @@
     }
     clampOverlay(overlay);
     applyOverlayStyle(operation.root, overlay);
-    if (state.editing && state.selected === overlay.counter_id) renderInspectorNumbers(overlay, affected);
+    if (state.editing && state.selected === overlay) renderInspectorNumbers(overlay, affected);
     scheduleSave();
   }
 
@@ -736,10 +756,10 @@
     if (!state.editing) return;
     const root = event.target.closest(".overlay");
     if (!root) {
-      selectCounter(null);
+      selectOverlay(null);
       return;
     }
-    selectCounter(root.dataset.counterId);
+    selectOverlay(root._vosulayOverlay);
     const edge = event.target.closest(".resize-handle")?.dataset.edge || null;
     startPointer(event, root, edge);
   });
@@ -751,14 +771,14 @@
     const root = event.target.closest(".overlay");
     if (!root) return;
     event.preventDefault();
-    selectCounter(root.dataset.counterId);
+    selectOverlay(root._vosulayOverlay);
   });
   stage.addEventListener("wheel", (event) => {
     if (!state.editing) return;
     const root = event.target.closest(".overlay");
     if (!root) return;
     event.preventDefault();
-    selectCounter(root.dataset.counterId);
+    selectOverlay(root._vosulayOverlay);
     const overlay = selectedOverlay();
     if (!overlay) return;
     overlay.z_index = clamp(overlay.z_index + (event.deltaY < 0 ? 1 : -1), 0, 999);
@@ -895,16 +915,19 @@
     const counter = overlay && !overlay.url && findCounter(overlay.counter_id);
     if (counter && counter.has_settings) ipc({ type: "open-settings", counter_id: counter.id });
   });
-  $("add-url").addEventListener("click", () => {
-    if (!state.config) return;
-    const proposed = window.prompt("Overlay URL", "https://");
-    if (proposed === null) return;
-    const source = parseSource(proposed, ["http:", "https:"]);
+  addUrl.addEventListener("click", openUrlModal);
+  urlCancel.addEventListener("click", () => closeUrlModal());
+  urlForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const source = parseSource(urlInput.value, ["http:", "https:"]);
     if (!source) {
       setError("Overlay URL must be a valid http or https URL");
+      urlInput.focus();
+      urlInput.select();
       return;
     }
     addCustomOverlay(source, deriveUrlName(source));
+    closeUrlModal();
   });
   $("add-html-file").addEventListener("click", () => ipc({ type: "choose-overlay-file" }));
 
@@ -919,12 +942,32 @@
   $("done").addEventListener("click", () => setEditing(false));
 
   window.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    if (event.repeat) {
-      if (!profileMenu.hidden || state.editing) event.preventDefault();
+    if (state.editing && event.ctrlKey && !event.altKey && !event.metaKey
+        && !event.shiftKey && event.key.toLowerCase() === "r") {
+      event.preventDefault();
+      if (!event.repeat && urlModal.hidden) refreshSelectedOverlay();
       return;
     }
-    if (!profileMenu.hidden) {
+
+    if (event.key === "Delete") {
+      const target = event.target;
+      const editable = target instanceof Element
+        && (target.closest("input, textarea, select") || target.isContentEditable);
+      if (event.repeat || urlModal.hidden === false || editable || !state.editing || !selectedOverlay()) return;
+      removeSelected();
+      event.preventDefault();
+      return;
+    }
+
+    if (event.key !== "Escape") return;
+    if (event.repeat) {
+      if (!urlModal.hidden || !profileMenu.hidden || !profileCreate.hidden || state.editing) event.preventDefault();
+      return;
+    }
+    if (!urlModal.hidden) {
+      event.preventDefault();
+      closeUrlModal();
+    } else if (!profileMenu.hidden) {
       event.preventDefault();
       closeProfileMenu(true);
     } else if (!profileCreate.hidden) {
@@ -962,7 +1005,7 @@
       if (envelope.type === "config") {
         state.config = normalizeConfig(envelope.config !== undefined ? envelope.config : envelope.payload);
         const profile = activeProfile();
-        if (!profile || !profile.overlays.some((overlay) => overlay.counter_id === state.selected)) state.selected = null;
+        if (!profile || !profile.overlays.includes(state.selected)) state.selected = null;
         const invalidSource = state.config.profiles
           .flatMap((item) => item.overlays)
           .find((overlay) => overlay.url && !customSource(overlay));

@@ -113,10 +113,6 @@ impl AppConfig {
             if profile.name.trim().is_empty() {
                 profile.name = format!("Profile {}", index + 1);
             }
-            let mut used_counter_ids = HashSet::with_capacity(profile.overlays.len());
-            profile
-                .overlays
-                .retain(|overlay| used_counter_ids.insert(overlay.counter_id.clone()));
             for overlay in &mut profile.overlays {
                 overlay.normalize();
             }
@@ -303,15 +299,17 @@ mod tests {
     }
 
     #[test]
-    fn normalize_deduplicates_counter_placements_per_profile_keeping_first() {
+    fn normalize_preserves_duplicate_counter_placements_in_order_and_normalizes_each() {
         let first = Placement {
             counter_id: "counter".to_owned(),
             top: 10.0,
+            width: -5.0,
             ..Placement::default()
         };
         let duplicate = Placement {
             counter_id: "counter".to_owned(),
             top: 20.0,
+            width: f64::NAN,
             ..Placement::default()
         };
         let mut config = AppConfig {
@@ -323,7 +321,7 @@ mod tests {
                 Profile {
                     id: "other".to_owned(),
                     name: "Other".to_owned(),
-                    overlays: vec![first.clone()],
+                    overlays: vec![first],
                 },
             ],
             ..AppConfig::default()
@@ -331,8 +329,23 @@ mod tests {
 
         config.normalize();
 
-        assert_eq!(config.profiles[0].overlays, vec![first.clone()]);
-        assert_eq!(config.profiles[1].overlays, vec![first]);
+        let expected_first = Placement {
+            counter_id: "counter".to_owned(),
+            top: 10.0,
+            width: 10.0,
+            ..Placement::default()
+        };
+        let expected_duplicate = Placement {
+            counter_id: "counter".to_owned(),
+            top: 20.0,
+            width: DEFAULT_WIDTH,
+            ..Placement::default()
+        };
+        assert_eq!(
+            config.profiles[0].overlays,
+            vec![expected_first.clone(), expected_duplicate]
+        );
+        assert_eq!(config.profiles[1].overlays, vec![expected_first]);
     }
 
     #[test]
