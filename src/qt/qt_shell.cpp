@@ -360,6 +360,36 @@ QString managerBridgeScript() {
 )JS");
 }
 
+QString counterMetadataScript(const QUrl &baseUrl) {
+  const QByteArray encodedBaseUrl =
+      QJsonDocument(QJsonArray{baseUrl.toString(QUrl::FullyEncoded)})
+          .toJson(QJsonDocument::Compact);
+  QString source = QString::fromUtf8(R"JS(
+(() => {
+  try {
+    const vosuOrigin = new URL(__VOSULAY_BASE_URL__[0]).origin;
+    if (window.location.origin !== vosuOrigin ||
+        typeof window.COUNTER_PATH === "string") {
+      return;
+    }
+
+    const pathname = window.location.pathname.endsWith("/")
+      ? window.location.pathname
+      : window.location.pathname.slice(0, window.location.pathname.lastIndexOf("/") + 1);
+    const counterPath = pathname
+      .split("/")
+      .filter(Boolean)
+      .map((segment) => decodeURIComponent(segment))
+      .join("/");
+    if (counterPath) window.COUNTER_PATH = counterPath;
+  } catch (_) {
+  }
+})();
+)JS");
+  return source.replace(QStringLiteral("__VOSULAY_BASE_URL__"),
+                        QString::fromUtf8(encodedBaseUrl));
+}
+
 void installScript(QWebEnginePage *page, const QString &name,
                    const QString &source, bool subframes) {
   QWebEngineScript script;
@@ -582,6 +612,9 @@ public:
         QWebEngineSettings::LocalContentCanAccessFileUrls, false);
     page_->settings()->setAttribute(
         QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
+
+    installScript(page_, QStringLiteral("vosulay-counter-metadata"),
+                  counterMetadataScript(QUrl(options_.vosuUrl)), true);
 
     if (options_.fpsLimit >= 0) {
       installLimiter();
