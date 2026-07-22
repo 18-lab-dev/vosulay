@@ -34,6 +34,35 @@
     height: $("field-height"), scale: $("field-scale"), z_index: $("field-z"),
     opacity: $("field-opacity"), rotation: $("field-rotation")
   };
+  const openSettings = $("open-settings");
+  const settingsModal = $("settings-modal");
+  const settingsForm = $("settings-form");
+  const rightClickSettings = $("right-click-settings");
+  const keepOverlaysInView = $("keep-overlays-in-view");
+  const hotkeyList = $("hotkey-list");
+  const settingsError = $("settings-error");
+  const settingsResetHotkeys = $("settings-reset-hotkeys");
+  const settingsCancel = $("settings-cancel");
+  const selectionBox = $("selection-box");
+  const HOTKEY_KEYS = [
+    ...Array.from({ length: 10 }, (_, index) => `profile_${index}`),
+    "copy_overlay",
+    "paste_overlay"
+  ];
+  const DEFAULT_HOTKEYS = Object.freeze({
+    profile_0: "Ctrl+0",
+    profile_1: "Ctrl+1",
+    profile_2: "Ctrl+2",
+    profile_3: "Ctrl+3",
+    profile_4: "Ctrl+4",
+    profile_5: "Ctrl+5",
+    profile_6: "Ctrl+6",
+    profile_7: "Ctrl+7",
+    profile_8: "Ctrl+8",
+    profile_9: "Ctrl+9",
+    copy_overlay: "Ctrl+C",
+    paste_overlay: "Ctrl+V"
+  });
 
   const dirty = {
     stageGeometry: true,
@@ -50,7 +79,12 @@
     counters: null,
     editing: false,
     interacting: false,
-    selected: null,
+    selected: new Set(),
+    copiedPlacements: [],
+    settingsDraft: null,
+    recordingHotkey: "",
+    inspectorPopup: false,
+    inspectorPoint: null,
     saveTimer: 0,
     saveRevision: 0,
     latestSaveId: "",
@@ -144,6 +178,49 @@
     return overlay && overlay.url ? parseSource(overlay.url, ["http:", "https:", "vosulay-overlay:"]) : null;
   }
 
+  function canonicalHotkey(value, fallback) {
+    if (typeof value !== "string") return fallback;
+    const rawParts = value.split("+").map((part) => part.trim()).filter(Boolean);
+    if (!rawParts.length) return fallback;
+    const aliases = {
+      control: "Ctrl", ctrl: "Ctrl", alt: "Alt", option: "Alt",
+      shift: "Shift", meta: "Meta", command: "Meta", cmd: "Meta",
+      super: "Meta", win: "Meta", windows: "Meta"
+    };
+    const modifiers = new Set();
+    let key = "";
+    for (const part of rawParts) {
+      const modifier = aliases[part.toLowerCase()];
+      if (modifier) {
+        modifiers.add(modifier);
+      } else if (!key) {
+        const lower = part.toLowerCase();
+        const names = {
+          esc: "Escape", escape: "Escape", space: "Space", spacebar: "Space",
+          return: "Enter", enter: "Enter", del: "Delete", delete: "Delete",
+          backspace: "Backspace", tab: "Tab", home: "Home", end: "End",
+          pageup: "PageUp", pagedown: "PageDown", arrowup: "ArrowUp",
+          arrowdown: "ArrowDown", arrowleft: "ArrowLeft", arrowright: "ArrowRight",
+          plus: "Plus", minus: "Minus"
+        };
+        key = names[lower] || (/^[a-z0-9]$/i.test(part) ? part.toUpperCase()
+          : (/^f(?:[1-9]|1[0-2])$/i.test(part) ? part.toUpperCase() : ""));
+      } else {
+        return fallback;
+      }
+    }
+    if (!key) return fallback;
+    return ["Ctrl", "Alt", "Shift", "Meta"].filter((modifier) => modifiers.has(modifier)).concat(key).join("+");
+  }
+
+  function normalizeHotkeys(input) {
+    const source = input && typeof input === "object" ? input : {};
+    return Object.fromEntries(HOTKEY_KEYS.map((key) => [
+      key,
+      canonicalHotkey(source[key], DEFAULT_HOTKEYS[key])
+    ]));
+  }
+
   function normalizeConfig(input) {
     const source = input && typeof input === "object" ? input : {};
     let profiles = Array.isArray(source.profiles) ? source.profiles.map((profile, index) => ({
@@ -160,7 +237,17 @@
       ids.add(id);
     });
     const requested = safeId(source.active_profile, profiles[0].id);
-    return { version: 1, active_profile: ids.has(requested) ? requested : profiles[0].id, profiles };
+    const sourceSettings = source.settings && typeof source.settings === "object" ? source.settings : {};
+    return {
+      version: 1,
+      active_profile: ids.has(requested) ? requested : profiles[0].id,
+      profiles,
+      settings: {
+        right_click_overlay_settings_menu: Boolean(sourceSettings.right_click_overlay_settings_menu),
+        always_keep_overlays_in_view: Boolean(sourceSettings.always_keep_overlays_in_view),
+        hotkeys: normalizeHotkeys(sourceSettings.hotkeys)
+      }
+    };
   }
 
   function activeProfile() {
@@ -174,7 +261,9 @@
 
   function selectedOverlay() {
     const profile = activeProfile();
-    return profile && state.selected && profile.overlays.includes(state.selected) ? state.selected : null;
+    if (!profile || state.selected.size !== 1) return null;
+    const overlay = state.selected.values().next().value;
+    return profile.overlays.includes(overlay) ? overlay : null;
   }
 
   function updatePanelAvoidance() {
@@ -186,6 +275,10 @@
     }
     const overlayRect = root.getBoundingClientRect();
     for (const panel of sidePanels) {
+      if (panel === inspector && document.body.classList.contains("context-inspector")) {
+        panel.classList.remove("avoids-selected-overlay");
+        continue;
+      }
       const panelRect = panel.getBoundingClientRect();
       const avoids = overlayRect.left <= panelRect.right + sidePanelClearance
         && overlayRect.right >= panelRect.left - sidePanelClearance
@@ -193,6 +286,50 @@
         && overlayRect.bottom >= panelRect.top - sidePanelClearance;
       panel.classList.toggle("avoids-selected-overlay", avoids);
     }
+  }
+
+  function transformedBounds(overlay) {
+    const angle = overlay.rotation * Math.PI / 180;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    const widthX = overlay.scale * overlay.width * cosine;
+    const widthY = overlay.scale * overlay.width * sine;
+    const heightX = -overlay.scale * overlay.height * sine;
+    const heightY = overlay.scale * overlay.height * cosine;
+    return {
+      minX: Math.min(0, widthX, heightX, widthX + heightX),
+      maxX: Math.max(0, widthX, heightX, widthX + heightX),
+      minY: Math.min(0, widthY, heightY, widthY + heightY),
+      maxY: Math.max(0, widthY, heightY, widthY + heightY)
+    };
+  }
+
+  function overlayPositionRange(overlay) {
+    if (!state.config?.settings.always_keep_overlays_in_view) {
+      const angle = overlay.rotation * Math.PI / 180;
+      const centerX = overlay.scale
+        * (overlay.width * Math.cos(angle) - overlay.height * Math.sin(angle)) / 2;
+      const centerY = overlay.scale
+        * (overlay.width * Math.sin(angle) + overlay.height * Math.cos(angle)) / 2;
+      return {
+        minLeft: -centerX,
+        maxLeft: window.innerWidth - centerX,
+        minTop: -centerY,
+        maxTop: window.innerHeight - centerY
+      };
+    }
+
+    const bounds = transformedBounds(overlay);
+    const boundWidth = bounds.maxX - bounds.minX;
+    const boundHeight = bounds.maxY - bounds.minY;
+    const centeredLeft = (window.innerWidth - boundWidth) / 2 - bounds.minX;
+    const centeredTop = (window.innerHeight - boundHeight) / 2 - bounds.minY;
+    return {
+      minLeft: boundWidth > window.innerWidth ? centeredLeft : -bounds.minX,
+      maxLeft: boundWidth > window.innerWidth ? centeredLeft : window.innerWidth - bounds.maxX,
+      minTop: boundHeight > window.innerHeight ? centeredTop : -bounds.minY,
+      maxTop: boundHeight > window.innerHeight ? centeredTop : window.innerHeight - bounds.maxY
+    };
   }
 
   function clampOverlay(overlay) {
@@ -206,13 +343,31 @@
     const angle = overlay.rotation * Math.PI / 180;
     const cosine = Math.cos(angle);
     const sine = Math.sin(angle);
-    const centerX = overlay.scale * (overlay.width * cosine - overlay.height * sine) / 2;
-    const centerY = overlay.scale * (overlay.width * sine + overlay.height * cosine) / 2;
+    if (!state.config?.settings.always_keep_overlays_in_view) {
+      const centerX = overlay.scale * (overlay.width * cosine - overlay.height * sine) / 2;
+      const centerY = overlay.scale * (overlay.width * sine + overlay.height * cosine) / 2;
+      if (document.activeElement !== fields.left) {
+        overlay.left = clamp(finite(overlay.left, 0), -centerX, window.innerWidth - centerX);
+      }
+      if (document.activeElement !== fields.top) {
+        overlay.top = clamp(finite(overlay.top, 0), -centerY, window.innerHeight - centerY);
+      }
+      return;
+    }
+
+    const boundWidthAtScaleOne = Math.abs(cosine) * overlay.width + Math.abs(sine) * overlay.height;
+    const boundHeightAtScaleOne = Math.abs(sine) * overlay.width + Math.abs(cosine) * overlay.height;
+    const fittingScale = Math.min(
+      boundWidthAtScaleOne ? window.innerWidth / boundWidthAtScaleOne : overlay.scale,
+      boundHeightAtScaleOne ? window.innerHeight / boundHeightAtScaleOne : overlay.scale
+    );
+    if (overlay.scale > fittingScale) overlay.scale = Math.max(0.1, fittingScale);
+    const range = overlayPositionRange(overlay);
     if (document.activeElement !== fields.left) {
-      overlay.left = clamp(finite(overlay.left, 0), -centerX, window.innerWidth - centerX);
+      overlay.left = clamp(finite(overlay.left, 0), range.minLeft, range.maxLeft);
     }
     if (document.activeElement !== fields.top) {
-      overlay.top = clamp(finite(overlay.top, 0), -centerY, window.innerHeight - centerY);
+      overlay.top = clamp(finite(overlay.top, 0), range.minTop, range.maxTop);
     }
   }
 
@@ -314,7 +469,7 @@
   }
 
   function overlayElement(overlay, details = overlayDetails(overlay)) {
-    const root = makeElement("div", `overlay${details.available ? "" : " missing"}${state.selected === overlay ? " selected" : ""}`);
+    const root = makeElement("div", `overlay${details.available ? "" : " missing"}${state.selected.has(overlay) ? " selected" : ""}`);
     root.dataset.counterId = overlay.counter_id;
     root._vosulayOverlay = overlay;
     root._vosulaySourceIdentity = `${details.available ? "available" : "missing"}\n${details.url || ""}\n${overlay.url ? "custom" : "counter"}`;
@@ -394,7 +549,9 @@
         const root = overlayRoots.get(overlay);
         if (!root) continue;
         applyOverlayStyle(root, overlay);
-        root.classList.toggle("selected", state.selected === overlay);
+        root.classList.toggle("selected", state.selected.has(overlay));
+        const soleSelected = state.selected.size === 1 && state.selected.has(overlay);
+        for (const handle of root.querySelectorAll(".resize-handle")) handle.hidden = !soleSelected;
       }
     }
   }
@@ -428,8 +585,9 @@
 
   function activateProfile(id) {
     if (!state.config || !state.config.profiles.some((profile) => profile.id === id)) return;
+    flushEditingChanges();
+    replaceSelection([]);
     state.config.active_profile = id;
-    state.selected = null;
     scheduleSave(true);
     closeProfileMenu(true);
     requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
@@ -553,13 +711,27 @@
 
   function renderInspector() {
     const overlay = selectedOverlay();
+    const contextual = Boolean(state.config?.settings.right_click_overlay_settings_menu);
+    document.body.classList.toggle("context-inspector", contextual && state.inspectorPopup);
     const warningContext = state.editing ? overlay : null;
     if (inspectorWarningContext !== warningContext) {
       inspectorWarningContext = warningContext;
       clearInspectorWarnings();
     }
-    inspector.hidden = !state.editing || !overlay;
-    if (!overlay) return;
+    inspector.hidden = !state.editing || !overlay || (contextual && !state.inspectorPopup);
+    if (inspector.hidden) return;
+    if (contextual && state.inspectorPoint) {
+      inspector.style.right = "auto";
+      inspector.style.left = `${state.inspectorPoint.x}px`;
+      inspector.style.top = `${state.inspectorPoint.y}px`;
+      const rect = inspector.getBoundingClientRect();
+      inspector.style.left = `${clamp(state.inspectorPoint.x, 0, Math.max(0, window.innerWidth - rect.width))}px`;
+      inspector.style.top = `${clamp(state.inspectorPoint.y, 0, Math.max(0, window.innerHeight - rect.height))}px`;
+    } else {
+      inspector.style.removeProperty("left");
+      inspector.style.removeProperty("top");
+      inspector.style.removeProperty("right");
+    }
     const counter = findCounter(overlay.counter_id);
     const details = overlayDetails(overlay);
     const custom = Boolean(overlay.url);
@@ -598,11 +770,35 @@
     updatePanelAvoidance();
   }
 
-  function selectOverlay(overlay) {
-    if (state.selected === overlay) return;
-    if (inspector.contains(document.activeElement)) document.activeElement.blur();
-    state.selected = overlay;
+  function closeInspectorPopup() {
+    if (!state.inspectorPopup && !state.inspectorPoint) return;
+    state.inspectorPopup = false;
+    state.inspectorPoint = null;
+    requestRender("inspector");
+  }
+
+  function replaceSelection(overlays, { keepPopup = false } = {}) {
+    const profile = activeProfile();
+    const next = new Set(profile ? [...overlays].filter((overlay) => profile.overlays.includes(overlay)) : []);
+    const same = next.size === state.selected.size && [...next].every((overlay) => state.selected.has(overlay));
+    if (!same && state.selected.size === 1 && inspector.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
+    if (!keepPopup) {
+      state.inspectorPopup = false;
+      state.inspectorPoint = null;
+    }
+    if (same) {
+      if (!keepPopup) requestRender("inspector");
+      return;
+    }
+    state.selected.clear();
+    for (const overlay of next) state.selected.add(overlay);
     requestRender("stageGeometry", "inspector");
+  }
+
+  function selectOverlay(overlay, options) {
+    replaceSelection(overlay ? [overlay] : [], options);
   }
 
   function uniqueProfileId() {
@@ -631,9 +827,10 @@
 
   function commitProfileImport(profile) {
     if (state.config.profiles.some((existing) => existing.id === profile.id)) profile = { ...profile, id: uniqueProfileId() };
+    flushEditingChanges();
+    replaceSelection([]);
     state.config.profiles.push(profile);
     state.config.active_profile = profile.id;
-    state.selected = null;
     scheduleSave(true);
     requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
     status.textContent = "Profile imported";
@@ -655,7 +852,7 @@
     });
     clampOverlay(overlay);
     profile.overlays.push(overlay);
-    state.selected = overlay;
+    selectOverlay(overlay);
     scheduleSave();
     requestRender("stageStructure", "stageGeometry", "catalog", "inspector");
   }
@@ -699,18 +896,19 @@
     });
     clampOverlay(overlay);
     profile.overlays.push(overlay);
-    state.selected = overlay;
+    selectOverlay(overlay);
     scheduleSave();
     requestRender("stageStructure", "stageGeometry", "catalog", "inspector");
   }
 
   function removeSelected() {
     const profile = activeProfile();
-    if (!profile || !state.selected) return;
-    const index = profile.overlays.indexOf(state.selected);
+    const overlay = selectedOverlay();
+    if (!profile || !overlay) return;
+    const index = profile.overlays.indexOf(overlay);
     if (index < 0) return;
+    replaceSelection([]);
     profile.overlays.splice(index, 1);
-    state.selected = null;
     scheduleSave(true);
     requestRender("stageStructure", "stageGeometry", "catalog", "inspector");
   }
@@ -733,6 +931,7 @@
       }
       state.pointer = null;
       if (operation.root.hasPointerCapture(operation.id)) operation.root.releasePointerCapture(operation.id);
+      if (operation.kind === "selection") selectionBox.hidden = true;
     }
     flushPendingSave();
   }
@@ -776,13 +975,15 @@
     if (!next) {
       state.interacting = false;
       closeUrlModal();
+      closeSettingsModal(false);
       closeProfileMenu();
       closeProfileCreator();
+      closeInspectorPopup();
     }
     if (!next) flushEditingChanges();
     if (changed) {
       state.editing = next;
-      if (!next) state.selected = null;
+      if (!next) replaceSelection([]);
     }
     if (changed || interactionChanged) requestRender("chrome", "stageGeometry", "inspector");
     if (notify && changed) ipc({ type: "set-editing", editing: next });
@@ -791,15 +992,33 @@
 
   function startPointer(event, root, edge) {
     if (!state.editing || event.button !== 0) return;
-    const overlay = selectedOverlay();
-    if (!overlay || root._vosulayOverlay !== overlay) return;
+    const overlay = root._vosulayOverlay;
+    if (!overlay || !state.selected.has(overlay)) return;
+    if (edge && selectedOverlay() !== overlay) return;
     event.preventDefault();
+    if (inspector.contains(document.activeElement)) document.activeElement.blur();
     root.setPointerCapture(event.pointerId);
     const angle = overlay.rotation * Math.PI / 180;
+    const placements = [...state.selected].map((placement) => ({
+      overlay: placement,
+      left: placement.left,
+      top: placement.top
+    }));
+    const movementBounds = placements.reduce((bounds, placement) => {
+      const range = overlayPositionRange(placement.overlay);
+      bounds.minX = Math.max(bounds.minX, range.minLeft - placement.left);
+      bounds.maxX = Math.min(bounds.maxX, range.maxLeft - placement.left);
+      bounds.minY = Math.max(bounds.minY, range.minTop - placement.top);
+      bounds.maxY = Math.min(bounds.maxY, range.maxTop - placement.top);
+      return bounds;
+    }, { minX: -Infinity, maxX: Infinity, minY: -Infinity, maxY: Infinity });
     state.pointer = {
+      kind: "overlay",
       id: event.pointerId,
       root,
       overlay,
+      placements,
+      movementBounds,
       edge,
       x: event.clientX,
       y: event.clientY,
@@ -820,13 +1039,36 @@
   function flushPointer(operation) {
     if (!operation || state.pointer !== operation) return;
     operation.frame = 0;
-    const overlay = operation.overlay;
     const screenX = operation.latestX - operation.x;
     const screenY = operation.latestY - operation.y;
+    if (operation.kind === "selection") {
+      const left = Math.min(operation.x, operation.latestX);
+      const top = Math.min(operation.y, operation.latestY);
+      const right = Math.max(operation.x, operation.latestX);
+      const bottom = Math.max(operation.y, operation.latestY);
+      selectionBox.style.left = `${left}px`;
+      selectionBox.style.top = `${top}px`;
+      selectionBox.style.width = `${right - left}px`;
+      selectionBox.style.height = `${bottom - top}px`;
+      const profile = activeProfile();
+      replaceSelection((profile ? profile.overlays : []).filter((overlay) => {
+        const rect = overlayRoots.get(overlay)?.getBoundingClientRect();
+        return rect && rect.right >= left && rect.left <= right && rect.bottom >= top && rect.top <= bottom;
+      }));
+      return;
+    }
+
+    const overlay = operation.overlay;
     let affected;
     if (!operation.edge) {
-      overlay.left = operation.left + screenX;
-      overlay.top = operation.top + screenY;
+      const movementX = clamp(screenX, operation.movementBounds.minX, operation.movementBounds.maxX);
+      const movementY = clamp(screenY, operation.movementBounds.minY, operation.movementBounds.maxY);
+      for (const placement of operation.placements) {
+        placement.overlay.left = placement.left + movementX;
+        placement.overlay.top = placement.top + movementY;
+        const root = overlayRoots.get(placement.overlay);
+        if (root) applyOverlayStyle(root, placement.overlay);
+      }
       affected = ["left", "top"];
     } else {
       const dx = (operation.cosine * screenX + operation.sine * screenY) * operation.inverseScale;
@@ -851,11 +1093,11 @@
         overlay.top += operation.cosine * shift;
       }
       affected = ["left", "top", "width", "height"];
+      clampOverlay(overlay);
+      applyOverlayStyle(operation.root, overlay);
     }
-    clampOverlay(overlay);
-    applyOverlayStyle(operation.root, overlay);
     updatePanelAvoidance();
-    if (state.editing && state.selected === overlay) renderInspectorNumbers(overlay, affected);
+    if (state.editing && selectedOverlay() === overlay) renderInspectorNumbers(overlay, affected);
     scheduleSave();
   }
 
@@ -878,18 +1120,38 @@
     }
     flushPointer(operation);
     state.pointer = null;
-    scheduleSave(true);
+    if (operation.root.hasPointerCapture(operation.id)) operation.root.releasePointerCapture(operation.id);
+    if (operation.kind === "selection") {
+      selectionBox.hidden = true;
+    } else {
+      scheduleSave(true);
+    }
     requestRender("stageGeometry", "inspector");
   }
 
   stage.addEventListener("pointerdown", (event) => {
-    if (!state.editing) return;
+    if (!state.editing || event.button !== 0) return;
     const root = event.target.closest(".overlay");
     if (!root) {
-      selectOverlay(null);
+      event.preventDefault();
+      replaceSelection([]);
+      stage.setPointerCapture(event.pointerId);
+      selectionBox.hidden = false;
+      state.pointer = {
+        kind: "selection",
+        id: event.pointerId,
+        root: stage,
+        x: event.clientX,
+        y: event.clientY,
+        latestX: event.clientX,
+        latestY: event.clientY,
+        frame: 0
+      };
+      flushPointer(state.pointer);
       return;
     }
-    selectOverlay(root._vosulayOverlay);
+    const overlay = root._vosulayOverlay;
+    if (!state.selected.has(overlay)) selectOverlay(overlay);
     const edge = event.target.closest(".resize-handle")?.dataset.edge || null;
     startPointer(event, root, edge);
   });
@@ -901,10 +1163,15 @@
     const root = event.target.closest(".overlay");
     if (!root) return;
     event.preventDefault();
-    selectOverlay(root._vosulayOverlay);
+    const contextual = Boolean(state.config?.settings.right_click_overlay_settings_menu);
+    selectOverlay(root._vosulayOverlay, { keepPopup: contextual });
+    if (!contextual) return;
+    state.inspectorPopup = true;
+    state.inspectorPoint = { x: event.clientX, y: event.clientY };
+    requestRender("inspector");
   });
   stage.addEventListener("wheel", (event) => {
-    if (!state.editing) return;
+    if (event.ctrlKey || !state.editing) return;
     const root = event.target.closest(".overlay");
     if (!root) return;
     event.preventDefault();
@@ -964,6 +1231,7 @@
   });
   document.addEventListener("pointerdown", (event) => {
     if (!profileMenu.hidden && !profilePicker.contains(event.target)) closeProfileMenu();
+    if (state.inspectorPopup && !inspector.contains(event.target)) closeInspectorPopup();
   }, true);
   profilePicker.addEventListener("focusout", (event) => {
     if (!profileMenu.hidden && !profilePicker.contains(event.relatedTarget)) closeProfileMenu();
@@ -994,9 +1262,10 @@
       return;
     }
     const profile = { id: uniqueProfileId(), name, overlays: [] };
+    flushEditingChanges();
+    replaceSelection([]);
     state.config.profiles.push(profile);
     state.config.active_profile = profile.id;
-    state.selected = null;
     closeProfileCreator();
     scheduleSave(true);
     requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
@@ -1010,9 +1279,9 @@
     if (!state.config || state.config.profiles.length <= 1) return;
     const profile = activeProfile();
     if (!profile || !window.confirm(`Delete profile “${profile.name}”?`)) return;
+    replaceSelection([]);
     state.config.profiles = state.config.profiles.filter((item) => item.id !== profile.id);
     state.config.active_profile = state.config.profiles[0].id;
-    state.selected = null;
     scheduleSave(true);
     requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
   });
@@ -1125,6 +1394,169 @@
     });
   }
 
+  function showSettingsError(message) {
+    settingsError.textContent = message;
+    settingsError.hidden = !message;
+  }
+
+  function renderSettingsDraft() {
+    if (!state.settingsDraft) return;
+    rightClickSettings.checked = state.settingsDraft.right_click_overlay_settings_menu;
+    keepOverlaysInView.checked = state.settingsDraft.always_keep_overlays_in_view;
+    for (const button of hotkeyList.querySelectorAll(".hotkey-input")) {
+      const key = button.dataset.hotkey;
+      button.textContent = state.settingsDraft.hotkeys[key] || DEFAULT_HOTKEYS[key] || "";
+      button.classList.toggle("recording", state.recordingHotkey === key);
+      button.setAttribute("aria-pressed", String(state.recordingHotkey === key));
+    }
+  }
+
+  function closeSettingsModal(restoreFocus = true) {
+    if (settingsModal.hidden) return;
+    settingsModal.hidden = true;
+    state.settingsDraft = null;
+    state.recordingHotkey = "";
+    showSettingsError("");
+    if (restoreFocus && openSettings.getClientRects().length) openSettings.focus();
+  }
+
+  function openSettingsModal() {
+    if (!state.config) return;
+    closeUrlModal(false);
+    closeProfileMenu();
+    closeProfileCreator();
+    closeInspectorPopup();
+    const settings = state.config.settings;
+    state.settingsDraft = {
+      right_click_overlay_settings_menu: settings.right_click_overlay_settings_menu,
+      always_keep_overlays_in_view: settings.always_keep_overlays_in_view,
+      hotkeys: { ...settings.hotkeys }
+    };
+    state.recordingHotkey = "";
+    showSettingsError("");
+    renderSettingsDraft();
+    settingsModal.hidden = false;
+    rightClickSettings.focus();
+  }
+
+  function eventHotkey(event) {
+    if (["Control", "Alt", "Shift", "Meta"].includes(event.key)) return "";
+    const key = event.key === " " ? "Space"
+      : event.key === "+" ? "Plus"
+        : event.key === "-" ? "Minus"
+          : event.key.length === 1 ? event.key.toUpperCase()
+            : event.key;
+    const parts = [];
+    if (event.ctrlKey) parts.push("Ctrl");
+    if (event.altKey) parts.push("Alt");
+    if (event.shiftKey) parts.push("Shift");
+    if (event.metaKey) parts.push("Meta");
+    parts.push(key);
+    return canonicalHotkey(parts.join("+"), "");
+  }
+
+  function copySelectedPlacements() {
+    const profile = activeProfile();
+    if (!profile || !state.selected.size) return;
+    state.copiedPlacements = profile.overlays
+      .filter((overlay) => state.selected.has(overlay))
+      .map((overlay) => ({ ...overlay }));
+  }
+
+  function pasteCopiedPlacements() {
+    const profile = activeProfile();
+    if (!profile || !state.copiedPlacements.length) return;
+    const pasted = state.copiedPlacements.map((overlay) => normalizeOverlay({ ...overlay }));
+    for (const overlay of pasted) clampOverlay(overlay);
+    profile.overlays.push(...pasted);
+    replaceSelection(pasted);
+    scheduleSave(true);
+    requestRender("stageStructure", "stageGeometry", "catalog", "inspector");
+  }
+
+  openSettings.addEventListener("click", openSettingsModal);
+  settingsCancel.addEventListener("click", () => closeSettingsModal());
+  rightClickSettings.addEventListener("change", () => {
+    if (state.settingsDraft) state.settingsDraft.right_click_overlay_settings_menu = rightClickSettings.checked;
+  });
+  keepOverlaysInView.addEventListener("change", () => {
+    if (state.settingsDraft) state.settingsDraft.always_keep_overlays_in_view = keepOverlaysInView.checked;
+  });
+  settingsResetHotkeys.addEventListener("click", () => {
+    if (!state.settingsDraft) return;
+    state.settingsDraft.hotkeys = { ...DEFAULT_HOTKEYS };
+    state.recordingHotkey = "";
+    showSettingsError("");
+    renderSettingsDraft();
+  });
+  hotkeyList.addEventListener("click", (event) => {
+    const button = event.target.closest(".hotkey-input");
+    if (!button || !state.settingsDraft || !HOTKEY_KEYS.includes(button.dataset.hotkey)) return;
+    state.recordingHotkey = button.dataset.hotkey;
+    showSettingsError("");
+    renderSettingsDraft();
+    button.focus();
+  });
+  hotkeyList.addEventListener("keydown", (event) => {
+    if (!state.settingsDraft || !state.recordingHotkey) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      state.recordingHotkey = "";
+      renderSettingsDraft();
+      return;
+    }
+    const shortcut = eventHotkey(event);
+    if (!shortcut) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const duplicate = HOTKEY_KEYS.find((key) => key !== state.recordingHotkey
+      && state.settingsDraft.hotkeys[key] === shortcut);
+    if (duplicate) {
+      showSettingsError(`${shortcut} is already assigned.`);
+      return;
+    }
+    state.settingsDraft.hotkeys[state.recordingHotkey] = shortcut;
+    state.recordingHotkey = "";
+    showSettingsError("");
+    renderSettingsDraft();
+  });
+  settingsForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!state.settingsDraft) return;
+    const shortcuts = HOTKEY_KEYS.map((key) => state.settingsDraft.hotkeys[key]);
+    if (new Set(shortcuts).size !== shortcuts.length) {
+      showSettingsError("Each action must have a unique shortcut.");
+      return;
+    }
+    state.config.settings = {
+      right_click_overlay_settings_menu: state.settingsDraft.right_click_overlay_settings_menu,
+      always_keep_overlays_in_view: state.settingsDraft.always_keep_overlays_in_view,
+      hotkeys: normalizeHotkeys(state.settingsDraft.hotkeys)
+    };
+    closeSettingsModal();
+    closeInspectorPopup();
+    const profile = activeProfile();
+    if (profile) for (const overlay of profile.overlays) clampOverlay(overlay);
+    scheduleSave(true);
+    requestRender("stageGeometry", "inspector");
+  });
+  settingsModal.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") return;
+    const focusable = [...settingsModal.querySelectorAll("button, input, select, textarea")]
+      .filter((element) => !element.disabled && element.getClientRects().length);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+
   $("remove").addEventListener("click", removeSelected);
   $("reset").addEventListener("click", () => {
     const overlay = selectedOverlay();
@@ -1171,24 +1603,58 @@
     ipc({ type: "refresh-counters" });
   });
   $("open-available").addEventListener("click", () => ipc({ type: "open-available" }));
-  $("quit").addEventListener("click", () => {
-    if (window.confirm("Quit vosulay?")) ipc({ type: "quit" });
-  });
   $("done").addEventListener("click", () => setEditing(false));
 
+  function isEditableTarget(target) {
+    return target instanceof Element
+      && (Boolean(target.closest("input, textarea, select")) || target.isContentEditable);
+  }
+
+  function menuOrModalOpen() {
+    return !settingsModal.hidden || !urlModal.hidden || !profileMenu.hidden
+      || !profileCreate.hidden || state.inspectorPopup;
+  }
+
+  document.addEventListener("wheel", (event) => {
+    if (event.ctrlKey) event.preventDefault();
+  }, { capture: true, passive: false });
+  document.addEventListener("keydown", (event) => {
+    if (!event.ctrlKey || event.altKey || event.metaKey) return;
+    const zoomKey = ["+", "-", "=", "0"].includes(event.key)
+      || ["Equal", "Minus", "NumpadAdd", "NumpadSubtract", "Digit0", "Numpad0"].includes(event.code);
+    if (zoomKey) event.preventDefault();
+  }, true);
+
   window.addEventListener("keydown", (event) => {
+    const editable = isEditableTarget(event.target);
+    if (state.editing && !event.repeat && !editable && !menuOrModalOpen()) {
+      const shortcut = eventHotkey(event);
+      const action = HOTKEY_KEYS.find((key) => state.config?.settings.hotkeys[key] === shortcut);
+      if (action) {
+        event.preventDefault();
+        if (action === "copy_overlay") {
+          copySelectedPlacements();
+        } else if (action === "paste_overlay") {
+          pasteCopiedPlacements();
+        } else {
+          const number = Number(action.slice("profile_".length));
+          const profileIndex = number === 0 ? 9 : number - 1;
+          const profile = state.config.profiles[profileIndex];
+          if (profile) activateProfile(profile.id);
+        }
+        return;
+      }
+    }
+
     if (state.editing && event.ctrlKey && !event.altKey && !event.metaKey
         && !event.shiftKey && event.key.toLowerCase() === "r") {
       event.preventDefault();
-      if (!event.repeat && urlModal.hidden) refreshSelectedOverlay();
+      if (!editable && !event.repeat && !menuOrModalOpen()) refreshSelectedOverlay();
       return;
     }
 
     if (event.key === "Delete") {
-      const target = event.target;
-      const editable = target instanceof Element
-        && (target.closest("input, textarea, select") || target.isContentEditable);
-      if (event.repeat || urlModal.hidden === false || editable || !state.editing || !selectedOverlay()) return;
+      if (event.repeat || menuOrModalOpen() || editable || !state.editing || !selectedOverlay()) return;
       removeSelected();
       event.preventDefault();
       return;
@@ -1196,10 +1662,13 @@
 
     if (event.key !== "Escape") return;
     if (event.repeat) {
-      if (!urlModal.hidden || !profileMenu.hidden || !profileCreate.hidden || state.editing) event.preventDefault();
+      if (menuOrModalOpen() || state.editing) event.preventDefault();
       return;
     }
-    if (!urlModal.hidden) {
+    if (!settingsModal.hidden) {
+      event.preventDefault();
+      closeSettingsModal();
+    } else if (!urlModal.hidden) {
       event.preventDefault();
       closeUrlModal();
     } else if (!profileMenu.hidden) {
@@ -1208,6 +1677,9 @@
     } else if (!profileCreate.hidden) {
       event.preventDefault();
       closeProfileCreator(true);
+    } else if (state.inspectorPopup) {
+      event.preventDefault();
+      closeInspectorPopup();
     } else if (state.editing) {
       event.preventDefault();
       setEditing(false);
@@ -1228,6 +1700,7 @@
         const after = `${overlay.left}\n${overlay.top}\n${overlay.width}\n${overlay.height}\n${overlay.scale}\n${overlay.rotation}`;
         if (before !== after) changed = true;
       }
+      if (state.inspectorPopup) requestRender("inspector");
       if (!changed) return;
       scheduleSave();
       requestRender("stageGeometry", "inspector");
@@ -1239,9 +1712,8 @@
       const envelope = typeof message === "string" ? JSON.parse(message) : message;
       if (!envelope || typeof envelope !== "object") throw new Error("Invalid message from overlay host");
       if (envelope.type === "config") {
+        replaceSelection([]);
         state.config = normalizeConfig(envelope.config !== undefined ? envelope.config : envelope.payload);
-        const profile = activeProfile();
-        if (!profile || !profile.overlays.includes(state.selected)) state.selected = null;
         const invalidSource = state.config.profiles
           .flatMap((item) => item.overlays)
           .find((overlay) => overlay.url && !customSource(overlay));
@@ -1290,7 +1762,7 @@
         const value = envelope.editing !== undefined ? envelope.editing : envelope.payload;
         setEditing(Boolean(value), false);
       } else if (envelope.type === "toggle-interaction") {
-        if (state.editing) {
+        if (state.editing && !menuOrModalOpen() && !isEditableTarget(document.activeElement)) {
           state.interacting = !state.interacting;
           requestRender("chrome");
         }

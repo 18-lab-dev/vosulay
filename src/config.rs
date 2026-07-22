@@ -15,11 +15,45 @@ const DEFAULT_HEIGHT: f64 = 300.0;
 const DEFAULT_OPACITY: f64 = 1.0;
 const DEFAULT_ROTATION: f64 = 0.0;
 
+const DEFAULT_PROFILE_HOTKEYS: [&str; 10] = [
+    "Ctrl+0", "Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5", "Ctrl+6", "Ctrl+7", "Ctrl+8",
+    "Ctrl+9",
+];
+const DEFAULT_COPY_OVERLAY_HOTKEY: &str = "Ctrl+C";
+const DEFAULT_PASTE_OVERLAY_HOTKEY: &str = "Ctrl+V";
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AppConfig {
     pub version: u32,
     pub active_profile: String,
     pub profiles: Vec<Profile>,
+    #[serde(default)]
+    pub settings: AppSettings,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub struct AppSettings {
+    pub right_click_overlay_settings_menu: bool,
+    pub always_keep_overlays_in_view: bool,
+    pub hotkeys: HotkeySettings,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub struct HotkeySettings {
+    pub profile_0: String,
+    pub profile_1: String,
+    pub profile_2: String,
+    pub profile_3: String,
+    pub profile_4: String,
+    pub profile_5: String,
+    pub profile_6: String,
+    pub profile_7: String,
+    pub profile_8: String,
+    pub profile_9: String,
+    pub copy_overlay: String,
+    pub paste_overlay: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -54,6 +88,26 @@ impl Default for AppConfig {
             version: CONFIG_VERSION,
             active_profile: "default".to_owned(),
             profiles: vec![Profile::default()],
+            settings: AppSettings::default(),
+        }
+    }
+}
+
+impl Default for HotkeySettings {
+    fn default() -> Self {
+        Self {
+            profile_0: DEFAULT_PROFILE_HOTKEYS[0].to_owned(),
+            profile_1: DEFAULT_PROFILE_HOTKEYS[1].to_owned(),
+            profile_2: DEFAULT_PROFILE_HOTKEYS[2].to_owned(),
+            profile_3: DEFAULT_PROFILE_HOTKEYS[3].to_owned(),
+            profile_4: DEFAULT_PROFILE_HOTKEYS[4].to_owned(),
+            profile_5: DEFAULT_PROFILE_HOTKEYS[5].to_owned(),
+            profile_6: DEFAULT_PROFILE_HOTKEYS[6].to_owned(),
+            profile_7: DEFAULT_PROFILE_HOTKEYS[7].to_owned(),
+            profile_8: DEFAULT_PROFILE_HOTKEYS[8].to_owned(),
+            profile_9: DEFAULT_PROFILE_HOTKEYS[9].to_owned(),
+            copy_overlay: DEFAULT_COPY_OVERLAY_HOTKEY.to_owned(),
+            paste_overlay: DEFAULT_PASTE_OVERLAY_HOTKEY.to_owned(),
         }
     }
 }
@@ -99,6 +153,7 @@ impl AppConfig {
 
     pub fn normalize(&mut self) {
         self.version = CONFIG_VERSION;
+        self.settings.normalize();
 
         if self.profiles.is_empty() {
             self.profiles.push(Profile::default());
@@ -125,6 +180,29 @@ impl AppConfig {
         {
             self.active_profile.clone_from(&self.profiles[0].id);
         }
+    }
+}
+
+impl AppSettings {
+    fn normalize(&mut self) {
+        self.hotkeys.normalize();
+    }
+}
+
+impl HotkeySettings {
+    fn normalize(&mut self) {
+        normalize_hotkey(&mut self.profile_0, DEFAULT_PROFILE_HOTKEYS[0]);
+        normalize_hotkey(&mut self.profile_1, DEFAULT_PROFILE_HOTKEYS[1]);
+        normalize_hotkey(&mut self.profile_2, DEFAULT_PROFILE_HOTKEYS[2]);
+        normalize_hotkey(&mut self.profile_3, DEFAULT_PROFILE_HOTKEYS[3]);
+        normalize_hotkey(&mut self.profile_4, DEFAULT_PROFILE_HOTKEYS[4]);
+        normalize_hotkey(&mut self.profile_5, DEFAULT_PROFILE_HOTKEYS[5]);
+        normalize_hotkey(&mut self.profile_6, DEFAULT_PROFILE_HOTKEYS[6]);
+        normalize_hotkey(&mut self.profile_7, DEFAULT_PROFILE_HOTKEYS[7]);
+        normalize_hotkey(&mut self.profile_8, DEFAULT_PROFILE_HOTKEYS[8]);
+        normalize_hotkey(&mut self.profile_9, DEFAULT_PROFILE_HOTKEYS[9]);
+        normalize_hotkey(&mut self.copy_overlay, DEFAULT_COPY_OVERLAY_HOTKEY);
+        normalize_hotkey(&mut self.paste_overlay, DEFAULT_PASTE_OVERLAY_HOTKEY);
     }
 }
 
@@ -220,6 +298,16 @@ fn default_rotation() -> f64 {
     DEFAULT_ROTATION
 }
 
+fn normalize_hotkey(value: &mut String, default: &str) {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        value.clear();
+        value.push_str(default);
+    } else if trimmed.len() != value.len() {
+        *value = trimmed.to_owned();
+    }
+}
+
 fn finite_or(value: f64, fallback: f64) -> f64 {
     if value.is_finite() { value } else { fallback }
 }
@@ -268,6 +356,7 @@ mod tests {
                     z_index: 10_000,
                 }],
             }],
+            settings: AppSettings::default(),
         };
 
         config.normalize();
@@ -294,6 +383,7 @@ mod tests {
                         z_index: 999,
                     }],
                 }],
+                settings: AppSettings::default(),
             }
         );
     }
@@ -375,6 +465,11 @@ mod tests {
                     z_index: 4,
                 }],
             }],
+            settings: AppSettings {
+                right_click_overlay_settings_menu: true,
+                always_keep_overlays_in_view: true,
+                ..AppSettings::default()
+            },
         };
         expected.normalize();
 
@@ -419,6 +514,128 @@ mod tests {
         assert_eq!(placement.rotation, DEFAULT_ROTATION);
         assert_eq!(placement.url, None);
         assert_eq!(placement.name, None);
+    }
+
+    #[test]
+    fn old_json_receives_settings_defaults() {
+        let config: AppConfig =
+            serde_json::from_str(r#"{"version":1,"active_profile":"default","profiles":[]}"#)
+                .expect("version 1 config without settings should deserialize");
+
+        assert_eq!(config.settings, AppSettings::default());
+    }
+
+    #[test]
+    fn partial_settings_receive_per_field_defaults() {
+        let config: AppConfig = serde_json::from_str(
+            r#"{
+                "version": 1,
+                "active_profile": "default",
+                "profiles": [],
+                "settings": {
+                    "right_click_overlay_settings_menu": true,
+                    "hotkeys": {"profile_0": "Alt+1"}
+                }
+            }"#,
+        )
+        .expect("partially specified settings should deserialize");
+        let mut expected = AppSettings {
+            right_click_overlay_settings_menu: true,
+            ..AppSettings::default()
+        };
+        expected.hotkeys.profile_0 = "Alt+1".to_owned();
+
+        assert_eq!(config.settings, expected);
+    }
+
+    #[test]
+    fn default_hotkeys_follow_profile_number_mapping() {
+        let hotkeys = HotkeySettings::default();
+
+        assert_eq!(
+            [
+                hotkeys.profile_0.as_str(),
+                hotkeys.profile_1.as_str(),
+                hotkeys.profile_2.as_str(),
+                hotkeys.profile_3.as_str(),
+                hotkeys.profile_4.as_str(),
+                hotkeys.profile_5.as_str(),
+                hotkeys.profile_6.as_str(),
+                hotkeys.profile_7.as_str(),
+                hotkeys.profile_8.as_str(),
+                hotkeys.profile_9.as_str(),
+                hotkeys.copy_overlay.as_str(),
+                hotkeys.paste_overlay.as_str(),
+            ],
+            [
+                "Ctrl+0", "Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5", "Ctrl+6", "Ctrl+7",
+                "Ctrl+8", "Ctrl+9", "Ctrl+C", "Ctrl+V",
+            ]
+        );
+    }
+
+    #[test]
+    fn normalize_blank_hotkeys_restores_each_action_default() {
+        let mut hotkeys = HotkeySettings {
+            profile_0: String::new(),
+            profile_1: " ".to_owned(),
+            profile_2: "\t".to_owned(),
+            profile_3: "\n".to_owned(),
+            profile_4: "  ".to_owned(),
+            profile_5: "\t ".to_owned(),
+            profile_6: " \n".to_owned(),
+            profile_7: "\r".to_owned(),
+            profile_8: "\r\n".to_owned(),
+            profile_9: "\t\n".to_owned(),
+            copy_overlay: " ".to_owned(),
+            paste_overlay: "\t".to_owned(),
+        };
+
+        hotkeys.normalize();
+
+        assert_eq!(hotkeys, HotkeySettings::default());
+    }
+
+    #[test]
+    fn normalize_trims_custom_hotkeys_without_rewriting_them() {
+        let mut hotkeys = HotkeySettings {
+            profile_0: "  Alt+Shift+K  ".to_owned(),
+            copy_overlay: "\tMeta+Y\n".to_owned(),
+            ..HotkeySettings::default()
+        };
+
+        hotkeys.normalize();
+
+        assert_eq!(
+            (hotkeys.profile_0.as_str(), hotkeys.copy_overlay.as_str()),
+            ("Alt+Shift+K", "Meta+Y")
+        );
+    }
+
+    #[test]
+    fn custom_hotkeys_round_trip_without_rewriting() {
+        let mut config = AppConfig::default();
+        config.settings.hotkeys.profile_0 = "Alt+Shift+K".to_owned();
+        config.settings.hotkeys.copy_overlay = "Meta+Y".to_owned();
+
+        let encoded = serde_json::to_string(&config).expect("config should serialize");
+        let decoded: AppConfig =
+            serde_json::from_str(&encoded).expect("serialized config should deserialize");
+
+        assert_eq!(decoded.settings.hotkeys, config.settings.hotkeys);
+    }
+
+    #[test]
+    fn both_settings_booleans_persist() {
+        let mut config = AppConfig::default();
+        config.settings.right_click_overlay_settings_menu = true;
+        config.settings.always_keep_overlays_in_view = true;
+
+        let encoded = serde_json::to_string(&config).expect("config should serialize");
+        let decoded: AppConfig =
+            serde_json::from_str(&encoded).expect("serialized config should deserialize");
+
+        assert_eq!(decoded.settings, config.settings);
     }
 
     #[test]

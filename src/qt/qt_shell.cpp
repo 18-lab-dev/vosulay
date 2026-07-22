@@ -26,6 +26,7 @@
 #include <QEventLoop>
 #include <QHash>
 #include <QGuiApplication>
+#include <QKeyEvent>
 #include <QIcon>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -52,6 +53,7 @@
 #include <QThread>
 #include <QTimer>
 #include <QUrl>
+#include <QWheelEvent>
 #include <QVBoxLayout>
 #include <QWebChannel>
 #include <QWebEngineFrame>
@@ -685,6 +687,59 @@ struct ParsedOptions {
   bool attach = false;
 };
 
+class ZoomLockedWebEngineView final : public QWebEngineView {
+public:
+  explicit ZoomLockedWebEngineView(QWidget *parent = nullptr)
+      : QWebEngineView(parent) {
+    qApp->installEventFilter(this);
+  }
+
+  ~ZoomLockedWebEngineView() override { qApp->removeEventFilter(this); }
+
+protected:
+  bool eventFilter(QObject *watched, QEvent *event) override {
+    if (belongsToView(watched) && isZoomGesture(event)) {
+      event->accept();
+      return true;
+    }
+    return QWebEngineView::eventFilter(watched, event);
+  }
+
+private:
+  bool belongsToView(const QObject *object) const {
+    for (auto *current = object; current != nullptr;
+         current = current->parent()) {
+      if (current == this)
+        return true;
+    }
+    return false;
+  }
+
+  static bool isZoomGesture(const QEvent *event) {
+    if (event->type() == QEvent::Wheel) {
+      const auto *wheelEvent = static_cast<const QWheelEvent *>(event);
+      return wheelEvent->modifiers().testFlag(Qt::ControlModifier);
+    }
+
+    if (event->type() != QEvent::KeyPress &&
+        event->type() != QEvent::ShortcutOverride) {
+      return false;
+    }
+
+    const auto *keyEvent = static_cast<const QKeyEvent *>(event);
+    const Qt::KeyboardModifiers modifiers = keyEvent->modifiers();
+    if (!modifiers.testFlag(Qt::ControlModifier) ||
+        modifiers.testFlag(Qt::AltModifier) ||
+        modifiers.testFlag(Qt::MetaModifier)) {
+      return false;
+    }
+
+    return keyEvent->key() == Qt::Key_Plus ||
+           keyEvent->key() == Qt::Key_Equal ||
+           keyEvent->key() == Qt::Key_Minus;
+  }
+};
+
 class ShellWindow final : public QWidget {
 public:
   explicit ShellWindow(ParsedOptions options)
@@ -695,7 +750,7 @@ public:
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    view_ = new QWebEngineView(this);
+    view_ = new ZoomLockedWebEngineView(this);
     view_->setAttribute(Qt::WA_TranslucentBackground);
     view_->setContextMenuPolicy(Qt::NoContextMenu);
     layout->addWidget(view_);
@@ -1107,9 +1162,6 @@ private:
       openSettings(request.value(QStringLiteral("counter_id")).toString());
     } else if (type == QStringLiteral("open-available")) {
       openAvailable();
-    } else if (type == QStringLiteral("quit")) {
-      QMetaObject::invokeMethod(qApp, &QApplication::quit,
-                                Qt::QueuedConnection);
     } else {
       sendEnvelope(errorEnvelope(QStringLiteral("Unknown vosulay manager message")));
     }
@@ -1933,7 +1985,7 @@ private:
   }
 
   ParsedOptions options_;
-  QWebEngineView *view_ = nullptr;
+  ZoomLockedWebEngineView *view_ = nullptr;
   QWebEnginePage *page_ = nullptr;
   OverlaySchemeHandler *overlaySchemeHandler_ = nullptr;
   QWebChannel *channel_ = nullptr;
