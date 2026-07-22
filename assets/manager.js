@@ -5,6 +5,8 @@
   const stage = $("stage");
   const editor = $("editor");
   const inspector = $("inspector");
+  const sidePanels = document.querySelectorAll(".sidebar, #inspector");
+  const sidePanelClearance = 24;
   const profileSelect = $("profile-select");
   const profileSelectLabel = $("profile-select-label");
   const profileMenu = $("profile-menu");
@@ -173,6 +175,24 @@
   function selectedOverlay() {
     const profile = activeProfile();
     return profile && state.selected && profile.overlays.includes(state.selected) ? state.selected : null;
+  }
+
+  function updatePanelAvoidance() {
+    const overlay = state.editing ? selectedOverlay() : null;
+    const root = overlay && overlayRoots.get(overlay);
+    if (!root) {
+      for (const panel of sidePanels) panel.classList.remove("avoids-selected-overlay");
+      return;
+    }
+    const overlayRect = root.getBoundingClientRect();
+    for (const panel of sidePanels) {
+      const panelRect = panel.getBoundingClientRect();
+      const avoids = overlayRect.left <= panelRect.right + sidePanelClearance
+        && overlayRect.right >= panelRect.left - sidePanelClearance
+        && overlayRect.top <= panelRect.bottom + sidePanelClearance
+        && overlayRect.bottom >= panelRect.top - sidePanelClearance;
+      panel.classList.toggle("avoids-selected-overlay", avoids);
+    }
   }
 
   function clampOverlay(overlay) {
@@ -575,6 +595,7 @@
     if (regions.profileList) renderProfiles();
     if (regions.catalog) renderCatalog();
     if (regions.inspector) renderInspector();
+    updatePanelAvoidance();
   }
 
   function selectOverlay(overlay) {
@@ -833,6 +854,7 @@
     }
     clampOverlay(overlay);
     applyOverlayStyle(operation.root, overlay);
+    updatePanelAvoidance();
     if (state.editing && state.selected === overlay) renderInspectorNumbers(overlay, affected);
     scheduleSave();
   }
@@ -1059,6 +1081,7 @@
         overlay[name] = value;
         const root = overlayRoots.get(overlay);
         if (root) applyOverlayStyle(root, overlay);
+        updatePanelAvoidance();
         return;
       }
       applyInspectorFieldValue(name, overlay, value);
@@ -1194,6 +1217,7 @@
     if (state.resizeFrame) return;
     state.resizeFrame = requestAnimationFrame(() => {
       state.resizeFrame = 0;
+      updatePanelAvoidance();
       if (!profileMenu.hidden && profilePicker.getClientRects().length === 0) closeProfileMenu();
       const profile = activeProfile();
       if (!profile) return;

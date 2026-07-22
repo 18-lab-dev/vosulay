@@ -165,6 +165,13 @@ button:disabled { opacity: .42; cursor: default; }
 .catalog-add { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; color: var(--accent-strong); background: rgba(139,124,255,.12); }
 
 .inspector { position: absolute; top: 72px; right: 12px; width: 260px; border-radius: 12px; overflow: hidden; }
+.sidebar, .inspector { transition: opacity .14s ease; }
+.sidebar.avoids-selected-overlay,
+.inspector.avoids-selected-overlay {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
 .truncate { min-width: 0; }
 .truncate strong, .truncate small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .source-fields { display: grid; gap: 9px; padding: 12px 12px 0; }
