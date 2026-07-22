@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -280,9 +280,10 @@ test("local overlay authorization handles scheme case and cache-busted assets wh
     await writeFile(join(root, "script.js"), "window.overlayLoaded = true;");
     await writeFile(join(other, "secret.html"), "secret");
     await symlink(join(other, "secret.html"), join(root, "escape.html"));
+    const canonicalRoot = await realpath(root);
     const registry = new LocalOverlayRegistry();
     const url = await registry.createUrl(join(root, "index.html"));
-    assert.equal(await registry.resolveAuthorizedFile(url), join(root, "index.html"));
+    assert.equal(await registry.resolveAuthorizedFile(url), join(canonicalRoot, "index.html"));
     const uppercaseUrl = url.replace(/^vosulay-overlay:/, "VOSULAY-OVERLAY:");
     assert.deepEqual(localOverlayUrls({ overlays: [{ url: uppercaseUrl }] }), [uppercaseUrl]);
     const importedRegistry = new LocalOverlayRegistry();
@@ -291,7 +292,7 @@ test("local overlay authorization handles scheme case and cache-busted assets wh
     assetUrl.pathname = `${assetUrl.pathname.slice(0, assetUrl.pathname.lastIndexOf("/") + 1)}script.js`;
     assetUrl.search = "?v=1";
     assetUrl.hash = "#loaded";
-    assert.equal(await importedRegistry.resolveAuthorizedFile(assetUrl), join(root, "script.js"));
+    assert.equal(await importedRegistry.resolveAuthorizedFile(assetUrl), join(canonicalRoot, "script.js"));
     const response = await importedRegistry.response(new Request(assetUrl));
     assert.equal(response.status, 200);
     assert.equal(await response.text(), "window.overlayLoaded = true;");
