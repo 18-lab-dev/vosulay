@@ -53,6 +53,12 @@
     saveRevision: 0,
     latestSaveId: "",
     pendingSaveId: "",
+    hostRevision: null,
+    saveInFlightId: "",
+    deferredConfig: null,
+    flushRequestIds: [],
+    saveErrorMessage: "",
+    retryRequired: false,
     renderPending: false,
     pointer: null,
     resizeFrame: 0,
@@ -233,17 +239,48 @@
 
   function flushPendingSave() {
     if (!state.pendingSaveId) return;
+    if (Number.isSafeInteger(state.hostRevision) && state.saveInFlightId) return;
     const saveId = state.pendingSaveId;
     state.pendingSaveId = "";
     if (state.saveTimer) {
       clearTimeout(state.saveTimer);
       state.saveTimer = 0;
     }
-    ipc({ type: "save-config", save_id: saveId, config: state.config });
+    const message = { type: "save-config", config: state.config, save_id: saveId };
+    if (Number.isSafeInteger(state.hostRevision)) {
+      message.base_revision = state.hostRevision;
+      state.saveInFlightId = saveId;
+    }
+    ipc(message);
   }
 
+  function settleFlushRequests(error) {
+    if (!error && (state.pendingSaveId || state.saveInFlightId)) return;
+    const type = error ? "flush-failed" : "flush-complete";
+    for (const requestId of state.flushRequestIds.splice(0)) {
+      ipc({ type, request_id: requestId, ...(error ? { message: error } : {}) });
+    }
+  }
+
+  function applyHostConfig(envelope) {
+    state.retryRequired = false;
+    state.config = normalizeConfig(envelope.config !== undefined ? envelope.config : envelope.payload);
+    if (Number.isSafeInteger(envelope.revision) && envelope.revision >= 0) state.hostRevision = envelope.revision;
+    const profile = activeProfile();
+    if (!profile || !profile.overlays.includes(state.selected)) state.selected = null;
+    const invalidSource = state.config.profiles
+      .flatMap((item) => item.overlays)
+      .find((overlay) => overlay.url && !customSource(overlay));
+    if (invalidSource) setError(`Unsupported custom overlay source: ${invalidSource.url}`);
+    else {
+      state.error = null;
+      status.textContent = "";
+    }
+    requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
+  }
   function scheduleSave(immediate = false) {
     if (!state.config) return;
+    state.retryRequired = false;
     const saveId = String(++state.saveRevision);
     state.latestSaveId = saveId;
     state.pendingSaveId = saveId;
@@ -1149,7 +1186,10 @@
   });
   $("open-available").addEventListener("click", () => ipc({ type: "open-available" }));
   $("quit").addEventListener("click", () => {
-    if (window.confirm("Quit vosulay?")) ipc({ type: "quit" });
+    if (window.confirm("Quit vosulay?")) {
+      flushPendingSave();
+      ipc({ type: "quit" });
+    }
   });
   $("done").addEventListener("click", () => setEditing(false));
 
@@ -1215,20 +1255,81 @@
       const envelope = typeof message === "string" ? JSON.parse(message) : message;
       if (!envelope || typeof envelope !== "object") throw new Error("Invalid message from overlay host");
       if (envelope.type === "config") {
-        state.config = normalizeConfig(envelope.config !== undefined ? envelope.config : envelope.payload);
-        const profile = activeProfile();
-        if (!profile || !profile.overlays.includes(state.selected)) state.selected = null;
-        const invalidSource = state.config.profiles
-          .flatMap((item) => item.overlays)
-          .find((overlay) => overlay.url && !customSource(overlay));
-        if (invalidSource) setError(`Unsupported custom overlay source: ${invalidSource.url}`);
-        else {
-          state.error = null;
-          status.textContent = "";
+        const revision = Number.isSafeInteger(envelope.revision) && envelope.revision >= 0
+          ? envelope.revision
+          : null;
+        if (revision !== null && (state.pendingSaveId || state.saveInFlightId)) {
+          if (!state.deferredConfig || revision >= state.deferredConfig.revision) {
+            state.deferredConfig = { config: envelope.config, revision };
+          }
+          if (state.retryRequired) state.hostRevision = revision;
+          else flushPendingSave();
+          return;
         }
-        requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
+        applyHostConfig(envelope);
       } else if (envelope.type === "saved") {
-        if (state.latestSaveId && envelope.save_id === state.latestSaveId) status.textContent = "Saved";
+        if (Number.isSafeInteger(envelope.revision) && envelope.revision >= 0
+            && (state.hostRevision === null || envelope.revision >= state.hostRevision)) {
+          state.hostRevision = envelope.revision;
+        }
+        if (envelope.save_id === state.saveInFlightId) state.saveInFlightId = "";
+        state.retryRequired = false;
+        if (state.latestSaveId && envelope.save_id === state.latestSaveId) {
+          if (state.saveErrorMessage && state.error === state.saveErrorMessage) {
+            state.error = null;
+            state.saveErrorMessage = "";
+            requestRender("chrome");
+          }
+          status.textContent = "Saved";
+        }
+        if (state.pendingSaveId) {
+          flushPendingSave();
+        } else if (state.deferredConfig) {
+          const deferred = state.deferredConfig;
+          state.deferredConfig = null;
+          if (state.hostRevision === null || deferred.revision > state.hostRevision) applyHostConfig(deferred);
+        }
+        settleFlushRequests(null);
+      } else if (envelope.type === "save-error") {
+        const message = typeof envelope.message === "string" ? envelope.message : "vosulay could not save the configuration";
+        if (envelope.save_id === state.saveInFlightId) state.saveInFlightId = "";
+        clearTimeout(state.saveTimer);
+        state.saveTimer = 0;
+        let recovery = envelope;
+        if (state.deferredConfig
+            && (!Number.isSafeInteger(envelope.revision) || state.deferredConfig.revision > envelope.revision)) {
+          recovery = state.deferredConfig;
+        }
+        state.deferredConfig = null;
+        const hasNewerLocalEdit = Boolean(state.pendingSaveId);
+        const preserveLocal = envelope.code === "conflict" || hasNewerLocalEdit;
+        if (Number.isSafeInteger(recovery.revision) && recovery.revision >= 0) {
+          state.hostRevision = recovery.revision;
+        }
+        if (preserveLocal) {
+          if (!state.pendingSaveId) {
+            const retryId = String(++state.saveRevision);
+            state.latestSaveId = retryId;
+            state.pendingSaveId = retryId;
+          }
+          state.retryRequired = true;
+        } else {
+          state.pendingSaveId = "";
+          if (recovery.config !== undefined) applyHostConfig(recovery);
+        }
+        state.saveErrorMessage = envelope.code === "conflict"
+          ? `${message}. Local edits remain onscreen but unsaved; edit again to retry, or restart vosulay to accept the saved configuration.`
+          : hasNewerLocalEdit
+            ? `${message}. Newer local edits remain onscreen but unsaved; edit again to retry.`
+            : message;
+        setError(state.saveErrorMessage);
+        settleFlushRequests(state.saveErrorMessage);
+      } else if (envelope.type === "flush-save") {
+        if (typeof envelope.request_id !== "string" || !envelope.request_id) throw new Error("Invalid save flush request");
+        if (!state.flushRequestIds.includes(envelope.request_id)) state.flushRequestIds.push(envelope.request_id);
+        state.retryRequired = false;
+        flushPendingSave();
+        settleFlushRequests(null);
       } else if (envelope.type === "counters") {
         const value = envelope.counters !== undefined ? envelope.counters : envelope.payload;
         state.counters = Array.isArray(value) ? value.filter((counter) => counter && typeof counter.id === "string").map((counter) => ({

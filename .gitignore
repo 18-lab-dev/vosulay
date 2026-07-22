@@ -2,6 +2,12 @@
 /target/
 /CMakeFiles/
 
+
+# Windows Electron build output
+/windows/node_modules/
+/windows/out/
+/windows/dist/
+*.tsbuildinfo
 # Editor and operating-system metadata
 .idea/
 .vscode/

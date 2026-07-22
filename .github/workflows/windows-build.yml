@@ -1,0 +1,53 @@
+name: Windows Build
+
+on:
+  push:
+    paths:
+      - "assets/**"
+      - "windows/**"
+      - ".github/workflows/windows-build.yml"
+  pull_request:
+    paths:
+      - "assets/**"
+      - "windows/**"
+      - ".github/workflows/windows-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build Windows installer
+        run: npm run dist:win
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: vosulay-windows
+          path: windows/dist/*.exe
+          if-no-files-found: error
