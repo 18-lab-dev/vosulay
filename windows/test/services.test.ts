@@ -7,6 +7,7 @@ import { ConfigStore, normalizeConfig } from "../src/main/config";
 import { MAX_COUNTER_PAGE_BYTES, fetchInstalledCounters, parseInstalledCounters } from "../src/main/counters";
 import { HostBridge, localOverlayUrls } from "../src/main/host-bridge";
 import { withFatalDeadline } from "../src/main/fatal-deadline";
+import { editShortcutCommand } from "../src/main/edit-shortcut";
 import { LocalOverlayRegistry } from "../src/main/local-overlays";
 import { chooseOverlayTarget } from "../src/main/overlay-target";
 import { buildManagerDocumentFromSources } from "../src/main/manager-document";
@@ -74,6 +75,51 @@ test("overlay target selection ignores helpers and favors the largest client", (
     assert.equal(chooseOverlayTarget([helper, secondary, main]), main);
     assert.equal(chooseOverlayTarget([main, secondary, helper]), main);
     assert.equal(chooseOverlayTarget([helper]), null);
+});
+
+test("edit shortcuts map exact non-repeat Ctrl keydowns", () => {
+    const input = {
+        type: "keyDown",
+        key: "i",
+        isAutoRepeat: false,
+        control: true,
+        alt: false,
+        meta: false,
+        shift: false,
+    };
+
+    assert.equal(editShortcutCommand(input), "toggle-interaction");
+    assert.equal(
+        editShortcutCommand({ ...input, key: "r" }),
+        "refresh-selected-overlay",
+    );
+});
+
+test("edit shortcuts reject keyUp, repeats, modifier drift, and wrong keys", () => {
+    for (const key of ["i", "r"]) {
+        const input = {
+            type: "keyDown",
+            key,
+            isAutoRepeat: false,
+            control: true,
+            alt: false,
+            meta: false,
+            shift: false,
+        };
+        const rejectedInputs = [
+            { ...input, type: "keyUp" },
+            { ...input, isAutoRepeat: true },
+            { ...input, control: false },
+            { ...input, alt: true },
+            { ...input, meta: true },
+            { ...input, shift: true },
+            { ...input, key: "x" },
+        ];
+
+        for (const rejected of rejectedInputs) {
+            assert.equal(editShortcutCommand(rejected), null);
+        }
+    }
 });
 
 test("fatal deadline terminates a hung native request", async () => {

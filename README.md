@@ -12,7 +12,7 @@ vosulay displays vosu counters and provides an edit mode for arranging them. Lay
 - Add remote or local custom HTML overlays.
 - Run click-through overlays on Wayland and X11.
 - Render directly in osu! stable and lazer windows on Windows.
-- Control Linux visibility, edit mode, geometry, and shutdown through local IPC.
+- Control Linux visibility, edit mode, geometry, and shutdown through Linux's external local IPC interface (Linux-specific).
 
 ## Linux
 
@@ -29,7 +29,7 @@ For Linux command-line options, monitor selection, frame limiting, attachment mo
 
 The Windows host requires 64-bit Windows and a separately running vosu instance. It follows the most recently focused discovered `osu!.exe` or `osulazer.exe` client, remains attached while another application has focus, and switches only when another game client receives focus. It attaches only that game client rather than both simultaneously, and renders the manager UI through `@asdf-overlay`'s shared GPU surface inside the game presentation rather than a transparent desktop window. The composed overlay is therefore available to OBS Game Capture.
 
-Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> in game to enter or leave edit mode. Reload, edit, and exit controls are also available from the system tray.
+Ctrl+Shift+Space is the sole Windows global shortcut; press it in game to enter or leave edit mode. While editing, Ctrl+I toggles overlay interaction and Ctrl+R refreshes the selected overlay; Delete removes the selected overlay and Escape exits edit mode. Reload, edit, and exit controls are also available from the system tray.
 
 If a native input capture or release request stalls for five seconds, vosulay exits immediately so Windows closes the injected connection and restores input to osu!. Restart vosulay to attach again.
 

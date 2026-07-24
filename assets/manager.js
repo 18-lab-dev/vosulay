@@ -1371,6 +1371,8 @@
           state.interacting = !state.interacting;
           requestRender("chrome");
         }
+      } else if (envelope.type === "refresh-selected-overlay") {
+        if (state.editing && urlModal.hidden) refreshSelectedOverlay();
       } else if (envelope.type === "error") {
         const value = envelope.message !== undefined ? envelope.message : envelope.error !== undefined ? envelope.error : envelope.payload;
         setError(typeof value === "string" ? value : "vosu could not refresh counters");

@@ -6,7 +6,12 @@ import {
 } from '@asdf-overlay/core';
 import { ElectronOverlayInput } from '@asdf-overlay/electron/input';
 import { ElectronOverlaySurface } from '@asdf-overlay/electron/surface';
-import { app, BrowserWindow } from 'electron';
+import {
+    app,
+    BrowserWindow,
+    type Event as ElectronEvent,
+    type Input
+} from 'electron';
 import EventEmitter from 'node:events';
 import path from 'node:path';
 
@@ -14,6 +19,7 @@ import type { RuntimeOptions } from './options';
 import type { ConfigStore } from './config';
 import type { LocalOverlayRegistry } from './local-overlays';
 import type { EditingTarget } from './types';
+import { editShortcutCommand } from './edit-shortcut';
 import {
     chooseOverlayTarget,
     type OverlayTarget
@@ -52,6 +58,42 @@ export class OverlayProcess implements EditingTarget {
     private destroyedEmitted = false;
     private nativeConnected = true;
     private editingValue = false;
+    private readonly pressedEditShortcutKeys = new Set<string>();
+    private readonly handleBeforeInputEvent = (
+        event: ElectronEvent,
+        input: Input
+    ): void => {
+        const key = input.key.toLowerCase();
+        const wasPressed = this.pressedEditShortcutKeys.has(key);
+        if (input.type === 'keyUp') {
+            this.pressedEditShortcutKeys.delete(key);
+            return;
+        }
+        if (input.type === 'keyDown' && (key === 'i' || key === 'r')) {
+            this.pressedEditShortcutKeys.add(key);
+        }
+        if (this.destroying || this.destroyed || !this.editingValue) {
+            return;
+        }
+        const exactChord = input.type === 'keyDown'
+            && input.control
+            && !input.alt
+            && !input.meta
+            && !input.shift
+            && (key === 'i' || key === 'r');
+        if (!exactChord) {
+            return;
+        }
+        event.preventDefault();
+
+        const command = editShortcutCommand(input);
+        if (command === null || wasPressed) {
+            return;
+        }
+        void this.bridge.send({ type: command }).catch((error: unknown) => {
+            this.handleOverlayError(error);
+        });
+    };
 
     private constructor(
         pid: number,
@@ -75,6 +117,10 @@ export class OverlayProcess implements EditingTarget {
             options,
             configStore,
             overlayRegistry
+        );
+        window.webContents.on(
+            'before-input-event',
+            this.handleBeforeInputEvent
         );
 
         overlay.event.on('resized', (resizedHwnd, width, height) => {
@@ -296,6 +342,7 @@ export class OverlayProcess implements EditingTarget {
             console.error(`Failed to disconnect overlay input for PID ${this.pid}`, error);
         }
         this.input = null;
+        this.pressedEditShortcutKeys.clear();
         this.editingValue = false;
         if (!this.window.isDestroyed()) {
             this.window.blurWebView();
@@ -324,6 +371,15 @@ export class OverlayProcess implements EditingTarget {
     private async finishDestruction(): Promise<void> {
         if (this.destroyed) {
             return;
+        }
+        if (!this.window.isDestroyed()) {
+            const webContents = this.window.webContents;
+            if (!webContents.isDestroyed()) {
+                webContents.removeListener(
+                    'before-input-event',
+                    this.handleBeforeInputEvent
+                );
+            }
         }
         const capture = this.inputCapturePromise;
         if (capture !== null) {
