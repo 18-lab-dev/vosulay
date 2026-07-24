@@ -42,12 +42,19 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build Windows installer
+      - name: Build Windows installer and portable distributions
         run: npm run dist:win
 
-      - name: Upload installer
+      - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: vosulay-windows
-          path: windows/dist/*.exe
+          name: vosulay-windows-installer
+          path: windows/dist/vosulay-*-setup.exe
+          if-no-files-found: error
+
+      - name: Upload Windows portable executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: vosulay-windows-portable
+          path: windows/dist/vosulay-*-portable.exe
           if-no-files-found: error

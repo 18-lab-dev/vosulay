@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import { ConfigStore, normalizeConfig } from "../src/main/config";
 import { MAX_COUNTER_PAGE_BYTES, fetchInstalledCounters, parseInstalledCounters } from "../src/main/counters";
@@ -11,8 +11,33 @@ import { LocalOverlayRegistry } from "../src/main/local-overlays";
 import { chooseOverlayTarget } from "../src/main/overlay-target";
 import { buildManagerDocumentFromSources } from "../src/main/manager-document";
 import { parseOptions } from "../src/main/options";
+import { resolveStoragePaths } from "../src/main/storage-path";
 import { availableUrl, counterUrl, settingsUrl } from "../src/main/urls";
 import type { MessageEnvelope } from "../src/main/types";
+
+test("config path resolver selects installed and portable storage", () => {
+    const appDataDirectory = resolve("appdata");
+    const portableExecutableDirectory = resolve("portable");
+    assert.deepEqual(resolveStoragePaths(appDataDirectory), {
+        dataDirectory: join(appDataDirectory, "vosulay"),
+        configPath: join(appDataDirectory, "vosulay", "config.json"),
+    });
+    assert.deepEqual(
+        resolveStoragePaths(appDataDirectory, portableExecutableDirectory),
+        {
+            dataDirectory: join(portableExecutableDirectory, "data"),
+            configPath: join(portableExecutableDirectory, "data", "config.json"),
+        }
+    );
+    assert.throws(
+        () => resolveStoragePaths("/appdata", ""),
+        /portable executable directory must not be empty/
+    );
+    assert.throws(
+        () => resolveStoragePaths("/appdata", "portable"),
+        /portable executable directory must be absolute/
+    );
+});
 
 test("options parse aliases and reject unsafe values without Electron", () => {
     const options = parseOptions(["-t", "https://example.test/vosu", "-f144", "--pid=42", "--pid", "99", "--process-name", "custom.exe"]);

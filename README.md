@@ -43,7 +43,11 @@ npm test
 npm run dist:win
 ```
 
-Run `windows\dist\win-unpacked\vosulay.exe` during development or install the generated setup executable. The Windows host accepts `--vosu-url`/`-t`, `--fps-limit`/`-f`, repeatable `--pid`, and repeatable `--process-name` options.
+The build produces two x64 distributions: `windows\dist\vosulay-<version>-setup.exe` is the NSIS installer, while `windows\dist\vosulay-<version>-portable.exe` is the portable executable. Install the setup executable for the normal installed distribution, or run the portable executable directly.
+
+The installed distribution stores its configuration at `%APPDATA%\vosulay\config.json`. The portable distribution stores its configuration beside the executable at `<executable directory>\data\config.json`.
+
+The Windows host accepts `--vosu-url`/`-t`, `--fps-limit`/`-f`, repeatable `--pid`, and repeatable `--process-name` options.
 
 ## Development
 

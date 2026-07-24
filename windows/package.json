@@ -68,8 +68,20 @@
                     "arch": [
                         "x64"
                     ]
+                },
+                {
+                    "target": "portable",
+                    "arch": [
+                        "x64"
+                    ]
                 }
             ]
+        },
+        "nsis": {
+            "artifactName": "vosulay-${version}-setup.${ext}"
+        },
+        "portable": {
+            "artifactName": "vosulay-${version}-portable.${ext}"
         }
     },
     "engines": {

@@ -7,9 +7,10 @@ import {
     session,
     type MenuItemConstructorOptions
 } from 'electron';
-import path from 'node:path';
+import { mkdirSync } from 'node:fs';
 
 import { ConfigStore } from './config';
+import { resolveStoragePaths } from './storage-path';
 import {
     LocalOverlayRegistry,
     installCustomProtocols,
@@ -25,6 +26,13 @@ app.commandLine.appendSwitch('high-dpi-support', '1');
 app.commandLine.appendSwitch('force-device-scale-factor', '1');
 app.commandLine.appendSwitch('in-process-gpu');
 app.commandLine.appendSwitch('disable-direct-composition');
+
+const storagePaths = resolveStoragePaths(
+    app.getPath('appData'),
+    process.env.PORTABLE_EXECUTABLE_DIR
+);
+mkdirSync(storagePaths.dataDirectory, { recursive: true });
+app.setPath('userData', storagePaths.dataDirectory);
 
 registerCustomSchemes();
 
@@ -51,9 +59,7 @@ async function start(): Promise<void> {
     Menu.setApplicationMenu(null);
     app.on('window-all-closed', () => {});
 
-    const configStore = new ConfigStore(
-        path.join(app.getPath('appData'), 'vosulay', 'config.json')
-    );
+    const configStore = new ConfigStore(storagePaths.configPath);
     const overlayRegistry = new LocalOverlayRegistry();
     const manager = new OverlayManager(options, configStore, overlayRegistry);
     let tray: Tray | null = null;
