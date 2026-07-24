@@ -4,6 +4,7 @@ import {
     defaultDllDir,
     length
 } from '@asdf-overlay/core';
+import type { KeyboardInput } from '@asdf-overlay/core/input';
 import { ElectronOverlayInput } from '@asdf-overlay/electron/input';
 import { ElectronOverlaySurface } from '@asdf-overlay/electron/surface';
 import {
@@ -19,7 +20,11 @@ import type { RuntimeOptions } from './options';
 import type { ConfigStore } from './config';
 import type { LocalOverlayRegistry } from './local-overlays';
 import type { EditingTarget } from './types';
-import { editShortcutCommand } from './edit-shortcut';
+import {
+    type EditShortcutCommand,
+    NativeEditShortcutState,
+    editShortcutCommand
+} from './edit-shortcut';
 import {
     chooseOverlayTarget,
     type OverlayTarget
@@ -59,6 +64,39 @@ export class OverlayProcess implements EditingTarget {
     private nativeConnected = true;
     private editingValue = false;
     private readonly pressedEditShortcutKeys = new Set<string>();
+    private readonly consumedNativeEditShortcutKeys = new Set<string>();
+    private readonly nativeEditShortcuts = new NativeEditShortcutState();
+    private readonly handleNativeKeyboardInput = (
+        nativeHwnd: number,
+        input: KeyboardInput
+    ): void => {
+        if (nativeHwnd !== this.hwnd) {
+            return;
+        }
+
+        if (input.kind === 'Key' && input.state === 'Released') {
+            if (input.key.code === 0x49) {
+                this.consumedNativeEditShortcutKeys.delete('i');
+            } else if (input.key.code === 0x52) {
+                this.consumedNativeEditShortcutKeys.delete('r');
+            }
+        }
+
+        const command = this.nativeEditShortcuts.handle(input);
+        if (
+            command === null
+            || this.destroying
+            || this.destroyed
+            || !this.editingValue
+        ) {
+            return;
+        }
+
+        this.consumedNativeEditShortcutKeys.add(
+            command === 'toggle-interaction' ? 'i' : 'r'
+        );
+        this.sendEditShortcutCommand(command);
+    };
     private readonly handleBeforeInputEvent = (
         event: ElectronEvent,
         input: Input
@@ -67,6 +105,7 @@ export class OverlayProcess implements EditingTarget {
         const wasPressed = this.pressedEditShortcutKeys.has(key);
         if (input.type === 'keyUp') {
             this.pressedEditShortcutKeys.delete(key);
+            this.consumedNativeEditShortcutKeys.delete(key);
             return;
         }
         if (input.type === 'keyDown' && (key === 'i' || key === 'r')) {
@@ -75,24 +114,30 @@ export class OverlayProcess implements EditingTarget {
         if (this.destroying || this.destroyed || !this.editingValue) {
             return;
         }
+
+        const consumedByNative =
+            this.consumedNativeEditShortcutKeys.has(key);
         const exactChord = input.type === 'keyDown'
-            && input.control
-            && !input.alt
-            && !input.meta
-            && !input.shift
-            && (key === 'i' || key === 'r');
+            && (
+                consumedByNative
+                || (
+                    input.control
+                    && !input.alt
+                    && !input.meta
+                    && !input.shift
+                    && (key === 'i' || key === 'r')
+                )
+            );
         if (!exactChord) {
             return;
         }
         event.preventDefault();
 
         const command = editShortcutCommand(input);
-        if (command === null || wasPressed) {
+        if (consumedByNative || command === null || wasPressed) {
             return;
         }
-        void this.bridge.send({ type: command }).catch((error: unknown) => {
-            this.handleOverlayError(error);
-        });
+        this.sendEditShortcutCommand(command);
     };
 
     private constructor(
@@ -121,6 +166,10 @@ export class OverlayProcess implements EditingTarget {
         window.webContents.on(
             'before-input-event',
             this.handleBeforeInputEvent
+        );
+        overlay.event.on(
+            'keyboard_input',
+            this.handleNativeKeyboardInput
         );
 
         overlay.event.on('resized', (resizedHwnd, width, height) => {
@@ -248,6 +297,8 @@ export class OverlayProcess implements EditingTarget {
     }
 
     private async finishStartBlockingInput(): Promise<void> {
+        this.nativeEditShortcuts.clear();
+        this.consumedNativeEditShortcutKeys.clear();
         await withFatalDeadline(
             () => Promise.resolve(
                 this.overlay.blockInput(this.hwnd, true)
@@ -343,11 +394,19 @@ export class OverlayProcess implements EditingTarget {
         }
         this.input = null;
         this.pressedEditShortcutKeys.clear();
+        this.nativeEditShortcuts.clear();
+        this.consumedNativeEditShortcutKeys.clear();
         this.editingValue = false;
         if (!this.window.isDestroyed()) {
             this.window.blurWebView();
             void this.bridge.send({ type: 'editing', editing: false });
         }
+    }
+
+    private sendEditShortcutCommand(command: EditShortcutCommand): void {
+        void this.bridge.send({ type: command }).catch((error: unknown) => {
+            this.handleOverlayError(error);
+        });
     }
 
     private destroyNativeOverlay(): void {
@@ -372,6 +431,10 @@ export class OverlayProcess implements EditingTarget {
         if (this.destroyed) {
             return;
         }
+        this.overlay.event.off(
+            'keyboard_input',
+            this.handleNativeKeyboardInput
+        );
         if (!this.window.isDestroyed()) {
             const webContents = this.window.webContents;
             if (!webContents.isDestroyed()) {

@@ -7,7 +7,7 @@ import { ConfigStore, normalizeConfig } from "../src/main/config";
 import { MAX_COUNTER_PAGE_BYTES, fetchInstalledCounters, parseInstalledCounters } from "../src/main/counters";
 import { HostBridge, localOverlayUrls } from "../src/main/host-bridge";
 import { withFatalDeadline } from "../src/main/fatal-deadline";
-import { editShortcutCommand } from "../src/main/edit-shortcut";
+import { NativeEditShortcutState, editShortcutCommand } from "../src/main/edit-shortcut";
 import { LocalOverlayRegistry } from "../src/main/local-overlays";
 import { chooseOverlayTarget } from "../src/main/overlay-target";
 import { buildManagerDocumentFromSources } from "../src/main/manager-document";
@@ -120,6 +120,53 @@ test("edit shortcuts reject keyUp, repeats, modifier drift, and wrong keys", () 
             assert.equal(editShortcutCommand(rejected), null);
         }
     }
+});
+
+test("native edit shortcuts follow Ctrl state and suppress held repeats", () => {
+    const shortcuts = new NativeEditShortcutState();
+    const key = (code: number, state: "Pressed" | "Released") => ({
+        kind: "Key",
+        key: { code },
+        state,
+    });
+
+    assert.equal(shortcuts.handle(key(0x11, "Pressed")), null);
+    assert.equal(
+        shortcuts.handle(key(0x49, "Pressed")),
+        "toggle-interaction",
+    );
+    assert.equal(shortcuts.handle(key(0x49, "Pressed")), null);
+    assert.equal(shortcuts.handle(key(0x49, "Released")), null);
+    assert.equal(
+        shortcuts.handle(key(0x52, "Pressed")),
+        "refresh-selected-overlay",
+    );
+});
+
+test("native edit shortcuts reject extra modifiers and reset cleanly", () => {
+    const shortcuts = new NativeEditShortcutState();
+    const key = (code: number, state: "Pressed" | "Released") => ({
+        kind: "Key",
+        key: { code },
+        state,
+    });
+
+    assert.equal(shortcuts.handle({ kind: "Char" }), null);
+    assert.equal(shortcuts.handle(key(0xa2, "Pressed")), null);
+    assert.equal(shortcuts.handle(key(0x10, "Pressed")), null);
+    assert.equal(shortcuts.handle(key(0x49, "Pressed")), null);
+    assert.equal(shortcuts.handle(key(0x49, "Released")), null);
+    assert.equal(shortcuts.handle(key(0x10, "Released")), null);
+    assert.equal(
+        shortcuts.handle(key(0x49, "Pressed")),
+        "toggle-interaction",
+    );
+    assert.equal(shortcuts.handle(key(0x49, "Released")), null);
+    assert.equal(shortcuts.handle(key(0x5d, "Pressed")), null);
+    assert.equal(shortcuts.handle(key(0x52, "Pressed")), null);
+
+    shortcuts.clear();
+    assert.equal(shortcuts.handle(key(0x52, "Pressed")), null);
 });
 
 test("fatal deadline terminates a hung native request", async () => {
