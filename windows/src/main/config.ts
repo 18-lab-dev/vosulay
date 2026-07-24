@@ -1,9 +1,33 @@
 import { constants } from "node:fs";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { AppConfig, Placement, Profile } from "./types";
+import type { AppConfig, AppSettings, HotkeySettings, Placement, Profile } from "./types";
 
 const CONFIG_VERSION = 1 as const;
+const DEFAULT_HOTKEYS: HotkeySettings = {
+    profile_0: "Ctrl+0",
+    profile_1: "Ctrl+1",
+    profile_2: "Ctrl+2",
+    profile_3: "Ctrl+3",
+    profile_4: "Ctrl+4",
+    profile_5: "Ctrl+5",
+    profile_6: "Ctrl+6",
+    profile_7: "Ctrl+7",
+    profile_8: "Ctrl+8",
+    profile_9: "Ctrl+9",
+    copy_overlay: "Ctrl+C",
+    paste_overlay: "Ctrl+V",
+};
+const HOTKEY_KEYS = Object.keys(DEFAULT_HOTKEYS) as Array<keyof HotkeySettings>;
+const RESERVED_HOTKEYS: Record<string, true> = {
+    "Ctrl+I": true,
+    "Ctrl+R": true,
+    "Ctrl+Shift+Space": true,
+    "Ctrl+Plus": true,
+    "Ctrl+Shift+Plus": true,
+    "Ctrl+Minus": true,
+};
+
 
 export interface ConfigLoadResult {
     config: AppConfig;
@@ -29,11 +53,17 @@ export class ConfigConflictError extends Error {
     }
 }
 
+
 export function defaultConfig(): AppConfig {
     return {
         version: CONFIG_VERSION,
         active_profile: "default",
         profiles: [{ id: "default", name: "Default", overlays: [] }],
+        settings: {
+            right_click_overlay_settings_menu: false,
+            always_keep_overlays_in_view: false,
+            hotkeys: { ...DEFAULT_HOTKEYS },
+        },
     };
 }
 
@@ -66,6 +96,56 @@ function normalizePlacement(value: unknown): Placement {
     return placement;
 }
 
+function canonicalHotkey(value: unknown, fallback: string): string {
+    if (typeof value !== "string") return fallback;
+    const rawParts = value.split("+").map((part) => part.trim()).filter(Boolean);
+    if (!rawParts.length) return fallback;
+    const aliases: Record<string, string> = {
+        control: "Ctrl", ctrl: "Ctrl", alt: "Alt", option: "Alt",
+        shift: "Shift", meta: "Meta", command: "Meta", cmd: "Meta",
+        super: "Meta", win: "Meta", windows: "Meta",
+    };
+    const keyNames: Record<string, string> = {
+        esc: "Escape", escape: "Escape", space: "Space", spacebar: "Space",
+        return: "Enter", enter: "Enter", del: "Delete", delete: "Delete",
+        backspace: "Backspace", tab: "Tab", home: "Home", end: "End",
+        pageup: "PageUp", pagedown: "PageDown", arrowup: "ArrowUp",
+        arrowdown: "ArrowDown", arrowleft: "ArrowLeft", arrowright: "ArrowRight",
+        plus: "Plus", minus: "Minus",
+    };
+    const modifiers = new Set<string>();
+    let key = "";
+    for (const part of rawParts) {
+        const modifier = aliases[part.toLowerCase()];
+        if (modifier) {
+            modifiers.add(modifier);
+        } else if (!key) {
+            const lower = part.toLowerCase();
+            key = keyNames[lower] || (/^[a-z0-9]$/i.test(part) ? part.toUpperCase()
+                : (/^f(?:[1-9]|1[0-2])$/i.test(part) ? part.toUpperCase() : ""));
+        } else {
+            return fallback;
+        }
+    }
+    if (!key) return fallback;
+    const shortcut = ["Ctrl", "Alt", "Shift", "Meta"].filter((modifier) => modifiers.has(modifier)).concat(key).join("+");
+    return RESERVED_HOTKEYS[shortcut] ? fallback : shortcut;
+}
+
+function normalizeSettings(value: unknown): AppSettings {
+    const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+    const inputHotkeys = source.hotkeys && typeof source.hotkeys === "object"
+        ? (source.hotkeys as Record<string, unknown>)
+        : {};
+    const hotkeys = { ...DEFAULT_HOTKEYS };
+    for (const key of HOTKEY_KEYS) hotkeys[key] = canonicalHotkey(inputHotkeys[key], DEFAULT_HOTKEYS[key]);
+    return {
+        right_click_overlay_settings_menu: Boolean(source.right_click_overlay_settings_menu),
+        always_keep_overlays_in_view: Boolean(source.always_keep_overlays_in_view),
+        hotkeys,
+    };
+}
+
 export function normalizeConfig(value: unknown): AppConfig {
     const source = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
     const inputProfiles = Array.isArray(source.profiles) && source.profiles.length ? source.profiles : [{ id: "default", name: "Default", overlays: [] }];
@@ -91,6 +171,7 @@ export function normalizeConfig(value: unknown): AppConfig {
         version: CONFIG_VERSION,
         active_profile: profiles.some((profile) => profile.id === requested) ? requested : firstProfile.id,
         profiles,
+        settings: normalizeSettings(source.settings),
     };
 }
 

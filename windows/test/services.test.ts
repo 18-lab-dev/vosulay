@@ -291,12 +291,119 @@ test("malformed config is normalized and saves serialize atomically", async () =
     const path = join(directory, "nested", "config.json");
     const store = new ConfigStore(path);
     await Promise.all([store.save({ profiles: [{ id: "one", name: "One", overlays: [] }], active_profile: "one" }), store.save({ profiles: [{ id: "two", name: "Two", overlays: [] }], active_profile: "two" })]);
-    assert.equal(JSON.parse(await readFile(path, "utf8")).active_profile, "two");
+    const persistedDefaults = JSON.parse(await readFile(path, "utf8")) as { active_profile: string; settings: unknown };
+    assert.equal(persistedDefaults.active_profile, "two");
+    assert.deepEqual(persistedDefaults.settings, normalizeConfig({}).settings);
     await writeFile(path, "{bad", "utf8");
     const loaded = await store.load();
     assert.equal(loaded.config.active_profile, "default");
     assert.match(loaded.error ?? "", /Could not load configuration/);
 });
+test("config settings default and normalize manager hotkeys", () => {
+    assert.deepEqual(normalizeConfig({}).settings, {
+        right_click_overlay_settings_menu: false,
+        always_keep_overlays_in_view: false,
+        hotkeys: {
+            profile_0: "Ctrl+0",
+            profile_1: "Ctrl+1",
+            profile_2: "Ctrl+2",
+            profile_3: "Ctrl+3",
+            profile_4: "Ctrl+4",
+            profile_5: "Ctrl+5",
+            profile_6: "Ctrl+6",
+            profile_7: "Ctrl+7",
+            profile_8: "Ctrl+8",
+            profile_9: "Ctrl+9",
+            copy_overlay: "Ctrl+C",
+            paste_overlay: "Ctrl+V",
+        },
+    });
+
+    const normalized = normalizeConfig({
+        settings: {
+            right_click_overlay_settings_menu: true,
+            always_keep_overlays_in_view: true,
+            hotkeys: {
+                profile_0: " option + shift + k ",
+                profile_1: "f12",
+                profile_2: "F13",
+                profile_3: "Ctrl+K+Q",
+                profile_4: 4,
+                copy_overlay: "cmd+y",
+                paste_overlay: " Control + option + spacebar ",
+            },
+        },
+    });
+    assert.deepEqual(normalized.settings, {
+        right_click_overlay_settings_menu: true,
+        always_keep_overlays_in_view: true,
+        hotkeys: {
+            profile_0: "Alt+Shift+K",
+            profile_1: "F12",
+            profile_2: "Ctrl+2",
+            profile_3: "Ctrl+3",
+            profile_4: "Ctrl+4",
+            profile_5: "Ctrl+5",
+            profile_6: "Ctrl+6",
+            profile_7: "Ctrl+7",
+            profile_8: "Ctrl+8",
+            profile_9: "Ctrl+9",
+            copy_overlay: "Meta+Y",
+            paste_overlay: "Ctrl+Alt+Space",
+        },
+    });
+});
+
+test("config normalization rejects reserved shortcuts per action", () => {
+    const reservedValues = [
+        "control+i",
+        " CTRL + r ",
+        "control + shift + spacebar",
+        "control+plus",
+        " CTRL + shift + plus ",
+        "control+minus",
+    ];
+    for (const reserved of reservedValues) {
+        const hotkeys = normalizeConfig({
+            settings: {
+                hotkeys: {
+                    profile_0: reserved,
+                    copy_overlay: reserved,
+                    paste_overlay: reserved,
+                },
+            },
+        }).settings.hotkeys;
+        assert.equal(hotkeys.profile_0, "Ctrl+0");
+        assert.equal(hotkeys.copy_overlay, "Ctrl+C");
+        assert.equal(hotkeys.paste_overlay, "Ctrl+V");
+    }
+});
+
+test("config store persists manager settings without changing profiles", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-settings-"));
+    const path = join(directory, "config.json");
+    const store = new ConfigStore(path);
+    const saved = await store.save({
+        active_profile: "custom",
+        profiles: [{ id: "custom", name: "Custom", overlays: [] }],
+        settings: {
+            right_click_overlay_settings_menu: true,
+            always_keep_overlays_in_view: true,
+            hotkeys: {
+                profile_0: "Alt+Shift+K",
+                copy_overlay: "Meta+Y",
+                paste_overlay: "Ctrl+Alt+Space",
+            },
+        },
+    });
+
+    const persisted = JSON.parse(await readFile(path, "utf8")) as unknown;
+    assert.deepEqual(persisted, saved.config);
+    assert.equal(saved.config.active_profile, "custom");
+    assert.deepEqual(saved.config.profiles, [{ id: "custom", name: "Custom", overlays: [] }]);
+    assert.deepEqual((await store.load()).config, saved.config);
+});
+
 test("config subscriptions carry revisions and reject stale saves", async () => {
     const directory = await mkdtemp(join(tmpdir(), "vosulay-config-revisions-"));
     const path = join(directory, "config.json");

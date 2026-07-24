@@ -34,7 +34,7 @@
       <span class="toolbar-spacer"></span>
       <span id="status" role="status" aria-live="polite"></span>
       <button id="open-available" class="quiet-button">Browse counters</button>
-      <button id="quit" class="icon-button danger" title="Quit vosulay" aria-label="Quit vosulay">×</button>
+      <button id="open-settings" class="quiet-button" type="button">Settings</button>
       <button id="done" class="primary-button">Done</button>
     </header>
 
@@ -49,6 +49,8 @@
       </div>
       <div id="catalog" class="catalog"></div>
     </aside>
+
+    <div id="selection-box" hidden aria-hidden="true"></div>
 
     <aside id="inspector" class="inspector" aria-label="Counter properties" hidden>
       <div class="panel-heading">
@@ -85,6 +87,63 @@
         <div class="url-dialog-actions">
           <button type="submit" class="primary-button">Add</button>
           <button id="url-cancel" type="button" class="quiet-button">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="settings-modal" class="modal-backdrop" hidden>
+      <form id="settings-form" class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
+        <div class="settings-dialog-header">
+          <div>
+            <strong id="settings-dialog-title">Settings</strong>
+            <small>Customize editor behavior and keyboard shortcuts.</small>
+          </div>
+        </div>
+
+        <div class="settings-dialog-content">
+          <fieldset class="settings-section">
+            <legend>General</legend>
+            <label class="checkbox-row" for="right-click-settings">
+              <span>
+                <strong>Right-click opens overlay settings</strong>
+                <small>Show the inspector beside the pointer.</small>
+              </span>
+              <input id="right-click-settings" type="checkbox">
+            </label>
+            <label class="checkbox-row" for="keep-overlays-in-view">
+              <span>
+                <strong>Keep overlays in view</strong>
+                <small>Constrain overlays to the visible viewport.</small>
+              </span>
+              <input id="keep-overlays-in-view" type="checkbox">
+            </label>
+          </fieldset>
+
+          <fieldset class="settings-section">
+            <legend>Keyboard shortcuts</legend>
+            <div id="hotkey-list" class="hotkey-list">
+              <div class="hotkey-row"><span>Profile 1</span><button class="hotkey-input" type="button" data-hotkey="profile_1"></button></div>
+              <div class="hotkey-row"><span>Profile 2</span><button class="hotkey-input" type="button" data-hotkey="profile_2"></button></div>
+              <div class="hotkey-row"><span>Profile 3</span><button class="hotkey-input" type="button" data-hotkey="profile_3"></button></div>
+              <div class="hotkey-row"><span>Profile 4</span><button class="hotkey-input" type="button" data-hotkey="profile_4"></button></div>
+              <div class="hotkey-row"><span>Profile 5</span><button class="hotkey-input" type="button" data-hotkey="profile_5"></button></div>
+              <div class="hotkey-row"><span>Profile 6</span><button class="hotkey-input" type="button" data-hotkey="profile_6"></button></div>
+              <div class="hotkey-row"><span>Profile 7</span><button class="hotkey-input" type="button" data-hotkey="profile_7"></button></div>
+              <div class="hotkey-row"><span>Profile 8</span><button class="hotkey-input" type="button" data-hotkey="profile_8"></button></div>
+              <div class="hotkey-row"><span>Profile 9</span><button class="hotkey-input" type="button" data-hotkey="profile_9"></button></div>
+              <div class="hotkey-row"><span>Profile 0</span><button class="hotkey-input" type="button" data-hotkey="profile_0"></button></div>
+              <div class="hotkey-row"><span>Copy overlays</span><button class="hotkey-input" type="button" data-hotkey="copy_overlay"></button></div>
+              <div class="hotkey-row"><span>Paste overlays</span><button class="hotkey-input" type="button" data-hotkey="paste_overlay"></button></div>
+            </div>
+          </fieldset>
+        </div>
+
+        <div id="settings-error" class="settings-error" role="status" aria-live="polite" hidden></div>
+        <div class="settings-dialog-actions">
+          <button id="settings-reset-hotkeys" type="button" class="quiet-button">Reset defaults</button>
+          <span class="settings-actions-spacer"></span>
+          <button id="settings-cancel" type="button" class="quiet-button">Cancel</button>
+          <button type="submit" class="primary-button">Save</button>
         </div>
       </form>
     </div>
