@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-07-21T20:07:59.737Z",
+  "updatedAt": "2026-07-25T18:52:00.477Z",
   "command": "update",
-  "gitHead": "e8d9040457d05010a4b21c29055c479aa4cf7622",
-  "model": "gpt-5.6-luna"
+  "gitHead": "6f238ad367927b0c818ee89997769347c51bf985",
+  "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
 }

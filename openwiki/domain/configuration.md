@@ -1,18 +1,23 @@
 ---
 type: Domain Model
 title: Configuration and overlay placement model
-description: Documents vosulay's versioned JSON configuration, profile and placement concepts, normalization invariants, geometry limits, and atomic persistence behavior shared by Rust and the manager frontend.
+description: Documents vosulay's versioned JSON configuration, profile and placement concepts, normalization invariants, geometry limits, editor settings, hotkey bindings, and atomic persistence behavior shared by Rust and the manager frontend.
 resource: src/config.rs
-tags: [domain, configuration, profiles, overlays, persistence]
+tags: [domain, configuration, profiles, overlays, persistence, hotkeys]
 ---
 
 # Configuration and overlay placement model
 
 ## Concepts
 
-`AppConfig` contains a schema `version`, an `active_profile` ID, and a non-empty list of `Profile` values. Each profile has an ID, display name, and an ordered list of overlay `Placement` values. A placement references an installed counter through `counter_id` or describes a custom source; `counter_id` is not a unique placement identifier. A profile may contain multiple placements for the same installed counter, and the placement object together with its position in the list constitutes that runtime instance's identity. Each placement stores position (`top`, `left`), size, scale, opacity, rotation, and z-order. Optional `url` and `name` fields preserve custom overlay metadata.
+`AppConfig` contains a schema `version`, an `active_profile` ID, a non-empty list of `Profile` values, and an `AppSettings` object. Each profile has an ID, display name, and an ordered list of overlay `Placement` values. A placement references an installed counter through `counter_id` or describes a custom source; `counter_id` is not a unique placement identifier. A profile may contain multiple placements for the same installed counter, and the placement object together with its position in the list constitutes that runtime instance's identity. Each placement stores position (`top`, `left`), size, scale, opacity, rotation, and z-order. Optional `url` and `name` fields preserve custom overlay metadata.
 
-The default state is version 1, one profile named `Default`, and no placements. The config file is located at the platform user configuration directory under `vosulay/config.json`; [`src/config.rs`](../../src/config.rs) uses the `directories` crate to resolve that location.
+`AppSettings` stores editor-wide preferences and keyboard shortcuts:
+- `right_click_overlay_settings_menu`: when true, right-clicking an overlay in editing mode opens the inspector beside the pointer.
+- `always_keep_overlays_in_view`: when true, overlay position and scale are constrained so overlays remain fully visible within the viewport.
+- `hotkeys`: a `HotkeySettings` map with one shortcut per profile slot (0–9), plus `copy_overlay` and `paste_overlay`. Defaults are `Ctrl+0` through `Ctrl+9`, `Ctrl+C`, and `Ctrl+V`. Shortcuts are normalized with modifier aliases (`control`/`ctrl` → `Ctrl`, `alt`/`option` → `Alt`, `meta`/`command`/`cmd`/`super`/`win`/`windows` → `Meta`, `shift` → `Shift`) and key-name mappings (`esc`→`Escape`, `space`→`Space`, `return`/`enter`→`Enter`, `del`/`delete`→`Delete`, `backspace`→`Backspace`, `tab`→`Tab`, `home`→`Home`, `end`→`End`, `pageup`→`PageUp`, `pagedown`→`PageDown`, arrow keys, `plus`/`minus`→`Plus`/`Minus`, `f1`–`f12`). Blank or whitespace-only values revert to the corresponding default; non-blank values are trimmed but otherwise preserved. Duplicate shortcuts across actions are rejected on save.
+
+The default state is version 1, one profile named `Default`, no placements, and default `AppSettings`. The config file is located at the platform user configuration directory under `vosulay/config.json`; [`src/config.rs`](../../src/config.rs) uses the `directories` crate to resolve that location.
 
 ## Invariants and normalization
 
@@ -24,8 +29,9 @@ The default state is version 1, one profile named `Default`, and no placements. 
 - The active profile falls back to the first profile if its ID is missing.
 - Placement URLs are restricted to `http`, `https`, and `vosulay-overlay`.
 - Non-finite geometry is replaced with defaults; width/height are at least `10`, scale is at least `0.1`, opacity is clamped to `0..1`, rotation to `-180..180`, and z-index to `0..999`.
+- `AppSettings` and `HotkeySettings` are normalized: boolean fields default to `false`; hotkey blanks/whitespace revert to per-action defaults; custom hotkeys are trimmed; duplicates across actions are rejected at save time (not auto-rewritten on load).
 
-[`assets/manager.js`](../../assets/manager.js) mirrors these rules in browser state so edits behave predictably before Rust persists them. Keep the two implementations aligned when adding fields or changing limits.
+[`assets/manager.js`](../../assets/manager.js) mirrors these rules in browser state so edits behave predictably before Rust persists them. The frontend's `normalizeConfig` and `canonicalHotkey`/`normalizeHotkeys` functions correspond to the Rust normalization. Keep the two implementations aligned when adding fields or changing limits.
 
 ## Persistence safety
 

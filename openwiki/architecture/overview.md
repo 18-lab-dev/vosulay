@@ -1,9 +1,9 @@
 ---
 type: Architecture Overview
 title: vosulay runtime architecture
-description: Explains how the Rust entrypoint, CXX bridge, Qt WebEngine shell, embedded manager frontend, workers, tray controls, and platform-specific overlay behavior compose into the vosulay application.
+description: Explains how the Rust entrypoint, CXX bridge, Qt WebEngine shell, embedded manager frontend, workers, tray controls, platform-specific overlay behavior, zoom locking, XDG Desktop Portal file selection, and local IPC compose into the vosulay application.
 resource: src/qt/qt_shell.cpp
-tags: [architecture, rust, cxx, qt, webengine]
+tags: [architecture, rust, cxx, qt, webengine, xdg-portal]
 ---
 
 # vosulay runtime architecture
@@ -31,7 +31,21 @@ The shell uses a frameless, transparent, always-on-top `QWebEngineView`, a syste
 
 When no overlays are active, the WebEngine page may be hidden/discarded; when overlays remain active but the window is hidden, the page can be frozen. These lifecycle optimizations are implemented in the C++ shell and must be considered when changing visibility or bridge callbacks.
 
-Local HTML selection is also owned by the Qt shell. While the XDG Desktop Portal file chooser is active, the shell hides the overlay and releases input capture, then restores its previous visibility and the input state appropriate to the current editing mode. It accepts only a local `file://` HTML/HTM file that is a readable regular file and can be opened read-only. The selected file is exposed through a capability-bearing `vosulay-overlay` URL; the scheme handler authorizes that capability for one canonical directory root and serves only canonical, readable regular files confined beneath it. The detailed boundary is documented in [vosu catalog, overlay sources, and local IPC](../integrations/vosu-and-overlays.md).
+### Zoom-locked WebEngine view
+
+The shell uses a custom `ZoomLockedWebEngineView` that installs an application-wide event filter to suppress pinch-zoom, Ctrl+wheel, and Ctrl++/Ctrl+- keyboard shortcuts that would otherwise change the WebEngine zoom level. This ensures the overlay scale remains under application control through the placement geometry rather than Chromium's built-in zoom.
+
+### XDG Desktop Portal file selection
+
+Local HTML selection is owned by the Qt shell and goes through the XDG Desktop Portal `OpenFile` or `SaveFile` request, restricted to one HTML/HTM/JSON selection. Before opening the chooser, the shell hides the overlay view and releases input capture; on cancellation, failure, or completion it restores the previous visibility and reapplies capture according to the current editing state.
+
+- For overlay file import (`OpenFile`), the returned URI must be a valid local `file://` URL pointing to a readable regular file with a case-insensitive `.html` or `.htm` suffix that opens successfully for read-only access.
+- For profile export (`SaveFile`), the shell suggests a filename derived from the profile name (sanitized, max 96 characters, no trailing dots) and validates the chosen path ends with `.json`.
+- For profile import (`OpenFile`), the chosen file must be a readable `.json` file under 1 MiB.
+
+For an accepted file, the shell canonicalizes both the file and its containing directory, verifies that the file is inside that directory, and creates a `vosulay-overlay` URL with a fresh 128-bit hexadecimal host token. The scheme handler authorizes that token for exactly the canonical root encoded in the URL; a token cannot later be rebound to another root. Each request must carry a valid authorized token and the identical canonical root. The requested path is canonicalized again, rejected if it escapes the root (including through traversal or symlinks), and served only when it is a readable regular file that opens read-only. The handler replies with the MIME type detected for that file.
+
+This boundary is security-sensitive: do not replace canonical path checks with string prefix checks, broaden the allowed schemes without reviewing WebEngine settings, or expose arbitrary local filesystem paths. The frontend's accepted schemes and the C++ handler's authorization rules must remain consistent with the [configuration model](../domain/configuration.md).
 
 ## Concurrency and lifecycle
 
