@@ -1,6 +1,13 @@
-# vosulay
+<div align="center">
 
-Native Linux in-game overlay manager for vosu, built with Rust and Qt 6.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/branding/vosulay-logo-on-dark.svg">
+  <img src="assets/branding/vosulay-logo.svg" alt="vosulay" width="720">
+</picture>
+
+**Native Linux in-game overlay manager for vosu, built with Rust and Qt 6.**
+
+</div>
 
 vosulay displays vosu counters in a frameless overlay and provides an edit mode for arranging them. Layouts are stored as profiles, and overlays can come from the vosu counter catalog, HTTP(S) URLs, or local HTML files.
 
