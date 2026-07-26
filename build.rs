@@ -41,7 +41,10 @@ fn main() {
     println!("cargo:rerun-if-changed=src/qt/bridge.h");
     println!("cargo:rerun-if-changed=src/qt/qt_shell.h");
     println!("cargo:rerun-if-changed=src/qt/qt_shell.cpp");
+    println!("cargo:rerun-if-changed=assets/vosulay.qrc");
+    println!("cargo:rerun-if-changed=assets/branding/vosulay-app-icon.png");
     println!("cargo:rerun-if-env-changed=QT_MOC");
+    println!("cargo:rerun-if-env-changed=QT_RCC");
     for variable in CMAKE_ENVIRONMENT {
         println!("cargo:rerun-if-env-changed={variable}");
     }
@@ -83,10 +86,28 @@ fn main() {
         .expect("failed to execute Qt moc");
     assert!(moc_status.success(), "Qt moc failed with {moc_status}");
 
+    let rcc_output = out_dir.join("qrc_vosulay.cpp");
+    let rcc = env::var_os("QT_RCC").unwrap_or_else(|| {
+        pkg_config::get_variable("Qt6Core", "libexecdir")
+            .map(PathBuf::from)
+            .map(|directory| directory.join("rcc").into_os_string())
+            .unwrap_or_else(|_| OsString::from("rcc"))
+    });
+    let rcc_status = Command::new(rcc)
+        .arg("-name")
+        .arg("vosulay")
+        .arg("-o")
+        .arg(&rcc_output)
+        .arg("assets/vosulay.qrc")
+        .status()
+        .expect("failed to execute Qt rcc");
+    assert!(rcc_status.success(), "Qt rcc failed with {rcc_status}");
+
     let mut build = cxx_build::bridge("src/ffi.rs");
     build
         .file("src/qt/qt_shell.cpp")
         .file(&moc_output)
+        .file(&rcc_output)
         .include("src/qt")
         .std("c++17")
         .flag_if_supported("-fPIC");

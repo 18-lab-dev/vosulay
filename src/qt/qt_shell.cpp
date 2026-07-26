@@ -41,6 +41,7 @@
 #include <QKeySequence>
 #include <QPointer>
 #include <QRegion>
+#include <QResource>
 #include <QScreen>
 #include <QShortcut>
 #include <QScopeGuard>
@@ -81,6 +82,10 @@
 #if defined(Q_OS_UNIX)
 #include <unistd.h>
 #endif
+
+static void initializeVosulayResources() {
+  Q_INIT_RESOURCE(vosulay);
+}
 
 namespace vosulay::portal {
 
@@ -161,6 +166,19 @@ constexpr auto kOverlayScheme = "vosulay-overlay";
 constexpr qsizetype kMaximumIpcBytes = 4096;
 constexpr qsizetype kMaximumProfileBytes = 1024 * 1024;
 
+
+QIcon loadApplicationIcon() {
+  QIcon icon(QStringLiteral(":/vosulay/vosulay-app-icon.png"));
+  if (!icon.isNull()) {
+    return icon;
+  }
+
+  icon = QIcon::fromTheme(QStringLiteral("applications-games"));
+  if (!icon.isNull()) {
+    return icon;
+  }
+  return QApplication::style()->standardIcon(QStyle::SP_ComputerIcon);
+}
 QString rustStringToQString(const rust::String &value) {
   return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
 }
@@ -742,8 +760,9 @@ private:
 
 class ShellWindow final : public QWidget {
 public:
-  explicit ShellWindow(ParsedOptions options)
+  explicit ShellWindow(ParsedOptions options, const QIcon &applicationIcon)
       : options_(std::move(options)), server_(this), tray_(this) {
+    setWindowIcon(applicationIcon);
     setAttribute(Qt::WA_TranslucentBackground);
     setWindowFlags(Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint |
                    Qt::WindowStaysOnTopHint | Qt::X11BypassWindowManagerHint);
@@ -800,7 +819,7 @@ public:
             });
     connectRefreshRateSignal(options_.screen);
 
-    setupTray();
+    setupTray(applicationIcon);
     setupIpcServer();
 
     const auto html = rustStringToQString(
@@ -872,11 +891,7 @@ private:
     return windowHandle();
   }
 
-  void setupTray() {
-    QIcon icon = QIcon::fromTheme(QStringLiteral("applications-games"));
-    if (icon.isNull()) {
-      icon = style()->standardIcon(QStyle::SP_ComputerIcon);
-    }
+  void setupTray(const QIcon &icon) {
     tray_.setIcon(icon);
     tray_.setToolTip(QStringLiteral("vosulay"));
 
@@ -2263,6 +2278,9 @@ std::int32_t run_qt_application(rust::Str arguments_json) {
   registerOverlayScheme();
 
   QApplication application(argc, argv.data());
+  initializeVosulayResources();
+  const QIcon icon = loadApplicationIcon();
+  QApplication::setWindowIcon(icon);
   QCoreApplication::setApplicationName(QString::fromLatin1(kApplicationName));
   QCoreApplication::setApplicationVersion(
       QString::fromLatin1(kApplicationVersion));
@@ -2279,7 +2297,7 @@ std::int32_t run_qt_application(rust::Str arguments_json) {
     }
   }
 
-  ShellWindow window(std::move(options));
+  ShellWindow window(std::move(options), icon);
   if (!window.ipcReady()) {
     QTextStream(stderr)
         << "vosulay: another instance is running or IPC could not be started\n";

@@ -34,7 +34,6 @@ pub struct AppConfig {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub struct AppSettings {
-    pub right_click_overlay_settings_menu: bool,
     pub always_keep_overlays_in_view: bool,
     pub hotkeys: HotkeySettings,
 }
@@ -466,7 +465,6 @@ mod tests {
                 }],
             }],
             settings: AppSettings {
-                right_click_overlay_settings_menu: true,
                 always_keep_overlays_in_view: true,
                 ..AppSettings::default()
             },
@@ -533,19 +531,39 @@ mod tests {
                 "active_profile": "default",
                 "profiles": [],
                 "settings": {
-                    "right_click_overlay_settings_menu": true,
                     "hotkeys": {"profile_0": "Alt+1"}
                 }
             }"#,
         )
         .expect("partially specified settings should deserialize");
-        let mut expected = AppSettings {
-            right_click_overlay_settings_menu: true,
-            ..AppSettings::default()
-        };
+        let mut expected = AppSettings::default();
         expected.hotkeys.profile_0 = "Alt+1".to_owned();
 
         assert_eq!(config.settings, expected);
+    }
+
+    #[test]
+    fn legacy_right_click_setting_is_ignored_and_omitted() {
+        for legacy_value in [false, true] {
+            let config: AppConfig = serde_json::from_value(serde_json::json!({
+                "version": 1,
+                "active_profile": "default",
+                "profiles": [],
+                "settings": {
+                    "right_click_overlay_settings_menu": legacy_value
+                }
+            }))
+            .expect("legacy settings should deserialize");
+
+            assert_eq!(config.settings, AppSettings::default());
+
+            let encoded = serde_json::to_value(config).expect("config should serialize");
+            assert!(
+                encoded["settings"]
+                    .get("right_click_overlay_settings_menu")
+                    .is_none()
+            );
+        }
     }
 
     #[test]
@@ -626,9 +644,8 @@ mod tests {
     }
 
     #[test]
-    fn both_settings_booleans_persist() {
+    fn keep_overlays_in_view_setting_persists() {
         let mut config = AppConfig::default();
-        config.settings.right_click_overlay_settings_menu = true;
         config.settings.always_keep_overlays_in_view = true;
 
         let encoded = serde_json::to_string(&config).expect("config should serialize");

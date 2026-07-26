@@ -91,11 +91,9 @@ fn fetch_installed_counters_with_timeout(
 }
 
 fn parse_installed_counters(base_url: &Url, source: &str) -> Result<Vec<InstalledCounter>> {
-    let card_selector = selector(".result-item[data-overlay-id]")?;
-    let metadata_selector = selector(".calu[n][a][v]")?;
-    let settings_selector = selector(".settings-button")?;
-    let width_selector = selector(r#"[nft="width"]"#)?;
-    let height_selector = selector(r#"[nft="height"]"#)?;
+    let card_selector = selector("article.counter-card[data-overlay-id]")?;
+    let settings_selector = selector(r#"[data-action="counter-settings"]"#)?;
+    let preview_selector = selector(".counter-card__preview iframe")?;
     let document = Html::parse_document(source);
     let mut counters = Vec::new();
 
@@ -104,14 +102,10 @@ fn parse_installed_counters(base_url: &Url, source: &str) -> Result<Vec<Installe
         if id.is_empty() {
             bail!("counter card has an empty data-overlay-id");
         }
-        let metadata = card
-            .select(&metadata_selector)
-            .next()
-            .with_context(|| format!("counter {id:?} is missing metadata"))?;
-        let name = required_attribute(metadata, "n", &id)?.to_owned();
-        let author = required_attribute(metadata, "a", &id)?.to_owned();
-        let version = required_attribute(metadata, "v", &id)?.to_owned();
-        let resolution = resolution(&card, &width_selector, &height_selector);
+        let name = required_attribute(card, "data-counter-name", &id)?.to_owned();
+        let author = required_attribute(card, "data-counter-author", &id)?.to_owned();
+        let version = required_attribute(card, "data-counter-version", &id)?.to_owned();
+        let resolution = resolution(&card, &preview_selector);
 
         counters.push(InstalledCounter {
             url: counter_url(base_url, &id)?,
@@ -140,20 +134,23 @@ fn required_attribute<'a>(element: ElementRef<'a>, name: &str, counter: &str) ->
         .with_context(|| format!("{counter:?} is missing the {name:?} attribute"))
 }
 
-fn resolution(card: &ElementRef<'_>, width: &Selector, height: &Selector) -> (f64, f64) {
-    let width = numeric_attribute(card, width);
-    let height = numeric_attribute(card, height);
+fn resolution(card: &ElementRef<'_>, preview: &Selector) -> (f64, f64) {
+    let Some(preview) = card.select(preview).next() else {
+        return (DEFAULT_WIDTH, DEFAULT_HEIGHT);
+    };
+    let width = numeric_attribute(preview, "width");
+    let height = numeric_attribute(preview, "height");
     match (width, height) {
         (Some(width), Some(height)) if width > 10.0 && height > 10.0 => (width, height),
         _ => (DEFAULT_WIDTH, DEFAULT_HEIGHT),
     }
 }
 
-fn numeric_attribute(card: &ElementRef<'_>, selector: &Selector) -> Option<f64> {
-    card.select(selector)
-        .next()?
-        .value()
-        .attr("nfv")?
+fn numeric_attribute(element: ElementRef<'_>, attribute: &str) -> Option<f64> {
+    let source = element.value().attr(attribute)?;
+    source
+        .strip_suffix("px")
+        .unwrap_or(source)
         .parse::<f64>()
         .ok()
         .filter(|value| value.is_finite())
@@ -182,15 +179,25 @@ mod tests {
     #[test]
     fn parse_decodes_escaped_metadata_and_preserves_source_order() {
         let source = r#"
-            <div class="result-item" data-overlay-id="folder/&amp;&quot;">
-              <div class="calu" n="First &amp; Best" a="A &quot;Name&quot;" v="1.2"></div>
-              <button class="settings-button"></button>
-              <span nft="width" nfv="640"></span><span nft="height" nfv="360"></span>
-            </div>
-            <div class="result-item" data-overlay-id="second">
-              <div class="calu" n="Second" a="Author" v="2"></div>
-              <span nft="width" nfv="800"></span><span nft="height" nfv="600"></span>
-            </div>
+            <article class="counter-card" data-overlay-id="folder/&amp;&quot;"
+                     data-counter-name="First &amp; Best"
+                     data-counter-author="A &quot;Name&quot;"
+                     data-counter-version="1.2">
+              <header>
+                <button type="button" data-action="counter-settings">Settings</button>
+              </header>
+              <div class="counter-card__preview">
+                <iframe src="/folder/" width="640px" height="360px"></iframe>
+              </div>
+            </article>
+            <article class="counter-card is-pinned" data-overlay-id="second"
+                     data-counter-name="Second"
+                     data-counter-author="Author"
+                     data-counter-version="2">
+              <div class="counter-card__preview">
+                <iframe src="/second/" width="800" height="600"></iframe>
+              </div>
+            </article>
         "#;
         let base = Url::parse("http://127.0.0.1:24050/base?old=1#fragment")
             .expect("fixture URL should parse");
@@ -227,21 +234,43 @@ mod tests {
     }
 
     #[test]
-    fn parse_defaults_dynamic_resolution() {
+    fn parse_defaults_flexible_non_numeric_and_invalid_resolution() {
         let source = r#"
-            <div class="result-item" data-overlay-id="dynamic">
-              <div class="calu" n="Dynamic" a="Author" v="1"></div>
-              <span nft="width" nfv="ANY"></span><span nft="height" nfv="-2"></span>
-            </div>
+            <article class="counter-card" data-overlay-id="flexible"
+                     data-counter-name="Flexible"
+                     data-counter-author="Author"
+                     data-counter-version="1">
+              <div class="counter-card__preview">
+                <iframe src="/flexible/" width="100%" height="300px"></iframe>
+              </div>
+            </article>
+            <article class="counter-card" data-overlay-id="non-numeric"
+                     data-counter-name="Non-numeric"
+                     data-counter-author="Author"
+                     data-counter-version="1">
+              <div class="counter-card__preview">
+                <iframe src="/non-numeric/" width="ANY" height="auto"></iframe>
+              </div>
+            </article>
+            <article class="counter-card" data-overlay-id="too-small"
+                     data-counter-name="Too small"
+                     data-counter-author="Author"
+                     data-counter-version="1">
+              <div class="counter-card__preview">
+                <iframe src="/too-small/" width="10px" height="300px"></iframe>
+              </div>
+            </article>
         "#;
         let base = Url::parse("http://127.0.0.1:24050").expect("fixture URL should parse");
 
-        let counter = parse_installed_counters(&base, source)
-            .expect("fixture should parse")
-            .pop()
-            .expect("fixture should contain one counter");
+        let counters = parse_installed_counters(&base, source).expect("fixture should parse");
 
-        assert_eq!((counter.width, counter.height), (500.0, 300.0));
+        assert_eq!(counters.len(), 3);
+        assert!(
+            counters.iter().all(|counter| {
+                (counter.width, counter.height) == (DEFAULT_WIDTH, DEFAULT_HEIGHT)
+            })
+        );
     }
     #[test]
     fn fetch_stops_reading_when_global_deadline_expires() {

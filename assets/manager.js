@@ -37,7 +37,6 @@
   const openSettings = $("open-settings");
   const settingsModal = $("settings-modal");
   const settingsForm = $("settings-form");
-  const rightClickSettings = $("right-click-settings");
   const keepOverlaysInView = $("keep-overlays-in-view");
   const hotkeyList = $("hotkey-list");
   const settingsError = $("settings-error");
@@ -243,7 +242,6 @@
       active_profile: ids.has(requested) ? requested : profiles[0].id,
       profiles,
       settings: {
-        right_click_overlay_settings_menu: Boolean(sourceSettings.right_click_overlay_settings_menu),
         always_keep_overlays_in_view: Boolean(sourceSettings.always_keep_overlays_in_view),
         hotkeys: normalizeHotkeys(sourceSettings.hotkeys)
       }
@@ -711,16 +709,15 @@
 
   function renderInspector() {
     const overlay = selectedOverlay();
-    const contextual = Boolean(state.config?.settings.right_click_overlay_settings_menu);
-    document.body.classList.toggle("context-inspector", contextual && state.inspectorPopup);
+    document.body.classList.toggle("context-inspector", state.inspectorPopup);
     const warningContext = state.editing ? overlay : null;
     if (inspectorWarningContext !== warningContext) {
       inspectorWarningContext = warningContext;
       clearInspectorWarnings();
     }
-    inspector.hidden = !state.editing || !overlay || (contextual && !state.inspectorPopup);
+    inspector.hidden = !state.editing || !overlay || !state.inspectorPopup;
     if (inspector.hidden) return;
-    if (contextual && state.inspectorPoint) {
+    if (state.inspectorPoint) {
       inspector.style.right = "auto";
       inspector.style.left = `${state.inspectorPoint.x}px`;
       inspector.style.top = `${state.inspectorPoint.y}px`;
@@ -1163,9 +1160,7 @@
     const root = event.target.closest(".overlay");
     if (!root) return;
     event.preventDefault();
-    const contextual = Boolean(state.config?.settings.right_click_overlay_settings_menu);
-    selectOverlay(root._vosulayOverlay, { keepPopup: contextual });
-    if (!contextual) return;
+    selectOverlay(root._vosulayOverlay, { keepPopup: true });
     state.inspectorPopup = true;
     state.inspectorPoint = { x: event.clientX, y: event.clientY };
     requestRender("inspector");
@@ -1401,7 +1396,6 @@
 
   function renderSettingsDraft() {
     if (!state.settingsDraft) return;
-    rightClickSettings.checked = state.settingsDraft.right_click_overlay_settings_menu;
     keepOverlaysInView.checked = state.settingsDraft.always_keep_overlays_in_view;
     for (const button of hotkeyList.querySelectorAll(".hotkey-input")) {
       const key = button.dataset.hotkey;
@@ -1428,7 +1422,6 @@
     closeInspectorPopup();
     const settings = state.config.settings;
     state.settingsDraft = {
-      right_click_overlay_settings_menu: settings.right_click_overlay_settings_menu,
       always_keep_overlays_in_view: settings.always_keep_overlays_in_view,
       hotkeys: { ...settings.hotkeys }
     };
@@ -1436,7 +1429,7 @@
     showSettingsError("");
     renderSettingsDraft();
     settingsModal.hidden = false;
-    rightClickSettings.focus();
+    keepOverlaysInView.focus();
   }
 
   function eventHotkey(event) {
@@ -1476,9 +1469,6 @@
 
   openSettings.addEventListener("click", openSettingsModal);
   settingsCancel.addEventListener("click", () => closeSettingsModal());
-  rightClickSettings.addEventListener("change", () => {
-    if (state.settingsDraft) state.settingsDraft.right_click_overlay_settings_menu = rightClickSettings.checked;
-  });
   keepOverlaysInView.addEventListener("change", () => {
     if (state.settingsDraft) state.settingsDraft.always_keep_overlays_in_view = keepOverlaysInView.checked;
   });
@@ -1530,7 +1520,6 @@
       return;
     }
     state.config.settings = {
-      right_click_overlay_settings_menu: state.settingsDraft.right_click_overlay_settings_menu,
       always_keep_overlays_in_view: state.settingsDraft.always_keep_overlays_in_view,
       hotkeys: normalizeHotkeys(state.settingsDraft.hotkeys)
     };

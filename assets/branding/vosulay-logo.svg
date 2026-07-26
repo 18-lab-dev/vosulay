@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="220" viewBox="0 0 960 220" role="img" aria-labelledby="title desc" shape-rendering="geometricPrecision">
+  <title id="title">Vosulay logo</title>
+  <desc id="desc">A violet overlay-layout frame holds the shared telemetry V and its rose and cyan signal, beside a geometric lowercase vosulay wordmark.</desc>
+
+  <g transform="translate(34 34) scale(1.18)">
+    <rect x="14" y="6" width="108" height="104" rx="3" fill="none" stroke="#8B7CFF" stroke-width="2.5" opacity="0.34"/>
+    <rect x="8" y="12" width="108" height="104" rx="3" fill="none" stroke="#8B7CFF" stroke-width="2.75" opacity="0.78"/>
+
+    <path d="M18 36 H32 L64 94 L96 36 H110" fill="none" stroke="#8B7CFF" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="64" cy="94" r="8" fill="#F45CAD"/>
+    <circle cx="64" cy="94" r="3.2" fill="#7AE1F8"/>
+
+    <rect x="3.5" y="7.5" width="9" height="9" rx="1.5" fill="#8B7CFF" stroke="#F9F7FF" stroke-width="1.25"/>
+    <rect x="111.5" y="7.5" width="9" height="9" rx="1.5" fill="#8B7CFF" stroke="#F9F7FF" stroke-width="1.25"/>
+    <rect x="3.5" y="111.5" width="9" height="9" rx="1.5" fill="#8B7CFF" stroke="#F9F7FF" stroke-width="1.25"/>
+    <rect x="111.5" y="111.5" width="9" height="9" rx="1.5" fill="#8B7CFF" stroke="#F9F7FF" stroke-width="1.25"/>
+  </g>
+
+  <g fill="none" stroke="#100E18" stroke-width="15.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M229 84 L266 153 L301 84"/>
+    <path d="M366 81 C344 81 329 95 329 118 C329 141 344 155 366 155 C388 155 403 141 403 118 C403 95 388 81 366 81 Z"/>
+    <path d="M493 91 C485 84 474 81 463 81 C448 81 437 90 437 102 C437 112 444 118 457 121 L477 126 C489 129 495 134 495 143 C495 153 484 159 469 159 C455 159 443 154 434 145"/>
+    <path d="M528 84 V126 C528 145 540 155 557 155 C575 155 588 145 588 126 V84"/>
+    <path d="M633 59 V140 C633 150 640 155 651 155 H659"/>
+    <path d="M758 92 C750 85 740 81 728 81 C708 81 694 96 694 118 C694 140 708 155 728 155 C740 155 751 149 758 140 M758 84 V154"/>
+    <path d="M798 84 V124 C798 143 810 153 827 153 C845 153 858 143 858 124 V84 M858 124 V151 C858 171 846 181 828 181 C817 181 806 178 798 172"/>
+  </g>
+</svg>

@@ -82,7 +82,7 @@ body.editing .overlay.selected .resize-handle { display: block; }
   display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 12px; border-radius: 12px;
 }
 .brand { display: flex; align-items: center; gap: 7px; margin-right: 8px; letter-spacing: .01em; }
-.brand-mark { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 8px; font-weight: 800; background: linear-gradient(145deg, #aa9fff, #6657dd); }
+.brand-mark { display: block; width: 25px; height: 25px; flex: 0 0 25px; }
 .profile-field { display: flex; align-items: center; gap: 7px; color: var(--muted); }
 .profile-picker { position: relative; width: 140px; color: var(--text); }
 #profile-select {
@@ -169,7 +169,9 @@ button:disabled { opacity: .42; cursor: default; }
   padding: 9px 11px; border: 1px solid var(--line); background: rgba(255,255,255,.035);
 }
 .checkbox-row:first-of-type { border-radius: 8px 8px 0 0; }
-.checkbox-row:last-of-type { border-top: 0; border-radius: 0 0 8px 8px; }
+.checkbox-row:not(:first-of-type) { border-top: 0; }
+.checkbox-row:last-of-type { border-radius: 0 0 8px 8px; }
+.checkbox-row:only-of-type { border-radius: 8px; }
 .checkbox-row span { min-width: 0; }
 .checkbox-row strong, .checkbox-row small { display: block; }
 .checkbox-row small { margin-top: 2px; color: var(--muted); }
