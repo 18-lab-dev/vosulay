@@ -5,11 +5,15 @@ on:
     paths:
       - "assets/**"
       - "windows/**"
+      - "src/api.rs"
+      - "src/config.rs"
       - ".github/workflows/windows-build.yml"
   pull_request:
     paths:
       - "assets/**"
       - "windows/**"
+      - "src/api.rs"
+      - "src/config.rs"
       - ".github/workflows/windows-build.yml"
   workflow_dispatch:
 

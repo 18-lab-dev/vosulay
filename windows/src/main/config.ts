@@ -1,4 +1,4 @@
-import { constants } from "node:fs";
+import { constants, readFileSync } from "node:fs";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { AppConfig, AppSettings, HotkeySettings, Placement, Profile } from "./types";
@@ -60,8 +60,8 @@ export function defaultConfig(): AppConfig {
         active_profile: "default",
         profiles: [{ id: "default", name: "Default", overlays: [] }],
         settings: {
-            right_click_overlay_settings_menu: false,
             always_keep_overlays_in_view: false,
+            allow_unrestricted_shared_array_buffer: false,
             hotkeys: { ...DEFAULT_HOTKEYS },
         },
     };
@@ -140,8 +140,8 @@ function normalizeSettings(value: unknown): AppSettings {
     const hotkeys = { ...DEFAULT_HOTKEYS };
     for (const key of HOTKEY_KEYS) hotkeys[key] = canonicalHotkey(inputHotkeys[key], DEFAULT_HOTKEYS[key]);
     return {
-        right_click_overlay_settings_menu: Boolean(source.right_click_overlay_settings_menu),
-        always_keep_overlays_in_view: Boolean(source.always_keep_overlays_in_view),
+        always_keep_overlays_in_view: source.always_keep_overlays_in_view === true,
+        allow_unrestricted_shared_array_buffer: source.allow_unrestricted_shared_array_buffer === true,
         hotkeys,
     };
 }
@@ -173,6 +173,24 @@ export function normalizeConfig(value: unknown): AppConfig {
         profiles,
         settings: normalizeSettings(source.settings),
     };
+}
+
+
+export function sharedArrayBufferBlinkSwitch(config: AppConfig): "enable-blink-features" | "disable-blink-features" {
+    return config.settings.allow_unrestricted_shared_array_buffer
+        ? "enable-blink-features"
+        : "disable-blink-features";
+}
+
+export function loadConfigSync(configPath: string): AppConfig {
+    try {
+        const parsed = JSON.parse(readFileSync(configPath, "utf8")) as unknown;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return defaultConfig();
+        if (!("version" in parsed) || parsed.version !== CONFIG_VERSION) return defaultConfig();
+        return normalizeConfig(parsed);
+    } catch {
+        return defaultConfig();
+    }
 }
 
 export class ConfigStore {

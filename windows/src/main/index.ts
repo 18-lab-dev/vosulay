@@ -9,7 +9,11 @@ import {
 } from 'electron';
 import { mkdirSync } from 'node:fs';
 
-import { ConfigStore } from './config';
+import {
+    ConfigStore,
+    loadConfigSync,
+    sharedArrayBufferBlinkSwitch
+} from './config';
 import { resolveStoragePaths } from './storage-path';
 import {
     LocalOverlayRegistry,
@@ -33,6 +37,11 @@ const storagePaths = resolveStoragePaths(
 );
 mkdirSync(storagePaths.dataDirectory, { recursive: true });
 app.setPath('userData', storagePaths.dataDirectory);
+const startupConfig = loadConfigSync(storagePaths.configPath);
+app.commandLine.appendSwitch(
+    sharedArrayBufferBlinkSwitch(startupConfig),
+    'SharedArrayBufferUnrestrictedAccessAllowed'
+);
 
 registerCustomSchemes();
 

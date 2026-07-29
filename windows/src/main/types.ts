@@ -34,8 +34,8 @@ export interface HotkeySettings {
 }
 
 export interface AppSettings {
-    right_click_overlay_settings_menu: boolean;
     always_keep_overlays_in_view: boolean;
+    allow_unrestricted_shared_array_buffer: boolean;
     hotkeys: HotkeySettings;
 }
 

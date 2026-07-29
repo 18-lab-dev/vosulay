@@ -301,8 +301,8 @@ test("malformed config is normalized and saves serialize atomically", async () =
 });
 test("config settings default and normalize manager hotkeys", () => {
     assert.deepEqual(normalizeConfig({}).settings, {
-        right_click_overlay_settings_menu: false,
         always_keep_overlays_in_view: false,
+        allow_unrestricted_shared_array_buffer: false,
         hotkeys: {
             profile_0: "Ctrl+0",
             profile_1: "Ctrl+1",
@@ -323,6 +323,7 @@ test("config settings default and normalize manager hotkeys", () => {
         settings: {
             right_click_overlay_settings_menu: true,
             always_keep_overlays_in_view: true,
+            allow_unrestricted_shared_array_buffer: true,
             hotkeys: {
                 profile_0: " option + shift + k ",
                 profile_1: "f12",
@@ -335,8 +336,8 @@ test("config settings default and normalize manager hotkeys", () => {
         },
     });
     assert.deepEqual(normalized.settings, {
-        right_click_overlay_settings_menu: true,
         always_keep_overlays_in_view: true,
+        allow_unrestricted_shared_array_buffer: true,
         hotkeys: {
             profile_0: "Alt+Shift+K",
             profile_1: "F12",
@@ -389,6 +390,7 @@ test("config store persists manager settings without changing profiles", async (
         settings: {
             right_click_overlay_settings_menu: true,
             always_keep_overlays_in_view: true,
+            allow_unrestricted_shared_array_buffer: true,
             hotkeys: {
                 profile_0: "Alt+Shift+K",
                 copy_overlay: "Meta+Y",
@@ -399,6 +401,10 @@ test("config store persists manager settings without changing profiles", async (
 
     const persisted = JSON.parse(await readFile(path, "utf8")) as unknown;
     assert.deepEqual(persisted, saved.config);
+    assert.equal(Object.hasOwn(saved.config.settings, "right_click_overlay_settings_menu"), false);
+    assert.ok(persisted && typeof persisted === "object" && "settings" in persisted);
+    assert.ok(persisted.settings && typeof persisted.settings === "object");
+    assert.equal(Object.hasOwn(persisted.settings, "right_click_overlay_settings_menu"), false);
     assert.equal(saved.config.active_profile, "custom");
     assert.deepEqual(saved.config.profiles, [{ id: "custom", name: "Custom", overlays: [] }]);
     assert.deepEqual((await store.load()).config, saved.config);
@@ -458,21 +464,122 @@ test("config flush reports the latest persistence failure", async () => {
 });
 
 
-test("catalog parser decodes metadata, defaults dimensions, and encodes URLs", () => {
-    const counters = parseInstalledCounters("http://127.0.0.1:24050/root/", `
-        <article class="result-item" data-overlay-id="folder/&amp; value">
-          <span class="calu" n="A &amp; B" a="Author" v="1"></span>
-          <i nft="width" nfv="9"></i><i nft="height" nfv="400"></i><button class="settings-button"></button>
-        </article>`);
-    assert.deepEqual(counters[0], {
-        id: "folder/& value", name: "A & B", author: "Author", version: "1", width: 500, height: 300, has_settings: true,
-        url: "http://127.0.0.1:24050/folder%2F%26%20value/",
-    });
-    assert.throws(() => parseInstalledCounters("http://host", '<div class="result-item" data-overlay-id="x"></div>'), /missing metadata/);
+test("catalog parser decodes escaped metadata and preserves source order", () => {
+    const source = `
+            <article class="counter-card" data-overlay-id="folder/&amp;&quot;"
+                     data-counter-name="First &amp; Best"
+                     data-counter-author="A &quot;Name&quot;"
+                     data-counter-version="1.2">
+              <header>
+                <button type="button" data-action="counter-settings">Settings</button>
+              </header>
+              <div class="counter-card__preview">
+                <iframe src="/folder/" width="640px" height="360px"></iframe>
+              </div>
+            </article>
+            <article class="counter-card is-pinned" data-overlay-id="second"
+                     data-counter-name="Second"
+                     data-counter-author="Author"
+                     data-counter-version="2">
+              <div class="counter-card__preview">
+                <iframe src="/second/" width="800" height="600"></iframe>
+              </div>
+            </article>
+        `;
+
+    const counters = parseInstalledCounters("http://127.0.0.1:24050/base?old=1#fragment", source);
+
+    assert.deepEqual(counters, [
+        {
+            id: "folder/&\"",
+            name: "First & Best",
+            author: "A \"Name\"",
+            version: "1.2",
+            width: 640,
+            height: 360,
+            has_settings: true,
+            url: "http://127.0.0.1:24050/folder%2F&%22/",
+        },
+        {
+            id: "second",
+            name: "Second",
+            author: "Author",
+            version: "2",
+            width: 800,
+            height: 600,
+            has_settings: false,
+            url: "http://127.0.0.1:24050/second/",
+        },
+    ]);
+});
+
+test("catalog parser defaults flexible, non-numeric, and invalid resolutions", () => {
+    const source = `
+            <article class="counter-card" data-overlay-id="flexible"
+                     data-counter-name="Flexible"
+                     data-counter-author="Author"
+                     data-counter-version="1">
+              <div class="counter-card__preview">
+                <iframe src="/flexible/" width="100%" height="300px"></iframe>
+              </div>
+            </article>
+            <article class="counter-card" data-overlay-id="non-numeric"
+                     data-counter-name="Non-numeric"
+                     data-counter-author="Author"
+                     data-counter-version="1">
+              <div class="counter-card__preview">
+                <iframe src="/non-numeric/" width="ANY" height="auto"></iframe>
+              </div>
+            </article>
+            <article class="counter-card" data-overlay-id="too-small"
+                     data-counter-name="Too small"
+                     data-counter-author="Author"
+                     data-counter-version="1">
+              <div class="counter-card__preview">
+                <iframe src="/too-small/" width="10px" height="300px"></iframe>
+              </div>
+            </article>
+        `;
+
+    const counters = parseInstalledCounters("http://127.0.0.1:24050", source);
+
+    assert.deepEqual(counters.map(({ width, height }) => [width, height]), [[500, 300], [500, 300], [500, 300]]);
+});
+
+test("catalog parser rejects a missing counter attribute", () => {
+    const source = `
+            <article class="counter-card" data-overlay-id="missing-version"
+                     data-counter-name="Missing version"
+                     data-counter-author="Author">
+              <div class="counter-card__preview">
+                <iframe src="/missing-version/" width="640px" height="360px"></iframe>
+              </div>
+            </article>
+        `;
+
+    assert.throws(
+        () => parseInstalledCounters("http://127.0.0.1:24050", source),
+        /"missing-version" is missing the "data-counter-version" attribute/,
+    );
+});
+
+test("catalog parser accepts an explicit empty state", () => {
+    assert.deepEqual(
+        parseInstalledCounters("http://127.0.0.1:24050", '<div class="empty-state">No counters found.</div>'),
+        [],
+    );
+});
+
+test("catalog parser rejects unrecognized markup", () => {
+    assert.throws(
+        () => parseInstalledCounters("http://127.0.0.1:24050", "<main>Unexpected response</main>"),
+        /counter search markup was not recognized; vosu and vosulay versions may be out of sync/,
+    );
 });
 
 test("catalog fetch validates type and enforces the streaming limit", async () => {
-    const html = '<div class="result-item" data-overlay-id="x"><i class="calu" n="X" a="A" v="1"></i></div>';
+    const html = `<article class="counter-card" data-overlay-id="x"
+        data-counter-name="X" data-counter-author="A" data-counter-version="1"></article>`;
     const fetcher = async () => new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
     assert.equal((await fetchInstalledCounters("http://host", fetcher as typeof fetch))[0].id, "x");
     const oversized = async () => new Response(new Uint8Array(MAX_COUNTER_PAGE_BYTES + 1), { headers: { "content-type": "application/xhtml+xml" } });
@@ -482,7 +589,7 @@ test("catalog fetch validates type and enforces the streaming limit", async () =
 });
 
 test("URL helpers encode identifiers and replace base paths", () => {
-    assert.equal(counterUrl("http://host/root/", "a/b &").href, "http://host/a%2Fb%20%26/");
+    assert.equal(counterUrl("http://host/root/", "a/b &").href, "http://host/a%2Fb%20&/");
     assert.equal(settingsUrl("http://host/root/", "a&b").href, "http://host/settings?overlay=a%26b");
     assert.equal(availableUrl("http://host/root/").href, "http://host/available");
 });

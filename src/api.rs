@@ -92,6 +92,7 @@ fn fetch_installed_counters_with_timeout(
 
 fn parse_installed_counters(base_url: &Url, source: &str) -> Result<Vec<InstalledCounter>> {
     let card_selector = selector("article.counter-card[data-overlay-id]")?;
+    let empty_selector = selector(".empty-state")?;
     let settings_selector = selector(r#"[data-action="counter-settings"]"#)?;
     let preview_selector = selector(".counter-card__preview iframe")?;
     let document = Html::parse_document(source);
@@ -117,6 +118,12 @@ fn parse_installed_counters(base_url: &Url, source: &str) -> Result<Vec<Installe
             height: resolution.1,
             has_settings: card.select(&settings_selector).next().is_some(),
         });
+    }
+
+    if counters.is_empty() && document.select(&empty_selector).next().is_none() {
+        bail!(
+            "counter search markup was not recognized; vosu and vosulay versions may be out of sync"
+        );
     }
 
     Ok(counters)
@@ -272,6 +279,52 @@ mod tests {
             })
         );
     }
+    #[test]
+    fn parse_rejects_missing_counter_attribute() {
+        let source = r#"
+            <article class="counter-card" data-overlay-id="missing-version"
+                     data-counter-name="Missing version"
+                     data-counter-author="Author">
+              <div class="counter-card__preview">
+                <iframe src="/missing-version/" width="640px" height="360px"></iframe>
+              </div>
+            </article>
+        "#;
+        let base = Url::parse("http://127.0.0.1:24050").expect("fixture URL should parse");
+
+        let error =
+            parse_installed_counters(&base, source).expect_err("missing attribute must fail");
+
+        assert_eq!(
+            error.to_string(),
+            r#""missing-version" is missing the "data-counter-version" attribute"#
+        );
+    }
+
+    #[test]
+    fn parse_accepts_empty_state_without_counters() {
+        let source = r#"<div class="empty-state">No counters found.</div>"#;
+        let base = Url::parse("http://127.0.0.1:24050").expect("fixture URL should parse");
+
+        let counters = parse_installed_counters(&base, source).expect("empty state should parse");
+
+        assert!(counters.is_empty());
+    }
+
+    #[test]
+    fn parse_rejects_unrecognized_markup() {
+        let source = "<main>Unexpected response</main>";
+        let base = Url::parse("http://127.0.0.1:24050").expect("fixture URL should parse");
+
+        let error =
+            parse_installed_counters(&base, source).expect_err("unrecognized markup must fail");
+
+        assert_eq!(
+            error.to_string(),
+            "counter search markup was not recognized; vosu and vosulay versions may be out of sync"
+        );
+    }
+
     #[test]
     fn fetch_stops_reading_when_global_deadline_expires() {
         let listener = TcpListener::bind("127.0.0.1:0").expect("fixture server should bind");
