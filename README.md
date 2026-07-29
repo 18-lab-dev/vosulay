@@ -5,11 +5,11 @@
   <img src="assets/branding/vosulay-logo.svg" alt="vosulay" width="720">
 </picture>
 
-**Native Linux in-game overlay manager for vosu, built with Rust and Qt 6.**
+**Cross-platform in-game overlay manager for vosu — native Rust + Qt 6 on Linux, in-game Electron injection on Windows.**
 
 </div>
 
-vosulay displays vosu counters in a frameless overlay and provides an edit mode for arranging them. Layouts are stored as profiles, and overlays can come from the vosu counter catalog, HTTP(S) URLs, or local HTML files.
+vosulay displays vosu counters and provides an edit mode for arranging them. Layouts are stored as profiles, and overlays can come from the vosu counter catalog, HTTP(S) URLs, or local HTML files. vosu remains a separate process; the Windows in-game renderer is packaged only with vosulay.
 
 ## Features
 
@@ -19,11 +19,12 @@ vosulay displays vosu counters in a frameless overlay and provides an edit mode 
 - Add remote or local custom HTML overlays.
 - Render WebGPU overlays through Dawn's native Vulkan backend.
 - Run click-through overlays on Wayland and X11.
-- Control visibility, edit mode, geometry, and shutdown through local IPC.
+- Render directly in osu! stable and lazer windows on Windows.
+- Control Linux visibility, edit mode, geometry, and shutdown through Linux's external local IPC interface (Linux-specific).
 
-## Requirements
+## Linux
 
-vosulay requires Qt 6.11.1 development packages and a Dawn-enabled Qt
+The Linux build requires Qt 6.11.1 development packages and a Dawn-enabled Qt
 WebEngine. Stock Qt WebEngine builds disable Dawn, so `build.rs` rejects them
 instead of silently exposing `navigator.gpu` without a working adapter.
 
@@ -37,14 +38,36 @@ extra/build-webgpu-qt.sh "$HOME/.local/opt/vosulay-qt-webgpu"
 Apply the six environment exports printed by the helper. They select its
 pkg-config metadata, libraries, subprocess, resources, and locales.
 
-## Build and run
-
 ```sh
 cargo build --release
 ./target/release/vosulay
 ```
 
-For command-line options, monitor selection, frame limiting, attachment mode, and IPC controls, see [Build and run](openwiki/operations/build-and-run.md).
+For Linux command-line options, monitor selection, frame limiting, attachment mode, and IPC controls, see [Build and run](openwiki/operations/build-and-run.md).
+
+## Windows
+
+The Windows host requires 64-bit Windows and a separately running vosu instance. It follows the most recently focused discovered `osu!.exe` or `osulazer.exe` client, remains attached while another application has focus, and switches only when another game client receives focus. It attaches only that game client rather than both simultaneously, and renders the manager UI through `@asdf-overlay`'s shared GPU surface inside the game presentation rather than a transparent desktop window. The composed overlay is therefore available to OBS Game Capture.
+
+Ctrl+Shift+Space is the sole Windows global shortcut; press it in game to enter or leave edit mode. While editing, Ctrl+I toggles overlay interaction and Ctrl+R refreshes the selected overlay; Delete removes the selected overlay and Escape exits edit mode. Reload, edit, and exit controls are also available from the system tray.
+
+If a native input capture or release request stalls for five seconds, vosulay exits immediately so Windows closes the injected connection and restores input to osu!. Restart vosulay to attach again.
+
+To build from source with Node.js 22 or newer:
+
+```powershell
+cd windows
+npm ci
+npm run typecheck
+npm test
+npm run dist:win
+```
+
+The build produces two x64 distributions: `windows\dist\vosulay-<version>-setup.exe` is the NSIS installer, while `windows\dist\vosulay-<version>-portable.exe` is the portable executable. Install the setup executable for the normal installed distribution, or run the portable executable directly.
+
+The installed distribution stores its configuration at `%APPDATA%\vosulay\config.json`. The portable distribution stores its configuration beside the executable at `<executable directory>\data\config.json`.
+
+The Windows host accepts `--vosu-url`/`-t`, `--fps-limit`/`-f`, repeatable `--pid`, and repeatable `--process-name` options.
 
 ## Measured overlay overhead
 
