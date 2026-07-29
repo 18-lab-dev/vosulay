@@ -135,6 +135,24 @@
           </fieldset>
 
           <fieldset class="settings-section">
+            <legend>Remote overlay server</legend>
+            <p class="settings-note">
+              Serves a view-only copy of your overlays to other devices at
+              <code class="settings-endpoint">http://&lt;this-host&gt;:5050/overlay?profile=1</code>.
+              <code>profile</code> is 1-based; omit it to follow the active profile.
+              Point remote devices at this computer's local or LAN address (for example its
+              <code>192.168.x.x</code> IP) &mdash; not <code>0.0.0.0</code>.
+            </p>
+            <label class="settings-field" for="allowed-ips">
+              <span>
+                <strong>Allowed client IPs</strong>
+                <small>Comma- or space-separated. Every remote device must be listed here <em>and</em> allowed by vosu itself. Leave empty to allow this computer only. Default <code>127.0.0.1,localhost,absolute</code> mirrors the string vosu expects.</small>
+              </span>
+              <textarea id="allowed-ips" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+            </label>
+          </fieldset>
+
+          <fieldset class="settings-section">
             <legend>Keyboard shortcuts</legend>
             <div id="hotkey-list" class="hotkey-list">
               <div class="hotkey-row"><span>Profile 1</span><button class="hotkey-input" type="button" data-hotkey="profile_1"></button></div>

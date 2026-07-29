@@ -179,6 +179,25 @@ button:disabled { opacity: .42; cursor: default; }
   width: 18px; height: 18px; flex: 0 0 auto; margin: 0; padding: 0;
   accent-color: var(--accent);
 }
+.settings-note { margin: 0 0 9px; color: var(--muted); line-height: 1.4; }
+.settings-note code, .settings-field code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; color: var(--text); overflow-wrap: anywhere;
+}
+.settings-endpoint { display: inline-block; padding: 1px 5px; border-radius: 5px; background: rgba(255,255,255,.07); }
+.settings-field {
+  display: block; padding: 9px 11px;
+  border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.035);
+}
+.settings-field span { display: block; min-width: 0; }
+.settings-field strong, .settings-field small { display: block; }
+.settings-field small { margin-top: 2px; color: var(--muted); }
+.settings-field textarea {
+  width: 100%; margin-top: 8px; min-height: 46px; resize: vertical;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px;
+  background: rgba(255,255,255,.055); color: var(--text); font: inherit; scrollbar-width: thin;
+}
+.settings-field textarea:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
 .hotkey-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .hotkey-row {
   min-width: 0; min-height: 39px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(105px, auto);

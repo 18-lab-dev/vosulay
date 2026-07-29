@@ -21,6 +21,7 @@ vosulay displays vosu counters and provides an edit mode for arranging them. Lay
 - Run click-through overlays on Wayland and X11.
 - Render directly in osu! stable and lazer windows on Windows.
 - Control Linux visibility, edit mode, geometry, and shutdown through Linux's external local IPC interface (Linux-specific).
+- Serve view-only profile pages to browsers and streaming clients on the local network.
 
 ## Linux
 
@@ -68,6 +69,21 @@ The build produces two x64 distributions: `windows\dist\vosulay-<version>-setup.
 The installed distribution stores its configuration at `%APPDATA%\vosulay\config.json`. The portable distribution stores its configuration beside the executable at `<executable directory>\data\config.json`.
 
 The Windows host accepts `--vosu-url`/`-t`, `--fps-limit`/`-f`, repeatable `--pid`, and repeatable `--process-name` options.
+
+## Remote profile pages
+
+vosulay listens on `0.0.0.0:5050` and serves the active profile at
+`http://<vosulay-host>:5050/overlay`. Use `?profile=1` to select a profile by
+its 1-based position. Clients must use the machine's loopback or LAN address,
+not the `0.0.0.0` bind address.
+
+Remote access is controlled by **Settings → Remote overlay server → Allowed
+client IPs**. Loopback is always allowed; remote entries can be exact IP
+addresses or four-part IPv4 patterns such as `192.168.*.*`. The profile page
+loads vosu counters directly rather than proxying them, so the same remote
+client IPs must also be allowed by vosu. HTTP(S) custom overlays load directly;
+local HTML overlay resources remain confined to their authorized roots and are
+served through vosulay to allowed clients.
 
 ## Measured overlay overhead
 

@@ -301,6 +301,7 @@ test("malformed config is normalized and saves serialize atomically", async () =
 });
 test("config settings default and normalize manager hotkeys", () => {
     assert.deepEqual(normalizeConfig({}).settings, {
+        allowed_ips: "127.0.0.1,localhost,absolute",
         right_click_overlay_settings_menu: false,
         always_keep_overlays_in_view: false,
         hotkeys: {
@@ -321,6 +322,7 @@ test("config settings default and normalize manager hotkeys", () => {
 
     const normalized = normalizeConfig({
         settings: {
+            allowed_ips: "10.20.*.* 2001:db8::4",
             right_click_overlay_settings_menu: true,
             always_keep_overlays_in_view: true,
             hotkeys: {
@@ -335,6 +337,7 @@ test("config settings default and normalize manager hotkeys", () => {
         },
     });
     assert.deepEqual(normalized.settings, {
+        allowed_ips: "10.20.*.* 2001:db8::4",
         right_click_overlay_settings_menu: true,
         always_keep_overlays_in_view: true,
         hotkeys: {

@@ -17,6 +17,7 @@ import {
     registerCustomSchemes
 } from './local-overlays';
 import { OverlayManager } from './overlay-manager';
+import { RemoteOverlayServer } from './remote-server';
 import { parseOptions } from './options';
 
 const EDIT_ACCELERATOR = 'Control+Shift+Space';
@@ -62,6 +63,11 @@ async function start(): Promise<void> {
     const configStore = new ConfigStore(storagePaths.configPath);
     const overlayRegistry = new LocalOverlayRegistry();
     const manager = new OverlayManager(options, configStore, overlayRegistry);
+    const remoteServer = new RemoteOverlayServer({
+        runtime: options,
+        registry: overlayRegistry,
+        getConfig: async () => (await configStore.load()).config
+    });
     let tray: Tray | null = null;
     let shuttingDown = false;
     let editShortcutRegistered = false;
@@ -81,6 +87,11 @@ async function start(): Promise<void> {
         }
         void (async () => {
             const failures: unknown[] = [];
+            try {
+                await remoteServer.stop();
+            } catch (error) {
+                failures.push(error);
+            }
             try {
                 await manager.flushAll();
             } catch (error) {
@@ -119,6 +130,11 @@ async function start(): Promise<void> {
     }
 
     await Promise.resolve(installCustomProtocols(options, overlayRegistry));
+    try {
+        await remoteServer.start();
+    } catch (error) {
+        console.error('Could not start remote overlay server on 0.0.0.0:5050', error);
+    }
     session.defaultSession.setPermissionRequestHandler(
         (_webContents, _permission, callback) => callback(false)
     );
