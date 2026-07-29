@@ -39,6 +39,7 @@
   const settingsForm = $("settings-form");
   const keepOverlaysInView = $("keep-overlays-in-view");
   const allowUnrestrictedSharedArrayBuffer = $("allow-unrestricted-shared-array-buffer");
+  const allowedIps = $("allowed-ips");
   const hotkeyList = $("hotkey-list");
   const settingsError = $("settings-error");
   const settingsResetHotkeys = $("settings-reset-hotkeys");
@@ -49,6 +50,7 @@
     "copy_overlay",
     "paste_overlay"
   ];
+  const DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute";
   const DEFAULT_HOTKEYS = Object.freeze({
     profile_0: "Ctrl+0",
     profile_1: "Ctrl+1",
@@ -255,6 +257,7 @@
       settings: {
         always_keep_overlays_in_view: Boolean(sourceSettings.always_keep_overlays_in_view),
         allow_unrestricted_shared_array_buffer: Boolean(sourceSettings.allow_unrestricted_shared_array_buffer),
+        allowed_ips: typeof sourceSettings.allowed_ips === "string" ? sourceSettings.allowed_ips : DEFAULT_ALLOWED_IPS,
         hotkeys: normalizeHotkeys(sourceSettings.hotkeys)
       }
     };
@@ -1440,6 +1443,7 @@
     if (!state.settingsDraft) return;
     keepOverlaysInView.checked = state.settingsDraft.always_keep_overlays_in_view;
     allowUnrestrictedSharedArrayBuffer.checked = state.settingsDraft.allow_unrestricted_shared_array_buffer;
+    allowedIps.value = state.settingsDraft.allowed_ips;
     for (const button of hotkeyList.querySelectorAll(".hotkey-input")) {
       const key = button.dataset.hotkey;
       button.textContent = state.settingsDraft.hotkeys[key] || DEFAULT_HOTKEYS[key] || "";
@@ -1467,6 +1471,7 @@
     state.settingsDraft = {
       always_keep_overlays_in_view: settings.always_keep_overlays_in_view,
       allow_unrestricted_shared_array_buffer: settings.allow_unrestricted_shared_array_buffer,
+      allowed_ips: settings.allowed_ips,
       hotkeys: { ...settings.hotkeys }
     };
     state.recordingHotkey = "";
@@ -1518,6 +1523,9 @@
   });
   allowUnrestrictedSharedArrayBuffer.addEventListener("change", () => {
     if (state.settingsDraft) state.settingsDraft.allow_unrestricted_shared_array_buffer = allowUnrestrictedSharedArrayBuffer.checked;
+  });
+  allowedIps.addEventListener("input", () => {
+    if (state.settingsDraft) state.settingsDraft.allowed_ips = allowedIps.value;
   });
   settingsResetHotkeys.addEventListener("click", () => {
     if (!state.settingsDraft) return;
@@ -1573,6 +1581,7 @@
     state.config.settings = {
       always_keep_overlays_in_view: state.settingsDraft.always_keep_overlays_in_view,
       allow_unrestricted_shared_array_buffer: state.settingsDraft.allow_unrestricted_shared_array_buffer,
+      allowed_ips: state.settingsDraft.allowed_ips,
       hotkeys: normalizeHotkeys(state.settingsDraft.hotkeys)
     };
     closeSettingsModal();

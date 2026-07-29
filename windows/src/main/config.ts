@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import type { AppConfig, AppSettings, HotkeySettings, Placement, Profile } from "./types";
 
 const CONFIG_VERSION = 1 as const;
+const DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute";
 const DEFAULT_HOTKEYS: HotkeySettings = {
     profile_0: "Ctrl+0",
     profile_1: "Ctrl+1",
@@ -60,6 +61,7 @@ export function defaultConfig(): AppConfig {
         active_profile: "default",
         profiles: [{ id: "default", name: "Default", overlays: [] }],
         settings: {
+            allowed_ips: DEFAULT_ALLOWED_IPS,
             always_keep_overlays_in_view: false,
             allow_unrestricted_shared_array_buffer: false,
             hotkeys: { ...DEFAULT_HOTKEYS },
@@ -140,6 +142,7 @@ function normalizeSettings(value: unknown): AppSettings {
     const hotkeys = { ...DEFAULT_HOTKEYS };
     for (const key of HOTKEY_KEYS) hotkeys[key] = canonicalHotkey(inputHotkeys[key], DEFAULT_HOTKEYS[key]);
     return {
+        allowed_ips: typeof source.allowed_ips === "string" ? source.allowed_ips : DEFAULT_ALLOWED_IPS,
         always_keep_overlays_in_view: source.always_keep_overlays_in_view === true,
         allow_unrestricted_shared_array_buffer: source.allow_unrestricted_shared_array_buffer === true,
         hotkeys,

@@ -34,6 +34,7 @@ export interface HotkeySettings {
 }
 
 export interface AppSettings {
+    allowed_ips: string;
     always_keep_overlays_in_view: boolean;
     allow_unrestricted_shared_array_buffer: boolean;
     hotkeys: HotkeySettings;

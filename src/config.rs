@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 
 pub const CONFIG_VERSION: u32 = 1;
+pub const DEFAULT_ALLOWED_IPS: &str = "127.0.0.1,localhost,absolute";
 
 const DEFAULT_WIDTH: f64 = 500.0;
 const DEFAULT_HEIGHT: f64 = 300.0;
@@ -31,11 +32,12 @@ pub struct AppConfig {
     pub settings: AppSettings,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub struct AppSettings {
     pub always_keep_overlays_in_view: bool,
     pub allow_unrestricted_shared_array_buffer: bool,
+    pub allowed_ips: String,
     pub hotkeys: HotkeySettings,
 }
 
@@ -89,6 +91,17 @@ impl Default for AppConfig {
             active_profile: "default".to_owned(),
             profiles: vec![Profile::default()],
             settings: AppSettings::default(),
+        }
+    }
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            always_keep_overlays_in_view: false,
+            allow_unrestricted_shared_array_buffer: false,
+            allowed_ips: DEFAULT_ALLOWED_IPS.to_owned(),
+            hotkeys: HotkeySettings::default(),
         }
     }
 }
@@ -185,6 +198,7 @@ impl AppConfig {
 
 impl AppSettings {
     fn normalize(&mut self) {
+        self.allowed_ips = self.allowed_ips.trim().to_owned();
         self.hotkeys.normalize();
     }
 }
@@ -556,6 +570,32 @@ mod tests {
             .expect("encoded config should deserialize");
 
         assert_eq!(decoded.settings, config.settings);
+    }
+
+    #[test]
+    fn allowed_ips_setting_survives_serde_roundtrip() {
+        let mut config = AppConfig::default();
+        config.settings.allowed_ips = "192.168.1.*, 2001:db8::1".to_owned();
+
+        let encoded = serde_json::to_vec(&config).expect("config should serialize");
+        let decoded = serde_json::from_slice::<AppConfig>(&encoded)
+            .expect("encoded config should deserialize");
+
+        assert_eq!(decoded.settings.allowed_ips, config.settings.allowed_ips);
+    }
+
+    #[test]
+    fn normalize_preserves_explicitly_empty_allowed_ips() {
+        let mut config = AppConfig::default();
+        config.settings.allowed_ips = " \t\n".to_owned();
+
+        config.normalize();
+
+        assert_eq!(config.settings.allowed_ips, "");
+        let encoded = serde_json::to_vec(&config).expect("config should serialize");
+        let decoded = serde_json::from_slice::<AppConfig>(&encoded)
+            .expect("encoded config should deserialize");
+        assert_eq!(decoded.settings.allowed_ips, "");
     }
 
     #[test]

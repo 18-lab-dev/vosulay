@@ -43,6 +43,7 @@
     }
   ],
   "settings": {
+    "allowed_ips": "127.0.0.1,localhost,absolute",
     "always_keep_overlays_in_view": true,
     "allow_unrestricted_shared_array_buffer": true,
     "hotkeys": {
