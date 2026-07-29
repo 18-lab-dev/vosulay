@@ -35,6 +35,7 @@ pub struct AppConfig {
 #[serde(default)]
 pub struct AppSettings {
     pub always_keep_overlays_in_view: bool,
+    pub allow_unrestricted_shared_array_buffer: bool,
     pub hotkeys: HotkeySettings,
 }
 
@@ -466,6 +467,7 @@ mod tests {
             }],
             settings: AppSettings {
                 always_keep_overlays_in_view: true,
+                allow_unrestricted_shared_array_buffer: true,
                 ..AppSettings::default()
             },
         };
@@ -520,6 +522,8 @@ mod tests {
             serde_json::from_str(r#"{"version":1,"active_profile":"default","profiles":[]}"#)
                 .expect("version 1 config without settings should deserialize");
 
+        assert!(!config.settings.allow_unrestricted_shared_array_buffer);
+
         assert_eq!(config.settings, AppSettings::default());
     }
 
@@ -540,6 +544,18 @@ mod tests {
         expected.hotkeys.profile_0 = "Alt+1".to_owned();
 
         assert_eq!(config.settings, expected);
+    }
+
+    #[test]
+    fn allow_unrestricted_shared_array_buffer_setting_survives_serde_roundtrip() {
+        let mut config = AppConfig::default();
+        config.settings.allow_unrestricted_shared_array_buffer = true;
+
+        let encoded = serde_json::to_vec(&config).expect("config should serialize");
+        let decoded = serde_json::from_slice::<AppConfig>(&encoded)
+            .expect("encoded config should deserialize");
+
+        assert_eq!(decoded.settings, config.settings);
     }
 
     #[test]

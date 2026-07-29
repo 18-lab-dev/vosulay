@@ -7,9 +7,9 @@ use std::{
 };
 
 const QT_MODULES: &[&str] = &[
+    "Qt6WebEngineWidgets",
     "Qt6Core",
     "Qt6Widgets",
-    "Qt6WebEngineWidgets",
     "Qt6WebChannel",
     "Qt6Network",
     "Qt6DBus",
@@ -45,6 +45,7 @@ fn main() {
     println!("cargo:rerun-if-changed=assets/branding/vosulay-app-icon.png");
     println!("cargo:rerun-if-env-changed=QT_MOC");
     println!("cargo:rerun-if-env-changed=QT_RCC");
+    println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
     for variable in CMAKE_ENVIRONMENT {
         println!("cargo:rerun-if-env-changed={variable}");
     }
@@ -58,14 +59,22 @@ fn main() {
             .unwrap_or_else(|error| {
                 panic!("Qt 6.8 or newer with the {module} development package is required: {error}")
             });
+        if *module == "Qt6WebEngineWidgets" {
+            verify_webengine_dawn(&library.include_paths);
+        }
         qt_include_paths.extend(library.include_paths);
     }
 
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo did not set OUT_DIR"));
     let layer_shell_qt = discover_layer_shell_qt(&out_dir);
     qt_include_paths.extend(layer_shell_qt.include_paths);
-    qt_include_paths.sort();
-    qt_include_paths.dedup();
+    let mut deduplicated_include_paths = Vec::with_capacity(qt_include_paths.len());
+    for include_path in qt_include_paths {
+        if !deduplicated_include_paths.contains(&include_path) {
+            deduplicated_include_paths.push(include_path);
+        }
+    }
+    let qt_include_paths = deduplicated_include_paths;
 
     let moc_output = out_dir.join("moc_bridge.cpp");
     let moc = env::var_os("QT_MOC").unwrap_or_else(|| {
@@ -120,6 +129,38 @@ fn main() {
         "cargo:rustc-link-arg={}",
         layer_shell_qt.library.to_string_lossy()
     );
+}
+
+fn verify_webengine_dawn(include_paths: &[PathBuf]) {
+    const HEADER: &str = "qtwebenginecore-config.h";
+    let config_header = include_paths
+        .iter()
+        .flat_map(|include_path| {
+            [
+                include_path.join(HEADER),
+                include_path.join("QtWebEngineCore").join(HEADER),
+            ]
+        })
+        .find(|candidate| candidate.is_file())
+        .unwrap_or_else(|| {
+            panic!(
+                "Qt WebEngine's public config header was not found; build and select the Dawn-enabled Qt with extra/build-webgpu-qt.sh"
+            )
+        });
+    let config = fs::read_to_string(&config_header).unwrap_or_else(|error| {
+        panic!(
+            "failed to read {}: {error}",
+            config_header.to_string_lossy()
+        )
+    });
+    if !config
+        .lines()
+        .any(|line| line.trim() == "#define QT_FEATURE_webengine_dawn 1")
+    {
+        panic!(
+            "Qt WebEngine was built without Dawn WebGPU support; build and select it with extra/build-webgpu-qt.sh"
+        );
+    }
 }
 
 fn discover_layer_shell_qt(out_dir: &Path) -> LayerShellQt {

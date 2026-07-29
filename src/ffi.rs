@@ -12,6 +12,7 @@ mod bridge {
         fn fetch_counters_for_qt(base_url: &str) -> Result<String>;
         fn settings_url_for_qt(base_url: &str, counter_id: &str) -> Result<String>;
         fn available_url_for_qt(base_url: &str) -> Result<String>;
+        fn unrestricted_shared_array_buffer_enabled_for_qt() -> bool;
     }
 
     unsafe extern "C++" {
@@ -41,6 +42,11 @@ fn load_config_for_qt() -> Result<String> {
 
     serde_json::to_string(&json!({ "config": config, "error": error }))
         .context("failed to serialize configuration response")
+}
+fn unrestricted_shared_array_buffer_enabled_for_qt() -> bool {
+    AppConfig::load()
+        .map(|config| config.settings.allow_unrestricted_shared_array_buffer)
+        .unwrap_or_default()
 }
 
 fn save_config_for_qt(config_json: &str) -> Result<()> {

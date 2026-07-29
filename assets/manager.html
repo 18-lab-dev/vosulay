@@ -125,6 +125,13 @@
               </span>
               <input id="keep-overlays-in-view" type="checkbox">
             </label>
+            <label class="checkbox-row" for="allow-unrestricted-shared-array-buffer">
+              <span>
+                <strong>Allow unrestricted SharedArrayBuffer</strong>
+                <small>Dangerous: disables a Chromium Spectre mitigation and exposes SharedArrayBuffer shared memory to every remote URL and local HTML overlay. Only enable it if you fully trust every overlay you load. Takes effect after restart.</small>
+              </span>
+              <input id="allow-unrestricted-shared-array-buffer" type="checkbox">
+            </label>
           </fieldset>
 
           <fieldset class="settings-section">

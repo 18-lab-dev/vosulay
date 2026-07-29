@@ -17,12 +17,25 @@ vosulay displays vosu counters in a frameless overlay and provides an edit mode 
 - Maintain multiple overlay profiles.
 - Discover installed counters from a local vosu instance.
 - Add remote or local custom HTML overlays.
+- Render WebGPU overlays through Dawn's native Vulkan backend.
 - Run click-through overlays on Wayland and X11.
 - Control visibility, edit mode, geometry, and shutdown through local IPC.
 
 ## Requirements
 
-See [Build and run](openwiki/operations/build-and-run.md) for supported platforms, native dependencies, and setup instructions.
+vosulay requires Qt 6.11.1 development packages and a Dawn-enabled Qt
+WebEngine. Stock Qt WebEngine builds disable Dawn, so `build.rs` rejects them
+instead of silently exposing `navigator.gpu` without a working adapter.
+
+Install the normal Qt WebEngine build dependencies, `gperf`, and Python's
+`html5lib`, then build the pinned WebEngine variant into a separate prefix:
+
+```sh
+extra/build-webgpu-qt.sh "$HOME/.local/opt/vosulay-qt-webgpu"
+```
+
+Apply the six environment exports printed by the helper. They select its
+pkg-config metadata, libraries, subprocess, resources, and locales.
 
 ## Build and run
 
@@ -60,7 +73,9 @@ See [Testing guidance](openwiki/testing/guidance.md) for the development and ver
 
 ## Security
 
-Overlays are active web content and may execute JavaScript or make network requests. Only add overlays from sources you trust. See [vosu and overlays](openwiki/integrations/vosu-and-overlays.md) for the security model and local-file authorization boundaries.
+`vosulay-overlay` local HTML overlays run in a secure context, but overlay pages are not cross-origin isolated. As a result, `SharedArrayBuffer` is unavailable by default.
+
+The **Allow unrestricted SharedArrayBuffer** setting is a compatibility opt-in. Enabling it requires a restart and affects every remote URL and local HTML overlay. It bypasses a Chromium Spectre mitigation, so use it only when every overlay is fully trusted.
 
 ## Configuration
 

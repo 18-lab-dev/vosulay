@@ -1,0 +1,48 @@
+diff --git a/src/core/CMakeLists.txt b/src/core/CMakeLists.txt
+index 02a5c00c3..3b354ceff 100644
+--- a/src/core/CMakeLists.txt
++++ b/src/core/CMakeLists.txt
+@@ -389,7 +389,6 @@ foreach(arch ${archs})
+             toolkit_views=false
+             pdf_use_skia=true
+             use_cups=false
+-            use_dawn=false
+             skia_use_dawn=false
+             dawn_use_built_dxc=false
+             use_static_angle=true
+@@ -428,6 +427,10 @@ foreach(arch ${archs})
+             ARGS enable_vulkan
+             CONDITION QT_FEATURE_webengine_vulkan
+         )
++        extend_gn_list(gnArgArg
++            ARGS use_dawn
++            CONDITION QT_FEATURE_webengine_dawn
++        )
+         extend_gn_list(gnArgArg
+             ARGS use_kerberos
+             CONDITION QT_FEATURE_webengine_kerberos
+diff --git a/src/core/api/configure.cmake b/src/core/api/configure.cmake
+index 606ebf5f7..294b26856 100644
+--- a/src/core/api/configure.cmake
++++ b/src/core/api/configure.cmake
+@@ -107,6 +107,12 @@ qt_feature("webengine-webchannel" PUBLIC
+     PURPOSE "Provides QtWebChannel integration."
+     CONDITION TARGET Qt::WebChannel
+ )
++qt_feature("webengine-dawn" PUBLIC
++    SECTION "WebEngine"
++    LABEL "Dawn WebGPU backend"
++    PURPOSE "Enables Chromium's Dawn WebGPU implementation."
++    AUTODETECT OFF
++)
+ qt_feature("webengine-proprietary-codecs" PRIVATE
+     SECTION "WebEngine"
+     LABEL "Proprietary Codecs"
+@@ -195,6 +201,7 @@ qt_feature("webengine-arm64-udot-support" PRIVATE
+ )
+ qt_configure_add_summary_section(NAME "Qt WebEngineCore")
+ qt_configure_add_summary_entry(ARGS "webengine-embedded-build")
++qt_configure_add_summary_entry(ARGS "webengine-dawn")
+ qt_configure_add_summary_entry(ARGS "webengine-full-debug-info")
+ qt_configure_add_summary_entry(ARGS "webengine-sanitizer")
+ qt_configure_add_summary_entry(ARGS "webengine-printing-and-pdf")

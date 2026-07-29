@@ -38,6 +38,7 @@
   const settingsModal = $("settings-modal");
   const settingsForm = $("settings-form");
   const keepOverlaysInView = $("keep-overlays-in-view");
+  const allowUnrestrictedSharedArrayBuffer = $("allow-unrestricted-shared-array-buffer");
   const hotkeyList = $("hotkey-list");
   const settingsError = $("settings-error");
   const settingsResetHotkeys = $("settings-reset-hotkeys");
@@ -243,6 +244,7 @@
       profiles,
       settings: {
         always_keep_overlays_in_view: Boolean(sourceSettings.always_keep_overlays_in_view),
+        allow_unrestricted_shared_array_buffer: Boolean(sourceSettings.allow_unrestricted_shared_array_buffer),
         hotkeys: normalizeHotkeys(sourceSettings.hotkeys)
       }
     };
@@ -1397,6 +1399,7 @@
   function renderSettingsDraft() {
     if (!state.settingsDraft) return;
     keepOverlaysInView.checked = state.settingsDraft.always_keep_overlays_in_view;
+    allowUnrestrictedSharedArrayBuffer.checked = state.settingsDraft.allow_unrestricted_shared_array_buffer;
     for (const button of hotkeyList.querySelectorAll(".hotkey-input")) {
       const key = button.dataset.hotkey;
       button.textContent = state.settingsDraft.hotkeys[key] || DEFAULT_HOTKEYS[key] || "";
@@ -1423,6 +1426,7 @@
     const settings = state.config.settings;
     state.settingsDraft = {
       always_keep_overlays_in_view: settings.always_keep_overlays_in_view,
+      allow_unrestricted_shared_array_buffer: settings.allow_unrestricted_shared_array_buffer,
       hotkeys: { ...settings.hotkeys }
     };
     state.recordingHotkey = "";
@@ -1471,6 +1475,9 @@
   settingsCancel.addEventListener("click", () => closeSettingsModal());
   keepOverlaysInView.addEventListener("change", () => {
     if (state.settingsDraft) state.settingsDraft.always_keep_overlays_in_view = keepOverlaysInView.checked;
+  });
+  allowUnrestrictedSharedArrayBuffer.addEventListener("change", () => {
+    if (state.settingsDraft) state.settingsDraft.allow_unrestricted_shared_array_buffer = allowUnrestrictedSharedArrayBuffer.checked;
   });
   settingsResetHotkeys.addEventListener("click", () => {
     if (!state.settingsDraft) return;
@@ -1521,6 +1528,7 @@
     }
     state.config.settings = {
       always_keep_overlays_in_view: state.settingsDraft.always_keep_overlays_in_view,
+      allow_unrestricted_shared_array_buffer: state.settingsDraft.allow_unrestricted_shared_array_buffer,
       hotkeys: normalizeHotkeys(state.settingsDraft.hotkeys)
     };
     closeSettingsModal();

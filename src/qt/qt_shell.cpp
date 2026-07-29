@@ -35,6 +35,7 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QMargins>
+#include <QList>
 #include <QUuid>
 #include <QMimeDatabase>
 #include <QMenu>
@@ -162,6 +163,14 @@ namespace {
 constexpr auto kApplicationName = "vosulay";
 constexpr auto kApplicationVersion = "0.1.0";
 constexpr auto kChromiumUnlimitedFps = "--disable-frame-rate-limit";
+constexpr auto kChromiumEnableFeatures = "--enable-features=";
+constexpr auto kChromiumDisableFeatures = "--disable-features=";
+constexpr auto kChromiumVulkanFeature = "Vulkan";
+constexpr auto kChromiumWebGpuFeature = "WebGPUService";
+constexpr auto kChromiumEnableBlinkFeatures = "--enable-blink-features=";
+constexpr auto kChromiumDisableBlinkFeatures = "--disable-blink-features=";
+constexpr auto kChromiumUnrestrictedSharedArrayBufferFeature =
+    "SharedArrayBufferUnrestrictedAccessAllowed";
 constexpr auto kOverlayScheme = "vosulay-overlay";
 constexpr qsizetype kMaximumIpcBytes = 4096;
 constexpr qsizetype kMaximumProfileBytes = 1024 * 1024;
@@ -187,13 +196,214 @@ rust::Str asRustStr(const QByteArray &value) {
   return rust::Str(value.constData(), static_cast<std::size_t>(value.size()));
 }
 
+QList<QByteArray> parseChromiumFlags(const QByteArray &flags) {
+  enum class State { Parse, Quoted, Unquoted };
+
+  QList<QByteArray> arguments;
+  QByteArray argument;
+  auto state = State::Parse;
+  for (const char character : flags) {
+    switch (state) {
+    case State::Parse:
+      if (character == '"') {
+        state = State::Quoted;
+      } else if (character != ' ') {
+        argument.append(character);
+        state = State::Unquoted;
+      }
+      break;
+    case State::Quoted:
+      if (character == '"') {
+        state = State::Unquoted;
+      } else {
+        argument.append(character);
+      }
+      break;
+    case State::Unquoted:
+      if (character == '"') {
+        state = State::Quoted;
+      } else if (character == ' ') {
+        arguments.append(argument);
+        argument.clear();
+        state = State::Parse;
+      } else {
+        argument.append(character);
+      }
+      break;
+    }
+  }
+  if (!argument.isEmpty()) {
+    arguments.append(argument);
+  }
+  return arguments;
+}
+
+QByteArray joinChromiumFlags(const QList<QByteArray> &arguments) {
+  QByteArray flags;
+  for (const auto &argument : arguments) {
+    if (!flags.isEmpty()) {
+      flags.append(' ');
+    }
+    if (argument.contains(' ')) {
+      flags.append('"');
+      flags.append(argument);
+      flags.append('"');
+    } else {
+      flags.append(argument);
+    }
+  }
+  return flags;
+}
+
 bool hasChromiumFlag(const QByteArray &flags, const QByteArray &wanted) {
-  const auto tokens = flags.split(' ');
-  return std::any_of(tokens.cbegin(), tokens.cend(),
-                     [&wanted](const QByteArray &token) {
-                       return token == wanted;
+  const auto arguments = parseChromiumFlags(flags);
+  return std::any_of(arguments.cbegin(), arguments.cend(),
+                     [&wanted](const QByteArray &argument) {
+                       return argument == wanted;
                      });
 }
+
+QByteArray chromiumFeatureName(const QByteArray &feature) {
+  auto name = feature.trimmed();
+  for (const char separator : {'<', '.', ':'}) {
+    const auto position = name.indexOf(separator);
+    if (position >= 0) {
+      name.truncate(position);
+    }
+  }
+  return name;
+}
+
+bool isRequiredWebGpuFeature(const QByteArray &feature) {
+  const auto name = chromiumFeatureName(feature);
+  return name == kChromiumVulkanFeature || name == kChromiumWebGpuFeature;
+}
+
+void removeDisabledWebGpuFeatures(QList<QByteArray> &arguments) {
+  qsizetype disabledIndex = -1;
+  for (qsizetype index = 0; index < arguments.size(); ++index) {
+    if (arguments.at(index).startsWith(kChromiumDisableFeatures)) {
+      disabledIndex = index;
+    }
+  }
+  if (disabledIndex < 0) {
+    return;
+  }
+
+  constexpr qsizetype prefixSize = sizeof("--disable-features=") - 1;
+  const auto disabled =
+      arguments.at(disabledIndex).sliced(prefixSize).split(',');
+  QByteArray retained;
+  for (const auto &feature : disabled) {
+    if (feature.trimmed().isEmpty() || isRequiredWebGpuFeature(feature)) {
+      continue;
+    }
+    if (!retained.isEmpty()) {
+      retained.append(',');
+    }
+    retained.append(feature.trimmed());
+  }
+
+  arguments[disabledIndex] = QByteArray(kChromiumDisableFeatures) + retained;
+}
+qsizetype removeChromiumFeature(QList<QByteArray> &arguments,
+                                const char *prefix, const char *wanted) {
+  const auto prefixSize =
+      static_cast<qsizetype>(std::char_traits<char>::length(prefix));
+  qsizetype lastIndex = -1;
+  for (qsizetype index = 0; index < arguments.size(); ++index) {
+    if (!arguments.at(index).startsWith(prefix)) {
+      continue;
+    }
+    lastIndex = index;
+
+    const auto features = arguments.at(index).sliced(prefixSize).split(',');
+    QByteArray retained;
+    retained.reserve(arguments.at(index).size());
+    for (const auto &feature : features) {
+      const auto trimmed = feature.trimmed();
+      if (trimmed.isEmpty() || chromiumFeatureName(trimmed) == wanted) {
+        continue;
+      }
+      if (!retained.isEmpty()) {
+        retained.append(',');
+      }
+      retained.append(trimmed);
+    }
+    arguments[index] = QByteArray(prefix) + retained;
+  }
+  return lastIndex;
+}
+
+void setChromiumFeatureEnabled(QList<QByteArray> &arguments,
+                               const char *enabledPrefix,
+                               const char *disabledPrefix, const char *feature,
+                               bool enabled) {
+  const auto enabledIndex =
+      removeChromiumFeature(arguments, enabledPrefix, feature);
+  const auto disabledIndex =
+      removeChromiumFeature(arguments, disabledPrefix, feature);
+  const auto destinationPrefix = enabled ? enabledPrefix : disabledPrefix;
+  const auto destinationIndex = enabled ? enabledIndex : disabledIndex;
+  if (destinationIndex < 0) {
+    arguments.append(QByteArray(destinationPrefix) + feature);
+    return;
+  }
+
+  auto &destination = arguments[destinationIndex];
+  if (!destination.endsWith('=')) {
+    destination.append(',');
+  }
+  destination.append(feature);
+}
+
+void configureUnrestrictedSharedArrayBuffer(QList<QByteArray> &arguments,
+                                            bool enabled) {
+  setChromiumFeatureEnabled(
+      arguments, kChromiumEnableBlinkFeatures, kChromiumDisableBlinkFeatures,
+      kChromiumUnrestrictedSharedArrayBufferFeature, enabled);
+}
+
+
+void enableChromiumWebGpu(QList<QByteArray> &arguments) {
+  removeDisabledWebGpuFeatures(arguments);
+
+  qsizetype enabledIndex = -1;
+  for (qsizetype index = 0; index < arguments.size(); ++index) {
+    if (arguments.at(index).startsWith(kChromiumEnableFeatures)) {
+      enabledIndex = index;
+    }
+  }
+  if (enabledIndex < 0) {
+    arguments.append(QByteArray(kChromiumEnableFeatures) +
+                     kChromiumVulkanFeature + ',' +
+                     kChromiumWebGpuFeature);
+    return;
+  }
+
+  auto &enabledArgument = arguments[enabledIndex];
+  constexpr qsizetype prefixSize = sizeof("--enable-features=") - 1;
+  const auto enabled = enabledArgument.sliced(prefixSize).split(',');
+  const auto hasFeature = [&enabled](const char *wanted) {
+    return std::any_of(enabled.cbegin(), enabled.cend(),
+                       [wanted](const QByteArray &feature) {
+                         return chromiumFeatureName(feature) == wanted;
+                       });
+  };
+  if (!hasFeature(kChromiumVulkanFeature)) {
+    if (enabledArgument.size() > prefixSize) {
+      enabledArgument.append(',');
+    }
+    enabledArgument.append(kChromiumVulkanFeature);
+  }
+  if (!hasFeature(kChromiumWebGpuFeature)) {
+    if (enabledArgument.size() > prefixSize) {
+      enabledArgument.append(',');
+    }
+    enabledArgument.append(kChromiumWebGpuFeature);
+  }
+}
+
 
 std::optional<int> rawFpsLimit(const QStringList &arguments) {
   for (qsizetype index = 1; index < arguments.size(); ++index) {
@@ -231,21 +441,24 @@ std::optional<int> rawFpsLimit(const QStringList &arguments) {
   return -1;
 }
 
-void configureChromium(const QStringList &arguments) {
-  const auto fps = rawFpsLimit(arguments);
-  if (!fps.has_value() || !(*fps == 0 || *fps > 60)) {
-    return;
-  }
+void configureChromium(const QStringList &arguments,
+                       bool unrestrictedSharedArrayBufferEnabled) {
+  auto chromiumArguments =
+      parseChromiumFlags(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS"));
+  enableChromiumWebGpu(chromiumArguments);
+  configureUnrestrictedSharedArrayBuffer(
+      chromiumArguments, unrestrictedSharedArrayBufferEnabled);
 
-  auto flags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
-  if (hasChromiumFlag(flags, kChromiumUnlimitedFps)) {
-    return;
+  const auto fps = rawFpsLimit(arguments);
+  if (fps.has_value() && (*fps == 0 || *fps > 60) &&
+      std::none_of(chromiumArguments.cbegin(), chromiumArguments.cend(),
+                   [](const QByteArray &argument) {
+                     return argument == kChromiumUnlimitedFps;
+                   })) {
+    chromiumArguments.append(kChromiumUnlimitedFps);
   }
-  if (!flags.isEmpty()) {
-    flags.append(' ');
-  }
-  flags.append(kChromiumUnlimitedFps);
-  qputenv("QTWEBENGINE_CHROMIUM_FLAGS", flags);
+  qputenv("QTWEBENGINE_CHROMIUM_FLAGS",
+          joinChromiumFlags(chromiumArguments));
 }
 
 
@@ -2274,7 +2487,9 @@ std::int32_t run_qt_application(rust::Str arguments_json) {
 #if QT_VERSION < QT_VERSION_CHECK(6, 5, 0)
   qputenv("QT_WAYLAND_SHELL_INTEGRATION", "layer-shell");
 #endif
-  configureChromium(arguments);
+  const bool unrestrictedSharedArrayBufferEnabled =
+      unrestricted_shared_array_buffer_enabled_for_qt();
+  configureChromium(arguments, unrestrictedSharedArrayBufferEnabled);
   registerOverlayScheme();
 
   QApplication application(argc, argv.data());
