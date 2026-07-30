@@ -26,8 +26,12 @@ Because [`build.rs`](../../build.rs) always performs Qt discovery, MOC, CXX comp
 - [`src/config.rs`](../../src/config.rs): defaults, profile and placement normalization, duplicate profile-ID handling, preservation of repeated counter placements, URL scheme filtering, malformed/unsupported files, atomic persistence, and round trips.
 - [`src/ffi.rs`](../../src/ffi.rs): settings URL encoding, base-path behavior, credential rejection, and contextual invalid-JSON errors.
 - [`src/ui.rs`](../../src/ui.rs): self-contained document generation, FPS bootstrap values, and escaping of script-closing characters.
+- [`src/remote.rs`](../../src/remote.rs): remote route selection, profile rendering, peer allowlists, local capability forwarding, request bounds, and HTTP error behavior.
+- [`tests/config_parity.rs`](../../tests/config_parity.rs): representative parity between Rust and Windows config normalization.
+- [`windows/test/remote-server.test.ts`](../../windows/test/remote-server.test.ts): Windows remote server authorization, profile selection, rendering, local resources, and HTTP behavior.
+- [`windows/test/config-parity.test.ts`](../../windows/test/config-parity.test.ts): Windows-side config parity fixture checks.
 
-These tests directly protect the [configuration model](../domain/configuration.md) and the [vosu/overlay integration contracts](../integrations/vosu-and-overlays.md).
+The Rust tests directly protect the [configuration model](../domain/configuration.md) and the [vosu/overlay integration contracts](../integrations/vosu-and-overlays.md). Windows checks run from `windows` with `npm test` and `npm run typecheck`; `npm run dist:win` verifies packaging separately.
 
 ## Regression priorities
 

@@ -11,7 +11,8 @@ Use the [architecture overview](architecture/overview.md) for relationships and 
 
 | Area | Start here | Responsibility |
 |---|---|---|
-| Process entrypoint | [`src/main.rs`](../src/main.rs) | Serializes arguments and enters the Qt application through FFI. |
+| Linux process entrypoint | [`src/main.rs`](../src/main.rs) | Starts the remote server, serializes arguments, and enters the Qt application through FFI. |
+| Remote profile server | [`src/remote.rs`](../src/remote.rs) | Bounded view-only HTTP service, profile rendering, peer allowlist, and local capability forwarding. See [integrations](integrations/vosu-and-overlays.md). |
 | Rust/C++ boundary | [`src/ffi.rs`](../src/ffi.rs), [`src/qt/bridge.h`](../src/qt/bridge.h) | CXX declarations, Qt-facing Rust operations, URL validation, JSON envelopes. |
 | Native shell | [`src/qt/qt_shell.cpp`](../src/qt/qt_shell.cpp) | Qt window, WebEngine, tray, IPC, workers, command-line parsing, platform behavior, local overlay scheme. |
 | Configuration | [`src/config.rs`](../src/config.rs) | Version 1 model, normalization, config path, atomic load/save. See [configuration](domain/configuration.md). |
@@ -21,7 +22,8 @@ Use the [architecture overview](architecture/overview.md) for relationships and 
 | Frontend structure/style | [`assets/manager.html`](../assets/manager.html), [`assets/manager.css`](../assets/manager.css) | Manager controls and visual presentation. |
 | Native build | [`build.rs`](../build.rs), [`Cargo.toml`](../Cargo.toml) | Qt/pkg-config/MOC/CMake discovery and Rust/CXX compilation. See [operations](operations/build-and-run.md). |
 | User integration | [`extra/attach.sh`](../extra/attach.sh), [`extra/com.vosu.vosulay.desktop`](../extra/com.vosu.vosulay.desktop) | Geometry IPC helper and desktop launcher metadata. |
-| Documentation automation | [`.github/workflows/openwiki-update.yml`](../.github/workflows/openwiki-update.yml) | Scheduled and manual OpenWiki update pull requests. |
+| Windows host | [`windows/src/main/index.ts`](../windows/src/main/index.ts), [`windows/src/main/remote-server.ts`](../windows/src/main/remote-server.ts) | Electron host lifecycle, game attachment, injected overlays, and the Windows remote profile server. |
+| Documentation maintenance | [`openwiki/quickstart.md`](quickstart.md), `AGENTS.md`, `CLAUDE.md` | Manual/local OpenWiki updates; no GitHub Actions workflow should be restored. |
 
 ## Practical change paths
 

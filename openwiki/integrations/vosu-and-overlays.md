@@ -28,6 +28,14 @@ For an accepted file, the shell canonicalizes both the file and its containing d
 
 This boundary is security-sensitive: do not replace canonical path checks with string prefix checks, broaden the allowed schemes without reviewing WebEngine settings, or expose arbitrary local filesystem paths. The frontend’s accepted schemes and the C++ handler’s authorization rules must remain consistent with the [configuration model](../domain/configuration.md).
 
+## Remote profile pages
+
+Linux [`src/remote.rs`](../../src/remote.rs) and Windows [`windows/src/main/remote-server.ts`](../../windows/src/main/remote-server.ts) expose a view-only HTTP service on `0.0.0.0:5050`. `GET` and `HEAD` requests to `/overlay` render the active profile; the single `profile=<positive 1-based index>` query selects another profile. `/local/<token>/<root>/...` is the server-side route used to forward authorized `vosulay-overlay` capabilities for local custom HTML resources. HTTP(S) custom overlays load directly in the client, while counter URLs are built against the requesting host when the configured vosu URL is loopback so remote clients can reach the same machine.
+
+Every protected route loads configuration and checks the peer against `AppSettings.allowed_ips`; loopback is always allowed, and configured entries may be exact IPs or four-part IPv4 wildcard patterns. The Linux implementation binds port 5050, uses three-second read/write timeouts, caps requests at 16 KiB and active connections at 32, and shuts down only after request workers drain. The Windows server applies the same peer-authorization and capability constraints through its Electron HTTP server. Remote profile pages are view-only: unsupported routes return 404 and non-GET/HEAD methods return 405.
+
+This is a network-facing boundary, so preserve the allowlist, request bounds, HTML escaping, no-store responses, iframe sandboxing for custom sources, and local capability-root confinement when changing either implementation. The server is started by the platform entrypoint and shares the [configuration model](../domain/configuration.md).
+
 ## Local IPC and attachment
 
 The shell creates a per-user Unix local socket in the runtime directory, with a temporary-directory fallback. New invocations can send newline-delimited JSON commands to toggle editing, toggle overlay visibility, quit, or set geometry. In particular, `--edit`/`-e` sends `toggle-edit`, so it toggles editing in the already-running instance. Payloads are capped at 4096 bytes and connections/read operations have short timeouts. Geometry is accepted only when the running instance was started with `--attach`.

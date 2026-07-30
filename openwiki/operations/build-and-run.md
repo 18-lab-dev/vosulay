@@ -36,8 +36,12 @@ The shell configures WebEngine frame-rate behavior before creating `QApplication
 
 On Wayland, LayerShellQt is used for overlay-layer placement; on X11, input transparency and masks implement click-through display mode. When debugging “invisible” or non-interactive overlays, check edit mode, selected monitor/attachment, visibility, and platform-specific shell behavior before changing frontend code.
 
-## Packaging and automation
+## Remote profile server operations
 
-[`extra/com.vosu.vosulay.desktop`](../../extra/com.vosu.vosulay.desktop) supplies a desktop entry, while [`extra/attach.sh`](../../extra/attach.sh) is a small geometry-control helper. No installer or release runbook is present yet.
+Both platform hosts serve view-only profile pages on `0.0.0.0:5050`; see the [remote integration boundary](../integrations/vosu-and-overlays.md) for routes and authorization. Configure **Allowed client IPs** before exposing the service beyond loopback, and remember that rendered counter frames may need the same client network allowed by vosu. A bind failure is non-fatal to application startup: the host logs that remote hosting is unavailable and continues without the server.
 
-The scheduled [OpenWiki workflow](../../.github/workflows/openwiki-update.yml) runs daily at 08:00 UTC and on demand, installs OpenWiki, updates repository docs, and opens a pull request. It is documentation automation, not an application build pipeline.
+## Packaging and documentation maintenance
+
+[`extra/com.vosu.vosulay.desktop`](../../extra/com.vosu.vosulay.desktop) supplies a desktop entry, while [`extra/attach.sh`](../../extra/attach.sh) is a small geometry-control helper. Windows packaging is defined by `windows/package.json`; the setup and portable distributions use different configuration locations described in the [configuration model](../domain/configuration.md). No installer or release runbook is present yet.
+
+OpenWiki maintenance is intentionally manual and local. From the repository root, run `openwiki code --update --print` (or `openwiki --update`) after reviewing source changes; inspect the generated diff and commit only the affected `openwiki/` and OpenWiki-managed guidance files. Do not create or restore `.github/workflows/openwiki-update.yml`, or add scheduled/manually dispatched GitHub Actions automation for OpenWiki.
