@@ -5,6 +5,13 @@ export interface RuntimeOptions {
     processNames: string[];
 }
 
+export type InstanceCommand = "toggle-overlay";
+
+export interface ParsedInvocation {
+    options: RuntimeOptions;
+    command: InstanceCommand | null;
+}
+
 const DEFAULT_VOSU_URL = "http://127.0.0.1:24050/";
 const DEFAULT_FPS_LIMIT = 60;
 
@@ -59,11 +66,15 @@ function optionValue(argv: string[], index: number, long: string, short?: string
     return undefined;
 }
 
-export function parseOptions(argv: string[]): RuntimeOptions {
+function parseArguments(
+    argv: string[],
+    allowInstanceCommand: boolean,
+): ParsedInvocation {
     let vosuUrl = validateBaseUrl(DEFAULT_VOSU_URL);
     let fpsLimit = DEFAULT_FPS_LIMIT;
     const pids: number[] = [];
     const processNames: string[] = ["osu!.exe", "osulazer.exe"];
+    let command: InstanceCommand | null = null;
 
     for (let index = 0; index < argv.length; index += 1) {
         const argument = argv[index]!;
@@ -74,6 +85,13 @@ export function parseOptions(argv: string[]): RuntimeOptions {
                 argument.includes("\\") ||
                 argument.toLowerCase().endsWith(".asar"));
         if (electronApplicationPath) continue;
+        if (
+            allowInstanceCommand
+            && (argument === "-i" || argument === "--ipc-toggle-overlay")
+        ) {
+            command = "toggle-overlay";
+            continue;
+        }
         const url = optionValue(argv, index, "--vosu-url", "-t");
         if (url) {
             if (!url[0]) throw new Error("--vosu-url requires a value");
@@ -107,5 +125,16 @@ export function parseOptions(argv: string[]): RuntimeOptions {
         throw new Error(`unknown option: ${argv[index]}`);
     }
 
-    return { vosuUrl, fpsLimit, pids, processNames };
+    return {
+        options: { vosuUrl, fpsLimit, pids, processNames },
+        command,
+    };
+}
+
+export function parseOptions(argv: string[]): RuntimeOptions {
+    return parseArguments(argv, false).options;
+}
+
+export function parseInvocation(argv: string[]): ParsedInvocation {
+    return parseArguments(argv, true);
 }

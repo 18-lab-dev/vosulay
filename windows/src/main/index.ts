@@ -22,9 +22,11 @@ import {
 } from './local-overlays';
 import { OverlayManager } from './overlay-manager';
 import { RemoteOverlayServer } from './remote-server';
-import { parseOptions } from './options';
+import { parseInvocation } from './options';
+import type { ParsedInvocation, RuntimeOptions } from './options';
 
 const EDIT_ACCELERATOR = 'Control+Shift+Space';
+const VISIBILITY_ACCELERATOR = 'Control+Alt+Shift+H';
 
 app.commandLine.appendSwitch('force_high_performance_gpu');
 app.commandLine.appendSwitch('high-dpi-support', '1');
@@ -46,26 +48,30 @@ app.commandLine.appendSwitch(
 
 registerCustomSchemes();
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
-if (!hasSingleInstanceLock) {
-    app.quit();
-} else {
-    void start().catch((error: unknown) => {
-        console.error('Failed to start vosulay', error);
-        app.exit(1);
-    });
+let invocation: ParsedInvocation | null = null;
+try {
+    invocation = parseInvocation(process.argv.slice(1));
+} catch (error) {
+    console.error('Invalid vosulay options', error);
+    app.exit(1);
 }
 
-async function start(): Promise<void> {
-    let options;
-    try {
-        options = parseOptions(process.argv.slice(1));
-    } catch (error) {
-        console.error('Invalid vosulay options', error);
+if (invocation !== null) {
+    const hasSingleInstanceLock = app.requestSingleInstanceLock();
+    if (!hasSingleInstanceLock) {
+        app.quit();
+    } else if (invocation.command !== null) {
+        console.error('vosulay is not running');
         app.exit(1);
-        return;
+    } else {
+        void start(invocation.options).catch((error: unknown) => {
+            console.error('Failed to start vosulay', error);
+            app.exit(1);
+        });
     }
+}
 
+async function start(options: RuntimeOptions): Promise<void> {
     Menu.setApplicationMenu(null);
     app.on('window-all-closed', () => {});
 
@@ -80,9 +86,23 @@ async function start(): Promise<void> {
     let tray: Tray | null = null;
     let shuttingDown = false;
     let editShortcutRegistered = false;
+    let visibilityShortcutRegistered = false;
 
-    app.on('second-instance', () => {
-        void manager.reloadAll();
+    app.on('second-instance', (_event, commandLine) => {
+        let command;
+        try {
+            command = parseInvocation(commandLine.slice(1)).command;
+        } catch (error) {
+            console.error('Invalid vosulay second-instance options', error);
+            return;
+        }
+        if (command === 'toggle-overlay') {
+            void manager.toggleVisibility().catch((error: unknown) => {
+                console.error('Failed to toggle overlay visibility', error);
+            });
+        } else {
+            void manager.reloadAll();
+        }
     });
     app.on('before-quit', (event) => {
         event.preventDefault();
@@ -93,6 +113,10 @@ async function start(): Promise<void> {
         if (editShortcutRegistered) {
             globalShortcut.unregister(EDIT_ACCELERATOR);
             editShortcutRegistered = false;
+        }
+        if (visibilityShortcutRegistered) {
+            globalShortcut.unregister(VISIBILITY_ACCELERATOR);
+            visibilityShortcutRegistered = false;
         }
         void (async () => {
             const failures: unknown[] = [];
@@ -161,6 +185,11 @@ async function start(): Promise<void> {
             console.error('Failed to toggle overlay edit mode', error);
         });
     };
+    const toggleVisibility = (): void => {
+        void manager.toggleVisibility().catch((error: unknown) => {
+            console.error('Failed to toggle overlay visibility', error);
+        });
+    };
     const editItem: MenuItemConstructorOptions = {
         label: 'Edit overlays',
         type: 'checkbox',
@@ -171,6 +200,11 @@ async function start(): Promise<void> {
         {
             ...editItem,
             id: 'edit-overlays'
+        },
+        {
+            id: 'toggle-visibility',
+            label: 'Hide overlays',
+            click: toggleVisibility
         },
         {
             label: 'Reload overlays',
@@ -187,9 +221,15 @@ async function start(): Promise<void> {
     tray.setContextMenu(trayMenu);
 
     const editMenuItem = trayMenu.getMenuItemById('edit-overlays');
+    const visibilityMenuItem = trayMenu.getMenuItemById('toggle-visibility');
     manager.events.on('editingChanged', (editing) => {
         if (editMenuItem !== null) {
             editMenuItem.checked = editing;
+        }
+    });
+    manager.events.on('visibilityChanged', (visible) => {
+        if (visibilityMenuItem !== null) {
+            visibilityMenuItem.label = visible ? 'Hide overlays' : 'Show overlays';
         }
     });
     editShortcutRegistered = globalShortcut.register(
@@ -199,6 +239,15 @@ async function start(): Promise<void> {
     if (!editShortcutRegistered) {
         console.warn(
             `Could not register ${EDIT_ACCELERATOR}; use the tray menu to edit overlays`
+        );
+    }
+    visibilityShortcutRegistered = globalShortcut.register(
+        VISIBILITY_ACCELERATOR,
+        toggleVisibility
+    );
+    if (!visibilityShortcutRegistered) {
+        console.warn(
+            `Could not register ${VISIBILITY_ACCELERATOR}; use the tray menu to show or hide overlays`
         );
     }
 

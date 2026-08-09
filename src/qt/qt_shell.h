@@ -6,6 +6,9 @@
 
 namespace vosulay {
 
-std::int32_t run_qt_application(rust::Str arguments_json);
+struct QtShellOptions;
+
+std::int32_t run_qt_application(rust::Str arguments_json,
+                                const QtShellOptions &options);
 
 } // namespace vosulay

@@ -50,7 +50,8 @@ export class OverlayProcess implements EditingTarget {
     readonly pid: number;
 
     private readonly hwnd: number;
-    private readonly surface: ElectronOverlaySurface;
+    private readonly luid: GpuLuid;
+    private surface: ElectronOverlaySurface | null;
     private readonly bridge: HostBridge;
     private input: ElectronOverlayInput | null = null;
     private resolveInputUnblocked: (() => void) | null = null;
@@ -63,6 +64,7 @@ export class OverlayProcess implements EditingTarget {
     private destroyedEmitted = false;
     private nativeConnected = true;
     private editingValue = false;
+    private visibleValue: boolean;
     private readonly pressedEditShortcutKeys = new Set<string>();
     private readonly consumedNativeEditShortcutKeys = new Set<string>();
     private readonly nativeEditShortcuts = new NativeEditShortcutState();
@@ -140,12 +142,18 @@ export class OverlayProcess implements EditingTarget {
         this.sendEditShortcutCommand(command);
     };
 
+    private readonly handleSurfaceError = (error: unknown): void => {
+        console.error(`Overlay surface error for PID ${this.pid}`, error);
+        void this.destroy();
+    };
+
     private constructor(
         pid: number,
         hwnd: number,
         overlay: Overlay,
         window: BrowserWindow,
-        surface: ElectronOverlaySurface,
+        luid: GpuLuid,
+        surface: ElectronOverlaySurface | null,
         private readonly editingTarget: EditingTarget,
         options: RuntimeOptions,
         configStore: ConfigStore,
@@ -155,7 +163,9 @@ export class OverlayProcess implements EditingTarget {
         this.hwnd = hwnd;
         this.overlay = overlay;
         this.window = window;
+        this.luid = luid;
         this.surface = surface;
+        this.visibleValue = surface !== null;
         this.bridge = new HostBridge(
             window.webContents,
             editingTarget,
@@ -197,10 +207,7 @@ export class OverlayProcess implements EditingTarget {
                 }
             }
         });
-        surface.events.on('error', (error: unknown) => {
-            console.error(`Overlay surface error for PID ${pid}`, error);
-            void this.destroy();
-        });
+        this.surface?.events.on('error', this.handleSurfaceError);
         window.on('closed', () => {
             void this.destroy();
         });
@@ -212,16 +219,50 @@ export class OverlayProcess implements EditingTarget {
         return this.editingValue;
     }
 
+    get visible(): boolean {
+        return this.visibleValue;
+    }
+
+    async setVisible(visible: boolean): Promise<void> {
+        if (this.destroying) {
+            await this.destroyPromise;
+            return;
+        }
+        if (this.destroyed || visible === this.visibleValue) {
+            return;
+        }
+
+        if (visible) {
+            const surface = ElectronOverlaySurface.connect(
+                { id: this.hwnd, overlay: this.overlay },
+                this.luid,
+                this.window.webContents
+            );
+            surface.events.on('error', this.handleSurfaceError);
+            this.surface = surface;
+            this.visibleValue = true;
+            return;
+        }
+
+        await this.setEditing(false);
+        const surface = this.surface;
+        surface?.events.off('error', this.handleSurfaceError);
+        this.surface = null;
+        this.visibleValue = false;
+        await surface?.disconnect();
+    }
+
     async setEditing(editing: boolean): Promise<void> {
         if (this.destroying) {
             await this.destroyPromise;
             return;
         }
-        if (this.destroyed || editing === this.editingValue) {
+        const nextEditing = editing && this.visibleValue;
+        if (this.destroyed || nextEditing === this.editingValue) {
             return;
         }
 
-        if (editing) {
+        if (nextEditing) {
             await this.startBlockingInput();
         } else {
             await this.stopBlockingInput();
@@ -489,8 +530,12 @@ export class OverlayProcess implements EditingTarget {
         } catch (error) {
             console.error(`Failed to dispose overlay bridge for PID ${this.pid}`, error);
         }
+        const surface = this.surface;
+        this.surface = null;
+        this.visibleValue = false;
+        surface?.events.off('error', this.handleSurfaceError);
         try {
-            await this.surface.disconnect();
+            await surface?.disconnect();
         } catch (error) {
             console.error(`Failed to disconnect overlay surface for PID ${this.pid}`, error);
         }
@@ -521,7 +566,8 @@ export class OverlayProcess implements EditingTarget {
         options: RuntimeOptions,
         configStore: ConfigStore,
         overlayRegistry: LocalOverlayRegistry,
-        editingTarget: EditingTarget
+        editingTarget: EditingTarget,
+        visible: boolean
     ): Promise<OverlayProcess> {
         const overlay = await Overlay.attach(
             defaultDllDir().replaceAll('app.asar', 'app.asar.unpacked'),
@@ -787,16 +833,19 @@ export class OverlayProcess implements EditingTarget {
             );
             throwIfInitializationFailed();
 
-            surface = ElectronOverlaySurface.connect(
-                { id: hwnd, overlay },
-                luid,
-                overlayWindow.webContents
-            );
+            if (visible) {
+                surface = ElectronOverlaySurface.connect(
+                    { id: hwnd, overlay },
+                    luid,
+                    overlayWindow.webContents
+                );
+            }
             overlayProcess = new OverlayProcess(
                 pid,
                 hwnd,
                 overlay,
                 overlayWindow,
+                luid,
                 surface,
                 editingTarget,
                 options,

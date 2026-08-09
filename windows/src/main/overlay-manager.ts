@@ -27,6 +27,7 @@ export interface ManagedOverlayProcess {
     };
     destroy(): Promise<void>;
     setEditing(editing: boolean): Promise<void>;
+    setVisible(visible: boolean): Promise<void>;
     flushPendingSave(): Promise<void>;
     reload(): Promise<void>;
 }
@@ -34,13 +35,18 @@ export interface ManagedOverlayProcess {
 export interface OverlayManagerDependencies {
     foregroundTracker?: ForegroundTracker;
     discoverPids?: () => Promise<Set<number>>;
-    initializeProcess?: (pid: number, editingTarget: EditingTarget) => Promise<ManagedOverlayProcess>;
+    initializeProcess?: (
+        pid: number,
+        editingTarget: EditingTarget,
+        visible: boolean,
+    ) => Promise<ManagedOverlayProcess>;
     scheduleScan?: (scan: () => void) => () => void;
 }
 
 export class OverlayManager implements EditingTarget {
     readonly events = new EventEmitter<{
         editingChanged: [editing: boolean];
+        visibilityChanged: [visible: boolean];
     }>();
     private readonly foregroundTracker: ForegroundTracker;
     private readonly discoverPids: () => Promise<Set<number>>;
@@ -56,6 +62,7 @@ export class OverlayManager implements EditingTarget {
     private transitionTail: Promise<void> = Promise.resolve();
     private stopped = true;
     private editingValue = false;
+    private visibleValue = true;
 
     constructor(
         private readonly options: RuntimeOptions,
@@ -65,7 +72,11 @@ export class OverlayManager implements EditingTarget {
     ) {
         this.foregroundTracker = dependencies.foregroundTracker ?? new WindowsForegroundTracker();
         this.discoverPids = dependencies.discoverPids ?? (() => this.findTargetPids());
-        this.initializeProcess = dependencies.initializeProcess ?? (async (pid, editingTarget) => {
+        this.initializeProcess = dependencies.initializeProcess ?? (async (
+            pid,
+            editingTarget,
+            visible,
+        ) => {
             // OverlayProcess loads Electron and Windows-only native modules, so tests inject this boundary.
             const { OverlayProcess } = await import("./overlay-process");
             return OverlayProcess.initialize(
@@ -74,6 +85,7 @@ export class OverlayManager implements EditingTarget {
                 this.configStore,
                 this.overlayRegistry,
                 editingTarget,
+                visible,
             );
         });
         this.scheduleScan = dependencies.scheduleScan ?? ((scan) => {
@@ -84,6 +96,10 @@ export class OverlayManager implements EditingTarget {
 
     get editing(): boolean {
         return this.editingValue;
+    }
+
+    get visible(): boolean {
+        return this.visibleValue;
     }
 
     start(): void {
@@ -129,6 +145,21 @@ export class OverlayManager implements EditingTarget {
         await this.setEditing(!this.editingValue);
     }
 
+    async setVisibility(visible: boolean): Promise<void> {
+        if (visible === this.visibleValue) {
+            return;
+        }
+        this.visibleValue = visible;
+        if (!this.stopped) {
+            await this.queueReconcile();
+        }
+        this.events.emit("visibilityChanged", this.visibleValue);
+    }
+
+    async toggleVisibility(): Promise<void> {
+        await this.setVisibility(!this.visibleValue);
+    }
+
     async flushAll(): Promise<void> {
         await this.active?.process.flushPendingSave();
     }
@@ -153,6 +184,7 @@ export class OverlayManager implements EditingTarget {
     private async finishStop(): Promise<void> {
         this.stopped = true;
         this.editingValue = false;
+        this.visibleValue = true;
         this.foregroundPid = null;
         this.lastFocusedGamePid = null;
         this.allowedPids.clear();
@@ -251,13 +283,17 @@ export class OverlayManager implements EditingTarget {
             return;
         }
         if (this.active?.pid === currentDesiredPid) {
-            await this.applyEditing(this.active);
+            await this.applyState(this.active);
             return;
         }
 
         let process: ManagedOverlayProcess;
         try {
-            process = await this.initializeProcess(currentDesiredPid, this);
+            process = await this.initializeProcess(
+                currentDesiredPid,
+                this,
+                this.visibleValue,
+            );
         } catch (error) {
             console.error(`Failed to attach vosulay overlay to PID ${currentDesiredPid}`, error);
             return;
@@ -283,9 +319,10 @@ export class OverlayManager implements EditingTarget {
             process.window.webContents.setFrameRate(this.options.fpsLimit);
         }
         try {
-            await process.setEditing(this.editingValue);
+            await process.setVisible(this.visibleValue);
+            await process.setEditing(this.visibleValue && this.editingValue);
         } catch (error) {
-            console.error(`Failed to change overlay edit mode for PID ${currentDesiredPid}`, error);
+            console.error(`Failed to apply overlay state for PID ${currentDesiredPid}`, error);
             await process.destroy();
             return;
         }
@@ -299,11 +336,16 @@ export class OverlayManager implements EditingTarget {
         console.log(`Attached vosulay overlay to PID ${currentDesiredPid}`);
     }
 
-    private async applyEditing(active: { pid: number; process: ManagedOverlayProcess }): Promise<void> {
+    private async applyState(
+        active: { pid: number; process: ManagedOverlayProcess },
+    ): Promise<void> {
         try {
-            await active.process.setEditing(this.editingValue);
+            await active.process.setVisible(this.visibleValue);
+            await active.process.setEditing(
+                this.visibleValue && this.editingValue,
+            );
         } catch (error) {
-            console.error(`Failed to change overlay edit mode for PID ${active.pid}`, error);
+            console.error(`Failed to apply overlay state for PID ${active.pid}`, error);
             if (this.active?.process === active.process) {
                 this.active = null;
             }

@@ -35,6 +35,7 @@ class FakeForegroundTracker implements ForegroundTracker {
 class FakeOverlayProcess implements ManagedOverlayProcess {
     readonly events = new EventEmitter<{ destroyed: [] }>();
     readonly editingValues: boolean[] = [];
+    readonly visibilityValues: boolean[] = [];
     readonly window = {
         webContents: {
             setFrameRate: (frameRate: number): void => {
@@ -62,6 +63,10 @@ class FakeOverlayProcess implements ManagedOverlayProcess {
         this.editingValues.push(editing);
     }
 
+    async setVisible(visible: boolean): Promise<void> {
+        this.visibilityValues.push(visible);
+    }
+
     async flushPendingSave(): Promise<void> {}
     async reload(): Promise<void> {}
 }
@@ -87,6 +92,7 @@ function harness(initialPid: number | null, allowed = new Set([11, 22])) {
     const tracker = new FakeForegroundTracker(initialPid);
     const initialized: FakeOverlayProcess[] = [];
     let scheduledScan: (() => void) | null = null;
+    const initializedVisibility: boolean[] = [];
     const manager = new OverlayManager(
         options,
         {} as ConfigStore,
@@ -94,7 +100,8 @@ function harness(initialPid: number | null, allowed = new Set([11, 22])) {
         {
             foregroundTracker: tracker,
             discoverPids: async () => new Set(allowed),
-            initializeProcess: async (pid) => {
+            initializeProcess: async (pid, _editingTarget, visible) => {
+                initializedVisibility.push(visible);
                 const process = new FakeOverlayProcess(pid);
                 initialized.push(process);
                 return process;
@@ -111,6 +118,7 @@ function harness(initialPid: number | null, allowed = new Set([11, 22])) {
         manager,
         tracker,
         initialized,
+        initializedVisibility,
         scan: (): void => {
             assert.ok(scheduledScan);
             scheduledScan();
@@ -268,5 +276,34 @@ test("propagates edit mode to the active and replacement process", async () => {
     state.tracker.emit(22);
     await eventually(() => state.initialized.length === 2);
     assert.equal(state.initialized[1]?.editingValues.at(-1), true);
+    await state.manager.stop();
+});
+
+test("hides the active overlay and keeps replacements hidden", async () => {
+    const state = harness(11);
+    state.manager.start();
+    await eventually(() => state.initialized.length === 1);
+    await state.manager.setEditing(true);
+    await state.manager.toggleVisibility();
+    assert.equal(state.manager.visible, false);
+    assert.equal(state.initialized[0]?.visibilityValues.at(-1), false);
+    assert.equal(state.initialized[0]?.editingValues.at(-1), false);
+
+    state.tracker.emit(22);
+    await eventually(() => state.initialized.length === 2);
+    assert.equal(state.initializedVisibility.at(-1), false);
+    assert.equal(state.initialized[1]?.visibilityValues.at(-1), false);
+    await state.manager.stop();
+});
+
+test("preserves a visibility toggle received before startup", async () => {
+    const state = harness(11);
+    await state.manager.toggleVisibility();
+    assert.equal(state.manager.visible, false);
+
+    state.manager.start();
+    await eventually(() => state.initialized.length === 1);
+    assert.equal(state.initializedVisibility.at(-1), false);
+    assert.equal(state.initialized[0]?.visibilityValues.at(-1), false);
     await state.manager.stop();
 });

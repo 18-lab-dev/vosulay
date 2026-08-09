@@ -11,7 +11,7 @@ import { NativeEditShortcutState, editShortcutCommand } from "../src/main/edit-s
 import { LocalOverlayRegistry } from "../src/main/local-overlays";
 import { chooseOverlayTarget } from "../src/main/overlay-target";
 import { buildManagerDocumentFromSources } from "../src/main/manager-document";
-import { parseOptions } from "../src/main/options";
+import { parseInvocation, parseOptions } from "../src/main/options";
 import { resolveStoragePaths } from "../src/main/storage-path";
 import { availableUrl, counterUrl, settingsUrl } from "../src/main/urls";
 import type { MessageEnvelope } from "../src/main/types";
@@ -50,6 +50,14 @@ test("options parse aliases and reject unsafe values without Electron", () => {
     for (const argv of [["--fps-limit", "0"], ["--fps-limit=241"], ["--pid=-1"], ["--vosu-url", "http://u:p@host/"], ["--vosu-url", "http://host/?x=1"], ["stray"]]) {
         assert.throws(() => parseOptions(argv));
     }
+});
+
+test("visibility IPC invocation accepts both command aliases", () => {
+    assert.equal(
+        parseInvocation(["--ipc-toggle-overlay"]).command,
+        "toggle-overlay",
+    );
+    assert.equal(parseInvocation(["-i"]).command, "toggle-overlay");
 });
 
 test("overlay target selection ignores helpers and favors the largest client", () => {

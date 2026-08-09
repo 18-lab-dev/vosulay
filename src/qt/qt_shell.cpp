@@ -8,12 +8,11 @@
 #include <QAction>
 #include <QApplication>
 #include <QByteArray>
-#include <QCommandLineOption>
-#include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDeadlineTimer>
 #include <QDir>
+#include <QDebug>
 #include <QFile>
 #include <QDBusArgument>
 #include <QDBusConnection>
@@ -24,7 +23,6 @@
 #include <QDBusPendingReply>
 #include <QFileInfo>
 #include <QEventLoop>
-#include <QHash>
 #include <QGuiApplication>
 #include <QKeyEvent>
 #include <QIcon>
@@ -70,13 +68,12 @@
 #include <QWebEngineUrlSchemeHandler>
 #include <QWindow>
 
-#include <algorithm>
 #include <cstdint>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <stdexcept>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -162,19 +159,9 @@ namespace {
 
 constexpr auto kApplicationName = "vosulay";
 constexpr auto kApplicationVersion = "0.1.0";
-constexpr auto kChromiumUnlimitedFps = "--disable-frame-rate-limit";
-constexpr auto kChromiumEnableFeatures = "--enable-features=";
-constexpr auto kChromiumDisableFeatures = "--disable-features=";
-constexpr auto kChromiumVulkanFeature = "Vulkan";
-constexpr auto kChromiumWebGpuFeature = "WebGPUService";
-constexpr auto kChromiumEnableBlinkFeatures = "--enable-blink-features=";
-constexpr auto kChromiumDisableBlinkFeatures = "--disable-blink-features=";
-constexpr auto kChromiumUnrestrictedSharedArrayBufferFeature =
-    "SharedArrayBufferUnrestrictedAccessAllowed";
 constexpr auto kOverlayScheme = "vosulay-overlay";
 constexpr qsizetype kMaximumIpcBytes = 4096;
 constexpr qsizetype kMaximumProfileBytes = 1024 * 1024;
-
 
 QIcon loadApplicationIcon() {
   QIcon icon(QStringLiteral(":/vosulay/vosulay-app-icon.png"));
@@ -196,270 +183,6 @@ rust::Str asRustStr(const QByteArray &value) {
   return rust::Str(value.constData(), static_cast<std::size_t>(value.size()));
 }
 
-QList<QByteArray> parseChromiumFlags(const QByteArray &flags) {
-  enum class State { Parse, Quoted, Unquoted };
-
-  QList<QByteArray> arguments;
-  QByteArray argument;
-  auto state = State::Parse;
-  for (const char character : flags) {
-    switch (state) {
-    case State::Parse:
-      if (character == '"') {
-        state = State::Quoted;
-      } else if (character != ' ') {
-        argument.append(character);
-        state = State::Unquoted;
-      }
-      break;
-    case State::Quoted:
-      if (character == '"') {
-        state = State::Unquoted;
-      } else {
-        argument.append(character);
-      }
-      break;
-    case State::Unquoted:
-      if (character == '"') {
-        state = State::Quoted;
-      } else if (character == ' ') {
-        arguments.append(argument);
-        argument.clear();
-        state = State::Parse;
-      } else {
-        argument.append(character);
-      }
-      break;
-    }
-  }
-  if (!argument.isEmpty()) {
-    arguments.append(argument);
-  }
-  return arguments;
-}
-
-QByteArray joinChromiumFlags(const QList<QByteArray> &arguments) {
-  QByteArray flags;
-  for (const auto &argument : arguments) {
-    if (!flags.isEmpty()) {
-      flags.append(' ');
-    }
-    if (argument.contains(' ')) {
-      flags.append('"');
-      flags.append(argument);
-      flags.append('"');
-    } else {
-      flags.append(argument);
-    }
-  }
-  return flags;
-}
-
-bool hasChromiumFlag(const QByteArray &flags, const QByteArray &wanted) {
-  const auto arguments = parseChromiumFlags(flags);
-  return std::any_of(arguments.cbegin(), arguments.cend(),
-                     [&wanted](const QByteArray &argument) {
-                       return argument == wanted;
-                     });
-}
-
-QByteArray chromiumFeatureName(const QByteArray &feature) {
-  auto name = feature.trimmed();
-  for (const char separator : {'<', '.', ':'}) {
-    const auto position = name.indexOf(separator);
-    if (position >= 0) {
-      name.truncate(position);
-    }
-  }
-  return name;
-}
-
-bool isRequiredWebGpuFeature(const QByteArray &feature) {
-  const auto name = chromiumFeatureName(feature);
-  return name == kChromiumVulkanFeature || name == kChromiumWebGpuFeature;
-}
-
-void removeDisabledWebGpuFeatures(QList<QByteArray> &arguments) {
-  qsizetype disabledIndex = -1;
-  for (qsizetype index = 0; index < arguments.size(); ++index) {
-    if (arguments.at(index).startsWith(kChromiumDisableFeatures)) {
-      disabledIndex = index;
-    }
-  }
-  if (disabledIndex < 0) {
-    return;
-  }
-
-  constexpr qsizetype prefixSize = sizeof("--disable-features=") - 1;
-  const auto disabled =
-      arguments.at(disabledIndex).sliced(prefixSize).split(',');
-  QByteArray retained;
-  for (const auto &feature : disabled) {
-    if (feature.trimmed().isEmpty() || isRequiredWebGpuFeature(feature)) {
-      continue;
-    }
-    if (!retained.isEmpty()) {
-      retained.append(',');
-    }
-    retained.append(feature.trimmed());
-  }
-
-  arguments[disabledIndex] = QByteArray(kChromiumDisableFeatures) + retained;
-}
-qsizetype removeChromiumFeature(QList<QByteArray> &arguments,
-                                const char *prefix, const char *wanted) {
-  const auto prefixSize =
-      static_cast<qsizetype>(std::char_traits<char>::length(prefix));
-  qsizetype lastIndex = -1;
-  for (qsizetype index = 0; index < arguments.size(); ++index) {
-    if (!arguments.at(index).startsWith(prefix)) {
-      continue;
-    }
-    lastIndex = index;
-
-    const auto features = arguments.at(index).sliced(prefixSize).split(',');
-    QByteArray retained;
-    retained.reserve(arguments.at(index).size());
-    for (const auto &feature : features) {
-      const auto trimmed = feature.trimmed();
-      if (trimmed.isEmpty() || chromiumFeatureName(trimmed) == wanted) {
-        continue;
-      }
-      if (!retained.isEmpty()) {
-        retained.append(',');
-      }
-      retained.append(trimmed);
-    }
-    arguments[index] = QByteArray(prefix) + retained;
-  }
-  return lastIndex;
-}
-
-void setChromiumFeatureEnabled(QList<QByteArray> &arguments,
-                               const char *enabledPrefix,
-                               const char *disabledPrefix, const char *feature,
-                               bool enabled) {
-  const auto enabledIndex =
-      removeChromiumFeature(arguments, enabledPrefix, feature);
-  const auto disabledIndex =
-      removeChromiumFeature(arguments, disabledPrefix, feature);
-  const auto destinationPrefix = enabled ? enabledPrefix : disabledPrefix;
-  const auto destinationIndex = enabled ? enabledIndex : disabledIndex;
-  if (destinationIndex < 0) {
-    arguments.append(QByteArray(destinationPrefix) + feature);
-    return;
-  }
-
-  auto &destination = arguments[destinationIndex];
-  if (!destination.endsWith('=')) {
-    destination.append(',');
-  }
-  destination.append(feature);
-}
-
-void configureUnrestrictedSharedArrayBuffer(QList<QByteArray> &arguments,
-                                            bool enabled) {
-  setChromiumFeatureEnabled(
-      arguments, kChromiumEnableBlinkFeatures, kChromiumDisableBlinkFeatures,
-      kChromiumUnrestrictedSharedArrayBufferFeature, enabled);
-}
-
-
-void enableChromiumWebGpu(QList<QByteArray> &arguments) {
-  removeDisabledWebGpuFeatures(arguments);
-
-  qsizetype enabledIndex = -1;
-  for (qsizetype index = 0; index < arguments.size(); ++index) {
-    if (arguments.at(index).startsWith(kChromiumEnableFeatures)) {
-      enabledIndex = index;
-    }
-  }
-  if (enabledIndex < 0) {
-    arguments.append(QByteArray(kChromiumEnableFeatures) +
-                     kChromiumVulkanFeature + ',' +
-                     kChromiumWebGpuFeature);
-    return;
-  }
-
-  auto &enabledArgument = arguments[enabledIndex];
-  constexpr qsizetype prefixSize = sizeof("--enable-features=") - 1;
-  const auto enabled = enabledArgument.sliced(prefixSize).split(',');
-  const auto hasFeature = [&enabled](const char *wanted) {
-    return std::any_of(enabled.cbegin(), enabled.cend(),
-                       [wanted](const QByteArray &feature) {
-                         return chromiumFeatureName(feature) == wanted;
-                       });
-  };
-  if (!hasFeature(kChromiumVulkanFeature)) {
-    if (enabledArgument.size() > prefixSize) {
-      enabledArgument.append(',');
-    }
-    enabledArgument.append(kChromiumVulkanFeature);
-  }
-  if (!hasFeature(kChromiumWebGpuFeature)) {
-    if (enabledArgument.size() > prefixSize) {
-      enabledArgument.append(',');
-    }
-    enabledArgument.append(kChromiumWebGpuFeature);
-  }
-}
-
-
-std::optional<int> rawFpsLimit(const QStringList &arguments) {
-  for (qsizetype index = 1; index < arguments.size(); ++index) {
-    const QString argument = arguments.at(index);
-    if (argument == QStringLiteral("--")) {
-      break;
-    }
-    QString value;
-    if (argument == QStringLiteral("--fps-limit") ||
-        argument == QStringLiteral("-f")) {
-      if (++index >= arguments.size()) {
-        return std::nullopt;
-      }
-      value = arguments.at(index);
-    } else if (argument.startsWith(QStringLiteral("--fps-limit="))) {
-      value = argument.sliced(QStringLiteral("--fps-limit=").size());
-    } else if (argument.startsWith(QStringLiteral("-f")) &&
-               argument.size() > 2) {
-      value = argument.sliced(2);
-      if (value.startsWith('=')) {
-        value.removeFirst();
-      }
-    } else {
-      continue;
-    }
-
-    value = value.trimmed();
-    if (value.compare(QStringLiteral("auto"), Qt::CaseInsensitive) == 0) {
-      return 0;
-    }
-    bool ok = false;
-    const int fps = value.toInt(&ok);
-    return ok ? std::optional<int>(fps) : std::nullopt;
-  }
-  return -1;
-}
-
-void configureChromium(const QStringList &arguments,
-                       bool unrestrictedSharedArrayBufferEnabled) {
-  auto chromiumArguments =
-      parseChromiumFlags(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS"));
-  enableChromiumWebGpu(chromiumArguments);
-  configureUnrestrictedSharedArrayBuffer(
-      chromiumArguments, unrestrictedSharedArrayBufferEnabled);
-
-  const auto fps = rawFpsLimit(arguments);
-  if (fps.has_value() && (*fps == 0 || *fps > 60) &&
-      std::none_of(chromiumArguments.cbegin(), chromiumArguments.cend(),
-                   [](const QByteArray &argument) {
-                     return argument == kChromiumUnlimitedFps;
-                   })) {
-    chromiumArguments.append(kChromiumUnlimitedFps);
-  }
-  qputenv("QTWEBENGINE_CHROMIUM_FLAGS",
-          joinChromiumFlags(chromiumArguments));
-}
 
 
 double detectedRefreshRate(QScreen *screen) {
@@ -471,231 +194,6 @@ double detectedRefreshRate(QScreen *screen) {
   return qBound(30.0, screen->refreshRate(), 360.0);
 }
 
-QString limiterScript(double initialFps, double nativeRefreshRate) {
-  QString source = QString::fromUtf8(R"JS(
-(() => {
-  const initialMaxFps = __VOSULAY_MAX_FPS__;
-  const nativeFrameIntervalMs = __VOSULAY_NATIVE_FRAME_INTERVAL_MS__;
-  const unboundedScheduler = __VOSULAY_UNBOUNDED_SCHEDULER__;
-  if (Number.isFinite(initialMaxFps) && initialMaxFps > 0) {
-    let requestedFrameRate = initialMaxFps;
-    let applyFrameRate = () => {};
-    let limiterInstalled = false;
-
-    window.__vosulaySetAnimationFrameRate = (fps) => {
-      requestedFrameRate = Number.isFinite(fps) && fps > 0 ? fps : 0;
-      applyFrameRate(requestedFrameRate);
-    };
-
-    const installAnimationFrameLimiter = () => {
-      if (limiterInstalled || typeof window.requestAnimationFrame !== "function") {
-        return limiterInstalled;
-      }
-
-      let minFrameIntervalMs = requestedFrameRate > 0 ? 1000 / requestedFrameRate : 0;
-      const nativeRequestAnimationFrame = window.requestAnimationFrame.bind(window);
-      const nativeCancelAnimationFrame =
-        typeof window.cancelAnimationFrame === "function"
-          ? window.cancelAnimationFrame.bind(window)
-          : null;
-      const pendingAnimationFrames = new Map();
-      let nextAnimationFrameId = 0;
-      let scheduledAnimationFrame = null;
-      let scheduledTimeout = null;
-      let lastTimestamp = null;
-      const frameIntervalToleranceMs = 0.5;
-
-      const nativeFrameLeadMs = () =>
-        unboundedScheduler
-          ? 1
-          : Math.max(1, Math.min(nativeFrameIntervalMs, minFrameIntervalMs));
-
-      const clearScheduledTimeout = () => {
-        if (scheduledTimeout === null) return;
-        window.clearTimeout(scheduledTimeout);
-        scheduledTimeout = null;
-      };
-
-      const clearScheduledAnimationFrame = () => {
-        if (scheduledAnimationFrame === null || nativeCancelAnimationFrame === null) return;
-        nativeCancelAnimationFrame(scheduledAnimationFrame);
-        scheduledAnimationFrame = null;
-      };
-
-      const flushPendingAnimationFrames = (timestamp) => {
-        if (pendingAnimationFrames.size === 0) return;
-        if (minFrameIntervalMs > 0 && lastTimestamp !== null &&
-            timestamp + frameIntervalToleranceMs - lastTimestamp < minFrameIntervalMs) {
-          scheduleAnimationFramePump();
-          return;
-        }
-        lastTimestamp = timestamp;
-        const callbacks = Array.from(pendingAnimationFrames.values());
-        pendingAnimationFrames.clear();
-        try {
-          for (const callback of callbacks) {
-            try {
-              callback(timestamp);
-            } catch (error) {
-              window.setTimeout(() => { throw error; }, 0);
-            }
-          }
-        } finally {
-          if (pendingAnimationFrames.size > 0) scheduleAnimationFramePump();
-        }
-      };
-
-      const resumeAnimationFramePump = () => {
-        scheduledTimeout = null;
-        scheduleAnimationFramePump();
-      };
-
-      const flushNativeAnimationFrames = (timestamp) => {
-        scheduledAnimationFrame = null;
-        flushPendingAnimationFrames(timestamp);
-      };
-
-      const scheduleAnimationFramePump = () => {
-        if (pendingAnimationFrames.size === 0 ||
-            scheduledAnimationFrame !== null || scheduledTimeout !== null) return;
-        if (minFrameIntervalMs > 0 && lastTimestamp !== null) {
-          const remainingMs = lastTimestamp + minFrameIntervalMs - performance.now();
-          const delayMs = remainingMs - nativeFrameLeadMs();
-          if (delayMs > frameIntervalToleranceMs) {
-            scheduledTimeout = window.setTimeout(resumeAnimationFramePump, delayMs);
-            return;
-          }
-        }
-        scheduledAnimationFrame = nativeRequestAnimationFrame(flushNativeAnimationFrames);
-      };
-
-      applyFrameRate = (fps) => {
-        clearScheduledTimeout();
-        clearScheduledAnimationFrame();
-        minFrameIntervalMs = Number.isFinite(fps) && fps > 0 ? 1000 / fps : 0;
-        lastTimestamp = null;
-        if (pendingAnimationFrames.size > 0) scheduleAnimationFramePump();
-      };
-
-      window.requestAnimationFrame = (callback) => {
-        const animationFrameId = ++nextAnimationFrameId;
-        pendingAnimationFrames.set(animationFrameId, callback);
-        scheduleAnimationFramePump();
-        return animationFrameId;
-      };
-
-      window.cancelAnimationFrame = (animationFrameId) => {
-        pendingAnimationFrames.delete(animationFrameId);
-        if (pendingAnimationFrames.size === 0) {
-          clearScheduledTimeout();
-          clearScheduledAnimationFrame();
-        }
-      };
-
-      limiterInstalled = true;
-      applyFrameRate(requestedFrameRate);
-      return true;
-    };
-
-    if (!installAnimationFrameLimiter()) {
-      const deferredInstall = () => installAnimationFrameLimiter();
-      document.addEventListener("DOMContentLoaded", deferredInstall, { once: true });
-      window.addEventListener("load", deferredInstall, { once: true });
-      window.setTimeout(deferredInstall, 0);
-    }
-  }
-})();
-)JS");
-  source.replace(QStringLiteral("__VOSULAY_MAX_FPS__"),
-                 QString::number(initialFps, 'f', 3));
-  source.replace(QStringLiteral("__VOSULAY_NATIVE_FRAME_INTERVAL_MS__"),
-                 QString::number(1000.0 / nativeRefreshRate, 'f', 3));
-  source.replace(
-      QStringLiteral("__VOSULAY_UNBOUNDED_SCHEDULER__"),
-      hasChromiumFlag(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS"),
-                      kChromiumUnlimitedFps)
-          ? QStringLiteral("true")
-          : QStringLiteral("false"));
-  return source;
-}
-
-QString managerBridgeScript() {
-  return QString::fromUtf8(R"JS(
-(() => {
-  const queuedMessages = [];
-  const documentId =
-    globalThis.crypto?.randomUUID?.() ??
-    `${performance.timeOrigin}:${Math.random()}`;
-  const serializePayload = (payload) => {
-    if (typeof payload !== "string") {
-      payload = JSON.stringify(payload);
-    }
-    try {
-      const message = JSON.parse(payload);
-      if (message && message.type === "ready") {
-        message.__vosulay_document_id = documentId;
-        return JSON.stringify(message);
-      }
-    } catch (_) {
-    }
-    return payload;
-  };
-  let sender = (payload) => queuedMessages.push(payload);
-  window.__VOSULAY_POST_MESSAGE__ = (payload) => sender(payload);
-  window.ipc = { postMessage: (payload) => window.__VOSULAY_POST_MESSAGE__(payload) };
-
-  const initializeChannel = () => {
-    const script = document.createElement("script");
-    script.onload = () => {
-      new QWebChannel(qt.webChannelTransport, (channel) => {
-        const bridge = channel.objects.vosulayBridge;
-        sender = (payload) => bridge.postMessage(serializePayload(payload));
-        for (const payload of queuedMessages.splice(0)) sender(payload);
-        window.dispatchEvent(new Event("vosulay-bridge-ready"));
-      });
-    };
-    script.src = "qrc:///qtwebchannel/qwebchannel.js";
-    (document.head || document.documentElement).appendChild(script);
-  };
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initializeChannel, { once: true });
-  } else {
-    initializeChannel();
-  }
-})();
-)JS");
-}
-
-QString counterMetadataScript(const QUrl &baseUrl) {
-  const QByteArray encodedBaseUrl =
-      QJsonDocument(QJsonArray{baseUrl.toString(QUrl::FullyEncoded)})
-          .toJson(QJsonDocument::Compact);
-  QString source = QString::fromUtf8(R"JS(
-(() => {
-  try {
-    const vosuOrigin = new URL(__VOSULAY_BASE_URL__[0]).origin;
-    if (window.location.origin !== vosuOrigin ||
-        typeof window.COUNTER_PATH === "string") {
-      return;
-    }
-
-    const pathname = window.location.pathname.endsWith("/")
-      ? window.location.pathname
-      : window.location.pathname.slice(0, window.location.pathname.lastIndexOf("/") + 1);
-    const counterPath = pathname
-      .split("/")
-      .filter(Boolean)
-      .map((segment) => decodeURIComponent(segment))
-      .join("/");
-    if (counterPath) window.COUNTER_PATH = counterPath;
-  } catch (_) {
-  }
-})();
-)JS");
-  return source.replace(QStringLiteral("__VOSULAY_BASE_URL__"),
-                        QString::fromUtf8(encodedBaseUrl));
-}
 
 void installScript(QWebEnginePage *page, const QString &name,
                    const QString &source, bool subframes) {
@@ -708,13 +206,10 @@ void installScript(QWebEnginePage *page, const QString &name,
   page->scripts().insert(script);
 }
 
-void updateFrameRate(QWebEngineFrame frame, double fps) {
-  frame.runJavaScript(
-      QStringLiteral("if (typeof window.__vosulaySetAnimationFrameRate === "
-                     "'function') window.__vosulaySetAnimationFrameRate(%1);")
-          .arg(QString::number(fps, 'f', 3)));
+void updateFrameRate(QWebEngineFrame frame, const QString &source) {
+  frame.runJavaScript(source);
   for (const auto &child : frame.children()) {
-    updateFrameRate(child, fps);
+    updateFrameRate(child, source);
   }
 }
 
@@ -737,157 +232,45 @@ QJsonObject errorEnvelope(const QString &message) {
                      {QStringLiteral("message"), message}};
 }
 
-bool isOverlayToken(const QString &token) {
-  return token.size() == 32 &&
-         std::all_of(token.cbegin(), token.cend(), [](QChar character) {
-           return character.isDigit() ||
-                  (character >= QLatin1Char('a') &&
-                   character <= QLatin1Char('f'));
-         });
-}
-
-bool isPathInsideRoot(const QString &root, const QString &target) {
-  const QString relative = QDir(root).relativeFilePath(target);
-  return !QDir::isAbsolutePath(relative) && relative != QStringLiteral("..") &&
-         !relative.startsWith(QStringLiteral("../"));
-}
-
-std::optional<QString> overlayRootFromUrl(const QUrl &url) {
-  if (url.scheme() != QString::fromLatin1(kOverlayScheme) ||
-      !isOverlayToken(url.host()) || url.port() != -1) {
-    return std::nullopt;
-  }
-
-  const QString path = url.path(QUrl::FullyDecoded);
-  const qsizetype rootEnd = path.indexOf('/', 1);
-  if (!path.startsWith('/') || rootEnd <= 1 || rootEnd == path.size() - 1) {
-    return std::nullopt;
-  }
-
-  const QByteArray encodedRoot = path.sliced(1, rootEnd - 1).toLatin1();
-  const auto decodedRoot = QByteArray::fromBase64Encoding(
-      encodedRoot, QByteArray::Base64UrlEncoding |
-                       QByteArray::AbortOnBase64DecodingErrors);
-  if (!decodedRoot ||
-      decodedRoot.decoded.toBase64(QByteArray::Base64UrlEncoding |
-                                   QByteArray::OmitTrailingEquals) !=
-          encodedRoot) {
-    return std::nullopt;
-  }
-
-  const QByteArray rootBytes = decodedRoot.decoded;
-  const QString decodedRootPath = QString::fromUtf8(rootBytes);
-  if (decodedRootPath.toUtf8() != rootBytes) {
-    return std::nullopt;
-  }
-
-  const QFileInfo rootInfo(decodedRootPath);
-  const QString root = rootInfo.canonicalFilePath();
-  if (root.isEmpty() || !rootInfo.isDir() || root != decodedRootPath) {
-    return std::nullopt;
-  }
-  return root;
-}
-
-QUrl overlayUrl(const QFileInfo &entry) {
-  const QString root = entry.dir().canonicalPath();
-  const QString target = entry.canonicalFilePath();
-  if (root.isEmpty() || target.isEmpty() || !isPathInsideRoot(root, target)) {
-    return {};
-  }
-
-  const QByteArray rootBytes = root.toUtf8();
-  const QByteArray encodedRoot =
-      rootBytes.toBase64(QByteArray::Base64UrlEncoding |
-                         QByteArray::OmitTrailingEquals);
-  QUrl url;
-  url.setScheme(QString::fromLatin1(kOverlayScheme));
-  url.setHost(QUuid::createUuid()
-                  .toString(QUuid::WithoutBraces)
-                  .remove(QLatin1Char('-')));
-  url.setPath(QStringLiteral("/%1/%2")
-                  .arg(QString::fromLatin1(encodedRoot), entry.fileName()));
-  return url;
-}
-
 class OverlaySchemeHandler final : public QWebEngineUrlSchemeHandler {
 public:
   explicit OverlaySchemeHandler(QObject *parent)
-      : QWebEngineUrlSchemeHandler(parent) {}
+      : QWebEngineUrlSchemeHandler(parent),
+        authorization_(new_overlay_authorization()) {}
 
   bool authorizeUrl(const QUrl &url) {
-    const auto root = overlayRootFromUrl(url);
-    if (!root) {
-      return false;
-    }
-    const auto existing = authorizedRoots_.constFind(url.host());
-    if (existing != authorizedRoots_.cend() && *existing != *root) {
-      return false;
-    }
-    authorizedRoots_.insert(url.host(), *root);
-    return true;
+    const QByteArray encoded = url.toEncoded(QUrl::FullyEncoded);
+    return authorize_overlay_url(*authorization_, asRustStr(encoded));
   }
 
-  bool authorizeUrls(const QList<QUrl> &urls) {
-    QHash<QString, QString> additions;
-    for (const QUrl &url : urls) {
-      const auto root = overlayRootFromUrl(url);
-      if (!root) {
-        return false;
-      }
-      const auto authorized = authorizedRoots_.constFind(url.host());
-      if (authorized != authorizedRoots_.cend() && *authorized != *root) {
-        return false;
-      }
-      const auto addition = additions.constFind(url.host());
-      if (addition != additions.cend() && *addition != *root) {
-        return false;
-      }
-      additions.insert(url.host(), *root);
-    }
-    for (auto addition = additions.cbegin(); addition != additions.cend();
-         ++addition) {
-      authorizedRoots_.insert(addition.key(), addition.value());
-    }
-    return true;
+  bool authorizeUrls(const QJsonArray &urls) {
+    const QByteArray encoded =
+        QJsonDocument(urls).toJson(QJsonDocument::Compact);
+    return authorize_overlay_urls(*authorization_, asRustStr(encoded));
   }
 
   void requestStarted(QWebEngineUrlRequestJob *job) override {
-    const QUrl url = job->requestUrl();
-    const auto root = overlayRootFromUrl(url);
-    if (!root) {
+    const QByteArray encoded =
+        job->requestUrl().toEncoded(QUrl::FullyEncoded);
+    const OverlayRequest request =
+        resolve_overlay_url(*authorization_, asRustStr(encoded));
+    switch (request.status) {
+    case OverlayRequestStatus::Invalid:
       job->fail(QWebEngineUrlRequestJob::UrlInvalid);
       return;
-    }
-
-    const auto authorizedRoot = authorizedRoots_.constFind(url.host());
-    if (authorizedRoot == authorizedRoots_.cend() || *authorizedRoot != *root) {
+    case OverlayRequestStatus::Denied:
       job->fail(QWebEngineUrlRequestJob::RequestDenied);
       return;
-    }
-
-    const QString path = url.path(QUrl::FullyDecoded);
-    const qsizetype rootEnd = path.indexOf('/', 1);
-
-    const QString relativePath = path.sliced(rootEnd + 1);
-    const QFileInfo requestedInfo(QDir(*root).filePath(relativePath));
-    const QString target = requestedInfo.canonicalFilePath();
-    if (target.isEmpty()) {
+    case OverlayRequestStatus::NotFound:
       job->fail(QWebEngineUrlRequestJob::UrlNotFound);
       return;
-    }
-    if (!isPathInsideRoot(*root, target)) {
-      job->fail(QWebEngineUrlRequestJob::RequestDenied);
-      return;
+    case OverlayRequestStatus::Ready:
+      break;
     }
 
-    const QFileInfo targetInfo(target);
-    if (!targetInfo.isFile() || !targetInfo.isReadable()) {
-      job->fail(QWebEngineUrlRequestJob::RequestDenied);
-      return;
-    }
-
-    auto *file = new QFile(target, job);
+    const QString path = rustStringToQString(request.path);
+    const QFileInfo targetInfo(path);
+    auto *file = new QFile(path, job);
     if (!file->open(QIODevice::ReadOnly)) {
       job->fail(QWebEngineUrlRequestJob::RequestFailed);
       return;
@@ -898,7 +281,7 @@ public:
   }
 
 private:
-  QHash<QString, QString> authorizedRoots_;
+  rust::Box<OverlayAuthorization> authorization_;
 };
 
 void configureQtWebEngineEnvironment() {
@@ -923,13 +306,6 @@ void registerOverlayScheme() {
                   QWebEngineUrlScheme::FetchApiAllowed);
   QWebEngineUrlScheme::registerScheme(scheme);
 }
-
-struct ParsedOptions {
-  QString vosuUrl;
-  QScreen *screen = nullptr;
-  int fpsLimit = -1;
-  bool attach = false;
-};
 
 class ZoomLockedWebEngineView final : public QWebEngineView {
 public:
@@ -984,10 +360,67 @@ private:
   }
 };
 
+class PromptAwareWebEnginePage final : public QWebEnginePage {
+public:
+  using PromptCallback = std::function<void()>;
+
+  PromptAwareWebEnginePage(PromptCallback onPromptOpened,
+                           PromptCallback onPromptClosed, QObject *parent)
+      : QWebEnginePage(parent), onPromptOpened_(std::move(onPromptOpened)),
+        onPromptClosed_(std::move(onPromptClosed)) {}
+
+private:
+  template <typename Function>
+  decltype(auto) whilePromptOpen(Function &&function) {
+    onPromptOpened_();
+    const auto promptGuard =
+        qScopeGuard([this] { onPromptClosed_(); });
+    return std::forward<Function>(function)();
+  }
+
+  PromptCallback onPromptOpened_;
+  PromptCallback onPromptClosed_;
+
+protected:
+  QStringList
+  chooseFiles(FileSelectionMode mode, const QStringList &oldFiles,
+              const QStringList &acceptedMimeTypes) override {
+    return whilePromptOpen([&] {
+      return QWebEnginePage::chooseFiles(mode, oldFiles, acceptedMimeTypes);
+    });
+  }
+
+  void javaScriptAlert(const QUrl &securityOrigin,
+                       const QString &message) override {
+    whilePromptOpen([&] {
+      QWebEnginePage::javaScriptAlert(securityOrigin, message);
+    });
+  }
+
+  bool javaScriptConfirm(const QUrl &securityOrigin,
+                         const QString &message) override {
+    return whilePromptOpen([&] {
+      return QWebEnginePage::javaScriptConfirm(securityOrigin, message);
+    });
+  }
+
+  bool javaScriptPrompt(const QUrl &securityOrigin, const QString &message,
+                        const QString &defaultValue, QString *result) override {
+    return whilePromptOpen([&] {
+      return QWebEnginePage::javaScriptPrompt(securityOrigin, message,
+                                              defaultValue, result);
+    });
+  }
+
+};
+
 class ShellWindow final : public QWidget {
 public:
-  explicit ShellWindow(ParsedOptions options, const QIcon &applicationIcon)
-      : options_(std::move(options)), server_(this), tray_(this) {
+  explicit ShellWindow(const QtShellOptions &options, QScreen *screen,
+                       const QIcon &applicationIcon)
+      : vosuUrl_(rustStringToQString(options.vosu_url)),
+        fpsLimit_(options.fps_limit), attach_(options.attach), screen_(screen),
+        server_(this), tray_(this) {
     setWindowIcon(applicationIcon);
     setAttribute(Qt::WA_TranslucentBackground);
     setWindowFlags(Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint |
@@ -1010,7 +443,9 @@ public:
       }
     });
 
-    page_ = new QWebEnginePage(view_);
+    page_ = new PromptAwareWebEnginePage(
+        [this] { suspendForPrompt(); },
+        [this] { restoreAfterPrompt(); }, view_);
     page_->setBackgroundColor(Qt::transparent);
     view_->setPage(page_);
     overlaySchemeHandler_ = new OverlaySchemeHandler(page_->profile());
@@ -1021,14 +456,18 @@ public:
     page_->settings()->setAttribute(
         QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
 
+    const QByteArray vosuUrl = vosuUrl_.toUtf8();
     installScript(page_, QStringLiteral("vosulay-counter-metadata"),
-                  counterMetadataScript(QUrl(options_.vosuUrl)), true);
+                  rustStringToQString(
+                      counter_metadata_script_for_qt(asRustStr(vosuUrl))),
+                  true);
 
-    if (options_.fpsLimit >= 0) {
+    if (fpsLimit_ >= 0) {
       installLimiter();
     }
-    installScript(page_, QStringLiteral("vosulay-manager-bridge"),
-                  managerBridgeScript(), false);
+    installScript(
+        page_, QStringLiteral("vosulay-manager-bridge"),
+        rustStringToQString(manager_bridge_script_for_qt()), false);
 
     channel_ = new QWebChannel(page_);
     bridge_ = new ManagerBridge(
@@ -1039,17 +478,17 @@ public:
 
     connect(windowHandleOrCreate(), &QWindow::screenChanged, this,
             [this](QScreen *screen) {
-              options_.screen = screen;
+              screen_ = screen;
               connectRefreshRateSignal(screen);
               syncAutoFrameRate();
             });
-    connectRefreshRateSignal(options_.screen);
+    connectRefreshRateSignal(screen_);
 
     setupTray(applicationIcon);
     setupIpcServer();
 
     const auto html = rustStringToQString(
-        manager_document_for_qt(static_cast<std::int32_t>(options_.fpsLimit)));
+        manager_document_for_qt(static_cast<std::int32_t>(fpsLimit_)));
     view_->setHtml(html, QUrl(QStringLiteral("qrc:///vosulay/manager.html")));
   }
 
@@ -1086,9 +525,9 @@ public:
   bool ipcReady() const { return ipcReady_; }
 
   void initializeWindow() {
-    QScreen *screen = options_.screen != nullptr ? options_.screen
+    QScreen *screen = screen_ != nullptr ? screen_
                                                  : QApplication::primaryScreen();
-    options_.screen = screen;
+    screen_ = screen;
     if (screen != nullptr) {
       windowHandleOrCreate()->setScreen(screen);
       setGeometry(screen->geometry());
@@ -1145,7 +584,13 @@ private:
   }
 
   void setOverlayVisibility(bool visible) {
+    if (!visible) {
+      applyInputCapture(false);
+    }
     setVisible(visible);
+    if (visible) {
+      applyInputCapture(editing_ && promptDepth_ == 0);
+    }
     visibilityAction_->setText(visible ? QStringLiteral("Hide vosulay")
                                        : QStringLiteral("Show vosulay"));
     updatePageLifecycle();
@@ -1205,6 +650,24 @@ private:
     }
   }
 
+  void suspendForPrompt() {
+    if (promptDepth_++ != 0) {
+      return;
+    }
+    promptOverlayWasVisible_ = view_->isVisible();
+    view_->hide();
+    applyInputCapture(false);
+    QGuiApplication::sync();
+  }
+
+  void restoreAfterPrompt() {
+    if (promptDepth_ == 0 || --promptDepth_ != 0) {
+      return;
+    }
+    view_->setVisible(promptOverlayWasVisible_);
+    applyInputCapture(editing_ && isVisible());
+  }
+
 
   void setEditing(bool editing) {
     editing_ = editing;
@@ -1213,7 +676,7 @@ private:
     } else {
       editingOffApplied_ = false;
     }
-    applyInputCapture(editing);
+    applyInputCapture(editing_ && promptDepth_ == 0 && isVisible());
     if (editAction_ != nullptr) {
       editAction_->setText(editing ? QStringLiteral("Finish editing vosulay")
                                    : QStringLiteral("Edit vosulay"));
@@ -1234,10 +697,10 @@ private:
     }
     QScreen *screen = QGuiApplication::screenAt(geometry.center());
     if (screen == nullptr) {
-      screen = options_.screen;
+      screen = screen_;
     }
-    if (screen != nullptr && screen != options_.screen) {
-      options_.screen = screen;
+    if (screen != nullptr && screen != screen_) {
+      screen_ = screen;
       windowHandleOrCreate()->setScreen(screen);
       if (layerWindow_ != nullptr) {
         layerWindow_->setScreen(screen);
@@ -1287,12 +750,15 @@ private:
   }
 
   void installLimiter() {
-    const double nativeRefreshRate = detectedRefreshRate(options_.screen);
-    const double fps = options_.fpsLimit == 0
+    const double nativeRefreshRate = detectedRefreshRate(screen_);
+    const double fps = fpsLimit_ == 0
                            ? nativeRefreshRate
-                           : static_cast<double>(options_.fpsLimit);
-    installScript(page_, QStringLiteral("vosulay-animation-frame-limiter"),
-                  limiterScript(fps, nativeRefreshRate), true);
+                           : static_cast<double>(fpsLimit_);
+    installScript(
+        page_, QStringLiteral("vosulay-animation-frame-limiter"),
+        rustStringToQString(
+            limiter_script_for_qt(fps, nativeRefreshRate)),
+        true);
   }
 
   void connectRefreshRateSignal(QScreen *screen) {
@@ -1310,46 +776,43 @@ private:
   }
 
   void syncAutoFrameRate() {
-    if (options_.fpsLimit != 0 || page_ == nullptr) {
+    if (fpsLimit_ != 0 || page_ == nullptr) {
       return;
     }
-    const double fps = detectedRefreshRate(options_.screen);
+    const double fps = detectedRefreshRate(screen_);
     const auto oldScripts =
         page_->scripts().find(QStringLiteral("vosulay-animation-frame-limiter"));
     for (const auto &oldScript : oldScripts) {
       page_->scripts().remove(oldScript);
     }
     installScript(page_, QStringLiteral("vosulay-animation-frame-limiter"),
-                  limiterScript(fps, fps), true);
-    updateFrameRate(page_->mainFrame(), fps);
+                  rustStringToQString(limiter_script_for_qt(fps, fps)), true);
+    updateFrameRate(page_->mainFrame(),
+                    rustStringToQString(frame_rate_script_for_qt(fps)));
   }
 
   void sendEnvelope(const QJsonObject &envelope) {
-    const QString payload = QString::fromUtf8(
-        QJsonDocument(envelope).toJson(QJsonDocument::Compact));
-    const QString javascript =
-        QStringLiteral("if (typeof window.__VOSULAY_RECEIVE__ === 'function') "
-                       "window.__VOSULAY_RECEIVE__(%1); else if "
-                       "(window.vosulay && typeof window.vosulay.receive === "
-                       "'function') window.vosulay.receive(%1);")
-            .arg(payload);
-    page_->runJavaScript(javascript);
+    const QByteArray payload =
+        QJsonDocument(envelope).toJson(QJsonDocument::Compact);
+    page_->runJavaScript(rustStringToQString(
+        manager_receive_script_for_qt(asRustStr(payload))));
   }
 
   void handleManagerMessage(const QString &message) {
-    QJsonParseError parseError;
-    const QJsonDocument document =
-        QJsonDocument::fromJson(message.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-      sendEnvelope(errorEnvelope(QStringLiteral("Invalid message from vosulay manager")));
-      return;
-    }
+    const QByteArray encoded = message.toUtf8();
+    const ManagerMessage request =
+        parse_manager_message_for_qt(asRustStr(encoded));
+    const auto payload = [&request] {
+      const QByteArray json = rustStringToQString(request.payload_json).toUtf8();
+      return QJsonDocument::fromJson(json).object();
+    };
 
-    const QJsonObject request = document.object();
-    const QString type = request.value(QStringLiteral("type")).toString();
-    if (type == QStringLiteral("ready")) {
-      const QString documentId =
-          request.value(QStringLiteral("__vosulay_document_id")).toString();
+    switch (request.kind) {
+    case ManagerMessageKind::Invalid:
+      sendEnvelope(errorEnvelope(rustStringToQString(request.error)));
+      return;
+    case ManagerMessageKind::Ready: {
+      const QString documentId = rustStringToQString(request.document_id);
       if (managerDocumentId_.has_value() &&
           *managerDocumentId_ == documentId) {
         return;
@@ -1362,20 +825,16 @@ private:
       } else {
         initializeManagerDocument(documentId);
       }
-    } else if (type == QStringLiteral("save-config")) {
-      const QJsonValue saveIdValue =
-          request.value(QStringLiteral("save_id"));
-      if (!saveIdValue.isString() || saveIdValue.toString().isEmpty()) {
-        sendEnvelope(errorEnvelope(QStringLiteral("Invalid vosulay save ID")));
-        return;
-      }
-      saveConfiguration(request.value(QStringLiteral("config")),
-                        saveIdValue.toString());
-    } else if (type == QStringLiteral("refresh-counters")) {
+      return;
+    }
+    case ManagerMessageKind::SaveConfig:
+      saveConfiguration(payload(), rustStringToQString(request.save_id));
+      return;
+    case ManagerMessageKind::RefreshCounters:
       fetchCounters();
-    } else if (type == QStringLiteral("editing-applied")) {
-      if (!request.value(QStringLiteral("editing")).toBool(true) &&
-          !editing_) {
+      return;
+    case ManagerMessageKind::EditingApplied:
+      if (!request.editing && !editing_) {
         editingOffApplied_ = true;
         updatePageLifecycle();
         if (initializationAwaitingEditingAppliedDocumentId_.has_value() &&
@@ -1389,31 +848,35 @@ private:
           }
         }
       }
-    } else if (type == QStringLiteral("set-editing")) {
-      setEditing(request.value(QStringLiteral("editing")).toBool());
-    } else if (type == QStringLiteral("choose-overlay-file")) {
+      return;
+    case ManagerMessageKind::SetEditing:
+      setEditing(request.editing);
+      return;
+    case ManagerMessageKind::ChooseOverlayFile:
       chooseOverlayFile();
-    } else if (type == QStringLiteral("export-profile")) {
-      exportProfile(request.value(QStringLiteral("profile")));
-    } else if (type == QStringLiteral("import-profile")) {
+      return;
+    case ManagerMessageKind::ExportProfile:
+      exportProfile(payload());
+      return;
+    case ManagerMessageKind::ImportProfile:
       importProfile();
-    } else if (type == QStringLiteral("authorize-profile-import")) {
-      authorizeProfileImport(request.value(QStringLiteral("profile")));
-    } else if (type == QStringLiteral("open-settings")) {
-      openSettings(request.value(QStringLiteral("counter_id")).toString());
-    } else if (type == QStringLiteral("open-available")) {
+      return;
+    case ManagerMessageKind::AuthorizeProfileImport:
+      authorizeProfileImport(payload());
+      return;
+    case ManagerMessageKind::OpenSettings:
+      openSettings(rustStringToQString(request.counter_id));
+      return;
+    case ManagerMessageKind::OpenAvailable:
       openAvailable();
-    } else {
-      sendEnvelope(errorEnvelope(QStringLiteral("Unknown vosulay manager message")));
+      return;
     }
   }
 
   QString choosePortalFile(const QString &method, const QString &title,
                            const portal::Filters &filters,
                            const QString &currentName = {}) {
-    const bool overlayWasVisible = view_->isVisible();
-    view_->hide();
-    applyInputCapture(false);
+    suspendForPrompt();
 
     bool restored = false;
     const auto restoreOverlay = [&] {
@@ -1421,8 +884,7 @@ private:
         return;
       }
       restored = true;
-      view_->setVisible(overlayWasVisible);
-      applyInputCapture(editing_);
+      restoreAfterPrompt();
     };
     const auto restorationGuard = qScopeGuard(restoreOverlay);
 
@@ -1625,13 +1087,22 @@ private:
         (suffix.compare(QStringLiteral("html"), Qt::CaseInsensitive) != 0 &&
          suffix.compare(QStringLiteral("htm"), Qt::CaseInsensitive) != 0) ||
         !file.open(QIODevice::ReadOnly)) {
-      sendEnvelope(
-          errorEnvelope(QStringLiteral("Selected overlay is not a readable HTML file")));
+      sendEnvelope(errorEnvelope(
+          QStringLiteral("Selected overlay is not a readable HTML file")));
       return;
     }
 
-    const QUrl selectedUrl = overlayUrl(fileInfo);
-    if (!selectedUrl.isValid() || selectedUrl.isEmpty()) {
+    const QByteArray pathBytes = fileInfo.absoluteFilePath().toUtf8();
+    const QByteArray token =
+        QUuid::createUuid()
+            .toString(QUuid::WithoutBraces)
+            .remove(QLatin1Char('-'))
+            .toUtf8();
+    QUrl selectedUrl;
+    try {
+      selectedUrl = QUrl(rustStringToQString(
+          overlay_url_for_qt(asRustStr(pathBytes), asRustStr(token))));
+    } catch (const std::exception &) {
       sendEnvelope(errorEnvelope(
           QStringLiteral("Selected overlay could not be resolved safely")));
       return;
@@ -1649,39 +1120,7 @@ private:
                     {QStringLiteral("name"), fileInfo.completeBaseName()}});
   }
 
-  static QString profileFilename(const QJsonObject &profile) {
-    const QString name =
-        profile.value(QStringLiteral("name")).toString().trimmed();
-    const QString forbidden = QStringLiteral("/\\:*?\"<>|");
-    QString filename;
-    filename.reserve(std::min<qsizetype>(name.size(), 96));
-    for (const QChar character : name) {
-      if (filename.size() == 96) {
-        break;
-      }
-      if (character.unicode() < 0x20 || character.unicode() == 0x7f ||
-          forbidden.contains(character)) {
-        filename.append(QLatin1Char('_'));
-      } else {
-        filename.append(character);
-      }
-    }
-    filename = filename.trimmed();
-    while (filename.endsWith(QLatin1Char('.'))) {
-      filename.chop(1);
-    }
-    if (filename.isEmpty()) {
-      filename = QStringLiteral("profile");
-    }
-    return filename + QStringLiteral(".json");
-  }
-
   void exportProfile(const QJsonValue &profileValue) {
-    if (!profileValue.isObject()) {
-      sendEnvelope(errorEnvelope(
-          QStringLiteral("The active profile is not a valid JSON object")));
-      return;
-    }
     const QJsonObject profile = profileValue.toObject();
     const QByteArray payload =
         QJsonDocument(profile).toJson(QJsonDocument::Compact);
@@ -1694,10 +1133,11 @@ private:
     const portal::Filters filters{
         {QStringLiteral("JSON profile files"),
          {{0, QStringLiteral("*.json")}}}};
+    const QString filename = rustStringToQString(
+        profile_filename_for_qt(asRustStr(payload)));
     const QString path =
         choosePortalFile(QStringLiteral("SaveFile"),
-                         QStringLiteral("Export profile"), filters,
-                         profileFilename(profile));
+                         QStringLiteral("Export profile"), filters, filename);
     if (path.isEmpty()) {
       return;
     }
@@ -1791,38 +1231,14 @@ private:
   }
 
   void authorizeProfileImport(const QJsonValue &profileValue) {
-    if (!profileValue.isObject()) {
-      sendEnvelope(errorEnvelope(
-          QStringLiteral("Imported profile is not a valid JSON object")));
-      return;
-    }
-
     const QJsonObject profile = profileValue.toObject();
-    const QJsonValue overlaysValue = profile.value(QStringLiteral("overlays"));
-    if (!overlaysValue.isArray()) {
-      sendEnvelope(errorEnvelope(
-          QStringLiteral("Imported profile does not contain a valid overlays array")));
-      return;
-    }
-
-    const QJsonArray overlays = overlaysValue.toArray();
+    const QJsonArray overlays =
+        profile.value(QStringLiteral("overlays")).toArray();
+    QJsonArray localOverlayUrls;
     for (const QJsonValue &overlayValue : overlays) {
-      if (!overlayValue.isObject()) {
-        sendEnvelope(errorEnvelope(
-            QStringLiteral("Imported profile contains an invalid overlay")));
-        return;
-      }
-    }
-
-    QList<QUrl> localOverlayUrls;
-    for (const QJsonValue &overlayValue : overlays) {
-      const QJsonValue urlValue =
-          overlayValue.toObject().value(QStringLiteral("url"));
-      if (!urlValue.isString()) {
-        continue;
-      }
-      const QUrl url(urlValue.toString().trimmed());
-      if (url.scheme() == QString::fromLatin1(kOverlayScheme)) {
+      const QString url =
+          overlayValue.toObject().value(QStringLiteral("url")).toString();
+      if (QUrl(url).scheme() == QString::fromLatin1(kOverlayScheme)) {
         localOverlayUrls.append(url);
       }
     }
@@ -1839,41 +1255,6 @@ private:
         {QStringLiteral("profile"), profileValue}});
   }
 
-  static bool configHasActiveOverlays(const QJsonValue &config) {
-    if (!config.isObject()) {
-      return true;
-    }
-    const QJsonObject object = config.toObject();
-    const QJsonValue activeProfileValue =
-        object.value(QStringLiteral("active_profile"));
-    const QJsonValue profilesValue = object.value(QStringLiteral("profiles"));
-    if (!activeProfileValue.isString() ||
-        activeProfileValue.toString().isEmpty() || !profilesValue.isArray()) {
-      return true;
-    }
-
-    const QString activeProfile = activeProfileValue.toString();
-    std::optional<bool> activeProfileHasOverlays;
-    for (const QJsonValue &profile : profilesValue.toArray()) {
-      if (!profile.isObject()) {
-        return true;
-      }
-      const QJsonObject profileObject = profile.toObject();
-      const QJsonValue id = profileObject.value(QStringLiteral("id"));
-      const QJsonValue overlays =
-          profileObject.value(QStringLiteral("overlays"));
-      if (!id.isString() || id.toString().isEmpty() || !overlays.isArray()) {
-        return true;
-      }
-      if (id.toString() == activeProfile) {
-        if (activeProfileHasOverlays.has_value()) {
-          return true;
-        }
-        activeProfileHasOverlays = !overlays.toArray().isEmpty();
-      }
-    }
-    return activeProfileHasOverlays.value_or(true);
-  }
 
   void loadConfiguration() {
     try {
@@ -1885,22 +1266,25 @@ private:
       }
       const auto object = document.object();
       const QJsonValue config = object.value(QStringLiteral("config"));
-      activeProfileHasOverlays_ = configHasActiveOverlays(config);
-      if (config.isObject()) {
-        const QJsonArray profiles =
-            config.toObject().value(QStringLiteral("profiles")).toArray();
-        for (const QJsonValue &profile : profiles) {
-          const QJsonArray overlays =
-              profile.toObject().value(QStringLiteral("overlays")).toArray();
-          for (const QJsonValue &overlay : overlays) {
-            const QUrl url(
-                overlay.toObject().value(QStringLiteral("url")).toString());
-            if (url.scheme() == QString::fromLatin1(kOverlayScheme)) {
-              overlaySchemeHandler_->authorizeUrl(url);
-            }
+      const QByteArray configJson =
+          QJsonDocument(config.toObject()).toJson(QJsonDocument::Compact);
+      activeProfileHasOverlays_ =
+          config_has_active_overlays_for_qt(asRustStr(configJson));
+      QJsonArray localOverlayUrls;
+      const QJsonArray profiles =
+          config.toObject().value(QStringLiteral("profiles")).toArray();
+      for (const QJsonValue &profile : profiles) {
+        const QJsonArray overlays =
+            profile.toObject().value(QStringLiteral("overlays")).toArray();
+        for (const QJsonValue &overlay : overlays) {
+          const QString url =
+              overlay.toObject().value(QStringLiteral("url")).toString();
+          if (QUrl(url).scheme() == QString::fromLatin1(kOverlayScheme)) {
+            localOverlayUrls.append(url);
           }
         }
       }
+      overlaySchemeHandler_->authorizeUrls(localOverlayUrls);
       sendEnvelope(QJsonObject{{QStringLiteral("type"),
                                 QStringLiteral("config")},
                                {QStringLiteral("config"), config}});
@@ -1961,14 +1345,10 @@ private:
   }
 
   void saveConfiguration(const QJsonValue &config, QString saveId) {
-    if (!config.isObject()) {
-      sendEnvelope(errorEnvelope(QStringLiteral("Invalid vosulay configuration")));
-      return;
-    }
-    const QJsonObject configObject = config.toObject();
-    SaveRequest save{
-        QJsonDocument(configObject).toJson(QJsonDocument::Compact),
-        std::move(saveId), configHasActiveOverlays(configObject)};
+    const QByteArray json =
+        QJsonDocument(config.toObject()).toJson(QJsonDocument::Compact);
+    SaveRequest save{json, std::move(saveId),
+                     config_has_active_overlays_for_qt(asRustStr(json))};
     if (saveWorker_ != nullptr) {
       pendingSave_ = std::move(save);
       return;
@@ -2041,7 +1421,7 @@ private:
   }
 
   void startCounterFetch(quint64 generation) {
-    const QByteArray baseUrl = options_.vosuUrl.toUtf8();
+    const QByteArray baseUrl = vosuUrl_.toUtf8();
     auto result = std::make_shared<WorkerResult>();
     QThread *worker = QThread::create([baseUrl, result] {
       try {
@@ -2095,7 +1475,7 @@ private:
       return;
     }
     try {
-      const QByteArray baseUrl = options_.vosuUrl.toUtf8();
+      const QByteArray baseUrl = vosuUrl_.toUtf8();
       const QByteArray id = counterId.toUtf8();
       const QUrl url(rustStringToQString(
           settings_url_for_qt(asRustStr(baseUrl), asRustStr(id))));
@@ -2109,7 +1489,7 @@ private:
 
   void openAvailable() {
     try {
-      const QByteArray baseUrl = options_.vosuUrl.toUtf8();
+      const QByteArray baseUrl = vosuUrl_.toUtf8();
       const QUrl url(rustStringToQString(
           available_url_for_qt(asRustStr(baseUrl))));
       if (!QDesktopServices::openUrl(url)) {
@@ -2187,45 +1567,35 @@ private:
     timeout->stop();
     const QByteArray payload = buffer.first(newline);
 
-    QJsonParseError error;
-    const auto document = QJsonDocument::fromJson(payload, &error);
-    if (error.error != QJsonParseError::NoError || !document.isObject()) {
+    const IpcCommand command =
+        parse_ipc_command_for_qt(asRustStr(payload), attach_);
+    switch (command.kind) {
+    case IpcCommandKind::Invalid:
       replyIpc(socket, false);
       return;
-    }
-    const auto command = document.object();
-    const QString name = command.value(QStringLiteral("command")).toString();
-    if (name == QStringLiteral("toggle-edit")) {
+    case IpcCommandKind::ToggleEdit:
       setEditing(!editing_);
-    } else if (name == QStringLiteral("toggle-overlay")) {
+      break;
+    case IpcCommandKind::ToggleOverlay:
       setOverlayVisibility(!isVisible());
-    } else if (name == QStringLiteral("quit")) {
+      break;
+    case IpcCommandKind::Quit:
       replyIpc(socket, true);
       QMetaObject::invokeMethod(qApp, &QApplication::quit,
                                 Qt::QueuedConnection);
       return;
-    } else if (name == QStringLiteral("geometry")) {
-      if (!options_.attach) {
-        replyIpc(socket, false);
-        return;
-      }
-      const int width = command.value(QStringLiteral("width")).toInt();
-      const int height = command.value(QStringLiteral("height")).toInt();
-      if (width <= 0 || height <= 0) {
-        replyIpc(socket, false);
-        return;
-      }
+    case IpcCommandKind::Geometry:
       queueOverlayGeometry(
-          QRect(command.value(QStringLiteral("x")).toInt(),
-                command.value(QStringLiteral("y")).toInt(), width, height));
-    } else {
-      replyIpc(socket, false);
-      return;
+          QRect(command.x, command.y, command.width, command.height));
+      break;
     }
     replyIpc(socket, true);
   }
 
-  ParsedOptions options_;
+  QString vosuUrl_;
+  int fpsLimit_;
+  bool attach_;
+  QScreen *screen_;
   ZoomLockedWebEngineView *view_ = nullptr;
   QWebEnginePage *page_ = nullptr;
   OverlaySchemeHandler *overlaySchemeHandler_ = nullptr;
@@ -2248,6 +1618,8 @@ private:
   bool geometryApplyScheduled_ = false;
   quint64 fetchGeneration_ = 0;
   bool fetchPending_ = false;
+  int promptDepth_ = 0;
+  bool promptOverlayWasVisible_ = true;
   bool shuttingDown_ = false;
   bool editing_ = false;
   bool activeProfileHasOverlays_ = true;
@@ -2290,31 +1662,12 @@ QScreen *parseScreen(const QString &value, QString *error) {
   return nullptr;
 }
 
-std::optional<QRect> parseGeometry(const QString &value) {
-  const auto parts = value.split(',');
-  if (parts.size() != 4) {
-    return std::nullopt;
-  }
-  int values[4];
-  for (int index = 0; index < 4; ++index) {
-    bool ok = false;
-    values[index] = parts.at(index).trimmed().toInt(&ok);
-    if (!ok) {
-      return std::nullopt;
-    }
-  }
-  if (values[2] <= 0 || values[3] <= 0) {
-    return std::nullopt;
-  }
-  return QRect(values[0], values[1], values[2], values[3]);
-}
 
-bool sendIpcCommand(const QJsonObject &command) {
-  const QByteArray payload =
-      QJsonDocument(command).toJson(QJsonDocument::Compact) + '\n';
-  if (payload.size() > kMaximumIpcBytes) {
+bool sendIpcCommand(QByteArray payload) {
+  if (payload.contains('\n') || payload.size() + 1 > kMaximumIpcBytes) {
     return false;
   }
+  payload.append('\n');
   QDeadlineTimer deadline(2000);
   QLocalSocket socket;
   socket.connectToServer(socketName(), QIODevice::ReadWrite);
@@ -2347,164 +1700,52 @@ bool sendIpcCommand(const QJsonObject &command) {
 
 } // namespace
 
-std::int32_t run_qt_application(rust::Str arguments_json) {
+std::int32_t run_qt_application(rust::Str arguments_json,
+                                const QtShellOptions &options) {
   const QByteArray serialized(arguments_json.data(),
                               static_cast<qsizetype>(arguments_json.size()));
-  QJsonParseError jsonError;
-  const auto json = QJsonDocument::fromJson(serialized, &jsonError);
-  if (jsonError.error != QJsonParseError::NoError || !json.isArray()) {
-    QTextStream(stderr) << "vosulay: invalid argument list\n";
+  const QJsonDocument json = QJsonDocument::fromJson(serialized);
+  if (!json.isArray()) {
     return 2;
-  }
-
-  QStringList arguments;
-  for (const auto &value : json.array()) {
-    if (!value.isString()) {
-      QTextStream(stderr) << "vosulay: invalid argument list\n";
-      return 2;
-    }
-    arguments.push_back(value.toString());
-  }
-  if (arguments.isEmpty()) {
-    arguments.push_back(QStringLiteral("vosulay"));
   }
 
   std::vector<QByteArray> encodedArguments;
-  encodedArguments.reserve(static_cast<std::size_t>(arguments.size()));
-  for (const auto &argument : arguments) {
-    encodedArguments.push_back(argument.toLocal8Bit());
+  encodedArguments.reserve(static_cast<std::size_t>(json.array().size()));
+  for (const QJsonValue &value : json.array()) {
+    if (!value.isString()) {
+      return 2;
+    }
+    encodedArguments.push_back(value.toString().toLocal8Bit());
   }
+  if (encodedArguments.empty()) {
+    encodedArguments.emplace_back("vosulay");
+  }
+
   std::vector<char *> argv;
   argv.reserve(encodedArguments.size());
-  for (auto &argument : encodedArguments) {
+  for (QByteArray &argument : encodedArguments) {
     argv.push_back(argument.data());
   }
   int argc = static_cast<int>(argv.size());
-  QCommandLineParser parser;
-  parser.setApplicationDescription(
-      QStringLiteral("Native vosu overlay manager"));
-  const QCommandLineOption help = parser.addHelpOption();
-  const QCommandLineOption version = parser.addVersionOption();
-  const QCommandLineOption url(
-      {QStringLiteral("t"), QStringLiteral("vosu-url")},
-      QStringLiteral("Base URL of the vosu instance"),
-      QStringLiteral("url"), QStringLiteral("http://127.0.0.1:24050"));
-  const QCommandLineOption monitor(
-      {QStringLiteral("m"), QStringLiteral("monitor")},
-      QStringLiteral("Monitor index or name for vosulay"),
-      QStringLiteral("monitor"));
-  const QCommandLineOption fps(
-      {QStringLiteral("f"), QStringLiteral("fps-limit")},
-      QStringLiteral("Animation frame limit; use auto or 0 for screen refresh"),
-      QStringLiteral("fps"));
-  const QCommandLineOption attach(
-      {QStringLiteral("a"), QStringLiteral("attach")},
-      QStringLiteral("Attach vosulay to geometry received over IPC"));
-  const QCommandLineOption edit(
-      {QStringLiteral("e"), QStringLiteral("edit")},
-      QStringLiteral("Toggle editing in the running vosulay"));
-  const QCommandLineOption ipcOverlay(
-      {QStringLiteral("i"), QStringLiteral("ipc-toggle-overlay")},
-      QStringLiteral("Toggle visibility of the running vosulay"));
-  const QCommandLineOption ipcQuit(
-      {QStringLiteral("q"), QStringLiteral("ipc-quit")},
-      QStringLiteral("Quit the running vosulay"));
-  const QCommandLineOption ipcGeometry(
-      QStringLiteral("ipc-geometry"),
-      QStringLiteral("Set attached vosulay geometry as x,y,w,h"),
-      QStringLiteral("x,y,w,h"));
-  parser.addOptions(
-      {url, monitor, fps, attach, edit, ipcOverlay, ipcQuit, ipcGeometry});
 
-  if (!parser.parse(arguments)) {
-    QTextStream(stderr) << "vosulay: " << parser.errorText() << '\n';
-    return 2;
-  }
-  const bool immediate =
-      parser.isSet(help) || parser.isSet(version) || parser.isSet(edit) ||
-      parser.isSet(ipcOverlay) || parser.isSet(ipcQuit) ||
-      parser.isSet(ipcGeometry);
-  if (immediate) {
+  const QByteArray chromiumFlags =
+      rustStringToQString(options.chromium_flags).toUtf8();
+  qputenv("QTWEBENGINE_CHROMIUM_FLAGS", chromiumFlags);
+
+  const QByteArray ipcCommand =
+      rustStringToQString(options.ipc_command).toUtf8();
+  if (!ipcCommand.isEmpty()) {
     QCoreApplication application(argc, argv.data());
     QCoreApplication::setApplicationName(QString::fromLatin1(kApplicationName));
     QCoreApplication::setApplicationVersion(
         QString::fromLatin1(kApplicationVersion));
-    if (parser.isSet(help)) {
-      QTextStream(stdout) << parser.helpText();
-      return 0;
-    }
-    if (parser.isSet(version)) {
-      QTextStream(stdout) << "vosulay " << kApplicationVersion << '\n';
-      return 0;
-    }
-
-    if (parser.isSet(edit)) {
-      return sendIpcCommand(
-                 QJsonObject{{QStringLiteral("command"),
-                              QStringLiteral("toggle-edit")}})
-                 ? 0
-                 : 1;
-    }
-    if (parser.isSet(ipcOverlay)) {
-      return sendIpcCommand(
-                 QJsonObject{{QStringLiteral("command"),
-                              QStringLiteral("toggle-overlay")}})
-                 ? 0
-                 : 1;
-    }
-    if (parser.isSet(ipcQuit)) {
-      return sendIpcCommand(QJsonObject{{QStringLiteral("command"),
-                                        QStringLiteral("quit")}})
-                 ? 0
-                 : 1;
-    }
-    if (parser.isSet(ipcGeometry)) {
-      const auto geometry = parseGeometry(parser.value(ipcGeometry));
-      if (!geometry.has_value()) {
-        QTextStream(stderr)
-            << "vosulay: --ipc-geometry expects x,y,w,h with positive size\n";
-        return 2;
-      }
-      return sendIpcCommand(
-                 QJsonObject{{QStringLiteral("command"),
-                              QStringLiteral("geometry")},
-                             {QStringLiteral("x"), geometry->x()},
-                             {QStringLiteral("y"), geometry->y()},
-                             {QStringLiteral("width"), geometry->width()},
-                             {QStringLiteral("height"), geometry->height()}})
-                 ? 0
-                 : 1;
-    }
+    return sendIpcCommand(ipcCommand) ? 0 : 1;
   }
-
-  ParsedOptions options;
-  options.vosuUrl = parser.value(url);
-  options.attach = parser.isSet(attach);
-
-  if (parser.isSet(fps)) {
-    const QString value = parser.value(fps).trimmed();
-    if (value.compare(QStringLiteral("auto"), Qt::CaseInsensitive) == 0 ||
-        value == QStringLiteral("0")) {
-      options.fpsLimit = 0;
-    } else {
-      bool ok = false;
-      options.fpsLimit = value.toInt(&ok);
-      if (!ok || options.fpsLimit <= 0) {
-        QTextStream(stderr)
-            << "vosulay: invalid fps limit; expected auto, 0, or a positive integer\n";
-        return 2;
-      }
-    }
-  }
-
   configureQtWebEngineEnvironment();
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 5, 0)
   qputenv("QT_WAYLAND_SHELL_INTEGRATION", "layer-shell");
 #endif
-  const bool unrestrictedSharedArrayBufferEnabled =
-      unrestricted_shared_array_buffer_enabled_for_qt();
-  configureChromium(arguments, unrestrictedSharedArrayBufferEnabled);
   registerOverlayScheme();
 
   QApplication application(argc, argv.data());
@@ -2517,17 +1758,18 @@ std::int32_t run_qt_application(rust::Str arguments_json) {
   QApplication::setApplicationDisplayName(QStringLiteral("vosulay"));
   QApplication::setQuitOnLastWindowClosed(false);
 
-  options.screen = QApplication::primaryScreen();
-  if (!options.attach && parser.isSet(monitor)) {
+  QScreen *screen = QApplication::primaryScreen();
+  const QString monitor = rustStringToQString(options.monitor);
+  if (!options.attach && !monitor.isEmpty()) {
     QString error;
-    options.screen = parseScreen(parser.value(monitor), &error);
-    if (options.screen == nullptr) {
+    screen = parseScreen(monitor, &error);
+    if (screen == nullptr) {
       QTextStream(stderr) << "vosulay: " << error << '\n';
       return 2;
     }
   }
 
-  ShellWindow window(std::move(options), icon);
+  ShellWindow window(options, screen, icon);
   if (!window.ipcReady()) {
     QTextStream(stderr)
         << "vosulay: another instance is running or IPC could not be started\n";
