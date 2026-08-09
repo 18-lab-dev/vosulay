@@ -15,6 +15,12 @@ const QT_MODULES: &[&str] = &[
     "Qt6DBus",
 ];
 
+const QTWEBENGINE_RUNTIME_ENVIRONMENT: &[&str] = &[
+    "QTWEBENGINEPROCESS_PATH",
+    "QTWEBENGINE_RESOURCES_PATH",
+    "QTWEBENGINE_LOCALES_PATH",
+];
+
 const CMAKE_ENVIRONMENT: &[&str] = &[
     "CMAKE",
     "CMAKE_BUILD_TYPE",
@@ -36,6 +42,12 @@ struct LayerShellQt {
     library: PathBuf,
 }
 
+struct QtWebEngineMetadata {
+    prefix: PathBuf,
+    libdir: PathBuf,
+    libexecdir: PathBuf,
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=src/ffi.rs");
     println!("cargo:rerun-if-changed=src/qt/bridge.h");
@@ -46,9 +58,23 @@ fn main() {
     println!("cargo:rerun-if-env-changed=QT_MOC");
     println!("cargo:rerun-if-env-changed=QT_RCC");
     println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
+    for variable in QTWEBENGINE_RUNTIME_ENVIRONMENT {
+        println!("cargo:rerun-if-env-changed={variable}");
+    }
     for variable in CMAKE_ENVIRONMENT {
         println!("cargo:rerun-if-env-changed={variable}");
     }
+
+    let webengine_core = pkg_config::Config::new()
+        .atleast_version("6.8")
+        .cargo_metadata(false)
+        .probe("Qt6WebEngineCore")
+        .unwrap_or_else(|error| {
+            panic!(
+                "Qt 6.8 or newer with the Qt6WebEngineCore development package is required: {error}"
+            )
+        });
+    let webengine = verify_webengine_dawn(&webengine_core);
 
     let mut qt_include_paths = Vec::new();
     for module in QT_MODULES {
@@ -59,11 +85,25 @@ fn main() {
             .unwrap_or_else(|error| {
                 panic!("Qt 6.8 or newer with the {module} development package is required: {error}")
             });
-        if *module == "Qt6WebEngineWidgets" {
-            verify_webengine_dawn(&library.include_paths);
-        }
         qt_include_paths.extend(library.include_paths);
     }
+    let webengine_process_path = resolve_webengine_path(
+        "QTWEBENGINEPROCESS_PATH",
+        webengine.libexecdir.join("QtWebEngineProcess"),
+    );
+    let webengine_resources_path = resolve_webengine_path(
+        "QTWEBENGINE_RESOURCES_PATH",
+        webengine.prefix.join("share/qt6/resources"),
+    );
+    let webengine_locales_path = resolve_webengine_path(
+        "QTWEBENGINE_LOCALES_PATH",
+        webengine
+            .prefix
+            .join("share/qt6/translations/qtwebengine_locales"),
+    );
+    let webengine_process_literal = cxx_string_literal(&webengine_process_path);
+    let webengine_resources_literal = cxx_string_literal(&webengine_resources_path);
+    let webengine_locales_literal = cxx_string_literal(&webengine_locales_path);
 
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo did not set OUT_DIR"));
     let layer_shell_qt = discover_layer_shell_qt(&out_dir);
@@ -119,21 +159,38 @@ fn main() {
         .file(&rcc_output)
         .include("src/qt")
         .std("c++17")
-        .flag_if_supported("-fPIC");
+        .flag_if_supported("-fPIC")
+        .define(
+            "VOSULAY_QTWEBENGINEPROCESS_PATH",
+            webengine_process_literal.as_str(),
+        )
+        .define(
+            "VOSULAY_QTWEBENGINE_RESOURCES_PATH",
+            webengine_resources_literal.as_str(),
+        )
+        .define(
+            "VOSULAY_QTWEBENGINE_LOCALES_PATH",
+            webengine_locales_literal.as_str(),
+        );
     for include_path in &qt_include_paths {
         build.include(include_path);
     }
     build.compile("vosulay-qt-shell");
 
     println!(
+        "cargo:rustc-link-arg=-Wl,-rpath,{}",
+        webengine.libdir.to_string_lossy()
+    );
+    println!(
         "cargo:rustc-link-arg={}",
         layer_shell_qt.library.to_string_lossy()
     );
 }
 
-fn verify_webengine_dawn(include_paths: &[PathBuf]) {
+fn verify_webengine_dawn(webengine_core: &pkg_config::Library) -> QtWebEngineMetadata {
     const HEADER: &str = "qtwebenginecore-config.h";
-    let config_header = include_paths
+    let config_header = webengine_core
+        .include_paths
         .iter()
         .flat_map(|include_path| {
             [
@@ -161,6 +218,58 @@ fn verify_webengine_dawn(include_paths: &[PathBuf]) {
             "Qt WebEngine was built without Dawn WebGPU support; build and select it with extra/build-webgpu-qt.sh"
         );
     }
+
+    QtWebEngineMetadata {
+        prefix: pkg_config_path("Qt6WebEngineCore", "prefix"),
+        libdir: pkg_config_path("Qt6WebEngineCore", "libdir"),
+        libexecdir: pkg_config_path("Qt6WebEngineCore", "libexecdir"),
+    }
+}
+
+fn pkg_config_path(package: &str, variable: &str) -> PathBuf {
+    let value = pkg_config::get_variable(package, variable).unwrap_or_else(|error| {
+        panic!("pkg-config package {package} did not provide {variable}: {error}")
+    });
+    if value.is_empty() {
+        panic!("pkg-config package {package} provided an empty {variable}");
+    }
+    PathBuf::from(value)
+}
+
+fn resolve_webengine_path(variable: &str, default_path: PathBuf) -> PathBuf {
+    let path = env::var_os(variable)
+        .filter(|value| !value.as_os_str().is_empty())
+        .map(PathBuf::from)
+        .unwrap_or(default_path);
+    let (valid, expected) = match variable {
+        "QTWEBENGINEPROCESS_PATH" => (path.is_file(), "an executable file"),
+        "QTWEBENGINE_RESOURCES_PATH" | "QTWEBENGINE_LOCALES_PATH" => (path.is_dir(), "a directory"),
+        _ => unreachable!("unknown Qt WebEngine runtime path variable: {variable}"),
+    };
+    if !valid {
+        panic!(
+            "Qt WebEngine runtime path {variable} must point to {expected}, but {} does not",
+            path.display()
+        );
+    }
+    path
+}
+
+fn cxx_string_literal(path: &Path) -> String {
+    let mut literal = String::from("\"");
+    for byte in path.to_string_lossy().as_bytes() {
+        match *byte {
+            b'\\' => literal.push_str("\\\\"),
+            b'"' => literal.push_str("\\\""),
+            b'\n' => literal.push_str("\\n"),
+            b'\r' => literal.push_str("\\r"),
+            b'\t' => literal.push_str("\\t"),
+            0x20..=0x7e => literal.push(*byte as char),
+            byte => literal.push_str(&format!("\\{byte:03o}")),
+        }
+    }
+    literal.push('"');
+    literal
 }
 
 fn discover_layer_shell_qt(out_dir: &Path) -> LayerShellQt {

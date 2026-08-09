@@ -16,6 +16,13 @@ For non-system installations, the build script recognizes CMake/Qt/LayerShellQt 
 
 If Cargo fails before Rust tests run, inspect the native dependency diagnostic from `build.rs` first. The generated MOC and CMake probe outputs live under Cargo `OUT_DIR`, not in the repository.
 
+The Dawn-enabled WebEngine selected at build time is also the runtime
+dependency. `build.rs` records its library directory as the executable
+RUNPATH and embeds its subprocess, resource, and locale paths as defaults.
+Consequently, binaries produced by `cargo install --path .` do not depend on
+the build shell retaining the helper's environment exports. Non-empty runtime
+`QTWEBENGINE*` values remain explicit overrides.
+
 ## Launch modes and controls
 
 The Qt command-line parser in [`src/qt/qt_shell.cpp`](../../src/qt/qt_shell.cpp) supports:

@@ -36,8 +36,11 @@ Install the normal Qt WebEngine build dependencies, `gperf`, and Python's
 extra/build-webgpu-qt.sh "$HOME/.local/opt/vosulay-qt-webgpu"
 ```
 
-Apply the six environment exports printed by the helper. They select its
-pkg-config metadata, libraries, subprocess, resources, and locales.
+Apply the six environment exports printed by the helper while running Cargo.
+They select the custom WebEngine at build time. `build.rs` records the validated
+library, subprocess, resource, and locale paths in the executable, so a
+`cargo install --path .` binary runs without those exports. Non-empty runtime
+`QTWEBENGINE*` variables still override the recorded defaults.
 
 ```sh
 cargo build --release

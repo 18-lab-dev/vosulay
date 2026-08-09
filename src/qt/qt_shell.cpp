@@ -901,6 +901,19 @@ private:
   QHash<QString, QString> authorizedRoots_;
 };
 
+void configureQtWebEngineEnvironment() {
+  if (qEnvironmentVariableIsEmpty("QTWEBENGINEPROCESS_PATH")) {
+    qputenv("QTWEBENGINEPROCESS_PATH", VOSULAY_QTWEBENGINEPROCESS_PATH);
+  }
+  if (qEnvironmentVariableIsEmpty("QTWEBENGINE_RESOURCES_PATH")) {
+    qputenv("QTWEBENGINE_RESOURCES_PATH",
+            VOSULAY_QTWEBENGINE_RESOURCES_PATH);
+  }
+  if (qEnvironmentVariableIsEmpty("QTWEBENGINE_LOCALES_PATH")) {
+    qputenv("QTWEBENGINE_LOCALES_PATH", VOSULAY_QTWEBENGINE_LOCALES_PATH);
+  }
+}
+
 void registerOverlayScheme() {
   QWebEngineUrlScheme scheme{QByteArray(kOverlayScheme)};
   scheme.setSyntax(QWebEngineUrlScheme::Syntax::HostAndPort);
@@ -2483,6 +2496,8 @@ std::int32_t run_qt_application(rust::Str arguments_json) {
       }
     }
   }
+
+  configureQtWebEngineEnvironment();
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 5, 0)
   qputenv("QT_WAYLAND_SHELL_INTEGRATION", "layer-shell");
