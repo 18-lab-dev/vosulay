@@ -12,7 +12,7 @@ Use the [architecture overview](architecture/overview.md) for relationships and 
 | Area | Start here | Responsibility |
 |---|---|---|
 | Linux process entrypoint | [`src/main.rs`](../src/main.rs) | Starts the remote server, serializes arguments, and enters the Qt application through FFI. |
-| Remote profile server | [`src/remote.rs`](../src/remote.rs) | Bounded view-only HTTP service, profile rendering, peer allowlist, and local capability forwarding. See [integrations](integrations/vosu-and-overlays.md). |
+| Remote profile server | [`src/remote.rs`](../src/remote.rs), [`windows/src/main/remote-server.ts`](../windows/src/main/remote-server.ts) | Credential-protected, bounded view-only HTTP service; authority/origin validation, opaque local capability forwarding, and peer allowlist. See [integrations](integrations/vosu-and-overlays.md). |
 | Rust/C++ boundary | [`src/ffi.rs`](../src/ffi.rs), [`src/qt/bridge.h`](../src/qt/bridge.h) | CXX declarations, Qt-facing Rust operations, URL validation, JSON envelopes. |
 | Native shell | [`src/qt/qt_shell.cpp`](../src/qt/qt_shell.cpp) | Qt window, WebEngine, tray, IPC, workers, command-line parsing, platform behavior, local overlay scheme. |
 | Configuration | [`src/config.rs`](../src/config.rs) | Version 1 model, normalization, config path, atomic load/save. See [configuration](domain/configuration.md). |

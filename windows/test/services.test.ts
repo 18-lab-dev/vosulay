@@ -14,7 +14,13 @@ import { buildManagerDocumentFromSources } from "../src/main/manager-document";
 import { parseInvocation, parseOptions } from "../src/main/options";
 import { resolveStoragePaths } from "../src/main/storage-path";
 import { availableUrl, counterUrl, settingsUrl } from "../src/main/urls";
-import type { MessageEnvelope } from "../src/main/types";
+import type { AppSettings, MessageEnvelope } from "../src/main/types";
+
+const TEST_REMOTE_ACCESS_TOKEN = "0123456789abcdef".repeat(4);
+
+function redactedRemoteAccessToken(settings: AppSettings): AppSettings {
+    return { ...settings, remote_access_token: "[credential]" };
+}
 
 test("config path resolver selects installed and portable storage", () => {
     const appDataDirectory = resolve("appdata");
@@ -299,17 +305,42 @@ test("malformed config is normalized and saves serialize atomically", async () =
     const path = join(directory, "nested", "config.json");
     const store = new ConfigStore(path);
     await Promise.all([store.save({ profiles: [{ id: "one", name: "One", overlays: [] }], active_profile: "one" }), store.save({ profiles: [{ id: "two", name: "Two", overlays: [] }], active_profile: "two" })]);
-    const persistedDefaults = JSON.parse(await readFile(path, "utf8")) as { active_profile: string; settings: unknown };
+    const persistedDefaults = JSON.parse(await readFile(path, "utf8")) as {
+        active_profile: string;
+        settings: AppSettings;
+    };
     assert.equal(persistedDefaults.active_profile, "two");
-    assert.deepEqual(persistedDefaults.settings, normalizeConfig({}).settings);
+    assert.match(persistedDefaults.settings.remote_access_token, /^[0-9a-f]{64}$/);
+    assert.deepEqual(
+        redactedRemoteAccessToken(persistedDefaults.settings),
+        redactedRemoteAccessToken(normalizeConfig({}).settings),
+    );
     await writeFile(path, "{bad", "utf8");
     const loaded = await store.load();
     assert.equal(loaded.config.active_profile, "default");
     assert.match(loaded.error ?? "", /Could not load configuration/);
 });
+
+test("config store persists a stable remote access credential on first load", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-credential-"));
+    const path = join(directory, "config.json");
+    const store = new ConfigStore(path);
+
+    const first = await store.load();
+    const second = await store.load();
+    const persisted = JSON.parse(await readFile(path, "utf8")) as { settings: AppSettings };
+
+    assert.match(first.config.settings.remote_access_token, /^[0-9a-f]{64}$/);
+    assert.equal(second.config.settings.remote_access_token, first.config.settings.remote_access_token);
+    assert.equal(persisted.settings.remote_access_token, first.config.settings.remote_access_token);
+});
 test("config settings default and normalize manager hotkeys", () => {
-    assert.deepEqual(normalizeConfig({}).settings, {
+    const defaults = normalizeConfig({}).settings;
+    assert.match(defaults.remote_access_token, /^[0-9a-f]{64}$/);
+    assert.deepEqual(redactedRemoteAccessToken(defaults), {
         allowed_ips: "127.0.0.1,localhost,absolute",
+        remote_access_token: "[credential]",
+        remote_access_host: "",
         always_keep_overlays_in_view: false,
         allow_unrestricted_shared_array_buffer: false,
         hotkeys: {
@@ -328,12 +359,16 @@ test("config settings default and normalize manager hotkeys", () => {
         },
     });
 
+    assert.equal(normalizeConfig({ settings: { remote_access_host: " Gaming-PC.Local. " } }).settings.remote_access_host, "gaming-pc.local");
+    assert.equal(normalizeConfig({ settings: { remote_access_host: "https://attacker.example/path" } }).settings.remote_access_host, "");
+
     const normalized = normalizeConfig({
         settings: {
             allowed_ips: "10.20.*.* 2001:db8::4",
             right_click_overlay_settings_menu: true,
             always_keep_overlays_in_view: true,
             allow_unrestricted_shared_array_buffer: true,
+            remote_access_token: TEST_REMOTE_ACCESS_TOKEN,
             hotkeys: {
                 profile_0: " option + shift + k ",
                 profile_1: "f12",
@@ -347,6 +382,8 @@ test("config settings default and normalize manager hotkeys", () => {
     });
     assert.deepEqual(normalized.settings, {
         allowed_ips: "10.20.*.* 2001:db8::4",
+        remote_access_token: TEST_REMOTE_ACCESS_TOKEN,
+        remote_access_host: "",
         always_keep_overlays_in_view: true,
         allow_unrestricted_shared_array_buffer: true,
         hotkeys: {
@@ -419,6 +456,19 @@ test("config store persists manager settings without changing profiles", async (
     assert.equal(saved.config.active_profile, "custom");
     assert.deepEqual(saved.config.profiles, [{ id: "custom", name: "Custom", overlays: [] }]);
     assert.deepEqual((await store.load()).config, saved.config);
+});
+
+test("malformed config keeps one fallback credential until repaired", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-malformed-"));
+    const path = join(directory, "config.json");
+    await writeFile(path, "{not json", "utf8");
+    const store = new ConfigStore(path);
+
+    const first = await store.load();
+    const second = await store.load();
+
+    assert.match(first.error ?? "", /Could not load configuration/);
+    assert.equal(second.config.settings.remote_access_token, first.config.settings.remote_access_token);
 });
 
 test("config subscriptions carry revisions and reject stale saves", async () => {
@@ -524,6 +574,61 @@ test("catalog parser decodes escaped metadata and preserves source order", () =>
     ]);
 });
 
+test("catalog parser accepts legacy Tosu counter markup", () => {
+    const source = `
+            <div class="result-item downloaded">
+              <div class="ri-head flexer">
+                <div>
+                  <h4 class="flexer">Legacy Counter v2.4</h4>
+                  <div class="ri-links flexer"><span>by Legacy Author</span></div>
+                </div>
+                <div class="calu buttons-group flexer" n="Legacy Counter" a="Legacy Author" v="2.4">
+                  <button class="button settings-builder-button flexer" n="legacy/folder"></button>
+                  <button class="button settings-button flexer" n="legacy/folder"></button>
+                  <button class="button open-button flexer" n="legacy/folder"></button>
+                  <button class="button delete-button flexer" n="legacy/folder"></button>
+                </div>
+              </div>
+              <div class="ri-gallery flexer">
+                <iframe src="/legacy/folder/" width="720px" height="480px"></iframe>
+              </div>
+            </div>
+            <div class="result-item">
+              <div class="calu buttons-group flexer" n="Second Legacy" a="Author" v="1.0">
+                <button class="button settings-builder-button flexer" n="second"></button>
+                <button class="button open-button flexer" n="second"></button>
+                <button class="button delete-button flexer" n="second"></button>
+              </div>
+              <div class="ri-gallery flexer"><img src="preview.png"></div>
+            </div>
+        `;
+
+    const counters = parseInstalledCounters("http://127.0.0.1:24050", source);
+
+    assert.deepEqual(counters, [
+        {
+            id: "legacy/folder",
+            name: "Legacy Counter",
+            author: "Legacy Author",
+            version: "2.4",
+            width: 720,
+            height: 480,
+            has_settings: true,
+            url: "http://127.0.0.1:24050/legacy%2Ffolder/",
+        },
+        {
+            id: "second",
+            name: "Second Legacy",
+            author: "Author",
+            version: "1.0",
+            width: 500,
+            height: 300,
+            has_settings: false,
+            url: "http://127.0.0.1:24050/second/",
+        },
+    ]);
+});
+
 test("catalog parser defaults flexible, non-numeric, and invalid resolutions", () => {
     const source = `
             <article class="counter-card" data-overlay-id="flexible"
@@ -574,17 +679,19 @@ test("catalog parser rejects a missing counter attribute", () => {
     );
 });
 
-test("catalog parser accepts an explicit empty state", () => {
-    assert.deepEqual(
-        parseInstalledCounters("http://127.0.0.1:24050", '<div class="empty-state">No counters found.</div>'),
-        [],
-    );
+test("catalog parser accepts modern and legacy empty states", () => {
+    for (const source of [
+        '<div class="empty-state">No counters found.</div>',
+        '<div class="no-results">No counters<br />Change your search phrase</div>',
+    ]) {
+        assert.deepEqual(parseInstalledCounters("http://127.0.0.1:24050", source), []);
+    }
 });
 
 test("catalog parser rejects unrecognized markup", () => {
     assert.throws(
         () => parseInstalledCounters("http://127.0.0.1:24050", "<main>Unexpected response</main>"),
-        /counter search markup was not recognized; vosu and vosulay versions may be out of sync/,
+        /counter search markup was not recognized; expected modern Vosu or legacy Tosu results/,
     );
 });
 

@@ -40,6 +40,8 @@
   const keepOverlaysInView = $("keep-overlays-in-view");
   const allowUnrestrictedSharedArrayBuffer = $("allow-unrestricted-shared-array-buffer");
   const allowedIps = $("allowed-ips");
+  const remoteAccessUrl = $("remote-access-url");
+  const remoteAccessHost = $("remote-access-host");
   const hotkeyList = $("hotkey-list");
   const settingsError = $("settings-error");
   const settingsResetHotkeys = $("settings-reset-hotkeys");
@@ -51,6 +53,7 @@
     "paste_overlay"
   ];
   const DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute";
+  const REMOTE_ACCESS_TOKEN_PATTERN = /^[0-9a-f]{64}$/;
   const DEFAULT_HOTKEYS = Object.freeze({
     profile_0: "Ctrl+0",
     profile_1: "Ctrl+1",
@@ -91,6 +94,7 @@
     recordingHotkey: "",
     inspectorPopup: false,
     inspectorPoint: null,
+    inspectorCycle: null,
     saveTimer: 0,
     saveRevision: 0,
     latestSaveId: "",
@@ -108,6 +112,16 @@
   };
 
   const outboundQueue = [];
+  if (typeof window.__VOSULAY_POST_MESSAGE__ !== "function") {
+    window.__VOSULAY_POST_MESSAGE__ = (payload) => {
+      const encoded = typeof payload === "string" ? payload : JSON.stringify(payload);
+      document.documentElement.setAttribute("data-vosulay-bridge-message", encoded);
+      document.documentElement.dispatchEvent(new Event("vosulay-bridge-message"));
+      document.documentElement.removeAttribute("data-vosulay-bridge-message");
+    };
+    window.ipc = { postMessage: (payload) => window.__VOSULAY_POST_MESSAGE__(payload) };
+  }
+
 
   function invokeBridge(payload) {
     const bridge = window.__VOSULAY_POST_MESSAGE__;
@@ -258,6 +272,11 @@
         always_keep_overlays_in_view: Boolean(sourceSettings.always_keep_overlays_in_view),
         allow_unrestricted_shared_array_buffer: Boolean(sourceSettings.allow_unrestricted_shared_array_buffer),
         allowed_ips: typeof sourceSettings.allowed_ips === "string" ? sourceSettings.allowed_ips : DEFAULT_ALLOWED_IPS,
+        remote_access_token: typeof sourceSettings.remote_access_token === "string"
+          && REMOTE_ACCESS_TOKEN_PATTERN.test(sourceSettings.remote_access_token)
+          ? sourceSettings.remote_access_token : "",
+        remote_access_host: typeof sourceSettings.remote_access_host === "string"
+          ? sourceSettings.remote_access_host : "",
         hotkeys: normalizeHotkeys(sourceSettings.hotkeys)
       }
     };
@@ -278,6 +297,57 @@
     const overlay = state.selected.values().next().value;
     return profile.overlays.includes(overlay) ? overlay : null;
   }
+
+  function overlayContainsPoint(overlay, x, y) {
+    const scale = Math.max(0.0001, finite(overlay.scale, 1));
+    const angle = finite(overlay.rotation, 0) * Math.PI / 180;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    const deltaX = x - finite(overlay.left, 0);
+    const deltaY = y - finite(overlay.top, 0);
+    const localX = (deltaX * cosine + deltaY * sine) / scale;
+    const localY = (-deltaX * sine + deltaY * cosine) / scale;
+    return localX >= 0
+      && localX <= finite(overlay.width, 0)
+      && localY >= 0
+      && localY <= finite(overlay.height, 0);
+  }
+
+  function overlaysAtPoint(x, y) {
+    const profile = activeProfile();
+    if (!profile) return [];
+    return profile.overlays
+      .map((overlay, index) => ({ overlay, index }))
+      .filter(({ overlay }) => overlayRoots.has(overlay) && overlayContainsPoint(overlay, x, y))
+      .sort((left, right) => (
+        finite(right.overlay.z_index, 0) - finite(left.overlay.z_index, 0)
+        || right.index - left.index
+      ))
+      .map(({ overlay }) => overlay);
+  }
+
+  function sameOverlayOrder(left, right) {
+    return left.length === right.length && left.every((overlay, index) => overlay === right[index]);
+  }
+
+  function contextOverlay(overlays, clickedOverlay) {
+    if (overlays.length < 2) {
+      state.inspectorCycle = null;
+      return clickedOverlay || overlays[0] || null;
+    }
+
+    const previous = state.inspectorCycle;
+    let index = clickedOverlay ? overlays.indexOf(clickedOverlay) : -1;
+    if (previous && sameOverlayOrder(previous.overlays, overlays)) {
+      const previousIndex = overlays.indexOf(previous.overlay);
+      if (previousIndex >= 0) index = (previousIndex + 1) % overlays.length;
+    }
+    if (index < 0) index = 0;
+    const overlay = overlays[index];
+    state.inspectorCycle = { overlays, overlay };
+    return overlay;
+  }
+
 
   function updatePanelAvoidance() {
     const overlay = state.editing ? selectedOverlay() : null;
@@ -522,7 +592,7 @@
       const frame = makeElement("iframe", "overlay-frame");
       frame.src = details.url;
       frame.title = details.name;
-      frame.setAttribute("allow", "autoplay");
+      frame.setAttribute("allow", "autoplay; webgpu");
       if (overlay.url) {
         frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
       }
@@ -812,10 +882,11 @@
     updatePanelAvoidance();
   }
 
-  function closeInspectorPopup() {
+  function closeInspectorPopup(preserveCycle = false) {
     if (!state.inspectorPopup && !state.inspectorPoint) return;
     state.inspectorPopup = false;
     state.inspectorPoint = null;
+    if (!preserveCycle) state.inspectorCycle = null;
     requestRender("inspector");
   }
 
@@ -827,6 +898,7 @@
       document.activeElement.blur();
     }
     if (!keepPopup) {
+      state.inspectorCycle = null;
       state.inspectorPopup = false;
       state.inspectorPoint = null;
     }
@@ -1200,15 +1272,32 @@
   stage.addEventListener("pointermove", movePointer);
   stage.addEventListener("pointerup", endPointer);
   stage.addEventListener("pointercancel", endPointer);
-  stage.addEventListener("contextmenu", (event) => {
+  function showContextInspector(event, root = null) {
     if (!state.editing) return;
+    const point = root
+      ? { x: event.clientX, y: event.clientY }
+      : state.inspectorPoint;
+    const clickedOverlay = root ? root._vosulayOverlay : null;
+    const overlays = point ? overlaysAtPoint(point.x, point.y) : [];
+    if (root && !overlays.length && clickedOverlay) overlays.push(clickedOverlay);
+    if (!root && overlays.length < 2) return;
+    const overlay = contextOverlay(overlays, clickedOverlay);
+    if (!overlay) return;
+    event.preventDefault();
+    selectOverlay(overlay, { keepPopup: true });
+    state.inspectorPopup = true;
+    if (root) state.inspectorPoint = point;
+    requestRender("inspector");
+  }
+
+  stage.addEventListener("contextmenu", (event) => {
     const root = event.target.closest(".overlay");
     if (!root) return;
-    event.preventDefault();
-    selectOverlay(root._vosulayOverlay, { keepPopup: true });
-    state.inspectorPopup = true;
-    state.inspectorPoint = { x: event.clientX, y: event.clientY };
-    requestRender("inspector");
+    showContextInspector(event, root);
+  });
+
+  editor.addEventListener("contextmenu", (event) => {
+    if (inspector.contains(event.target)) showContextInspector(event);
   });
   stage.addEventListener("wheel", (event) => {
     if (event.ctrlKey || !state.editing) return;
@@ -1270,8 +1359,15 @@
     options[next].focus();
   });
   document.addEventListener("pointerdown", (event) => {
+    if (event.button !== 2) state.inspectorCycle = null;
     if (!profileMenu.hidden && !profilePicker.contains(event.target)) closeProfileMenu();
-    if (state.inspectorPopup && !inspector.contains(event.target)) closeInspectorPopup();
+    if (state.inspectorPopup && !inspector.contains(event.target)) {
+      const target = event.target;
+      const preserveCycle = event.button === 2
+        && target instanceof Element
+        && Boolean(target.closest(".overlay"));
+      closeInspectorPopup(preserveCycle);
+    }
   }, true);
   profilePicker.addEventListener("focusout", (event) => {
     if (!profileMenu.hidden && !profilePicker.contains(event.relatedTarget)) closeProfileMenu();
@@ -1439,11 +1535,33 @@
     settingsError.hidden = !message;
   }
 
+  function normalizedRemoteAccessHost(value) {
+    const candidate = String(value || "").trim().replace(/\.$/, "");
+    if (!candidate) return "";
+    try {
+      const url = new URL(`http://${candidate}/`);
+      if (url.username || url.password || url.port || url.pathname !== "/" || url.search || url.hash) return "";
+      return url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    } catch {
+      return "";
+    }
+  }
+
+  function renderRemoteAccessUrl() {
+    if (!state.settingsDraft) return;
+    const configuredHost = normalizedRemoteAccessHost(state.settingsDraft.remote_access_host);
+    remoteAccessUrl.value = state.settingsDraft.remote_access_token && configuredHost
+      ? `http://${configuredHost.includes(":") && !configuredHost.startsWith("[") ? `[${configuredHost}]` : configuredHost}:5050/access/${state.settingsDraft.remote_access_token}/overlay`
+      : "Enter a valid remote host below";
+  }
+
   function renderSettingsDraft() {
     if (!state.settingsDraft) return;
     keepOverlaysInView.checked = state.settingsDraft.always_keep_overlays_in_view;
     allowUnrestrictedSharedArrayBuffer.checked = state.settingsDraft.allow_unrestricted_shared_array_buffer;
     allowedIps.value = state.settingsDraft.allowed_ips;
+    remoteAccessHost.value = state.settingsDraft.remote_access_host;
+    renderRemoteAccessUrl();
     for (const button of hotkeyList.querySelectorAll(".hotkey-input")) {
       const key = button.dataset.hotkey;
       button.textContent = state.settingsDraft.hotkeys[key] || DEFAULT_HOTKEYS[key] || "";
@@ -1472,6 +1590,8 @@
       always_keep_overlays_in_view: settings.always_keep_overlays_in_view,
       allow_unrestricted_shared_array_buffer: settings.allow_unrestricted_shared_array_buffer,
       allowed_ips: settings.allowed_ips,
+      remote_access_token: settings.remote_access_token,
+      remote_access_host: settings.remote_access_host,
       hotkeys: { ...settings.hotkeys }
     };
     state.recordingHotkey = "";
@@ -1527,6 +1647,15 @@
   allowedIps.addEventListener("input", () => {
     if (state.settingsDraft) state.settingsDraft.allowed_ips = allowedIps.value;
   });
+  remoteAccessHost.addEventListener("input", () => {
+    if (!state.settingsDraft) return;
+    state.settingsDraft.remote_access_host = remoteAccessHost.value;
+    const candidate = remoteAccessHost.value.trim();
+    showSettingsError(candidate && !normalizedRemoteAccessHost(candidate)
+      ? "Remote host must be a hostname or IP address without a scheme, port, or path."
+      : "");
+    renderRemoteAccessUrl();
+  });
   settingsResetHotkeys.addEventListener("click", () => {
     if (!state.settingsDraft) return;
     state.settingsDraft.hotkeys = { ...DEFAULT_HOTKEYS };
@@ -1573,6 +1702,12 @@
   settingsForm.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!state.settingsDraft) return;
+    const normalizedHost = normalizedRemoteAccessHost(state.settingsDraft.remote_access_host);
+    if (state.settingsDraft.remote_access_host.trim() && !normalizedHost) {
+      showSettingsError("Remote host must be a hostname or IP address without a scheme, port, or path.");
+      remoteAccessHost.focus();
+      return;
+    }
     const shortcuts = HOTKEY_KEYS.map((key) => state.settingsDraft.hotkeys[key]);
     if (new Set(shortcuts).size !== shortcuts.length) {
       showSettingsError("Each action must have a unique shortcut.");
@@ -1582,6 +1717,8 @@
       always_keep_overlays_in_view: state.settingsDraft.always_keep_overlays_in_view,
       allow_unrestricted_shared_array_buffer: state.settingsDraft.allow_unrestricted_shared_array_buffer,
       allowed_ips: state.settingsDraft.allowed_ips,
+      remote_access_token: state.settingsDraft.remote_access_token,
+      remote_access_host: normalizedHost,
       hotkeys: normalizeHotkeys(state.settingsDraft.hotkeys)
     };
     closeSettingsModal();

@@ -51,6 +51,8 @@
     "right_click_overlay_settings_menu": true,
     "always_keep_overlays_in_view": true,
     "allow_unrestricted_shared_array_buffer": true,
+    "remote_access_token": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "remote_access_host": " Gaming-PC.Local. ",
     "unknown_setting_key": 42,
     "hotkeys": {
       "profile_0": "Ctrl+0",

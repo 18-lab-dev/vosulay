@@ -1,5 +1,7 @@
+import { timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import { createReadStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
@@ -13,14 +15,19 @@ import { counterUrl } from "./urls";
 
 const DEFAULT_HOST = "0.0.0.0";
 const DEFAULT_PORT = 5050;
+const MAX_ACTIVE_REQUESTS = 32;
+const MAX_REQUEST_HEADER_BYTES = 16 * 1024;
+const REQUEST_TIMEOUT_MS = 3_000;
+const ACCESS_TOKEN_PATTERN = /^[0-9a-f]{64}$/;
 const TOKEN_PATTERN = /^[0-9a-f]{32}$/;
 const ROOT_PATTERN = /^[A-Za-z0-9_-]+$/;
 const OVERLAY_CSP = "default-src 'none'; frame-src 'self' http: https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors *";
+const OVERLAY_PERMISSIONS_POLICY = "webgpu=*";
 
 export interface RemoteOverlayServerOptions {
     runtime: RuntimeOptions;
     registry: LocalOverlayRegistry;
-    getConfig(): Promise<AppConfig>;
+    initialConfig: AppConfig;
     host?: string;
     port?: number;
 }
@@ -125,11 +132,13 @@ function localCapability(value: string): string | null {
     }
 }
 
-function remoteLocalUrl(value: string): string | null {
+function remoteLocalUrl(value: string, credential: string): string | null {
     const capability = localCapability(value);
     if (capability === null) return null;
     const url = new URL(value);
-    return `/local/${url.hostname}${url.pathname}${url.search}${url.hash}`;
+    const [, , ...relativeSegments] = url.pathname.split("/");
+    if (relativeSegments.length === 0) return null;
+    return `/access/${credential}/local/${url.hostname}/${relativeSegments.join("/")}${url.search}${url.hash}`;
 }
 
 function vosuUrlForRequest(baseUrl: URL, requestHost: string | undefined): URL {
@@ -150,38 +159,42 @@ function vosuUrlForRequest(baseUrl: URL, requestHost: string | undefined): URL {
 
 interface PlacementSource {
     source: string;
-    custom: boolean;
+    kind: "counter" | "local" | "remote";
 }
 
-function placementSource(placement: Placement, vosuUrl: URL): PlacementSource | null {
+function placementSource(placement: Placement, vosuUrl: URL, credential: string): PlacementSource | null {
     if (placement.url !== undefined) {
-        const local = remoteLocalUrl(placement.url);
-        if (local !== null) return { source: local, custom: true };
+        const local = remoteLocalUrl(placement.url, credential);
+        if (local !== null) return { source: local, kind: "local" };
         try {
             const custom = new URL(placement.url);
             if (custom.protocol === "http:" || custom.protocol === "https:") {
-                return { source: custom.toString(), custom: true };
+                return { source: custom.toString(), kind: "remote" };
             }
         } catch {
             // An invalid custom source is unavailable, not a counter placement.
         }
         return null;
     }
-    return { source: counterUrl(vosuUrl, placement.counter_id).toString(), custom: false };
+    return { source: counterUrl(vosuUrl, placement.counter_id).toString(), kind: "counter" };
 }
 
-function renderPlacement(placement: Placement, vosuUrl: URL): string | null {
-    const resolved = placementSource(placement, vosuUrl);
+function renderPlacement(placement: Placement, vosuUrl: URL, credential: string): string | null {
+    const resolved = placementSource(placement, vosuUrl, credential);
     if (resolved === null) return null;
     const title = placement.name?.trim() || placement.counter_id || "Overlay";
     const style = `position:absolute;left:${placement.left}px;top:${placement.top}px;width:${placement.width}px;height:${placement.height}px;transform-origin:0 0;transform:scale(${placement.scale}) rotate(${placement.rotation}deg);opacity:${placement.opacity};z-index:${placement.z_index};border:0;background:transparent`;
-    const sandbox = resolved.custom ? ` sandbox="allow-scripts allow-same-origin"` : "";
-    return `<iframe src="${htmlEscape(resolved.source)}" title="${htmlEscape(title)}" allow="autoplay" loading="eager"${sandbox} referrerpolicy="no-referrer" style="${style}"></iframe>`;
+    const sandbox = resolved.kind === "local"
+        ? ` sandbox="allow-scripts"`
+        : resolved.kind === "remote"
+            ? ` sandbox="allow-scripts allow-same-origin"`
+            : "";
+    return `<iframe src="${htmlEscape(resolved.source)}" title="${htmlEscape(title)}" allow="autoplay; webgpu" loading="eager"${sandbox} referrerpolicy="no-referrer" style="${style}"></iframe>`;
 }
 
-export function renderProfileDocument(profile: Profile, runtime: RuntimeOptions, requestHost?: string): string {
+export function renderProfileDocument(profile: Profile, runtime: RuntimeOptions, credential: string, requestHost?: string): string {
     const vosuUrl = vosuUrlForRequest(runtime.vosuUrl, requestHost);
-    const frames = profile.overlays.map((placement) => renderPlacement(placement, vosuUrl)).filter((frame): frame is string => frame !== null).join("\n");
+    const frames = profile.overlays.map((placement) => renderPlacement(placement, vosuUrl, credential)).filter((frame): frame is string => frame !== null).join("\n");
     return `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${htmlEscape(profile.name)}</title><style>*{box-sizing:border-box}html,body,#stage{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}#stage{position:fixed;inset:0}</style></head><body><main id="stage">${frames}</main></body></html>`;
 }
@@ -228,18 +241,125 @@ function sendText(response: ServerResponse, status: number, body: string, header
     response.end(content);
 }
 
+interface ProtectedRoute {
+    credential: string;
+    path: string;
+}
+
+function protectedRoute(pathname: string): ProtectedRoute | null {
+    const protectedPath = pathname.startsWith("/access/") ? pathname.slice("/access/".length) : "";
+    const separator = protectedPath.indexOf("/");
+    if (separator < 1) return null;
+    const credential = protectedPath.slice(0, separator);
+    const path = protectedPath.slice(separator + 1);
+    return path === "overlay" || path.startsWith("local/") ? { credential, path } : null;
+}
+
+function credentialMatches(provided: string, expected: string): boolean {
+    if (!ACCESS_TOKEN_PATTERN.test(provided) || !ACCESS_TOKEN_PATTERN.test(expected)) return false;
+    return timingSafeEqual(Buffer.from(provided, "ascii"), Buffer.from(expected, "ascii"));
+}
+
+function singleHeader(request: IncomingMessage, name: string): string | null | undefined {
+    const values: string[] = [];
+    for (let index = 0; index < request.rawHeaders.length; index += 2) {
+        if (request.rawHeaders[index]?.toLowerCase() === name) {
+            values.push(request.rawHeaders[index + 1] ?? "");
+        }
+    }
+    if (values.length > 1) return null;
+    return values[0];
+}
+
+function requestAuthority(host: string, request: IncomingMessage, configuredHost: string): URL | null {
+    const localAddress = request.socket.localAddress;
+    const localPort = request.socket.localPort;
+    if (localAddress === undefined || localPort === undefined) return null;
+    try {
+        const url = new URL(`http://${host}/`);
+        const hostname = url.hostname.startsWith("[") && url.hostname.endsWith("]")
+            ? url.hostname.slice(1, -1)
+            : url.hostname;
+        if (url.username || url.password || url.pathname !== "/" || url.search || url.hash
+            || !url.port || Number(url.port) !== localPort) return null;
+        if (hostname.toLowerCase() === "localhost") {
+            return isLoopback(localAddress) ? url : null;
+        }
+        if (configuredHost && hostname.toLowerCase() === configuredHost.toLowerCase()) return url;
+        return sameIp(hostname, localAddress) ? url : null;
+    } catch {
+        return null;
+    }
+}
+
+function requestMetadataIsAllowed(
+    request: IncomingMessage,
+    configuredHost: string,
+    allowOpaqueOrigin: boolean,
+): boolean {
+    const host = singleHeader(request, "host");
+    if (typeof host !== "string" || !host) return false;
+    const authority = requestAuthority(host, request, configuredHost);
+    if (authority === null) return false;
+    const fetchSite = singleHeader(request, "sec-fetch-site");
+    if (fetchSite === null) return false;
+    const fetchSiteAllowed = fetchSite === undefined
+        || ["none", "same-origin", "same-site"].includes(fetchSite)
+        || (allowOpaqueOrigin && fetchSite === "cross-site");
+    if (!fetchSiteAllowed) return false;
+    const origin = singleHeader(request, "origin");
+    if (origin === null) return false;
+    if (origin === undefined || (allowOpaqueOrigin && origin === "null")) return true;
+    try {
+        const url = new URL(origin);
+        return url.protocol === "http:" && !url.username && !url.password
+            && url.pathname === "/" && !url.search && !url.hash
+            && url.origin === authority.origin;
+    } catch {
+        return false;
+    }
+}
+
 export class RemoteOverlayServer {
     private readonly server: Server;
     private readonly options: RemoteOverlayServerOptions;
+    private config: AppConfig;
+    private activeRequests = 0;
 
     constructor(options: RemoteOverlayServerOptions) {
         this.options = options;
-        this.server = createServer((request, response) => {
-            void this.handle(request, response).catch(() => {
-                if (!response.headersSent) sendText(response, 500, "Internal Server Error\n");
+        this.config = options.initialConfig;
+        this.server = createServer({
+            maxHeaderSize: MAX_REQUEST_HEADER_BYTES,
+            requestTimeout: REQUEST_TIMEOUT_MS,
+            headersTimeout: REQUEST_TIMEOUT_MS,
+            keepAliveTimeout: REQUEST_TIMEOUT_MS,
+        }, (request, response) => {
+            if (this.activeRequests >= MAX_ACTIVE_REQUESTS) {
+                sendText(response, 503, "Server is busy\n");
+                return;
+            }
+            this.activeRequests += 1;
+            request.setTimeout(REQUEST_TIMEOUT_MS, () => {
+                if (!response.headersSent) sendText(response, 408, "Request Timeout\n");
                 else response.destroy();
             });
+            response.setTimeout(REQUEST_TIMEOUT_MS, () => response.destroy());
+            void this.handle(request, response)
+                .catch(() => {
+                    if (!response.headersSent) sendText(response, 500, "Internal Server Error\n");
+                    else response.destroy();
+                })
+                .finally(() => {
+                    this.activeRequests -= 1;
+                });
         });
+        this.server.maxConnections = MAX_ACTIVE_REQUESTS * 2;
+        this.server.maxRequestsPerSocket = 100;
+    }
+
+    updateConfig(config: AppConfig): void {
+        this.config = config;
     }
 
     async start(): Promise<void> {
@@ -263,29 +383,35 @@ export class RemoteOverlayServer {
     }
 
     private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
-        const config = (await this.options.getConfig());
-        if (!isPeerAllowed(request.socket.remoteAddress, config.settings.allowed_ips)) {
-            sendText(response, 403, "Forbidden\n");
-            return;
-        }
-        const url = new URL(request.url ?? "/", "http://localhost");
-        if (url.pathname !== "/overlay" && !url.pathname.startsWith("/local/")) {
-            sendText(response, 404, "Not Found\n");
-            return;
-        }
         if (request.method !== "GET" && request.method !== "HEAD") {
             sendText(response, 405, "Method Not Allowed\n", { allow: "GET, HEAD" });
             return;
         }
-        if (url.pathname === "/overlay") {
-            this.serveOverlay(request, response, url, config);
+        const url = new URL(request.url ?? "/", "http://localhost");
+        const route = protectedRoute(url.pathname);
+        if (route === null) {
+            sendText(response, 404, "Not Found\n");
             return;
         }
-        await this.serveLocal(request, response, url, config);
+        if (!requestMetadataIsAllowed(
+            request,
+            this.config.settings.remote_access_host,
+            route.path.startsWith("local/"),
+        )
+            || !isPeerAllowed(request.socket.remoteAddress, this.config.settings.allowed_ips)
+            || !credentialMatches(route.credential, this.config.settings.remote_access_token)) {
+            sendText(response, 403, "Forbidden\n");
+            return;
+        }
+        if (route.path === "overlay") {
+            this.serveOverlay(request, response, url, route.credential);
+            return;
+        }
+        await this.serveLocal(request, response, url, route.path);
     }
 
-    private serveOverlay(request: IncomingMessage, response: ServerResponse, url: URL, config: AppConfig): void {
-        const selected = selectProfile(url, config);
+    private serveOverlay(request: IncomingMessage, response: ServerResponse, url: URL, credential: string): void {
+        const selected = selectProfile(url, this.config);
         if (selected instanceof ProfileSelectionError) {
             sendText(response, selected.status, `${selected.message}\n`);
             return;
@@ -294,43 +420,58 @@ export class RemoteOverlayServer {
             sendText(response, 404, "Profile not found\n");
             return;
         }
-        const content = Buffer.from(renderProfileDocument(selected, this.options.runtime, request.headers.host), "utf8");
+        const host = singleHeader(request, "host");
+        const content = Buffer.from(renderProfileDocument(
+            selected,
+            this.options.runtime,
+            credential,
+            typeof host === "string" ? host : undefined,
+        ), "utf8");
         response.writeHead(200, {
             "cache-control": "no-store",
             "content-type": "text/html; charset=utf-8",
             "content-length": String(content.byteLength),
             "content-security-policy": OVERLAY_CSP,
+            "permissions-policy": OVERLAY_PERMISSIONS_POLICY,
             "referrer-policy": "no-referrer",
             "x-content-type-options": "nosniff",
-            "cross-origin-resource-policy": "cross-origin",
+            "cross-origin-resource-policy": "same-origin",
         });
         response.end(request.method === "HEAD" ? undefined : content);
     }
 
-    private async serveLocal(request: IncomingMessage, response: ServerResponse, url: URL, config: AppConfig): Promise<void> {
-        const raw = url.pathname.slice("/local/".length);
+    private async serveLocal(request: IncomingMessage, response: ServerResponse, url: URL, routePath: string): Promise<void> {
+        const raw = routePath.slice("local/".length);
         const slash = raw.indexOf("/");
-        const rootSlash = slash < 0 ? -1 : raw.indexOf("/", slash + 1);
-        if (slash < 0 || rootSlash < 0) {
+        if (slash < 1 || slash === raw.length - 1) {
             sendText(response, 404, "Not Found\n");
             return;
         }
-        const capability = raw.slice(0, rootSlash);
+        const capabilityToken = raw.slice(0, slash);
+        const relativePath = raw.slice(slash + 1);
         let configuredUrl: string | null = null;
-        for (const profile of config.profiles) {
+        let configuredCapability: string | null = null;
+        for (const profile of this.config.profiles) {
             for (const placement of profile.overlays) {
-                if (placement.url && localCapability(placement.url) === capability) {
+                if (!placement.url) continue;
+                const capability = localCapability(placement.url);
+                if (capability?.startsWith(`${capabilityToken}/`)) {
+                    if (configuredCapability !== null && capability !== configuredCapability) {
+                        sendText(response, 404, "Not Found\n");
+                        return;
+                    }
+                    configuredCapability = capability;
                     configuredUrl = placement.url;
-                    break;
                 }
             }
-            if (configuredUrl !== null) break;
         }
-        if (configuredUrl === null || !this.options.registry.authorizeUrl(configuredUrl)) {
+        if (configuredUrl === null || configuredCapability === null
+            || !this.options.registry.authorizeUrl(configuredUrl)) {
             sendText(response, 404, "Not Found\n");
             return;
         }
-        const localUrl = `vosulay-overlay://${raw}${url.search}`;
+        const root = configuredCapability.slice(configuredCapability.indexOf("/") + 1);
+        const localUrl = `vosulay-overlay://${capabilityToken}/${root}/${relativePath}${url.search}`;
         let path: string;
         try {
             path = await this.options.registry.resolveAuthorizedFile(localUrl);
@@ -347,13 +488,12 @@ export class RemoteOverlayServer {
             "referrer-policy": "no-referrer",
             "x-content-type-options": "nosniff",
             "cross-origin-resource-policy": "cross-origin",
+            "access-control-allow-origin": "null",
         });
         if (request.method === "HEAD") {
             response.end();
             return;
         }
-        const stream = createReadStream(path);
-        stream.on("error", () => response.destroy());
-        stream.pipe(response);
+        await pipeline(createReadStream(path), response);
     }
 }

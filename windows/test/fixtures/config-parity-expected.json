@@ -44,6 +44,8 @@
   ],
   "settings": {
     "allowed_ips": "127.0.0.1,localhost,absolute",
+    "remote_access_token": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "remote_access_host": "gaming-pc.local",
     "always_keep_overlays_in_view": true,
     "allow_unrestricted_shared_array_buffer": true,
     "hotkeys": {

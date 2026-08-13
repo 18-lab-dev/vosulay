@@ -9,13 +9,13 @@
 
 </div>
 
-vosulay displays vosu counters and provides an edit mode for arranging them. Layouts are stored as profiles, and overlays can come from the vosu counter catalog, HTTP(S) URLs, or local HTML files. vosu remains a separate process; the Windows in-game renderer is packaged only with vosulay.
+vosulay displays Vosu/Tosu-compatible counters and provides an edit mode for arranging them. Layouts are stored as profiles, and overlays can come from a Vosu or Tosu-compatible counter catalog, HTTP(S) URLs, or local HTML files. Vosu remains a separate process; the Windows in-game renderer is packaged only with vosulay.
 
 ## Features
 
 - Position, resize, scale, rotate, reorder, and adjust the opacity of overlays.
 - Maintain multiple overlay profiles.
-- Discover installed counters from a local vosu instance.
+- Discover installed counters from a local Vosu or Tosu instance.
 - Add remote or local custom HTML overlays.
 - Render WebGPU overlays through Dawn's native Vulkan backend.
 - Run click-through overlays on Wayland and X11.

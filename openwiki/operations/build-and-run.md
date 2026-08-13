@@ -45,7 +45,7 @@ On Wayland, LayerShellQt is used for overlay-layer placement; on X11, input tran
 
 ## Remote profile server operations
 
-Both platform hosts serve view-only profile pages on `0.0.0.0:5050`; see the [remote integration boundary](../integrations/vosu-and-overlays.md) for routes and authorization. Configure **Allowed client IPs** before exposing the service beyond loopback, and remember that rendered counter frames may need the same client network allowed by vosu. A bind failure is non-fatal to application startup: the host logs that remote hosting is unavailable and continues without the server.
+Both platform hosts serve credential-protected, view-only profile pages on `0.0.0.0:5050`; see the [remote integration boundary](../integrations/vosu-and-overlays.md) for routes and authorization. Copy the complete **Remote access URL** from manager settings rather than sharing `/overlay` directly. Configure **Allowed client IPs** before exposing the service beyond loopback, and remember that rendered counter frames may need the same client network allowed by vosu. Regenerating or replacing the credential in `config.json` revokes prior URLs. A bind failure is non-fatal to application startup: the host logs that remote hosting is unavailable and continues without the server.
 
 ## Packaging and documentation maintenance
 

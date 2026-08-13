@@ -979,9 +979,6 @@ pub const MANAGER_BRIDGE_SCRIPT: &str = r#"
     globalThis.crypto?.randomUUID?.() ??
     `${performance.timeOrigin}:${Math.random()}`;
   const serializePayload = (payload) => {
-    if (typeof payload !== "string") {
-      payload = JSON.stringify(payload);
-    }
     try {
       const message = JSON.parse(payload);
       if (message && message.type === "ready") {
@@ -993,28 +990,16 @@ pub const MANAGER_BRIDGE_SCRIPT: &str = r#"
     return payload;
   };
   let sender = (payload) => queuedMessages.push(payload);
-  window.__VOSULAY_POST_MESSAGE__ = (payload) => sender(payload);
-  window.ipc = { postMessage: (payload) => window.__VOSULAY_POST_MESSAGE__(payload) };
-
-  const initializeChannel = () => {
-    const script = document.createElement("script");
-    script.onload = () => {
-      new QWebChannel(qt.webChannelTransport, (channel) => {
-        const bridge = channel.objects.vosulayBridge;
-        sender = (payload) => bridge.postMessage(serializePayload(payload));
-        for (const payload of queuedMessages.splice(0)) sender(payload);
-        window.dispatchEvent(new Event("vosulay-bridge-ready"));
-      });
-    };
-    script.src = "qrc:///qtwebchannel/qwebchannel.js";
-    (document.head || document.documentElement).appendChild(script);
-  };
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initializeChannel, { once: true });
-  } else {
-    initializeChannel();
-  }
+  document.documentElement.addEventListener("vosulay-bridge-message", () => {
+    const payload =
+      document.documentElement.getAttribute("data-vosulay-bridge-message");
+    if (payload !== null) sender(payload);
+  });
+  new QWebChannel(qt.webChannelTransport, (channel) => {
+    const bridge = channel.objects.vosulayBridge;
+    sender = (payload) => bridge.postMessage(serializePayload(payload));
+    for (const payload of queuedMessages.splice(0)) sender(payload);
+  });
 })();
 "#;
 

@@ -1,6 +1,6 @@
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
-use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -119,56 +119,56 @@ fn handle(stream: &mut TcpStream, base_url: &Url, loader: &Arc<ConfigLoader>) ->
                 .map_err(Into::into);
         }
     };
-    let path = request
-        .target
-        .split_once('?')
-        .map_or(request.target.as_str(), |parts| parts.0);
-    let config = if path == "/overlay" || path.starts_with("/local/") {
-        let config = match loader() {
-            Ok(config) => config,
-            Err(error) => {
-                eprintln!("Could not load peer authorization settings: {error:#}");
-                return Response::plain(
-                    500,
-                    "Internal Server Error",
-                    "Could not load configuration\n",
-                )
-                .write(stream, request.method == "HEAD")
-                .map_err(Into::into);
-            }
-        };
-        if !peer_is_allowed(stream.peer_addr()?.ip(), &config.settings.allowed_ips) {
-            return Response::plain(403, "Forbidden", "Peer is not allowed\n")
-                .write(stream, request.method == "HEAD")
-                .map_err(Into::into);
-        }
-        Some(config)
-    } else {
-        None
-    };
     if request.method != "GET" && request.method != "HEAD" {
         let mut response = Response::plain(405, "Method Not Allowed", "Use GET or HEAD\n");
         response.headers.push(("Allow", "GET, HEAD".to_owned()));
         return response.write(stream, false).map_err(Into::into);
     }
-    let result = if path == "/overlay" {
+    let path = request
+        .target
+        .split_once('?')
+        .map_or(request.target.as_str(), |parts| parts.0);
+    let Some((credential, protected_path)) = protected_path(path) else {
+        return Response::plain(404, "Not Found", "Route not found\n")
+            .write(stream, request.method == "HEAD")
+            .map_err(Into::into);
+    };
+    let local_address = stream.local_addr()?;
+    let config = match loader() {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("Could not load peer authorization settings: {error:#}");
+            return Response::plain(
+                500,
+                "Internal Server Error",
+                "Could not load configuration\n",
+            )
+            .write(stream, request.method == "HEAD")
+            .map_err(Into::into);
+        }
+    };
+    if !request_metadata_is_allowed(
+        &request,
+        local_address,
+        &config.settings.remote_access_host,
+        protected_path.starts_with("local/"),
+    ) || !peer_is_allowed(stream.peer_addr()?.ip(), &config.settings.allowed_ips)
+        || !credential_matches(credential, &config.settings.remote_access_token)
+    {
+        return Response::plain(403, "Forbidden", "Request is not authorized\n")
+            .write(stream, request.method == "HEAD")
+            .map_err(Into::into);
+    }
+    let result = if protected_path == "overlay" {
         overlay_response(
             base_url,
             request.host.as_deref(),
-            config
-                .as_ref()
-                .ok_or_else(|| anyhow!("missing protected route config"))?,
+            &config,
             &request.target,
-        )
-    } else if path.starts_with("/local/") {
-        local_response(
-            config
-                .as_ref()
-                .ok_or_else(|| anyhow!("missing protected route config"))?,
-            path,
+            credential,
         )
     } else {
-        Ok(Response::plain(404, "Not Found", "Route not found\n"))
+        local_response(&config, protected_path)
     };
     let response = match result {
         Ok(response) => response,
@@ -179,10 +179,86 @@ fn handle(stream: &mut TcpStream, base_url: &Url, loader: &Arc<ConfigLoader>) ->
         .map_err(Into::into)
 }
 
+fn protected_path(path: &str) -> Option<(&str, &str)> {
+    let protected = path.strip_prefix("/access/")?;
+    let (credential, route) = protected.split_once('/')?;
+    (route == "overlay" || route.starts_with("local/")).then_some((credential, route))
+}
+
+fn credential_matches(provided: &str, expected: &str) -> bool {
+    provided.len() == expected.len()
+        && provided
+            .bytes()
+            .zip(expected.bytes())
+            .fold(0_u8, |difference, (left, right)| {
+                difference | (left ^ right)
+            })
+            == 0
+}
+
+fn request_metadata_is_allowed(
+    request: &Request,
+    local_address: SocketAddr,
+    configured_host: &str,
+    allow_opaque_origin: bool,
+) -> bool {
+    let Some(authority) = request
+        .host
+        .as_deref()
+        .and_then(|host| request_authority(host, local_address, configured_host))
+    else {
+        return false;
+    };
+    let fetch_site_allowed = request.fetch_site.as_deref().is_none_or(|site| {
+        matches!(site, "none" | "same-origin" | "same-site")
+            || (allow_opaque_origin && site == "cross-site")
+    });
+    if !fetch_site_allowed {
+        return false;
+    }
+    request.origin.as_deref().is_none_or(|origin| {
+        (allow_opaque_origin && origin == "null")
+            || Url::parse(origin).is_ok_and(|url| {
+                url.scheme() == "http"
+                    && url.username().is_empty()
+                    && url.password().is_none()
+                    && url.path() == "/"
+                    && url.query().is_none()
+                    && url.fragment().is_none()
+                    && url.origin() == authority.origin()
+            })
+    })
+}
+
+fn request_authority(host: &str, local_address: SocketAddr, configured_host: &str) -> Option<Url> {
+    let url = Url::parse(&format!("http://{host}/")).ok()?;
+    if !url.username().is_empty()
+        || url.password().is_some()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || url.port() != Some(local_address.port())
+    {
+        return None;
+    }
+    let local_ip = normalize_ip(local_address.ip());
+    let matches = match url.host()? {
+        url::Host::Domain(domain) => {
+            (domain.eq_ignore_ascii_case("localhost") && local_ip.is_loopback())
+                || (!configured_host.is_empty() && domain.eq_ignore_ascii_case(configured_host))
+        }
+        url::Host::Ipv4(address) => normalize_ip(IpAddr::V4(address)) == local_ip,
+        url::Host::Ipv6(address) => normalize_ip(IpAddr::V6(address)) == local_ip,
+    };
+    matches.then_some(url)
+}
+
 struct Request {
     method: String,
     target: String,
     host: Option<String>,
+    origin: Option<String>,
+    fetch_site: Option<String>,
 }
 
 fn read_request(stream: &mut TcpStream) -> std::result::Result<Request, HttpError> {
@@ -242,6 +318,8 @@ fn read_request(stream: &mut TcpStream) -> std::result::Result<Request, HttpErro
         ));
     }
     let mut host = None;
+    let mut origin = None;
+    let mut fetch_site = None;
     for line in lines.filter(|line| !line.is_empty()) {
         let Some((name, value)) = line.split_once(':') else {
             return Err(request_error(
@@ -274,23 +352,29 @@ fn read_request(stream: &mut TcpStream) -> std::result::Result<Request, HttpErro
                 "Request bodies are not supported\n",
             ));
         }
-        if name.eq_ignore_ascii_case("host") {
+        let target = if name.eq_ignore_ascii_case("host") {
+            Some((&mut host, "Invalid Host header\n"))
+        } else if name.eq_ignore_ascii_case("origin") {
+            Some((&mut origin, "Invalid Origin header\n"))
+        } else if name.eq_ignore_ascii_case("sec-fetch-site") {
+            Some((&mut fetch_site, "Invalid Sec-Fetch-Site header\n"))
+        } else {
+            None
+        };
+        if let Some((slot, message)) = target {
             let value = value.trim();
-            if value.is_empty() || host.is_some() {
-                return Err(request_error(
-                    &bytes,
-                    400,
-                    "Bad Request",
-                    "Invalid Host header\n",
-                ));
+            if value.is_empty() || slot.is_some() {
+                return Err(request_error(&bytes, 400, "Bad Request", message));
             }
-            host = Some(value.to_owned());
+            *slot = Some(value.to_owned());
         }
     }
     Ok(Request {
         method: method.to_owned(),
         target: target.to_owned(),
         host,
+        origin,
+        fetch_site,
     })
 }
 
@@ -310,33 +394,35 @@ fn overlay_response(
     request_host: Option<&str>,
     config: &AppConfig,
     target: &str,
+    credential: &str,
 ) -> std::result::Result<Response, HttpError> {
     let profile = select_profile(config, parse_profile(target)?)?;
     let mut response = Response::bytes(
         200,
         "OK",
         "text/html; charset=utf-8",
-        render_profile(profile, &vosu_url_for_request(base_url, request_host))?.into_bytes(),
+        render_profile(
+            profile,
+            &vosu_url_for_request(base_url, request_host),
+            credential,
+        )?
+        .into_bytes(),
     );
     response.headers.extend([
-        ("Cache-Control", "no-store".to_owned()), ("Referrer-Policy", "no-referrer".to_owned()),
-        ("X-Content-Type-Options", "nosniff".to_owned()), ("Cross-Origin-Resource-Policy", "cross-origin".to_owned()),
+        ("Cache-Control", "no-store".to_owned()),
+        ("Referrer-Policy", "no-referrer".to_owned()),
+        ("X-Content-Type-Options", "nosniff".to_owned()),
+        ("Cross-Origin-Resource-Policy", "same-origin".to_owned()),
+        ("Permissions-Policy", "webgpu=*".to_owned()),
         ("Content-Security-Policy", "default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; style-src 'unsafe-inline'; frame-src 'self' http: https:; frame-ancestors *".to_owned()),
     ]);
     Ok(response)
 }
 
 fn parse_profile(target: &str) -> std::result::Result<Option<usize>, HttpError> {
-    let Some((path, query)) = target.split_once('?') else {
+    let Some((_, query)) = target.split_once('?') else {
         return Ok(None);
     };
-    if path != "/overlay" {
-        return Err(HttpError::new(
-            400,
-            "Bad Request",
-            "Malformed profile query\n",
-        ));
-    }
     if query.is_empty() {
         return Ok(None);
     }
@@ -451,25 +537,29 @@ fn vosu_url_for_request(base_url: &Url, request_host: Option<&str>) -> Url {
     result
 }
 
-fn render_profile(profile: &Profile, base_url: &Url) -> std::result::Result<String, HttpError> {
+fn render_profile(
+    profile: &Profile,
+    base_url: &Url,
+    credential: &str,
+) -> std::result::Result<String, HttpError> {
     let title = escape_html(&profile.name);
     let mut html = format!(
         "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title}</title><style>html,body{{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}}body{{position:relative}}iframe{{display:block;border:0}}</style></head><body>"
     );
     for item in &profile.overlays {
-        let source = match placement_url(item, base_url) {
+        let source = match placement_url(item, base_url, credential) {
             Ok(source) => escape_html(&source),
             Err(_) if item.url.is_some() => continue,
             Err(error) => return Err(error),
         };
         let frame_title = escape_html(placement_title(item));
-        let sandbox = if item.url.is_some() {
-            " sandbox=\"allow-scripts allow-same-origin\""
-        } else {
-            ""
+        let sandbox = match item.url.as_ref().map(Url::scheme) {
+            Some("vosulay-overlay") => " sandbox=\"allow-scripts\"",
+            Some("http" | "https") => " sandbox=\"allow-scripts allow-same-origin\"",
+            _ => "",
         };
         use std::fmt::Write as _;
-        write!(html, "<iframe src=\"{source}\" title=\"{frame_title}\" allow=\"autoplay\" loading=\"eager\"{sandbox} referrerpolicy=\"no-referrer\" style=\"position:absolute;left:{}px;top:{}px;width:{}px;height:{}px;transform-origin:0 0;transform:scale({}) rotate({}deg);opacity:{};z-index:{}\"></iframe>", item.left, item.top, item.width, item.height, item.scale, item.rotation, item.opacity, item.z_index)
+        write!(html, "<iframe src=\"{source}\" title=\"{frame_title}\" allow=\"autoplay; webgpu\" loading=\"eager\"{sandbox} referrerpolicy=\"no-referrer\" style=\"position:absolute;left:{}px;top:{}px;width:{}px;height:{}px;transform-origin:0 0;transform:scale({}) rotate({}deg);opacity:{};z-index:{}\"></iframe>", item.left, item.top, item.width, item.height, item.scale, item.rotation, item.opacity, item.z_index)
             .map_err(|_| HttpError::new(500, "Internal Server Error", "Could not render profile\n"))?;
     }
     html.push_str("</body></html>");
@@ -489,7 +579,11 @@ fn placement_title(item: &Placement) -> &str {
     &item.counter_id
 }
 
-fn placement_url(item: &Placement, base_url: &Url) -> std::result::Result<String, HttpError> {
+fn placement_url(
+    item: &Placement,
+    base_url: &Url,
+    credential: &str,
+) -> std::result::Result<String, HttpError> {
     let Some(custom) = item.url.as_ref() else {
         let mut url = base_url.clone();
         url.set_query(None);
@@ -510,18 +604,25 @@ fn placement_url(item: &Placement, base_url: &Url) -> std::result::Result<String
                 .ok_or_else(|| {
                     HttpError::new(500, "Internal Server Error", "Invalid local capability\n")
                 })?;
-            if custom.port().is_some()
-                || custom
-                    .path_segments()
-                    .is_none_or(|segments| segments.count() < 2)
-            {
+            let Some((root_encoded, relative_path)) = custom
+                .path()
+                .strip_prefix('/')
+                .and_then(|path| path.split_once('/'))
+            else {
+                return Err(HttpError::new(
+                    500,
+                    "Internal Server Error",
+                    "Invalid local path\n",
+                ));
+            };
+            if custom.port().is_some() || root_encoded.is_empty() || relative_path.is_empty() {
                 return Err(HttpError::new(
                     500,
                     "Internal Server Error",
                     "Invalid local path\n",
                 ));
             }
-            let mut result = format!("/local/{token}{}", custom.path());
+            let mut result = format!("/access/{credential}/local/{token}/{relative_path}");
             if let Some(query) = custom.query() {
                 result.push('?');
                 result.push_str(query);
@@ -569,6 +670,7 @@ fn local_response(config: &AppConfig, path: &str) -> std::result::Result<Respons
         ("Referrer-Policy", "no-referrer".to_owned()),
         ("X-Content-Type-Options", "nosniff".to_owned()),
         ("Cross-Origin-Resource-Policy", "cross-origin".to_owned()),
+        ("Access-Control-Allow-Origin", "null".to_owned()),
     ]);
     Ok(response)
 }
@@ -581,10 +683,9 @@ struct LocalResource {
 }
 
 fn resolve_local(config: &AppConfig, path: &str) -> std::result::Result<LocalResource, HttpError> {
-    let mut parts = path.strip_prefix("/local/").unwrap_or_default().split('/');
+    let mut parts = path.strip_prefix("local/").unwrap_or_default().split('/');
     let token = parts.next().unwrap_or_default();
-    let root_encoded = parts.next().unwrap_or_default();
-    if !is_token(token) || root_encoded.is_empty() {
+    if !is_token(token) {
         return Err(HttpError::new(
             403,
             "Forbidden",
@@ -597,26 +698,32 @@ fn resolve_local(config: &AppConfig, path: &str) -> std::result::Result<LocalRes
     if segments.is_empty() {
         return Err(HttpError::new(400, "Bad Request", "Missing local path\n"));
     }
-    let capable = config
+    let mut root_encoded = None;
+    for url in config
         .profiles
         .iter()
         .flat_map(|profile| &profile.overlays)
-        .any(|item| {
-            item.url.as_ref().is_some_and(|url| {
-                url.scheme() == "vosulay-overlay"
-                    && url.host_str() == Some(token)
-                    && url.port().is_none()
-                    && url.path_segments().and_then(|mut values| values.next())
-                        == Some(root_encoded)
-            })
-        });
-    if !capable {
-        return Err(HttpError::new(
-            403,
-            "Forbidden",
-            "Local capability is not configured\n",
-        ));
+        .filter_map(|item| item.url.as_ref())
+        .filter(|url| {
+            url.scheme() == "vosulay-overlay"
+                && url.host_str() == Some(token)
+                && url.port().is_none()
+        })
+    {
+        let Some(candidate) = url.path_segments().and_then(|mut values| values.next()) else {
+            continue;
+        };
+        if root_encoded.is_some_and(|root| root != candidate) {
+            return Err(HttpError::new(
+                403,
+                "Forbidden",
+                "Local capability is ambiguous\n",
+            ));
+        }
+        root_encoded = Some(candidate);
     }
+    let root_encoded = root_encoded
+        .ok_or_else(|| HttpError::new(403, "Forbidden", "Local capability is not configured\n"))?;
     let root_bytes = decode_base64(root_encoded)
         .ok_or_else(|| HttpError::new(403, "Forbidden", "Invalid local root\n"))?;
     let root_text = std::str::from_utf8(&root_bytes)
@@ -1034,9 +1141,44 @@ mod tests {
                 ..Placement::default()
             }],
         };
-        let html = render_profile(&profile, &base()).expect("render");
+        let html = render_profile(&profile, &base(), &"a".repeat(64)).expect("render");
         assert!(html.contains("http://127.0.0.1:24050/a%2Fb/"));
+        assert!(html.contains("allow=\"autoplay; webgpu\""));
         assert!(html.contains("left:12.5px;top:-3px;width:640px;height:360px;transform-origin:0 0;transform:scale(1.25) rotate(-15deg);opacity:0.75;z-index:7"));
+    }
+
+    #[test]
+    fn custom_frame_sandboxes_isolate_forwarded_local_sources() {
+        let credential = "a".repeat(64);
+        let profile = Profile {
+            id: "custom".to_owned(),
+            name: "Custom".to_owned(),
+            overlays: vec![
+                Placement {
+                    url: Some(
+                        Url::parse(
+                            "vosulay-overlay://0123456789abcdef0123456789abcdef/cm9vdA/index.html",
+                        )
+                        .expect("local URL"),
+                    ),
+                    name: Some("local".to_owned()),
+                    ..Placement::default()
+                },
+                Placement {
+                    url: Some(Url::parse("https://overlay.example/widget").expect("remote URL")),
+                    name: Some("remote".to_owned()),
+                    ..Placement::default()
+                },
+            ],
+        };
+
+        let html = render_profile(&profile, &base(), &credential).expect("render");
+        assert!(html.contains(&format!(
+            "src=\"/access/{credential}/local/0123456789abcdef0123456789abcdef/index.html\" title=\"local\" allow=\"autoplay; webgpu\" loading=\"eager\" sandbox=\"allow-scripts\""
+        )));
+        assert!(html.contains(
+            "src=\"https://overlay.example/widget\" title=\"remote\" allow=\"autoplay; webgpu\" loading=\"eager\" sandbox=\"allow-scripts allow-same-origin\""
+        ));
     }
     fn encoded(value: &[u8]) -> String {
         const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -1070,32 +1212,106 @@ mod tests {
             ..Placement::default()
         });
         assert_eq!(
-            resolve_local(
-                &AppConfig::default(),
-                &format!("/local/{token}/{root64}/index.html")
-            )
-            .expect_err("capability")
-            .status,
+            resolve_local(&AppConfig::default(), &format!("local/{token}/index.html"))
+                .expect_err("capability")
+                .status,
             403
         );
         assert_eq!(
-            resolve_local(&config, &format!("/local/{token}/{root64}/%2e%2e/x"))
+            resolve_local(&config, &format!("local/{token}/%2e%2e/x"))
                 .expect_err("traversal")
                 .status,
             400
         );
         assert_eq!(
-            resolve_local(&config, &format!("/local/{token}/{root64}/index.html"))
+            resolve_local(&config, &format!("local/{token}/index.html"))
                 .expect("file")
                 .mime,
             "text/html; charset=utf-8"
         );
+        let remote_url = placement_url(&config.profiles[0].overlays[0], &base(), &"b".repeat(64))
+            .expect("remote URL");
+        assert_eq!(
+            remote_url,
+            format!("/access/{}/local/{token}/index.html", "b".repeat(64))
+        );
+        assert!(!remote_url.contains(&root64));
     }
+
+    #[test]
+    fn opaque_local_frame_requests_receive_scoped_resource_headers() {
+        let directory = tempfile::tempdir().expect("temp");
+        fs::write(directory.path().join("external.js"), b"window.loaded=true").expect("write");
+        let root = fs::canonicalize(directory.path()).expect("root");
+        let capability = "0123456789abcdef0123456789abcdef";
+        let root64 = encoded(root.as_os_str().as_encoded_bytes());
+        let mut config = AppConfig::default();
+        let access_token = "c".repeat(64);
+        config
+            .settings
+            .remote_access_token
+            .clone_from(&access_token);
+        config.profiles[0].overlays.push(Placement {
+            url: Some(
+                Url::parse(&format!(
+                    "vosulay-overlay://{capability}/{root64}/index.html"
+                ))
+                .expect("URL"),
+            ),
+            ..Placement::default()
+        });
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("address");
+        let server = RemoteServer::start_with_listener(
+            listener,
+            base(),
+            Arc::new(move || Ok(config.clone())),
+        )
+        .expect("server");
+        let send = |target: &str| {
+            let mut client = TcpStream::connect(address).expect("connect");
+            let request = format!(
+                "GET {target} HTTP/1.1\r\nHost: {address}\r\nOrigin: null\r\nSec-Fetch-Site: cross-site\r\n\r\n"
+            );
+            client.write_all(request.as_bytes()).expect("write");
+            client.shutdown(Shutdown::Write).expect("shutdown");
+            let mut response = String::new();
+            client.read_to_string(&mut response).expect("read");
+            response
+        };
+
+        let local = send(&format!(
+            "/access/{access_token}/local/{capability}/external.js"
+        ));
+        assert!(local.starts_with("HTTP/1.1 200 OK\r\n"));
+        assert!(local.contains("Cross-Origin-Resource-Policy: cross-origin\r\n"));
+        assert!(local.contains("Access-Control-Allow-Origin: null\r\n"));
+        assert!(local.ends_with("window.loaded=true"));
+
+        let overlay = send(&format!("/access/{access_token}/overlay"));
+        assert!(overlay.starts_with("HTTP/1.1 403 Forbidden\r\n"));
+        drop(server);
+    }
+    #[test]
+    fn request_authority_accepts_destination_or_configured_host() {
+        let local = "127.0.0.1:5050".parse().expect("socket address");
+
+        assert!(request_authority("127.0.0.1:5050", local, "").is_some());
+        assert!(request_authority("gaming-pc.local:5050", local, "gaming-pc.local").is_some());
+        assert!(request_authority("attacker.example:5050", local, "gaming-pc.local").is_none());
+        assert!(request_authority("127.0.0.1:5051", local, "").is_none());
+    }
+
     #[test]
     fn ephemeral_listener_serves_overlay() {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let address = listener.local_addr().expect("address");
         let mut config = AppConfig::default();
+        let access_token = "c".repeat(64);
+        config
+            .settings
+            .remote_access_token
+            .clone_from(&access_token);
         config.profiles[0].overlays.push(Placement {
             counter_id: "counter".to_owned(),
             ..Placement::default()
@@ -1107,15 +1323,17 @@ mod tests {
         )
         .expect("server");
         let mut client = TcpStream::connect(address).expect("connect");
-        client
-            .write_all(b"GET /overlay HTTP/1.1\r\nHost: 192.0.2.44:5050\r\n\r\n")
-            .expect("write");
+        let request =
+            format!("GET /access/{access_token}/overlay HTTP/1.1\r\nHost: {address}\r\n\r\n");
+        client.write_all(request.as_bytes()).expect("write");
         client.shutdown(Shutdown::Write).expect("shutdown");
         let mut response = String::new();
         client.read_to_string(&mut response).expect("read");
         drop(server);
         assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
-        assert!(response.contains("src=\"http://192.0.2.44:24050/counter/\""));
+        assert!(response.contains("Permissions-Policy: webgpu=*\r\n"));
+        assert!(response.contains("allow=\"autoplay; webgpu\""));
+        assert!(response.contains("src=\"http://127.0.0.1:24050/counter/\""));
     }
     #[test]
     fn runtime_url_options_match_qt() {

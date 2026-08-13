@@ -48,20 +48,49 @@ function numericAttribute(element: AttributeElement, name: string): number | und
 
 export function parseInstalledCounters(base: URL | string, source: string): InstalledCounter[] {
     const $ = load(source);
-    const cards = $("article.counter-card[data-overlay-id]");
-    if (!cards.length && !$(".empty-state").length) {
-        throw new Error("counter search markup was not recognized; vosu and vosulay versions may be out of sync");
-    }
-
+    const results = $("article.counter-card[data-overlay-id], .result-item");
+    const empty = $(".empty-state, .no-results");
+    let recognized = false;
     const counters: InstalledCounter[] = [];
-    cards.each((_index, node) => {
-        const card = $(node);
-        const id = requiredAttribute(card, "data-overlay-id", "counter card");
-        if (!id) throw new Error("counter card has an empty data-overlay-id");
-        const name = requiredAttribute(card, "data-counter-name", id);
-        const author = requiredAttribute(card, "data-counter-author", id);
-        const version = requiredAttribute(card, "data-counter-version", id);
-        const preview = card.find(".counter-card__preview iframe").first();
+    results.each((_index, node) => {
+        const result = $(node);
+        const modernId = result.attr("data-overlay-id");
+        if (modernId !== undefined) {
+            recognized = true;
+            const id = requiredAttribute(result, "data-overlay-id", "counter card");
+            if (!id) throw new Error("counter card has an empty data-overlay-id");
+            const name = requiredAttribute(result, "data-counter-name", id);
+            const author = requiredAttribute(result, "data-counter-author", id);
+            const version = requiredAttribute(result, "data-counter-version", id);
+            const preview = result.find(".counter-card__preview iframe").first();
+            const width = numericAttribute(preview, "width");
+            const height = numericAttribute(preview, "height");
+            const validResolution = width !== undefined && height !== undefined && width > 10 && height > 10;
+            counters.push({
+                id,
+                name,
+                author,
+                version,
+                width: validResolution ? width : 500,
+                height: validResolution ? height : 300,
+                has_settings: result.find('[data-action="counter-settings"]').length > 0,
+                url: counterUrl(base, id).toString(),
+            });
+            return;
+        }
+
+        const actions = result.find(".calu").first();
+        if (!actions.length) return;
+        recognized = true;
+        const name = requiredAttribute(actions, "n", "legacy counter");
+        const author = requiredAttribute(actions, "a", name);
+        const version = requiredAttribute(actions, "v", name);
+        const idElement = result
+            .find(".settings-builder-button[n], .settings-button[n], .open-button[n], .delete-button[n]")
+            .first();
+        const id = idElement.attr("n");
+        if (!id) throw new Error(`${JSON.stringify(name)} is missing a legacy folder name`);
+        const preview = result.find(".ri-gallery iframe").first();
         const width = numericAttribute(preview, "width");
         const height = numericAttribute(preview, "height");
         const validResolution = width !== undefined && height !== undefined && width > 10 && height > 10;
@@ -72,10 +101,13 @@ export function parseInstalledCounters(base: URL | string, source: string): Inst
             version,
             width: validResolution ? width : 500,
             height: validResolution ? height : 300,
-            has_settings: card.find('[data-action="counter-settings"]').length > 0,
+            has_settings: actions.find(".settings-button").length > 0,
             url: counterUrl(base, id).toString(),
         });
     });
+    if (!recognized && !empty.length) {
+        throw new Error("counter search markup was not recognized; expected modern Vosu or legacy Tosu results");
+    }
     return counters;
 }
 

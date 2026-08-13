@@ -91,22 +91,57 @@ fn fetch_installed_counters_with_timeout(
 }
 
 fn parse_installed_counters(base_url: &Url, source: &str) -> Result<Vec<InstalledCounter>> {
-    let card_selector = selector("article.counter-card[data-overlay-id]")?;
-    let empty_selector = selector(".empty-state")?;
-    let settings_selector = selector(r#"[data-action="counter-settings"]"#)?;
-    let preview_selector = selector(".counter-card__preview iframe")?;
+    let result_selector = selector(r#"article.counter-card[data-overlay-id], .result-item"#)?;
+    let empty_selector = selector(".empty-state, .no-results")?;
+    let modern_settings_selector = selector(r#"[data-action="counter-settings"]"#)?;
+    let modern_preview_selector = selector(".counter-card__preview iframe")?;
+    let legacy_actions_selector = selector(".calu")?;
+    let legacy_id_selector = selector(
+        ".settings-builder-button[n], .settings-button[n], .open-button[n], .delete-button[n]",
+    )?;
+    let legacy_settings_selector = selector(".settings-button")?;
+    let legacy_preview_selector = selector(".ri-gallery iframe")?;
     let document = Html::parse_document(source);
     let mut counters = Vec::new();
 
-    for card in document.select(&card_selector) {
-        let id = required_attribute(card, "data-overlay-id", "counter card")?.to_owned();
-        if id.is_empty() {
-            bail!("counter card has an empty data-overlay-id");
+    for result in document.select(&result_selector) {
+        if result.value().attr("data-overlay-id").is_some() {
+            let id = required_attribute(result, "data-overlay-id", "counter card")?.to_owned();
+            if id.is_empty() {
+                bail!("counter card has an empty data-overlay-id");
+            }
+            let name = required_attribute(result, "data-counter-name", &id)?.to_owned();
+            let author = required_attribute(result, "data-counter-author", &id)?.to_owned();
+            let version = required_attribute(result, "data-counter-version", &id)?.to_owned();
+            let resolution = resolution(&result, &modern_preview_selector);
+
+            counters.push(InstalledCounter {
+                url: counter_url(base_url, &id)?,
+                id,
+                name,
+                author,
+                version,
+                width: resolution.0,
+                height: resolution.1,
+                has_settings: result.select(&modern_settings_selector).next().is_some(),
+            });
+            continue;
         }
-        let name = required_attribute(card, "data-counter-name", &id)?.to_owned();
-        let author = required_attribute(card, "data-counter-author", &id)?.to_owned();
-        let version = required_attribute(card, "data-counter-version", &id)?.to_owned();
-        let resolution = resolution(&card, &preview_selector);
+
+        let Some(actions) = result.select(&legacy_actions_selector).next() else {
+            continue;
+        };
+        let name = required_attribute(actions, "n", "legacy counter")?.to_owned();
+        let author = required_attribute(actions, "a", &name)?.to_owned();
+        let version = required_attribute(actions, "v", &name)?.to_owned();
+        let id = result
+            .select(&legacy_id_selector)
+            .next()
+            .and_then(|element| element.value().attr("n"))
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| anyhow!("legacy counter {name:?} is missing a folder name"))?
+            .to_owned();
+        let resolution = resolution(&result, &legacy_preview_selector);
 
         counters.push(InstalledCounter {
             url: counter_url(base_url, &id)?,
@@ -116,13 +151,13 @@ fn parse_installed_counters(base_url: &Url, source: &str) -> Result<Vec<Installe
             version,
             width: resolution.0,
             height: resolution.1,
-            has_settings: card.select(&settings_selector).next().is_some(),
+            has_settings: actions.select(&legacy_settings_selector).next().is_some(),
         });
     }
 
     if counters.is_empty() && document.select(&empty_selector).next().is_none() {
         bail!(
-            "counter search markup was not recognized; vosu and vosulay versions may be out of sync"
+            "counter search markup was not recognized; expected modern Vosu or legacy Tosu results"
         );
     }
 
@@ -241,6 +276,68 @@ mod tests {
     }
 
     #[test]
+    fn parse_accepts_legacy_tosu_counter_markup() {
+        let source = r#"
+            <div class="result-item downloaded">
+              <div class="ri-head flexer">
+                <div>
+                  <h4 class="flexer">Legacy Counter v2.4</h4>
+                  <div class="ri-links flexer"><span>by Legacy Author</span></div>
+                </div>
+                <div class="calu buttons-group flexer" n="Legacy Counter" a="Legacy Author" v="2.4">
+                  <button class="button settings-builder-button flexer" n="legacy/folder"></button>
+                  <button class="button settings-button flexer" n="legacy/folder"></button>
+                  <button class="button open-button flexer" n="legacy/folder"></button>
+                  <button class="button delete-button flexer" n="legacy/folder"></button>
+                </div>
+              </div>
+              <div class="ri-gallery flexer">
+                <iframe src="/legacy/folder/" width="720px" height="480px"></iframe>
+              </div>
+            </div>
+            <div class="result-item">
+              <div class="calu buttons-group flexer" n="Second Legacy" a="Author" v="1.0">
+                <button class="button settings-builder-button flexer" n="second"></button>
+                <button class="button open-button flexer" n="second"></button>
+                <button class="button delete-button flexer" n="second"></button>
+              </div>
+              <div class="ri-gallery flexer"><img src="preview.png"></div>
+            </div>
+        "#;
+        let base = Url::parse("http://127.0.0.1:24050").expect("fixture URL should parse");
+
+        let counters = parse_installed_counters(&base, source).expect("fixture should parse");
+
+        assert_eq!(
+            counters,
+            vec![
+                InstalledCounter {
+                    id: "legacy/folder".to_owned(),
+                    name: "Legacy Counter".to_owned(),
+                    author: "Legacy Author".to_owned(),
+                    version: "2.4".to_owned(),
+                    width: 720.0,
+                    height: 480.0,
+                    has_settings: true,
+                    url: Url::parse("http://127.0.0.1:24050/legacy%2Ffolder/")
+                        .expect("expected URL should parse"),
+                },
+                InstalledCounter {
+                    id: "second".to_owned(),
+                    name: "Second Legacy".to_owned(),
+                    author: "Author".to_owned(),
+                    version: "1.0".to_owned(),
+                    width: DEFAULT_WIDTH,
+                    height: DEFAULT_HEIGHT,
+                    has_settings: false,
+                    url: Url::parse("http://127.0.0.1:24050/second/")
+                        .expect("expected URL should parse"),
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn parse_defaults_flexible_non_numeric_and_invalid_resolution() {
         let source = r#"
             <article class="counter-card" data-overlay-id="flexible"
@@ -312,6 +409,16 @@ mod tests {
     }
 
     #[test]
+    fn parse_accepts_legacy_tosu_empty_state_without_counters() {
+        let source = r#"<div class="no-results">No counters<br />Change your search phrase</div>"#;
+        let base = Url::parse("http://127.0.0.1:24050").expect("fixture URL should parse");
+
+        let counters = parse_installed_counters(&base, source).expect("empty state should parse");
+
+        assert!(counters.is_empty());
+    }
+
+    #[test]
     fn parse_rejects_unrecognized_markup() {
         let source = "<main>Unexpected response</main>";
         let base = Url::parse("http://127.0.0.1:24050").expect("fixture URL should parse");
@@ -321,7 +428,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "counter search markup was not recognized; vosu and vosulay versions may be out of sync"
+            "counter search markup was not recognized; expected modern Vosu or legacy Tosu results"
         );
     }
 

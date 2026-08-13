@@ -78,11 +78,8 @@ async function start(options: RuntimeOptions): Promise<void> {
     const configStore = new ConfigStore(storagePaths.configPath);
     const overlayRegistry = new LocalOverlayRegistry();
     const manager = new OverlayManager(options, configStore, overlayRegistry);
-    const remoteServer = new RemoteOverlayServer({
-        runtime: options,
-        registry: overlayRegistry,
-        getConfig: async () => (await configStore.load()).config
-    });
+    let remoteServer: RemoteOverlayServer | null = null;
+    let unsubscribeRemoteConfig: (() => void) | null = null;
     let tray: Tray | null = null;
     let shuttingDown = false;
     let editShortcutRegistered = false;
@@ -121,7 +118,9 @@ async function start(options: RuntimeOptions): Promise<void> {
         void (async () => {
             const failures: unknown[] = [];
             try {
-                await remoteServer.stop();
+                unsubscribeRemoteConfig?.();
+                unsubscribeRemoteConfig = null;
+                await remoteServer?.stop();
             } catch (error) {
                 failures.push(error);
             }
@@ -163,6 +162,15 @@ async function start(options: RuntimeOptions): Promise<void> {
     }
 
     await Promise.resolve(installCustomProtocols(options, overlayRegistry));
+    const initialConfig = (await configStore.load()).config;
+    remoteServer = new RemoteOverlayServer({
+        runtime: options,
+        registry: overlayRegistry,
+        initialConfig,
+    });
+    unsubscribeRemoteConfig = configStore.subscribe((change) => {
+        remoteServer?.updateConfig(change.config);
+    });
     try {
         await remoteServer.start();
     } catch (error) {

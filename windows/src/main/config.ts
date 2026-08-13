@@ -1,10 +1,12 @@
 import { constants, readFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { AppConfig, AppSettings, HotkeySettings, Placement, Profile } from "./types";
 
 const CONFIG_VERSION = 1 as const;
 const DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute";
+const REMOTE_ACCESS_TOKEN_BYTES = 32;
 const DEFAULT_HOTKEYS: HotkeySettings = {
     profile_0: "Ctrl+0",
     profile_1: "Ctrl+1",
@@ -62,6 +64,8 @@ export function defaultConfig(): AppConfig {
         profiles: [{ id: "default", name: "Default", overlays: [] }],
         settings: {
             allowed_ips: DEFAULT_ALLOWED_IPS,
+            remote_access_token: randomBytes(REMOTE_ACCESS_TOKEN_BYTES).toString("hex"),
+            remote_access_host: "",
             always_keep_overlays_in_view: false,
             allow_unrestricted_shared_array_buffer: false,
             hotkeys: { ...DEFAULT_HOTKEYS },
@@ -134,6 +138,25 @@ function canonicalHotkey(value: unknown, fallback: string): string {
     return RESERVED_HOTKEYS[shortcut] ? fallback : shortcut;
 }
 
+function remoteAccessToken(value: unknown): string {
+    return typeof value === "string" && /^[0-9a-fA-F]{64}$/.test(value.trim())
+        ? value.trim().toLowerCase()
+        : randomBytes(REMOTE_ACCESS_TOKEN_BYTES).toString("hex");
+}
+
+function remoteAccessHost(value: unknown): string {
+    if (typeof value !== "string") return "";
+    const candidate = value.trim().replace(/\.$/, "");
+    if (!candidate) return "";
+    try {
+        const url = new URL(`http://${candidate}/`);
+        if (url.username || url.password || url.port || url.pathname !== "/" || url.search || url.hash) return "";
+        return url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    } catch {
+        return "";
+    }
+}
+
 function normalizeSettings(value: unknown): AppSettings {
     const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
     const inputHotkeys = source.hotkeys && typeof source.hotkeys === "object"
@@ -143,6 +166,8 @@ function normalizeSettings(value: unknown): AppSettings {
     for (const key of HOTKEY_KEYS) hotkeys[key] = canonicalHotkey(inputHotkeys[key], DEFAULT_HOTKEYS[key]);
     return {
         allowed_ips: typeof source.allowed_ips === "string" ? source.allowed_ips : DEFAULT_ALLOWED_IPS,
+        remote_access_token: remoteAccessToken(source.remote_access_token),
+        remote_access_host: remoteAccessHost(source.remote_access_host),
         always_keep_overlays_in_view: source.always_keep_overlays_in_view === true,
         allow_unrestricted_shared_array_buffer: source.allow_unrestricted_shared_array_buffer === true,
         hotkeys,
@@ -202,6 +227,7 @@ export class ConfigStore {
     private currentRevision = 0;
     private readonly subscribers = new Set<(change: ConfigChange) => void>();
     private saveError: Error | null = null;
+    private fallbackConfig: AppConfig | null = null;
 
     constructor(configPath: string) {
         if (!configPath) throw new Error("config path must not be empty");
@@ -217,13 +243,26 @@ export class ConfigStore {
                 if ((parsed as Record<string, unknown>).version !== CONFIG_VERSION) {
                     throw new Error(`unsupported config version ${String((parsed as Record<string, unknown>).version)}; expected ${CONFIG_VERSION}`);
                 }
-                return { config: normalizeConfig(parsed), revision: this.currentRevision };
+                const sourceToken = ((parsed as Record<string, unknown>).settings as Record<string, unknown> | undefined)?.remote_access_token;
+                const config = normalizeConfig(parsed);
+                if (typeof sourceToken !== "string" || !/^[0-9a-fA-F]{64}$/.test(sourceToken.trim())) {
+                    await this.writeAtomically(config);
+                }
+                return { config, revision: this.currentRevision };
             } catch (error) {
                 if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-                    return { config: defaultConfig(), revision: this.currentRevision };
+                    const config = defaultConfig();
+                    await this.writeAtomically(config);
+                    this.fallbackConfig = null;
+                    return { config, revision: this.currentRevision };
                 }
                 const message = error instanceof Error ? error.message : String(error);
-                return { config: defaultConfig(), revision: this.currentRevision, error: `Could not load configuration: ${message}` };
+                this.fallbackConfig ??= defaultConfig();
+                return {
+                    config: this.fallbackConfig,
+                    revision: this.currentRevision,
+                    error: `Could not load configuration: ${message}`,
+                };
             }
         });
         this.saveTail = operation.then(
@@ -240,6 +279,7 @@ export class ConfigStore {
                 throw new ConfigConflictError(options.expectedRevision, this.currentRevision);
             }
             await this.writeAtomically(config);
+            this.fallbackConfig = null;
             const change = { config, revision: ++this.currentRevision, source: options.source };
             for (const subscriber of this.subscribers) {
                 try {

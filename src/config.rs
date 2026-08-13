@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{ErrorKind, Write};
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -10,6 +11,7 @@ use tempfile::NamedTempFile;
 
 pub const CONFIG_VERSION: u32 = 1;
 pub const DEFAULT_ALLOWED_IPS: &str = "127.0.0.1,localhost,absolute";
+pub const REMOTE_ACCESS_TOKEN_BYTES: usize = 32;
 
 const DEFAULT_WIDTH: f64 = 500.0;
 const DEFAULT_HEIGHT: f64 = 300.0;
@@ -38,6 +40,8 @@ pub struct AppSettings {
     pub always_keep_overlays_in_view: bool,
     pub allow_unrestricted_shared_array_buffer: bool,
     pub allowed_ips: String,
+    pub remote_access_token: String,
+    pub remote_access_host: String,
     pub hotkeys: HotkeySettings,
 }
 
@@ -101,6 +105,8 @@ impl Default for AppSettings {
             always_keep_overlays_in_view: false,
             allow_unrestricted_shared_array_buffer: false,
             allowed_ips: DEFAULT_ALLOWED_IPS.to_owned(),
+            remote_access_token: String::new(),
+            remote_access_host: String::new(),
             hotkeys: HotkeySettings::default(),
         }
     }
@@ -199,6 +205,8 @@ impl AppConfig {
 impl AppSettings {
     fn normalize(&mut self) {
         self.allowed_ips = self.allowed_ips.trim().to_owned();
+        self.remote_access_token = normalized_remote_access_token(&self.remote_access_token);
+        self.remote_access_host = normalized_remote_access_host(&self.remote_access_host);
         self.hotkeys.normalize();
     }
 }
@@ -249,26 +257,31 @@ pub fn config_path() -> Result<PathBuf> {
 }
 
 fn load_from_path(path: &Path) -> Result<AppConfig> {
-    let bytes = match fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(AppConfig::default()),
+    let (mut config, needs_token) = match fs::read(path) {
+        Ok(bytes) => {
+            let config: AppConfig = serde_json::from_slice(&bytes)
+                .with_context(|| format!("failed to parse config at {}", path.display()))?;
+            if config.version != CONFIG_VERSION {
+                bail!(
+                    "unsupported config version {} at {}; expected {}",
+                    config.version,
+                    path.display(),
+                    CONFIG_VERSION
+                );
+            }
+            let needs_token = !remote_access_token_is_valid(&config.settings.remote_access_token);
+            (config, needs_token)
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => (AppConfig::default(), true),
         Err(error) => {
             return Err(error)
                 .with_context(|| format!("failed to read config at {}", path.display()));
         }
     };
-
-    let mut config: AppConfig = serde_json::from_slice(&bytes)
-        .with_context(|| format!("failed to parse config at {}", path.display()))?;
-    if config.version != CONFIG_VERSION {
-        bail!(
-            "unsupported config version {} at {}; expected {}",
-            config.version,
-            path.display(),
-            CONFIG_VERSION
-        );
-    }
     config.normalize();
+    if needs_token {
+        save_to_path(&config, path).context("failed to persist remote access credential")?;
+    }
     Ok(config)
 }
 
@@ -320,6 +333,49 @@ fn normalize_hotkey(value: &mut String, default: &str) {
     } else if trimmed.len() != value.len() {
         *value = trimmed.to_owned();
     }
+}
+
+fn remote_access_token_is_valid(value: &str) -> bool {
+    let trimmed = value.trim();
+    trimmed.len() == REMOTE_ACCESS_TOKEN_BYTES * 2
+        && trimmed.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+fn normalized_remote_access_token(value: &str) -> String {
+    if remote_access_token_is_valid(value) {
+        return value.trim().to_ascii_lowercase();
+    }
+    generate_remote_access_token()
+}
+
+fn generate_remote_access_token() -> String {
+    let mut bytes = [0_u8; REMOTE_ACCESS_TOKEN_BYTES];
+    getrandom::fill(&mut bytes).unwrap_or_else(|error| {
+        panic!("operating system randomness unavailable for remote access token: {error}")
+    });
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut token = String::with_capacity(REMOTE_ACCESS_TOKEN_BYTES * 2);
+    for byte in bytes {
+        token.push(HEX[usize::from(byte >> 4)] as char);
+        token.push(HEX[usize::from(byte & 0x0f)] as char);
+    }
+    token
+}
+
+fn normalized_remote_access_host(value: &str) -> String {
+    let trimmed = value.trim().trim_end_matches('.');
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let unbracketed = trimmed
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(trimmed);
+    if let Ok(address) = unbracketed.parse::<IpAddr>() {
+        return address.to_string();
+    }
+    url::Host::parse(trimmed)
+        .map(|host| host.to_string().to_ascii_lowercase())
+        .unwrap_or_default()
 }
 
 fn finite_or(value: f64, fallback: f64) -> f64 {
@@ -374,6 +430,7 @@ mod tests {
         };
 
         config.normalize();
+        let settings = config.settings.clone();
 
         assert_eq!(
             config,
@@ -397,7 +454,7 @@ mod tests {
                         z_index: 999,
                     }],
                 }],
-                settings: AppSettings::default(),
+                settings,
             }
         );
     }
@@ -582,6 +639,54 @@ mod tests {
             .expect("encoded config should deserialize");
 
         assert_eq!(decoded.settings.allowed_ips, config.settings.allowed_ips);
+    }
+
+    #[test]
+    fn normalize_generates_remote_access_token_when_missing() {
+        let mut config = AppConfig::default();
+
+        config.normalize();
+
+        assert_eq!(
+            config.settings.remote_access_token.len(),
+            REMOTE_ACCESS_TOKEN_BYTES * 2
+        );
+        assert!(
+            config
+                .settings
+                .remote_access_token
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+        );
+    }
+
+    #[test]
+    fn normalize_preserves_valid_remote_access_token() {
+        let mut config = AppConfig::default();
+        config.settings.remote_access_token = "AB".repeat(REMOTE_ACCESS_TOKEN_BYTES);
+
+        config.normalize();
+
+        assert_eq!(
+            config.settings.remote_access_token,
+            "ab".repeat(REMOTE_ACCESS_TOKEN_BYTES)
+        );
+    }
+
+    #[test]
+    fn normalize_validates_remote_access_host() {
+        let mut config = AppConfig::default();
+        config.settings.remote_access_host = " My-PC.Local. ".to_owned();
+        config.normalize();
+        assert_eq!(config.settings.remote_access_host, "my-pc.local");
+
+        config.settings.remote_access_host = "[2001:db8::1]".to_owned();
+        config.normalize();
+        assert_eq!(config.settings.remote_access_host, "2001:db8::1");
+
+        config.settings.remote_access_host = "https://attacker.example/path".to_owned();
+        config.normalize();
+        assert!(config.settings.remote_access_host.is_empty());
     }
 
     #[test]
@@ -796,7 +901,7 @@ mod tests {
     }
 
     #[test]
-    fn load_normalizes_external_configuration() {
+    fn load_normalizes_external_configuration_and_persists_credential() {
         let directory = tempfile::tempdir().expect("temporary directory should be created");
         let path = directory.path().join("config.json");
         fs::write(
@@ -806,8 +911,15 @@ mod tests {
         .expect("fixture should be written");
 
         let config = load_from_path(&path).expect("valid configuration should load");
+        let persisted: AppConfig = serde_json::from_slice(
+            &fs::read(&path).expect("migrated configuration should be readable"),
+        )
+        .expect("migrated configuration should be valid");
 
-        assert_eq!(config, AppConfig::default());
+        assert_eq!(
+            persisted.settings.remote_access_token,
+            config.settings.remote_access_token
+        );
     }
 
     #[test]

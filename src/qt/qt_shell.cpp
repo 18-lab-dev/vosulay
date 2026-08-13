@@ -195,13 +195,15 @@ double detectedRefreshRate(QScreen *screen) {
 }
 
 
-void installScript(QWebEnginePage *page, const QString &name,
-                   const QString &source, bool subframes) {
+void installScript(
+    QWebEnginePage *page, const QString &name, const QString &source,
+    bool subframes,
+    QWebEngineScript::ScriptWorldId world = QWebEngineScript::MainWorld) {
   QWebEngineScript script;
   script.setName(name);
   script.setInjectionPoint(QWebEngineScript::DocumentCreation);
   script.setRunsOnSubFrames(subframes);
-  script.setWorldId(QWebEngineScript::MainWorld);
+  script.setWorldId(world);
   script.setSourceCode(source);
   page->scripts().insert(script);
 }
@@ -465,16 +467,22 @@ public:
     if (fpsLimit_ >= 0) {
       installLimiter();
     }
-    installScript(
-        page_, QStringLiteral("vosulay-manager-bridge"),
-        rustStringToQString(manager_bridge_script_for_qt()), false);
-
     channel_ = new QWebChannel(page_);
     bridge_ = new ManagerBridge(
         [this](const QString &message) { handleManagerMessage(message); },
         channel_);
     channel_->registerObject(QStringLiteral("vosulayBridge"), bridge_);
-    page_->setWebChannel(channel_);
+    page_->setWebChannel(channel_, QWebEngineScript::ApplicationWorld);
+
+    QFile webChannelSource(QStringLiteral(":/qtwebchannel/qwebchannel.js"));
+    if (!webChannelSource.open(QIODevice::ReadOnly)) {
+      qFatal("Could not load Qt WebChannel JavaScript");
+    }
+    QString isolatedBridge =
+        QString::fromUtf8(webChannelSource.readAll()) + QLatin1Char('\n') +
+        rustStringToQString(manager_bridge_script_for_qt());
+    installScript(page_, QStringLiteral("vosulay-manager-bridge"),
+                  isolatedBridge, false, QWebEngineScript::ApplicationWorld);
 
     connect(windowHandleOrCreate(), &QWindow::screenChanged, this,
             [this](QScreen *screen) {

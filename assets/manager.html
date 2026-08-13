@@ -90,7 +90,7 @@
         <button id="reset" class="quiet-button">Reset size</button>
         <button id="settings" class="quiet-button">Settings</button>
       </div>
-      <small class="hint">Drag move · handles resize · wheel changes layer · Ctrl+I interacts</small>
+      <small class="hint">Drag move · handles resize · wheel changes layer · right-click overlap cycles settings · Ctrl+I interacts</small>
     </aside>
     <div id="url-modal" class="modal-backdrop" hidden>
       <form id="url-form" class="url-dialog" role="dialog" aria-modal="true" aria-labelledby="url-dialog-title" novalidate>
@@ -137,12 +137,23 @@
           <fieldset class="settings-section">
             <legend>Remote overlay server</legend>
             <p class="settings-note">
-              Serves a view-only copy of your overlays to other devices at
-              <code class="settings-endpoint">http://&lt;this-host&gt;:5050/overlay?profile=1</code>.
-              <code>profile</code> is 1-based; omit it to follow the active profile.
-              Point remote devices at this computer's local or LAN address (for example its
-              <code>192.168.x.x</code> IP) &mdash; not <code>0.0.0.0</code>.
+              Serves a credential-protected, view-only copy of your overlays to other devices.
+              Enter the LAN IP or hostname that those devices use to reach this computer.
             </p>
+            <label class="settings-field" for="remote-access-url">
+              <span>
+                <strong>Remote access URL</strong>
+                <small>Keep this URL secret. Regenerating the configuration credential invalidates previously shared URLs.</small>
+              </span>
+              <input id="remote-access-url" type="text" readonly spellcheck="false" autocomplete="off">
+            </label>
+            <label class="settings-field" for="remote-access-host">
+              <span>
+                <strong>Remote host</strong>
+                <small>LAN IP or hostname only; for example <code>192.168.1.20</code> or <code>gaming-pc.local</code>.</small>
+              </span>
+              <input id="remote-access-host" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="192.168.1.20">
+            </label>
             <label class="settings-field" for="allowed-ips">
               <span>
                 <strong>Allowed client IPs</strong>
