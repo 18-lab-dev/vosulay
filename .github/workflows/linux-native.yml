@@ -1,0 +1,227 @@
+name: Linux Native
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "native/**"
+      - "desktop/**"
+      - ".github/workflows/linux-native.yml"
+  pull_request:
+    paths:
+      - "native/**"
+      - "desktop/**"
+      - ".github/workflows/linux-native.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust workspace
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: native
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace
+
+  napi:
+    name: N-API addon
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: native
+
+      - name: Install addon toolchain
+        working-directory: native
+        run: npm install --no-audit --no-fund
+
+      # `native/package.json` -> scripts.build
+      - name: Build addon
+        working-directory: native
+        run: npm run build
+
+      # `native/crates/overlay-agent-core/src/bin/overlay-fake-agent.rs` backs
+      # the integration test's agent side.
+      - name: Build fake agent
+        working-directory: native
+        run: cargo build --release -p overlay-agent-core --bin overlay-fake-agent
+
+      # `native/test/overlay-node.integration.test.mjs` resolves both through
+      # `createRequire`/`spawn`, so they must be absolute; `native/package.json`
+      # -> scripts.test runs it.
+      - name: Integration test
+        working-directory: native
+        env:
+          VOSULAY_NATIVE_ADDON: ${{ github.workspace }}/native/crates/overlay-node/overlay-node.linux-x64-gnu.node
+          VOSULAY_FAKE_AGENT: ${{ github.workspace }}/native/target/release/overlay-fake-agent
+        run: npm test
+
+  gl-harness:
+    name: GL harnesses
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: native
+
+      # `native/test/run-gl-harnesses.sh` compiles the harnesses with
+      # -lX11 -lGL -lEGL -lGLESv2, and needs a software GL stack plus an X
+      # server to run them headlessly.
+      - name: Install GL toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libx11-dev libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libgbm1 mesa-utils xvfb
+
+      - name: Build agent and SHM host
+        working-directory: native
+        run: |
+          cargo build --release -p overlay-agent-gl
+          cargo build --release -p overlay-host --example shm-checkerboard
+
+      # Both harnesses need a real drawable, so they run under Xvfb against
+      # Mesa's software rasteriser.
+      - name: Run GL harnesses
+        working-directory: native
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" sh test/run-gl-harnesses.sh
+
+  vulkan:
+    name: Vulkan layer smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: native
+
+      - name: Install lavapipe and validation layers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mesa-vulkan-drivers vulkan-tools libvulkan1 vulkan-validationlayers
+
+      - name: Build layer
+        working-directory: native
+        run: cargo build --release -p overlay-vulkan-layer
+
+      # Confirms the packaged manifest still resolves against a real loader.
+      # `native/VkLayer_VOSULAY_overlay.json` is what `stage:native` ships and
+      # what `validate_vulkan_layer_directory` in
+      # `native/crates/overlay-node/src/lib.rs` requires at launch.
+      - name: Verify the layer manifest loads
+        working-directory: native
+        env:
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+        run: |
+          cp target/release/liboverlay_vulkan_layer.so .
+          VK_LAYER_PATH="$PWD" vulkaninfo --summary | tee /tmp/vulkaninfo.txt
+          grep -q VK_LAYER_VOSULAY_overlay /tmp/vulkaninfo.txt
+
+      # The layer's own draw path needs a presenting swapchain, which lavapipe
+      # cannot provide headlessly here. Its unit tests still run under the
+      # validation environment so the fail-open and format logic is covered.
+      - name: Layer unit tests under validation
+        working-directory: native
+        env:
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          VK_INSTANCE_LAYERS: VK_LAYER_KHRONOS_validation
+        run: cargo test -p overlay-vulkan-layer
+
+  package:
+    name: Linux package
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      # `desktop/scripts/stage-native.mjs` publishes
+      # `native/crates/overlay-dotnet-bootstrap/dotnet/Vosulay.AttachProfiler`
+      # self-contained for linux-x64.
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: native
+
+      - name: Install addon toolchain
+        working-directory: native
+        run: npm install --no-audit --no-fund
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci --force
+
+      # `desktop/package.json` -> scripts["stage:native"]
+      - name: Stage native artifacts
+        working-directory: desktop
+        run: npm run stage:native
+
+      # `verify:package` inspects `dist/linux-unpacked`, so the electron-builder
+      # output has to exist first; `dist:linux` produces it and then runs the
+      # verification itself.
+      - name: Build and verify the Linux package
+        working-directory: desktop
+        run: npm run dist:linux
