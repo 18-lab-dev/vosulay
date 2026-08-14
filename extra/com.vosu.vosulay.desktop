@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Vosulay
-Comment=Vosu in-game overlay
-Exec=vosulay
-Icon=com.vosu.vosulay
-Terminal=false
-Categories=Game;Utility;
