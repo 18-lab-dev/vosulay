@@ -1063,7 +1063,9 @@ unsafe fn observe_presented_target(original: &vk::PresentInfoKHR<'_>) {
         })
     };
     if let Some(target_id) = selected {
-        session().selected_target.store(target_id, Ordering::Release);
+        session()
+            .selected_target
+            .store(target_id, Ordering::Release);
     }
 }
 
