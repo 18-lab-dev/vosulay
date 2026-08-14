@@ -12,11 +12,11 @@ import {
 const inputFixture = new URL("./fixtures/config-parity-input.json", import.meta.url);
 const expectedFixture = new URL("./fixtures/config-parity-expected.json", import.meta.url);
 
-test("TypeScript config normalization matches the Rust golden result", async () => {
+test("TypeScript config normalization matches the canonical golden result", async () => {
     const input = JSON.parse(await readFile(inputFixture, "utf8")) as unknown;
     const expected = JSON.parse(await readFile(expectedFixture, "utf8")) as unknown;
 
-    // Hotkeys are canonical in this fixture because Electron additionally canonicalizes frontend input.
+    // Hotkeys in the golden fixture use Electron's canonical representation.
     assert.deepEqual(normalizeConfig(input), expected);
 });
 

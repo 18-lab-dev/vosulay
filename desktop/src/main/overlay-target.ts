@@ -1,4 +1,8 @@
-import type { GpuLuid } from "@asdf-overlay/core";
+export interface GpuLuid {
+    high: number;
+    low: number;
+}
+
 
 export interface OverlayTarget {
     hwnd: number;

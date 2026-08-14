@@ -1,7 +1,8 @@
 {
-    "name": "vosulay-windows",
+    "name": "vosulay",
     "version": "0.2.0",
-    "description": "Windows in-game overlay host for vosulay",
+    "description": "Cross-platform in-game overlay host for vosulay",
+    "desktopName": "vosulay.desktop",
     "private": true,
     "license": "MIT",
     "main": "./out/main/index.js",
@@ -10,15 +11,19 @@
         "test": "tsx --test test/**/*.test.ts",
         "typecheck": "tsc --noEmit -p tsconfig.node.json",
         "verify:package": "node scripts/verify-package.mjs",
-        "dist:win": "npm run build && electron-builder --win --publish never && npm run verify:package"
+        "dist:win": "npm run build && electron-builder --win --publish never && npm run verify:package -- win",
+        "stage:native": "node scripts/stage-native.mjs",
+        "dist:linux": "npm run stage:native && npm run build && electron-builder --linux --publish never && npm run verify:package -- linux"
     },
     "dependencies": {
-        "@asdf-overlay/core": "1.2.5",
-        "@asdf-overlay/electron": "1.2.5",
-        "@paymoapp/active-window": "2.1.4",
         "cheerio": "^1.1.2",
         "find-process": "^2.1.1",
         "mime-types": "^3.0.1"
+    },
+    "optionalDependencies": {
+        "@asdf-overlay/core": "1.2.5",
+        "@asdf-overlay/electron": "1.2.5",
+        "@paymoapp/active-window": "2.1.4"
     },
     "devDependencies": {
         "@electron/asar": "^3.4.1",
@@ -35,11 +40,6 @@
         "appId": "dev.vosu.vosulay",
         "productName": "vosulay",
         "asar": true,
-        "asarUnpack": [
-            "node_modules/@asdf-overlay/core/**/*",
-            "node_modules/@asdf-overlay/electron/**/*",
-            "node_modules/@paymoapp/active-window/build/Release/PaymoActiveWindow.node"
-        ],
         "files": [
             "out/**/*",
             "package.json"
@@ -75,7 +75,42 @@
                         "x64"
                     ]
                 }
+            ],
+            "asarUnpack": [
+                "node_modules/@asdf-overlay/core/**/*",
+                "node_modules/@asdf-overlay/electron/**/*",
+                "node_modules/@paymoapp/active-window/build/Release/PaymoActiveWindow.node"
             ]
+        },
+        "linux": {
+            "target": [
+                {
+                    "target": "AppImage",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "files": [
+                "out/**/*",
+                "package.json",
+                "!node_modules/@asdf-overlay/core/**/*",
+                "!node_modules/@asdf-overlay/electron/**/*",
+                "!node_modules/@paymoapp/active-window/**/*"
+            ],
+            "extraResources": [
+                {
+                    "from": "build/native",
+                    "to": "native",
+                    "filter": [
+                        "**/*"
+                    ]
+                }
+            ],
+            "artifactName": "vosulay-${version}-x64.${ext}",
+            "icon": "../assets/branding/vosulay-app-icon.png",
+            "syncDesktopName": true,
+            "category": "Utility"
         },
         "nsis": {
             "artifactName": "vosulay-${version}-setup.${ext}"
@@ -87,7 +122,10 @@
     "engines": {
         "node": ">=22"
     },
-    "os": [
-        "win32"
-    ]
+    "allowScripts": {
+        "electron@40.10.6": true,
+        "esbuild@0.25.12": true,
+        "esbuild@0.28.1": true,
+        "electron-winstaller@5.4.0": true
+    }
 }

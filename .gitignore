@@ -1,13 +1,21 @@
 # Rust build output
 /target/
 /CMakeFiles/
+/native/target/
+/native/node_modules/
 
-
-# Windows Electron build output
-/windows/node_modules/
-/windows/out/
-/windows/dist/
+# Electron desktop host build output
+/desktop/node_modules/
+/desktop/out/
+/desktop/dist/
+/desktop/build/
 *.tsbuildinfo
+
+# N-API and .NET build products (rebuilt by stage-native)
+native/crates/overlay-node/*.node
+native/crates/overlay-dotnet-bootstrap/dotnet/**/bin/
+native/crates/overlay-dotnet-bootstrap/dotnet/**/obj/
+
 # Editor and operating-system metadata
 .idea/
 .vscode/
@@ -24,3 +32,6 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Agent harness local config
+WATCHDOG.yml

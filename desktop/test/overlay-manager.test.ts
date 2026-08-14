@@ -136,6 +136,39 @@ test("selects exactly the allowed foreground PID", async () => {
     assert.equal(state.tracker.stopped, true);
 });
 
+test("attaches native process without a BrowserWindow", async () => {
+    const tracker = new FakeForegroundTracker(11);
+    let attached = false;
+    const manager = new OverlayManager(
+        options,
+        {} as ConfigStore,
+        {} as LocalOverlayRegistry,
+        {
+            foregroundTracker: tracker,
+            discoverPids: async () => new Set([11]),
+            initializeProcess: async (pid) => {
+                const process: ManagedOverlayProcess = {
+                    pid,
+                    events: new EventEmitter<{ destroyed: [] }>(),
+                    destroy: async () => {},
+                    setEditing: async () => {},
+                    setVisible: async () => {
+                        attached = true;
+                    },
+                    flushPendingSave: async () => {},
+                    reload: async () => {},
+                };
+                return process;
+            },
+            scheduleScan: () => () => {},
+        },
+    );
+
+    manager.start();
+    await eventually(() => attached);
+    await manager.stop();
+});
+
 test("destroys stable before attaching lazer", async () => {
     const state = harness(11);
     state.manager.start();

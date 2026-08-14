@@ -20,6 +20,14 @@ export interface ForegroundTracker {
     stop(): void;
 }
 
+export class NoopForegroundTracker implements ForegroundTracker {
+    start(_onChanged: (pid: number | null) => void): number | null {
+        return null;
+    }
+
+    stop(): void {}
+}
+
 export interface ForegroundTrackerDependencies {
     loadActiveWindow?: () => ActiveWindowApi;
     scheduleReadback?: (poll: () => void) => () => void;

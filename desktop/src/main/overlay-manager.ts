@@ -6,7 +6,8 @@ import type { RuntimeOptions } from "./options";
 import type { ConfigStore } from "./config";
 import type { LocalOverlayRegistry } from "./local-overlays";
 import type { EditingTarget } from "./types";
-import { WindowsForegroundTracker, type ForegroundTracker } from "./foreground-tracker";
+import type { OverlayProvider } from "./overlay-provider";
+import { NoopForegroundTracker, type ForegroundTracker } from "./foreground-tracker";
 
 const findProcessModule: unknown = createRequire(import.meta.url)("find-process");
 if (!findProcessModule || typeof findProcessModule !== "object"
@@ -20,8 +21,8 @@ const PROCESS_SCAN_INTERVAL_MS = 1_000;
 export interface ManagedOverlayProcess {
     readonly pid: number;
     readonly events: EventEmitter<{ destroyed: [] }>;
-    readonly window: {
-        webContents: {
+    readonly window?: {
+        webContents?: {
             setFrameRate(frameRate: number): void;
         };
     };
@@ -43,7 +44,8 @@ export interface OverlayManagerDependencies {
     scheduleScan?: (scan: () => void) => () => void;
 }
 
-export class OverlayManager implements EditingTarget {
+
+export class OverlayManager implements OverlayProvider {
     readonly events = new EventEmitter<{
         editingChanged: [editing: boolean];
         visibilityChanged: [visible: boolean];
@@ -70,23 +72,10 @@ export class OverlayManager implements EditingTarget {
         private readonly overlayRegistry: LocalOverlayRegistry,
         dependencies: OverlayManagerDependencies = {},
     ) {
-        this.foregroundTracker = dependencies.foregroundTracker ?? new WindowsForegroundTracker();
+        this.foregroundTracker = dependencies.foregroundTracker ?? new NoopForegroundTracker();
         this.discoverPids = dependencies.discoverPids ?? (() => this.findTargetPids());
-        this.initializeProcess = dependencies.initializeProcess ?? (async (
-            pid,
-            editingTarget,
-            visible,
-        ) => {
-            // OverlayProcess loads Electron and Windows-only native modules, so tests inject this boundary.
-            const { OverlayProcess } = await import("./overlay-process");
-            return OverlayProcess.initialize(
-                pid,
-                this.options,
-                this.configStore,
-                this.overlayRegistry,
-                editingTarget,
-                visible,
-            );
+        this.initializeProcess = dependencies.initializeProcess ?? (async () => {
+            throw new Error("OverlayManager requires a platform overlay process initializer");
         });
         this.scheduleScan = dependencies.scheduleScan ?? ((scan) => {
             const timer = setInterval(scan, PROCESS_SCAN_INTERVAL_MS);
@@ -315,9 +304,6 @@ export class OverlayManager implements EditingTarget {
             return;
         }
 
-        if (this.options.fpsLimit > 0) {
-            process.window.webContents.setFrameRate(this.options.fpsLimit);
-        }
         try {
             await process.setVisible(this.visibleValue);
             await process.setEditing(this.visibleValue && this.editingValue);
@@ -332,6 +318,9 @@ export class OverlayManager implements EditingTarget {
             return;
         }
 
+        if (this.options.fpsLimit > 0) {
+            process.window?.webContents?.setFrameRate(this.options.fpsLimit);
+        }
         this.active = { pid: currentDesiredPid, process };
         console.log(`Attached vosulay overlay to PID ${currentDesiredPid}`);
     }

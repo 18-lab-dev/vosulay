@@ -1,20 +1,14 @@
-import {
-    type GpuLuid,
-    Overlay,
-    defaultDllDir,
-    length
-} from '@asdf-overlay/core';
-import type { KeyboardInput } from '@asdf-overlay/core/input';
-import { ElectronOverlayInput } from '@asdf-overlay/electron/input';
-import { ElectronOverlaySurface } from '@asdf-overlay/electron/surface';
+import { createRequire } from 'node:module';
+import EventEmitter from 'node:events';
+import path from 'node:path';
+
 import {
     app,
     BrowserWindow,
     type Event as ElectronEvent,
-    type Input
+    type Input,
+    type WebContents
 } from 'electron';
-import EventEmitter from 'node:events';
-import path from 'node:path';
 
 import type { RuntimeOptions } from './options';
 import type { ConfigStore } from './config';
@@ -22,11 +16,13 @@ import type { LocalOverlayRegistry } from './local-overlays';
 import type { EditingTarget } from './types';
 import {
     type EditShortcutCommand,
+    type NativeEditShortcutInput,
     NativeEditShortcutState,
     editShortcutCommand
 } from './edit-shortcut';
 import {
     chooseOverlayTarget,
+    type GpuLuid,
     type OverlayTarget
 } from './overlay-target';
 import { HostBridge } from './host-bridge';
@@ -35,6 +31,111 @@ import {
     withFatalDeadline
 } from './fatal-deadline';
 
+type OverlayEventListener<Args extends unknown[]> = (...args: Args) => void;
+
+interface OverlayEvent {
+    on(event: 'added', listener: OverlayEventListener<[number, number, number, GpuLuid]>): void;
+    on(event: 'resized', listener: OverlayEventListener<[number, number, number]>): void;
+    on(event: 'destroyed', listener: OverlayEventListener<[number]>): void;
+    on(event: 'error', listener: OverlayEventListener<[unknown]>): void;
+    on(event: 'disconnected', listener: OverlayEventListener<[]>): void;
+    on(event: 'keyboard_input', listener: OverlayEventListener<[number, KeyboardInput]>): void;
+    on(event: 'input_blocking_ended', listener: OverlayEventListener<[number]>): void;
+    off(event: 'added', listener: OverlayEventListener<[number, number, number, GpuLuid]>): void;
+    off(event: 'resized', listener: OverlayEventListener<[number, number, number]>): void;
+    off(event: 'destroyed', listener: OverlayEventListener<[number]>): void;
+    off(event: 'error', listener: OverlayEventListener<[unknown]>): void;
+    off(event: 'disconnected', listener: OverlayEventListener<[]>): void;
+    off(event: 'keyboard_input', listener: OverlayEventListener<[number, KeyboardInput]>): void;
+    off(event: 'input_blocking_ended', listener: OverlayEventListener<[number]>): void;
+}
+
+interface OverlayInstance {
+    readonly event: OverlayEvent;
+    blockInput(hwnd: number, blocked: boolean): Promise<void> | void;
+    destroy(): void;
+    setPosition(hwnd: number, x: unknown, y: unknown): Promise<void> | void;
+    setAnchor(hwnd: number, x: unknown, y: unknown): Promise<void> | void;
+    setMargin(
+        hwnd: number,
+        top: unknown,
+        right: unknown,
+        bottom: unknown,
+        left: unknown
+    ): Promise<void> | void;
+}
+
+interface OverlayModule {
+    attach(
+        dllDirectory: string,
+        pid: number,
+        timeoutMs: number
+    ): Promise<OverlayInstance>;
+}
+
+interface OverlayInput {
+    disconnect(): void;
+}
+
+interface OverlayInputModule {
+    connect(
+        target: { readonly id: number; readonly overlay: OverlayInstance },
+        webContents: WebContents
+    ): OverlayInput;
+}
+
+interface SurfaceEvents {
+    on(event: 'error', listener: OverlayEventListener<[unknown]>): void;
+    off(event: 'error', listener: OverlayEventListener<[unknown]>): void;
+}
+
+interface OverlaySurface {
+    readonly events: SurfaceEvents;
+    disconnect(): Promise<void> | void;
+}
+
+interface OverlaySurfaceModule {
+    connect(
+        target: { readonly id: number; readonly overlay: OverlayInstance },
+        luid: GpuLuid,
+        webContents: WebContents
+    ): OverlaySurface;
+}
+
+interface WindowsOverlayRuntime {
+    readonly overlay: OverlayModule;
+    readonly defaultDllDir: () => string;
+    readonly length: (value: number) => unknown;
+    readonly input: OverlayInputModule;
+    readonly surface: OverlaySurfaceModule;
+}
+
+interface KeyboardInput extends NativeEditShortcutInput {
+    readonly key: { readonly code: number };
+    readonly state: string;
+}
+
+const loadWindowsOverlayRuntime = (): WindowsOverlayRuntime => {
+    const require = createRequire(import.meta.url);
+    const core = require('@asdf-overlay/core') as {
+        readonly Overlay: OverlayModule;
+        readonly defaultDllDir: () => string;
+        readonly length: (value: number) => unknown;
+    };
+    const input = require('@asdf-overlay/electron/input') as {
+        readonly ElectronOverlayInput: OverlayInputModule;
+    };
+    const surface = require('@asdf-overlay/electron/surface') as {
+        readonly ElectronOverlaySurface: OverlaySurfaceModule;
+    };
+    return {
+        overlay: core.Overlay,
+        defaultDllDir: core.defaultDllDir,
+        length: core.length,
+        input: input.ElectronOverlayInput,
+        surface: surface.ElectronOverlaySurface
+    };
+};
 const MANAGER_URL = 'vosulay://manager/index.html';
 const PRELOAD_PATH = path.join(app.getAppPath(), 'out/preload/index.js');
 const OVERLAY_ATTACH_TIMEOUT_MS = 5_000;
@@ -43,17 +144,18 @@ const OVERLAY_WINDOW_SETTLE_MS = 250;
 const INPUT_REQUEST_TIMEOUT_MS = 5_000;
 const INPUT_UNBLOCK_RETRY_MS = 50;
 
+
 export class OverlayProcess implements EditingTarget {
     readonly events = new EventEmitter<{ destroyed: [] }>();
     readonly window: BrowserWindow;
-    readonly overlay: Overlay;
+    readonly overlay: OverlayInstance;
     readonly pid: number;
 
     private readonly hwnd: number;
     private readonly luid: GpuLuid;
-    private surface: ElectronOverlaySurface | null;
+    private surface: OverlaySurface | null;
     private readonly bridge: HostBridge;
-    private input: ElectronOverlayInput | null = null;
+    private input: OverlayInput | null = null;
     private resolveInputUnblocked: (() => void) | null = null;
     private inputCapturePromise: Promise<void> | null = null;
     private inputUnblockPromise: Promise<void> | null = null;
@@ -150,14 +252,15 @@ export class OverlayProcess implements EditingTarget {
     private constructor(
         pid: number,
         hwnd: number,
-        overlay: Overlay,
+        overlay: OverlayInstance,
         window: BrowserWindow,
         luid: GpuLuid,
-        surface: ElectronOverlaySurface | null,
+        surface: OverlaySurface | null,
         private readonly editingTarget: EditingTarget,
         options: RuntimeOptions,
         configStore: ConfigStore,
-        overlayRegistry: LocalOverlayRegistry
+        overlayRegistry: LocalOverlayRegistry,
+        private readonly runtime: WindowsOverlayRuntime
     ) {
         this.pid = pid;
         this.hwnd = hwnd;
@@ -181,13 +284,21 @@ export class OverlayProcess implements EditingTarget {
             'keyboard_input',
             this.handleNativeKeyboardInput
         );
-
-        overlay.event.on('resized', (resizedHwnd, width, height) => {
-            if (resizedHwnd === this.hwnd && !this.window.isDestroyed()) {
-                this.window.setSize(width, height, false);
+        overlay.event.on(
+            'resized',
+            (
+                resizedHwnd: number,
+                width: number,
+                height: number
+            ): void => {
+                if (resizedHwnd === this.hwnd && !this.window.isDestroyed()) {
+                    this.window.setSize(width, height, false);
+                }
             }
-        });
-        overlay.event.on('input_blocking_ended', (inputHwnd) => {
+        );
+        overlay.event.on(
+            'input_blocking_ended',
+            (inputHwnd: number): void => {
             if (inputHwnd === this.hwnd) {
                 const requested = this.resolveInputUnblocked !== null;
                 this.releaseEditingInput();
@@ -233,7 +344,7 @@ export class OverlayProcess implements EditingTarget {
         }
 
         if (visible) {
-            const surface = ElectronOverlaySurface.connect(
+            const surface = this.runtime.surface.connect(
                 { id: this.hwnd, overlay: this.overlay },
                 this.luid,
                 this.window.webContents
@@ -354,7 +465,7 @@ export class OverlayProcess implements EditingTarget {
         }
 
         try {
-            this.input = ElectronOverlayInput.connect(
+            this.input = this.runtime.input.connect(
                 { id: this.hwnd, overlay: this.overlay },
                 this.window.webContents
             );
@@ -569,13 +680,14 @@ export class OverlayProcess implements EditingTarget {
         editingTarget: EditingTarget,
         visible: boolean
     ): Promise<OverlayProcess> {
-        const overlay = await Overlay.attach(
-            defaultDllDir().replaceAll('app.asar', 'app.asar.unpacked'),
+        const runtime = loadWindowsOverlayRuntime();
+        const overlay = await runtime.overlay.attach(
+            runtime.defaultDllDir().replaceAll('app.asar', 'app.asar.unpacked'),
             pid,
             OVERLAY_ATTACH_TIMEOUT_MS
         );
         let overlayWindow: BrowserWindow | null = null;
-        let surface: ElectronOverlaySurface | null = null;
+        let surface: OverlaySurface | null = null;
         let overlayProcess: OverlayProcess | null = null;
         let targetHwnd: number | null = null;
         let initializationError: unknown = null;
@@ -772,16 +884,16 @@ export class OverlayProcess implements EditingTarget {
             });
             throwIfInitializationFailed();
 
-            await overlay.setPosition(hwnd, length(0), length(0));
+            await overlay.setPosition(hwnd, runtime.length(0), runtime.length(0));
             throwIfInitializationFailed();
-            await overlay.setAnchor(hwnd, length(0), length(0));
+            await overlay.setAnchor(hwnd, runtime.length(0), runtime.length(0));
             throwIfInitializationFailed();
             await overlay.setMargin(
                 hwnd,
-                length(0),
-                length(0),
-                length(0),
-                length(0)
+                runtime.length(0),
+                runtime.length(0),
+                runtime.length(0),
+                runtime.length(0)
             );
             throwIfInitializationFailed();
 
@@ -834,7 +946,7 @@ export class OverlayProcess implements EditingTarget {
             throwIfInitializationFailed();
 
             if (visible) {
-                surface = ElectronOverlaySurface.connect(
+                surface = runtime.surface.connect(
                     { id: hwnd, overlay },
                     luid,
                     overlayWindow.webContents
@@ -850,7 +962,8 @@ export class OverlayProcess implements EditingTarget {
                 editingTarget,
                 options,
                 configStore,
-                overlayRegistry
+                overlayRegistry,
+                runtime
             );
             throwIfInitializationFailed();
             await overlayWindow.loadURL(MANAGER_URL);

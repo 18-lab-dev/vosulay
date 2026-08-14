@@ -1,8 +1,16 @@
+import { resolve } from "node:path";
+
+export interface VulkanLaunchOptions {
+    executable: string;
+    args: string[];
+}
+
 export interface RuntimeOptions {
     vosuUrl: URL;
     fpsLimit: number;
     pids: number[];
     processNames: string[];
+    vulkanLaunch?: VulkanLaunchOptions;
 }
 
 export type InstanceCommand = "toggle-overlay";
@@ -66,6 +74,7 @@ function optionValue(argv: string[], index: number, long: string, short?: string
     return undefined;
 }
 
+
 function parseArguments(
     argv: string[],
     allowInstanceCommand: boolean,
@@ -74,17 +83,19 @@ function parseArguments(
     let fpsLimit = DEFAULT_FPS_LIMIT;
     const pids: number[] = [];
     const processNames: string[] = ["osu!.exe", "osulazer.exe"];
+    let vulkanExecutable: string | null = null;
+    const vulkanArgs: string[] = [];
     let command: InstanceCommand | null = null;
 
     for (let index = 0; index < argv.length; index += 1) {
         const argument = argv[index]!;
-        const electronApplicationPath =
-            index === 0 &&
-            (argument === "." ||
-                argument.includes("/") ||
-                argument.includes("\\") ||
-                argument.toLowerCase().endsWith(".asar"));
-        if (electronApplicationPath) continue;
+        if (argument === "--") {
+            if (vulkanExecutable === null) {
+                throw new Error("-- is only valid after --launch-vulkan");
+            }
+            vulkanArgs.push(...argv.slice(index + 1));
+            break;
+        }
         if (
             allowInstanceCommand
             && (argument === "-i" || argument === "--ipc-toggle-overlay")
@@ -111,6 +122,15 @@ function parseArguments(
             index = pid[1];
             continue;
         }
+        const launch = optionValue(argv, index, "--launch-vulkan");
+        if (launch) {
+            if (!launch[0] || vulkanExecutable !== null) {
+                throw new Error("--launch-vulkan requires exactly one executable");
+            }
+            vulkanExecutable = launch[0];
+            index = launch[1];
+            continue;
+        }
         const processName = optionValue(argv, index, "--process-name");
         if (processName) {
             const name = processName[0].trim();
@@ -126,7 +146,15 @@ function parseArguments(
     }
 
     return {
-        options: { vosuUrl, fpsLimit, pids, processNames },
+        options: {
+            vosuUrl,
+            fpsLimit,
+            pids,
+            processNames,
+            ...(vulkanExecutable === null
+                ? {}
+                : { vulkanLaunch: { executable: vulkanExecutable, args: vulkanArgs } }),
+        },
         command,
     };
 }
@@ -135,6 +163,17 @@ export function parseOptions(argv: string[]): RuntimeOptions {
     return parseArguments(argv, false).options;
 }
 
-export function parseInvocation(argv: string[]): ParsedInvocation {
-    return parseArguments(argv, true);
+export function parseInvocation(
+    argv: string[],
+    electronApplicationPath?: string,
+): ParsedInvocation {
+    if (electronApplicationPath === undefined) return parseArguments(argv, true);
+    const expectedPath = resolve(electronApplicationPath);
+    const applicationPathIndex = argv.findIndex(
+        (argument) => !argument.startsWith("-") && resolve(argument) === expectedPath,
+    );
+    return parseArguments(
+        applicationPathIndex < 0 ? argv : argv.slice(applicationPathIndex + 1),
+        true,
+    );
 }

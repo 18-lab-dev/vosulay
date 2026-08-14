@@ -20,19 +20,26 @@ import {
     installCustomProtocols,
     registerCustomSchemes
 } from './local-overlays';
-import { OverlayManager } from './overlay-manager';
+import { createOverlayProvider } from './provider-factory';
+import type { OverlayProvider } from './overlay-provider';
 import { RemoteOverlayServer } from './remote-server';
 import { parseInvocation } from './options';
 import type { ParsedInvocation, RuntimeOptions } from './options';
 
 const EDIT_ACCELERATOR = 'Control+Shift+Space';
 const VISIBILITY_ACCELERATOR = 'Control+Alt+Shift+H';
-
-app.commandLine.appendSwitch('force_high_performance_gpu');
+if (process.platform === 'win32') {
+    app.commandLine.appendSwitch('force_high_performance_gpu');
+    app.commandLine.appendSwitch('disable-direct-composition');
+} else if (process.platform === 'linux') {
+    // Electron's Linux shared-texture OSR needs the ANGLE Vulkan path on
+    // NVIDIA; the default Ganesh/GL representation cannot import Ozone's
+    // native pixmap backing and emits no paint texture.
+    app.commandLine.appendSwitch('use-angle', 'vulkan');
+    app.commandLine.appendSwitch('enable-features', 'Vulkan');
+}
 app.commandLine.appendSwitch('high-dpi-support', '1');
 app.commandLine.appendSwitch('force-device-scale-factor', '1');
-app.commandLine.appendSwitch('in-process-gpu');
-app.commandLine.appendSwitch('disable-direct-composition');
 
 const storagePaths = resolveStoragePaths(
     app.getPath('appData'),
@@ -50,7 +57,10 @@ registerCustomSchemes();
 
 let invocation: ParsedInvocation | null = null;
 try {
-    invocation = parseInvocation(process.argv.slice(1));
+    invocation = parseInvocation(
+        process.argv.slice(1),
+        process.defaultApp ? app.getAppPath() : undefined,
+    );
 } catch (error) {
     console.error('Invalid vosulay options', error);
     app.exit(1);
@@ -74,10 +84,14 @@ if (invocation !== null) {
 async function start(options: RuntimeOptions): Promise<void> {
     Menu.setApplicationMenu(null);
     app.on('window-all-closed', () => {});
-
     const configStore = new ConfigStore(storagePaths.configPath);
     const overlayRegistry = new LocalOverlayRegistry();
-    const manager = new OverlayManager(options, configStore, overlayRegistry);
+    const provider: OverlayProvider = await createOverlayProvider(
+        process.platform,
+        options,
+        configStore,
+        overlayRegistry,
+    );
     let remoteServer: RemoteOverlayServer | null = null;
     let unsubscribeRemoteConfig: (() => void) | null = null;
     let tray: Tray | null = null;
@@ -88,17 +102,20 @@ async function start(options: RuntimeOptions): Promise<void> {
     app.on('second-instance', (_event, commandLine) => {
         let command;
         try {
-            command = parseInvocation(commandLine.slice(1)).command;
+            command = parseInvocation(
+                commandLine.slice(1),
+                process.defaultApp ? app.getAppPath() : undefined,
+            ).command;
         } catch (error) {
             console.error('Invalid vosulay second-instance options', error);
             return;
         }
         if (command === 'toggle-overlay') {
-            void manager.toggleVisibility().catch((error: unknown) => {
+            void provider.toggleVisibility().catch((error: unknown) => {
                 console.error('Failed to toggle overlay visibility', error);
             });
         } else {
-            void manager.reloadAll();
+            void provider.reloadAll();
         }
     });
     app.on('before-quit', (event) => {
@@ -125,7 +142,7 @@ async function start(options: RuntimeOptions): Promise<void> {
                 failures.push(error);
             }
             try {
-                await manager.flushAll();
+                await provider.flushAll();
             } catch (error) {
                 failures.push(error);
             }
@@ -135,7 +152,7 @@ async function start(options: RuntimeOptions): Promise<void> {
                 failures.push(error);
             }
             try {
-                await manager.stop();
+                await provider.stop();
             } catch (error) {
                 failures.push(error);
             }
@@ -155,11 +172,6 @@ async function start(options: RuntimeOptions): Promise<void> {
     });
 
     await app.whenReady();
-    if (process.platform !== 'win32') {
-        console.error('vosulay Windows runtime can only run on Windows');
-        app.quit();
-        return;
-    }
 
     await Promise.resolve(installCustomProtocols(options, overlayRegistry));
     const initialConfig = (await configStore.load()).config;
@@ -189,12 +201,12 @@ async function start(options: RuntimeOptions): Promise<void> {
     tray.setToolTip('vosulay');
 
     const toggleEditing = (): void => {
-        void manager.toggleEditing().catch((error: unknown) => {
+        void provider.toggleEditing().catch((error: unknown) => {
             console.error('Failed to toggle overlay edit mode', error);
         });
     };
     const toggleVisibility = (): void => {
-        void manager.toggleVisibility().catch((error: unknown) => {
+        void provider.toggleVisibility().catch((error: unknown) => {
             console.error('Failed to toggle overlay visibility', error);
         });
     };
@@ -217,7 +229,7 @@ async function start(options: RuntimeOptions): Promise<void> {
         {
             label: 'Reload overlays',
             click: () => {
-                void manager.reloadAll();
+                void provider.reloadAll();
             }
         },
         { type: 'separator' },
@@ -230,12 +242,12 @@ async function start(options: RuntimeOptions): Promise<void> {
 
     const editMenuItem = trayMenu.getMenuItemById('edit-overlays');
     const visibilityMenuItem = trayMenu.getMenuItemById('toggle-visibility');
-    manager.events.on('editingChanged', (editing) => {
+    provider.events.on('editingChanged', (editing) => {
         if (editMenuItem !== null) {
             editMenuItem.checked = editing;
         }
     });
-    manager.events.on('visibilityChanged', (visible) => {
+    provider.events.on('visibilityChanged', (visible) => {
         if (visibilityMenuItem !== null) {
             visibilityMenuItem.label = visible ? 'Hide overlays' : 'Show overlays';
         }
@@ -259,7 +271,7 @@ async function start(options: RuntimeOptions): Promise<void> {
         );
     }
 
-    manager.start();
+    provider.start();
 }
 
 function createTrayPixels(): Buffer {

@@ -53,9 +53,31 @@ test("options parse aliases and reject unsafe values without Electron", () => {
     assert.deepEqual(options.pids, [42, 99]);
     assert.deepEqual(options.processNames, ["custom.exe"]);
     assert.deepEqual(parseOptions([]).processNames, ["osu!.exe", "osulazer.exe"]);
-    for (const argv of [["--fps-limit", "0"], ["--fps-limit=241"], ["--pid=-1"], ["--vosu-url", "http://u:p@host/"], ["--vosu-url", "http://host/?x=1"], ["stray"]]) {
+    for (const argv of [["--fps-limit", "0"], ["--fps-limit=241"], ["--pid=-1"], ["--vosu-url", "http://u:p@host/"], ["--vosu-url", "http://host/?x=1"], ["--vosu-url", "/bad"], ["stray"]]) {
         assert.throws(() => parseOptions(argv));
     }
+});
+
+test("Vulkan launch parsing separates vosulay and game arguments", () => {
+    const options = parseOptions([
+        "--launch-vulkan",
+        "/games/osu.AppImage",
+        "--",
+        "--no-audio",
+        "--renderer=vulkan",
+    ]);
+    assert.deepEqual(options.vulkanLaunch, {
+        executable: "/games/osu.AppImage",
+        args: ["--no-audio", "--renderer=vulkan"],
+    });
+    assert.throws(
+        () => parseOptions(["--launch-vulkan", "game", "--launch-vulkan", "other"]),
+        /exactly one executable/,
+    );
+    assert.throws(
+        () => parseOptions(["--", "game"]),
+        /only valid after --launch-vulkan/,
+    );
 });
 
 test("visibility IPC invocation accepts both command aliases", () => {
@@ -64,6 +86,17 @@ test("visibility IPC invocation accepts both command aliases", () => {
         "toggle-overlay",
     );
     assert.equal(parseInvocation(["-i"]).command, "toggle-overlay");
+});
+
+test("invocation ignores Electron-injected Linux runtime switches", () => {
+    const invocation = parseInvocation([
+        "--ozone-platform=wayland",
+        "--disable-gpu-video-accelerated-decoding",
+        ".",
+        "--pid",
+        "42",
+    ], process.cwd());
+    assert.deepEqual(invocation.options.pids, [42]);
 });
 
 test("overlay target selection ignores helpers and favors the largest client", () => {

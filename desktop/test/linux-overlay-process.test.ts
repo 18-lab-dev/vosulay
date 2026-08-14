@@ -1,0 +1,207 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+    bitmapFrame,
+    cdpInput,
+    offscreenPreference,
+    electronInput,
+    nextTarget,
+    parseInput,
+    parseTargetEvent,
+} from "../src/main/linux-overlay-process";
+import { NativeSharedTexture } from "../src/main/linux-overlay-provider";
+
+function textureInfo(
+    pixelFormat: "rgba" | "bgra" | "rgbaf16" = "bgra",
+    planes: Electron.Planes[] = [{ fd: 42, stride: 2560, offset: 0, size: 1_228_800 }],
+): Electron.TextureInfo {
+    return {
+        widgetType: "frame",
+        pixelFormat,
+        codedSize: { width: 640, height: 480 },
+        colorSpace: {} as Electron.ColorSpace,
+        visibleRect: { x: 0, y: 0, width: 640, height: 480 },
+        contentRect: { x: 0, y: 0, width: 640, height: 480 },
+        timestamp: 0,
+        metadata: {},
+        handle: {
+            nativePixmap: {
+                planes,
+                modifier: "72057594037927935",
+                supportsZeroCopyWebGpuImport: false,
+            },
+        },
+    };
+}
+
+test("maps Electron BGRA DMA-BUF metadata without copying plane descriptors", () => {
+    assert.deepEqual(
+        NativeSharedTexture.fromElectron(
+            9,
+            17,
+            textureInfo(),
+            { x: 1, y: 2, width: 3, height: 4 },
+        ),
+        {
+            targetId: 9,
+            sequence: 17,
+            width: 640,
+            height: 480,
+            fourcc: "AR24",
+            modifier: "72057594037927935",
+            planes: [{ fd: 42, stride: 2560, offset: 0, size: 1_228_800 }],
+        },
+    );
+});
+
+
+test("targets that cannot sample imported buffers receive CPU frames", () => {
+    assert.deepEqual(offscreenPreference({ supportsDmabuf: () => true }), {
+        useSharedTexture: true,
+        sharedTexturePixelFormat: "argb",
+    });
+    assert.equal(offscreenPreference({ supportsDmabuf: () => false }), true);
+    assert.deepEqual(offscreenPreference({}), {
+        useSharedTexture: true,
+        sharedTexturePixelFormat: "argb",
+    });
+});
+
+test("CPU frames are forwarded with tightly packed BGRA geometry", () => {
+    const bitmap = Buffer.alloc(8 * 4 * 4);
+    assert.deepEqual(
+        bitmapFrame(7, { getSize: () => ({ width: 8, height: 4 }), toBitmap: () => bitmap }),
+        { descriptor: { targetId: 7, width: 8, height: 4, stride: 32 }, bitmap },
+    );
+    assert.equal(
+        bitmapFrame(7, { getSize: () => ({ width: 0, height: 4 }), toBitmap: () => bitmap }),
+        null,
+    );
+    assert.equal(
+        bitmapFrame(7, {
+            getSize: () => ({ width: 8, height: 4 }),
+            toBitmap: () => Buffer.alloc(16),
+        }),
+        null,
+    );
+});
+test("maps Electron RGBA and rejects unsupported shared textures", () => {
+    assert.equal(NativeSharedTexture.fromElectron(
+        1,
+        1,
+        textureInfo("rgba"),
+        { x: 0, y: 0, width: 640, height: 480 },
+    )?.fourcc, "AB24");
+    assert.equal(NativeSharedTexture.fromElectron(
+        1,
+        1,
+        textureInfo("rgbaf16"),
+        { x: 0, y: 0, width: 640, height: 480 },
+    ), null);
+    assert.equal(NativeSharedTexture.fromElectron(
+        1,
+        1,
+        textureInfo("bgra", []),
+        { x: 0, y: 0, width: 640, height: 480 },
+    ), null);
+});
+
+test("target destruction stops forwarding until a replacement target arrives", () => {
+    const created = parseTargetEvent("created:9:640:480");
+    assert.deepEqual(created, {
+        kind: "created",
+        target: { id: 9, width: 640, height: 480 },
+    });
+    assert.deepEqual(nextTarget(null, created!), { id: 9, width: 640, height: 480 });
+    assert.deepEqual(
+        nextTarget({ id: 9, width: 640, height: 480 }, parseTargetEvent("destroyed:8")!),
+        { id: 9, width: 640, height: 480 },
+    );
+    assert.equal(
+        nextTarget({ id: 9, width: 640, height: 480 }, parseTargetEvent("destroyed:9")!),
+        null,
+    );
+    assert.equal(parseTargetEvent("destroyed:0"), null);
+    assert.equal(parseTargetEvent("destroyed:9:extra"), null);
+});
+
+test("validates and translates native SDL input events", () => {
+    const mouse = parseInput("9:4:0:0:123:456");
+    assert.deepEqual(mouse, {
+        targetId: 9,
+        kind: 4,
+        code: 0,
+        flags: 0,
+        value: 123,
+        value2: 456,
+    });
+    assert.deepEqual(electronInput(mouse!), {
+        type: "mouseMove",
+        x: 123,
+        y: 456,
+    });
+    assert.deepEqual(electronInput(parseInput("9:5:1:2:123:456")!), {
+        type: "mouseDown",
+        x: 123,
+        y: 456,
+        button: "left",
+        clickCount: 2,
+    });
+    assert.deepEqual(electronInput(parseInput("9:7:0:0:-120:240")!), {
+        type: "mouseWheel",
+        x: 0,
+        y: 0,
+        deltaX: -120,
+        deltaY: 240,
+    });
+    assert.deepEqual(electronInput(parseInput("9:1:4:2147483648:97:0")!), {
+        type: "keyDown",
+        keyCode: "a",
+        modifiers: ["isautorepeat"],
+    });
+    assert.deepEqual(electronInput(parseInput("9:3:0:0:955:0")!), {
+        type: "char",
+        keyCode: "λ",
+    });
+});
+
+test("rejects malformed or unsupported native input", () => {
+    assert.equal(parseInput("9:4:0"), null);
+    assert.equal(parseInput("9:4:0:0:NaN:1"), null);
+    assert.equal(electronInput(parseInput("9:5:9:1:1:1")!), null);
+    assert.equal(electronInput(parseInput("9:3:0:0:55296:0")!), null);
+    assert.equal(electronInput(parseInput("9:99:0:0:0:0")!), null);
+});
+
+test("maps native input to focus-independent CDP commands", () => {
+    assert.deepEqual(cdpInput(parseInput("9:4:0:0:123:456")!), {
+        method: "Input.dispatchMouseEvent",
+        params: { type: "mouseMoved", x: 123, y: 456, modifiers: 0 },
+    });
+    assert.deepEqual(cdpInput(parseInput("9:5:1:2:123:456")!), {
+        method: "Input.dispatchMouseEvent",
+        params: {
+            type: "mousePressed",
+            x: 123,
+            y: 456,
+            button: "left",
+            clickCount: 2,
+            modifiers: 8,
+        },
+    });
+    assert.deepEqual(cdpInput(parseInput("9:3:0:0:955:0")!), {
+        method: "Input.insertText",
+        params: { text: "λ" },
+    });
+    assert.deepEqual(cdpInput(parseInput("9:1:4:2147483712:97:0")!), {
+        method: "Input.dispatchKeyEvent",
+        params: {
+            type: "keyDown",
+            key: "a",
+            code: "a",
+            modifiers: 2,
+            autoRepeat: true,
+        },
+    });
+});
