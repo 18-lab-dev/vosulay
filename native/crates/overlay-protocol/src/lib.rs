@@ -24,8 +24,9 @@ pub const MAX_TEXTURE_DIMENSION: u32 = 16_384;
 pub const DRM_FORMAT_ARGB8888: u32 = u32::from_le_bytes(*b"AR24");
 pub const DRM_FORMAT_ABGR8888: u32 = u32::from_le_bytes(*b"AB24");
 
-/// Shared-memory frame transport. Every agent supports it, so the host requires
-/// it and uses it whenever zero-copy import is unavailable in the target.
+/// Shared-memory frame transport. Backends that can always upload a CPU buffer
+/// advertise it; it is not universally mandatory, because a backend may only be
+/// able to consume zero-copy buffers.
 pub const CAP_SHM: u64 = 1 << 0;
 /// DMA-BUF frame transport. Only targets whose current graphics context can
 /// actually sample an imported buffer advertise it.
@@ -33,6 +34,10 @@ pub const CAP_DMABUF: u64 = 1 << 1;
 /// Shared-memory frames in Chromium's native BGRA order, avoiding a per-frame
 /// channel swizzle on the host.
 pub const CAP_SHM_BGRA: u64 = 1 << 2;
+/// Every capability that can carry frame pixels. A usable session must grant at
+/// least one of these, but which one is backend-specific: the GL agent accepts
+/// either, while the Vulkan layer can only consume DMA-BUF.
+pub const CAP_TRANSPORT_MASK: u64 = CAP_SHM | CAP_DMABUF;
 
 pub const TEXTURE_FORMAT_STRAIGHT_RGBA8: u32 = 0;
 pub const TEXTURE_FORMAT_PREMULTIPLIED_RGBA8: u32 = 1;
@@ -118,6 +123,10 @@ pub enum MessageKind {
     Pong = 14,
     Shutdown = 15,
     Error = 16,
+    /// Agent to host: the agent has authoritatively chosen which registered
+    /// target it will composite into. The host must follow this selection
+    /// instead of inferring one from target-creation order.
+    SelectTarget = 17,
 }
 
 impl TryFrom<u16> for MessageKind {
@@ -140,6 +149,7 @@ impl TryFrom<u16> for MessageKind {
             14 => Self::Pong,
             15 => Self::Shutdown,
             16 => Self::Error,
+            17 => Self::SelectTarget,
             other => return Err(ProtocolError::MessageKind(other)),
         })
     }
@@ -352,6 +362,35 @@ impl Target {
             target_id: u64::from_le_bytes(p[..8].try_into().unwrap()),
             width: u32::from_le_bytes(p[8..12].try_into().unwrap()),
             height: u32::from_le_bytes(p[12..].try_into().unwrap()),
+        })
+    }
+}
+
+/// Authoritative composition target announced by the agent. `generation`
+/// increases on every selection change, so a host that observes selections out
+/// of order can discard stale ones instead of ping-ponging between targets.
+/// `target_id` is zero when the agent currently has no drawable to composite
+/// into, which the host treats as "stop producing frames".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SelectedTarget {
+    pub target_id: u64,
+    pub generation: u64,
+}
+impl SelectedTarget {
+    pub const LEN: usize = 16;
+    pub fn encode(self) -> [u8; Self::LEN] {
+        let mut b = [0; Self::LEN];
+        b[..8].copy_from_slice(&self.target_id.to_le_bytes());
+        b[8..].copy_from_slice(&self.generation.to_le_bytes());
+        b
+    }
+    pub fn decode(p: &[u8]) -> Result<Self, ProtocolError> {
+        if p.len() != Self::LEN {
+            return Err(ProtocolError::InvalidPayload);
+        }
+        Ok(Self {
+            target_id: u64::from_le_bytes(p[..8].try_into().unwrap()),
+            generation: u64::from_le_bytes(p[8..].try_into().unwrap()),
         })
     }
 }
@@ -1161,5 +1200,35 @@ mod tests {
         invalid.planes[0].size = 17 + 256 * 32;
         invalid.planes.push(invalid.planes[0]);
         assert!(invalid.validate().is_err());
+    }
+    #[test]
+    fn selected_target_roundtrips_and_is_fd_free() {
+        let selection = SelectedTarget {
+            target_id: 0x1122_3344_5566_7788,
+            generation: 7,
+        };
+        let encoded = selection.encode();
+        assert_eq!(encoded.len(), SelectedTarget::LEN);
+        assert_eq!(SelectedTarget::decode(&encoded).unwrap(), selection);
+        assert!(SelectedTarget::decode(&encoded[..15]).is_err());
+
+        assert_eq!(
+            MessageKind::try_from(17).unwrap(),
+            MessageKind::SelectTarget
+        );
+        assert_eq!(expected_fd_count(MessageKind::SelectTarget), 0);
+        let packet = Packet::new(
+            MessageKind::SelectTarget,
+            1,
+            encoded.to_vec(),
+            vec![File::open("/dev/null").unwrap().into()],
+        );
+        assert!(matches!(packet, Err(ProtocolError::FdCount { .. })));
+    }
+
+    #[test]
+    fn transport_mask_covers_exactly_the_frame_carrying_capabilities() {
+        assert_eq!(CAP_TRANSPORT_MASK, CAP_SHM | CAP_DMABUF);
+        assert_eq!(CAP_TRANSPORT_MASK & CAP_SHM_BGRA, 0);
     }
 }

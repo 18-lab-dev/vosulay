@@ -1,8 +1,8 @@
 //! Host-side authenticated overlay session.
 use overlay_protocol::{
-    BoolValue, CAP_DMABUF, CAP_SHM, CAP_SHM_BGRA, COOKIE_LEN, DmabufDescriptor, Endpoint,
-    FrameConsumed, Hello, InputEvent, MAJOR_VERSION, MessageKind, Packet, ProtocolError, Seqpacket,
-    Target, TextureDescriptor,
+    BoolValue, CAP_DMABUF, CAP_SHM, CAP_SHM_BGRA, CAP_TRANSPORT_MASK, COOKIE_LEN, DmabufDescriptor,
+    Endpoint, FrameConsumed, Hello, InputEvent, MAJOR_VERSION, MessageKind, Packet, ProtocolError,
+    SelectedTarget, Seqpacket, Target, TextureDescriptor,
 };
 use std::{
     collections::HashSet,
@@ -33,8 +33,13 @@ pub enum HostError {
 pub struct HostConfig {
     pub expected_pid: u32,
     pub expected_uid: u32,
-    /// Capabilities the host requires from every agent.
+    /// Capabilities the host requires from every agent, all of which must be
+    /// granted.
     pub capabilities: u64,
+    /// Frame transports the host will accept a session on. The agent must
+    /// support at least one of them; which one is the backend's choice, so a
+    /// DMA-BUF-only backend is a valid peer.
+    pub required_transports: u64,
     /// Capabilities the host is able to use; the granted set is the
     /// intersection with what the agent advertises.
     pub supported_capabilities: u64,
@@ -46,7 +51,8 @@ impl HostConfig {
             expected_pid,
             expected_process_group: None,
             expected_uid: unsafe { libc::geteuid() },
-            capabilities: CAP_SHM,
+            capabilities: 0,
+            required_transports: CAP_TRANSPORT_MASK,
             supported_capabilities: CAP_SHM | CAP_DMABUF | CAP_SHM_BGRA,
         }
     }
@@ -56,7 +62,8 @@ impl HostConfig {
             expected_pid: 0,
             expected_process_group: Some(expected_process_group),
             expected_uid: unsafe { libc::geteuid() },
-            capabilities: CAP_SHM,
+            capabilities: 0,
+            required_transports: CAP_TRANSPORT_MASK,
             supported_capabilities: CAP_SHM | CAP_DMABUF | CAP_SHM_BGRA,
         }
     }
@@ -175,6 +182,12 @@ impl Host {
             return Err(ProtocolError::Credentials.into());
         }
         let granted = h.capabilities & self.config.supported_capabilities;
+        // A session with no usable frame transport can never present anything,
+        // so reject it here instead of accepting a peer whose every frame the
+        // backend would discard.
+        if self.config.required_transports != 0 && granted & self.config.required_transports == 0 {
+            return Err(ProtocolError::Credentials.into());
+        }
         let welcome = Packet::new(
             MessageKind::Welcome,
             hello.header.request_id,
@@ -221,6 +234,10 @@ pub struct HostFrame {
 pub enum HostEvent {
     TargetCreated(Target),
     TargetDestroyed(u64),
+    /// The agent chose which target it composites into. This is the only
+    /// authority for target selection; the host must not infer one from
+    /// creation order.
+    TargetSelected(SelectedTarget),
     Frame(HostFrame),
     Consumed(FrameConsumed),
     Cleared(u64),
@@ -424,6 +441,15 @@ impl HostSession {
                 self.targets.remove(&id);
                 Ok(HostEvent::TargetDestroyed(id))
             }
+            MessageKind::SelectTarget => {
+                let selection = SelectedTarget::decode(&p.payload)?;
+                // Zero clears the selection; anything else must name a target
+                // the agent has already registered.
+                if selection.target_id != 0 && !self.targets.contains(&selection.target_id) {
+                    return Err(ProtocolError::InvalidPayload.into());
+                }
+                Ok(HostEvent::TargetSelected(selection))
+            }
             MessageKind::Dmabuf => {
                 let descriptor = DmabufDescriptor::decode(&p.payload)?;
                 if p.fds.len() != descriptor.planes.len() {
@@ -582,7 +608,11 @@ mod tests {
     }
 
     #[test]
-    fn a_target_without_shared_memory_is_rejected() {
+    fn a_dmabuf_only_target_negotiates_a_zero_copy_session() {
+        // The Vulkan layer can only consume imported buffers. Requiring shared
+        // memory from every agent used to force it to advertise a transport it
+        // cannot read, so the host selected SHM and the layer discarded every
+        // frame it was sent.
         let pid = unsafe { libc::getpid() }.cast_unsigned();
         let host = Host::new(pid).unwrap();
         let ep = host.endpoint().clone();
@@ -601,6 +631,39 @@ mod tests {
                         .unwrap(),
                 )
                 .unwrap();
+            let welcome = connection.recv().unwrap();
+            u64::from_le_bytes(welcome.payload.as_slice().try_into().unwrap())
+        });
+        let session = host.accept().unwrap();
+        assert_eq!(session.capabilities(), CAP_DMABUF);
+        assert_eq!(session.capabilities() & CAP_SHM, 0);
+        assert_eq!(client.join().unwrap(), CAP_DMABUF);
+    }
+
+    #[test]
+    fn a_target_with_no_usable_frame_transport_is_rejected() {
+        let pid = unsafe { libc::getpid() }.cast_unsigned();
+        let host = Host::new(pid).unwrap();
+        let ep = host.endpoint().clone();
+        let cookie = host.cookie();
+        let client = thread::spawn(move || {
+            let connection = ep.connect().unwrap();
+            let hello = Hello {
+                cookie,
+                pid,
+                uid: unsafe { libc::geteuid() },
+                // Colour ordering alone carries no pixels.
+                capabilities: CAP_SHM_BGRA,
+            };
+            connection
+                .send(
+                    &Packet::new(MessageKind::Hello, 1, hello.encode().to_vec(), Vec::new())
+                        .unwrap(),
+                )
+                .unwrap();
+            // Stay connected so the rejection cannot be mistaken for a peer
+            // that simply hung up before the welcome was written.
+            let _ = connection.recv();
         });
         assert!(host.accept().is_err());
         client.join().unwrap();

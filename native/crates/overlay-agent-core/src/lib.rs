@@ -1,8 +1,12 @@
 //! Small, fail-open agent-side protocol state machine. It owns no graphics
 //! resources: descriptors and descriptors' FDs are passed through unchanged.
+pub mod completion;
+pub use completion::CompletionQueue;
+
 use overlay_protocol::{
-    BoolValue, CAP_SHM, COOKIE_LEN, DmabufDescriptor, Endpoint, FrameConsumed, Hello, InputEvent,
-    MessageKind, Packet, ProtocolError, Seqpacket, Target, TextureDescriptor,
+    BoolValue, CAP_DMABUF, CAP_SHM, COOKIE_LEN, DmabufDescriptor, Endpoint, FrameConsumed, Hello,
+    InputEvent, MessageKind, Packet, ProtocolError, SelectedTarget, Seqpacket, Target,
+    TextureDescriptor,
 };
 use std::{
     collections::VecDeque,
@@ -31,6 +35,12 @@ pub struct AgentConfig {
     /// Capabilities the session cannot run without; the host must grant all of
     /// them or the agent refuses the session.
     pub capabilities: u64,
+    /// Frame transports this backend can actually consume. The host must grant
+    /// at least one of them, but never all: the GL backend can sample either an
+    /// imported DMA-BUF or an uploaded SHM buffer, while the Vulkan layer only
+    /// has a DMA-BUF import path. Requiring the union here is what previously
+    /// forced every backend to claim SHM.
+    pub required_transports: u64,
     /// Everything this target can actually use. The host picks its frame
     /// transport from this set, so it must reflect the live graphics context.
     pub advertised_capabilities: u64,
@@ -43,10 +53,30 @@ impl AgentConfig {
             uid: unsafe { libc::geteuid() },
             expected_host_pid: unsafe { libc::getppid() } as u32,
             expected_host_uid: unsafe { libc::geteuid() },
-            capabilities: CAP_SHM,
+            capabilities: 0,
+            required_transports: CAP_SHM,
             advertised_capabilities: CAP_SHM,
             watchdog: Duration::from_secs(2),
         }
+    }
+
+    /// Configuration for a backend that can only consume zero-copy buffers.
+    /// It advertises and requires DMA-BUF alone, so a host that cannot provide
+    /// it fails the handshake instead of silently negotiating an SHM session
+    /// whose frames the backend would reject on every present.
+    pub fn dmabuf_only() -> Self {
+        Self {
+            capabilities: 0,
+            required_transports: CAP_DMABUF,
+            advertised_capabilities: CAP_DMABUF,
+            ..Self::current()
+        }
+    }
+
+    /// The transport bits the handshake must yield for this configuration.
+    fn accepts_granted(&self, granted: u64) -> bool {
+        granted & self.capabilities == self.capabilities
+            && (self.required_transports == 0 || granted & self.required_transports != 0)
     }
 }
 
@@ -152,7 +182,9 @@ impl Agent {
             cookie,
             pid: config.pid,
             uid: config.uid,
-            capabilities: config.advertised_capabilities | config.capabilities,
+            capabilities: config.advertised_capabilities
+                | config.capabilities
+                | config.required_transports,
         };
         conn.send(&Packet::new(
             MessageKind::Hello,
@@ -173,7 +205,7 @@ impl Agent {
                 .try_into()
                 .map_err(|_| AgentError::InvalidWelcome)?,
         );
-        if granted & config.capabilities != config.capabilities {
+        if !config.accepts_granted(granted) {
             return Err(AgentError::InvalidWelcome);
         }
         Ok(Self {
@@ -257,6 +289,17 @@ impl Agent {
             MessageKind::Consumed,
             consumed.sequence,
             consumed.encode().to_vec(),
+            Vec::new(),
+        )?)
+    }
+    /// Announce the target this agent will composite into. The host follows
+    /// this instead of guessing from target-creation order, so the two sides
+    /// cannot disagree about where frames should go.
+    pub fn send_selected_target(&mut self, selection: SelectedTarget) -> Result<(), AgentError> {
+        self.send_packet(&Packet::new(
+            MessageKind::SelectTarget,
+            selection.generation,
+            selection.encode().to_vec(),
             Vec::new(),
         )?)
     }
