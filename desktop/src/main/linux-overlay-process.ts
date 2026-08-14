@@ -489,13 +489,18 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         } catch (error) {
             failure = error;
         }
-        for (const release of this.releases.values()) release();
-        this.releases.clear();
         try {
+            // The native side owns GPU retirement. Do not release Chromium's
+            // textures merely because JS is tearing down: a submitted GL/Vulkan
+            // draw may still be reading them. Once native teardown completes,
+            // anything still present here is either locally discarded or no
+            // longer reachable by the target process.
             await this.native.destroy();
         } catch (error) {
             failure ??= error;
         } finally {
+            for (const release of this.releases.values()) release();
+            this.releases.clear();
             if (!this.window.isDestroyed()) this.window.destroy();
             this.emitDestroyed();
         }
@@ -528,14 +533,17 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         const previous = this.targets.active;
         this.targets = nextTargetState(this.targets, event);
         const target = this.targets.active;
-        if (target === previous) return;
-        // The composition target changed, so any frame still in flight belongs
-        // to a surface that is no longer being drawn.
-        this.releasePendingTextures();
-        if (target !== null && !this.window.isDestroyed()) {
+        const targetChanged = target?.id !== previous?.id;
+        const geometryChanged = target !== null && previous !== null
+            && target.id === previous.id
+            && (target.width !== previous.width || target.height !== previous.height);
+        // Target selection/resize is not proof of GPU completion. Pending
+        // shared textures remain owned until the native agent explicitly emits
+        // `consumed` (or reports a local discard before the frame was sent).
+        if (target !== null && (targetChanged || geometryChanged) && !this.window.isDestroyed()) {
             this.window.setSize(target.width, target.height, false);
         }
-        if (target !== null && this.diagnostics) {
+        if (targetChanged && target !== null && this.diagnostics) {
             console.info(
                 `Native overlay target for PID ${this.pid}: ${target.id} ${target.width}x${target.height}`,
             );
@@ -552,11 +560,6 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
             console.info(`Native overlay consumed frame ${sequence} for PID ${this.pid}`);
         }
     };
-
-    private releasePendingTextures(): void {
-        for (const release of this.releases.values()) release();
-        this.releases.clear();
-    }
 
     private readonly handleInput = (value: unknown): void => {
         const input = parseInput(value);
@@ -633,7 +636,10 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
                 + ` planes=${descriptor.planes.length}`,
             );
         }
-        void Promise.resolve(this.surface.updateDmabuf(descriptor))
+        // Start from an already-resolved promise so a synchronous N-API throw
+        // takes the same cleanup path as an asynchronous rejection.
+        void Promise.resolve()
+            .then(() => this.surface.updateDmabuf(descriptor))
             .then(() => {
                 if (this.diagnostics && !this.firstFrameForwarded) {
                     this.firstFrameForwarded = true;
@@ -661,9 +667,8 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         const { width, height } = descriptor;
         const sequence = ++this.sequence;
         this.bitmapInflight += 1;
-        void Promise.resolve(
-            update.call(this.surface, descriptor, bitmap),
-        )
+        void Promise.resolve()
+            .then(() => update.call(this.surface, descriptor, bitmap))
             .then(() => {
                 if (this.diagnostics && !this.firstFrameForwarded) {
                     this.firstFrameForwarded = true;
