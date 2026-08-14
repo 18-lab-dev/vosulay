@@ -12,7 +12,7 @@ use ash::{
 };
 use compositor::SwapchainState;
 use overlay_agent_core::{Agent, AgentConfig, CompletionQueue, Frame, FrameDescriptor};
-use overlay_protocol::{COOKIE_LEN, Endpoint, FrameConsumed, Target};
+use overlay_protocol::{COOKIE_LEN, Endpoint, FrameConsumed, SelectedTarget, Target};
 use std::{
     collections::{HashMap, VecDeque},
     ffi::{CStr, c_char, c_void},
@@ -177,6 +177,9 @@ struct Session {
     /// life, and a present must never wait behind host backpressure.
     acknowledgements: Arc<CompletionQueue>,
     targets: Mutex<VecDeque<TargetCommand>>,
+    /// Most recently presented registered swapchain. The present hook only
+    /// writes this atomic; protocol I/O stays on the control thread.
+    selected_target: AtomicU64,
     connected: AtomicBool,
 }
 
@@ -233,6 +236,7 @@ fn session() -> &'static Arc<Session> {
             latest: Mutex::new(None),
             acknowledgements,
             targets: Mutex::new(VecDeque::new()),
+            selected_target: AtomicU64::new(0),
             connected: AtomicBool::new(false),
         });
         if let Some((endpoint, cookie)) = session_configuration() {
@@ -273,6 +277,8 @@ fn run_session(session: Arc<Session>, endpoint: Endpoint, cookie: [u8; COOKIE_LE
         return;
     }
     session.connected.store(true, Ordering::Release);
+    let mut announced_target = 0u64;
+    let mut selection_generation = 0u64;
     loop {
         while let Some(consumed) = session.acknowledgements.pop() {
             if agent.send_consumed(consumed).is_err() {
@@ -291,6 +297,24 @@ fn run_session(session: Arc<Session>, endpoint: Endpoint, cookie: [u8; COOKIE_LE
                     return;
                 }
             }
+        }
+        // Target registration is drained first, so a selection can never name
+        // a swapchain the host has not observed yet. The present thread only
+        // updates the atomic above; this is the sole socket writer.
+        let selected = session.selected_target.load(Ordering::Acquire);
+        if selected != announced_target {
+            selection_generation = selection_generation.wrapping_add(1).max(1);
+            if agent
+                .send_selected_target(SelectedTarget {
+                    target_id: selected,
+                    generation: selection_generation,
+                })
+                .is_err()
+            {
+                session.connected.store(false, Ordering::Release);
+                return;
+            }
+            announced_target = selected;
         }
         let _ = agent.watchdog_tick();
         match agent.poll() {
@@ -886,6 +910,9 @@ unsafe extern "system" fn layer_destroy_device(
             for record in swapchains {
                 if let Ok(mut record) = record.lock() {
                     unsafe { record.state.destroy(&removed.raw) };
+                    if session().selected_target.load(Ordering::Acquire) == record.target_id {
+                        session().selected_target.store(0, Ordering::Release);
+                    }
                     if let Ok(mut commands) = session().targets.lock() {
                         commands.push_back(TargetCommand::Destroy(record.target_id));
                     }
@@ -995,6 +1022,9 @@ unsafe extern "system" fn layer_destroy_swapchain(
             if let Some(device_dispatch) = device_dispatch {
                 unsafe { record.state.destroy(&device_dispatch.raw) };
             }
+            if session().selected_target.load(Ordering::Acquire) == record.target_id {
+                session().selected_target.store(0, Ordering::Release);
+            }
             if let Ok(mut commands) = session().targets.lock() {
                 commands.push_back(TargetCommand::Destroy(record.target_id));
             }
@@ -1010,6 +1040,31 @@ unsafe extern "system" fn layer_destroy_swapchain(
         }
         diagnostics("swapchain destroyed");
     });
+}
+
+/// Observe the first registered swapchain in a present without performing any
+/// protocol I/O on the application's present thread. Electron only forwards
+/// frames after receiving SelectedTarget, so Vulkan must publish this before a
+/// frame can ever reach `compose_overlay`.
+unsafe fn observe_presented_target(original: &vk::PresentInfoKHR<'_>) {
+    if original.swapchain_count == 0 || original.p_swapchains.is_null() {
+        return;
+    }
+    let swapchains = unsafe {
+        std::slice::from_raw_parts(original.p_swapchains, original.swapchain_count as usize)
+    };
+    let selected = {
+        let state = dispatch_state();
+        swapchains.iter().find_map(|swapchain| {
+            state
+                .swapchains
+                .get(&swapchain.as_raw())
+                .and_then(|record| record.lock().ok().map(|record| record.target_id))
+        })
+    };
+    if let Some(target_id) = selected {
+        session().selected_target.store(target_id, Ordering::Release);
+    }
 }
 
 /// Decides whether the layer may touch this present at all. Split out so the
@@ -1118,6 +1173,13 @@ unsafe extern "system" fn layer_queue_present(
     };
 
     let original = unsafe { present_info.as_ref() };
+    if let Some(original) = original {
+        // Best effort only; selection publication itself happens later on the
+        // control thread. A failure here must not alter the game's present.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            observe_presented_target(original)
+        }));
+    }
     let permitted = overlay_permitted(
         overlay_disabled(),
         queue_dispatch.is_some(),
@@ -1220,5 +1282,12 @@ mod tests {
             vk::Result::ERROR_INITIALIZATION_FAILED,
             vk::Result::ERROR_DEVICE_LOST
         );
+    }
+
+    #[test]
+    fn selection_generation_never_uses_zero() {
+        let mut generation = u64::MAX;
+        generation = generation.wrapping_add(1).max(1);
+        assert_eq!(generation, 1);
     }
 }
