@@ -17,7 +17,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::{
-        Arc, Mutex,
+        Arc, Condvar, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     thread,
@@ -96,26 +96,77 @@ struct EventState {
     pending: VecDeque<(String, String)>,
 }
 struct Shared {
-    state: Mutex<Lifecycle>,
+    commands: Mutex<CommandQueue>,
+    /// Wakes the actor when work is queued, so an idle session does not spin.
+    signal: Condvar,
     cancel: Arc<AtomicBool>,
     events: Mutex<EventState>,
 }
-enum Lifecycle {
-    Connected(Arc<Mutex<HostSession>>),
-    Destroyed,
+
+/// Ordered work for the one thread that owns `HostSession`.
+///
+/// A worker per command could not preserve submission order: `SurfaceBytes`
+/// spent time creating and writing a memfd before it reached the session, so a
+/// newer visibility or clear command could overtake it and a stale frame could
+/// land after the control state it was supposed to precede.
+struct CommandQueue {
+    pending: VecDeque<Envelope>,
+    closed: bool,
 }
-impl Shared {
-    fn with_session<T>(&self, f: impl FnOnce(&mut HostSession) -> Result<T>) -> Result<T> {
-        let state = self.state.lock().map_err(fail)?;
-        match &*state {
-            Lifecycle::Connected(session) => {
-                let mut session = session.lock().map_err(fail)?;
-                f(&mut session)
+
+struct Envelope {
+    command: SessionCommand,
+    completion: Arc<Completion>,
+}
+
+/// Signalled once the actor has *applied* a command, so an awaiting JS caller
+/// observes host-side effect rather than mere enqueueing.
+struct Completion {
+    outcome: Mutex<Option<std::result::Result<(), String>>>,
+    signal: Condvar,
+}
+
+impl Completion {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            outcome: Mutex::new(None),
+            signal: Condvar::new(),
+        })
+    }
+    fn settle(&self, outcome: std::result::Result<(), String>) {
+        if let Ok(mut slot) = self.outcome.lock() {
+            if slot.is_none() {
+                *slot = Some(outcome);
             }
-            Lifecycle::Destroyed => Err(fail("overlay handle is destroyed")),
+            self.signal.notify_all();
+        }
+    }
+    fn wait(&self) -> Result<()> {
+        let mut slot = self.outcome.lock().map_err(fail)?;
+        while slot.is_none() {
+            slot = self.signal.wait(slot).map_err(fail)?;
+        }
+        match slot.take().expect("settled") {
+            Ok(()) => Ok(()),
+            Err(message) => Err(fail(message)),
         }
     }
 }
+
+impl SessionCommand {
+    /// Frames are latest-wins: only the newest one for a target is worth
+    /// sending, and superseding in place keeps the queue bounded without
+    /// reordering anything relative to control commands.
+    fn frame_target(&self) -> Option<u64> {
+        match self {
+            Self::SurfaceFd { descriptor, .. } => Some(descriptor.target_id),
+            Self::SurfaceBytes { descriptor, .. } => Some(descriptor.target_id),
+            Self::Dmabuf { descriptor, .. } => Some(descriptor.target_id),
+            _ => None,
+        }
+    }
+}
+
 enum SessionCommand {
     Visible(bool),
     Capture(bool),
@@ -124,8 +175,9 @@ enum SessionCommand {
         descriptor: TextureDescriptor,
         fd: OwnedFd,
     },
-    /// Premultiplied BGRA bytes. Sealed memfd is created on the worker thread
-    /// so a multi-megabyte write does not block Chromium's paint callback.
+    /// Premultiplied BGRA bytes. The sealed memfd is created on the actor
+    /// thread, inside the ordered queue, so the write cannot let this frame
+    /// slip behind a later control command.
     SurfaceBytes {
         descriptor: TextureDescriptor,
         bytes: Buffer,
@@ -139,8 +191,7 @@ enum SessionCommand {
 }
 
 pub struct SessionTask {
-    shared: Arc<Shared>,
-    command: Option<SessionCommand>,
+    completion: Option<Arc<Completion>>,
 }
 
 impl Task for SessionTask {
@@ -148,71 +199,10 @@ impl Task for SessionTask {
     type JsValue = ();
 
     fn compute(&mut self) -> Result<Self::Output> {
-        let command = self
-            .command
+        self.completion
             .take()
-            .ok_or_else(|| fail("task already run"))?;
-        match command {
-            SessionCommand::Visible(value) => self
-                .shared
-                .with_session(|session| session.set_visible(value).map_err(fail)),
-            SessionCommand::Capture(value) => self
-                .shared
-                .with_session(|session| session.set_input_capture(value).map_err(fail)),
-            SessionCommand::SurfaceFd { descriptor, fd } => self.shared.with_session(|session| {
-                session
-                    .ensure_target(Target {
-                        target_id: descriptor.target_id,
-                        width: descriptor.width,
-                        height: descriptor.height,
-                    })
-                    .map_err(fail)?;
-                session
-                    .send_shm(descriptor.target_id, descriptor, fd)
-                    .map_err(fail)
-            }),
-            SessionCommand::SurfaceBytes { descriptor, bytes } => {
-                let fd = sealed_memfd(&bytes)?;
-                self.shared.with_session(|session| {
-                    session
-                        .ensure_target(Target {
-                            target_id: descriptor.target_id,
-                            width: descriptor.width,
-                            height: descriptor.height,
-                        })
-                        .map_err(fail)?;
-                    session
-                        .send_shm(descriptor.target_id, descriptor, fd)
-                        .map_err(fail)
-                })
-            }
-            SessionCommand::Dmabuf { descriptor, fds } => self.shared.with_session(|session| {
-                session
-                    .ensure_target(Target {
-                        target_id: descriptor.target_id,
-                        width: descriptor.width,
-                        height: descriptor.height,
-                    })
-                    .map_err(fail)?;
-                session
-                    .send_dmabuf(descriptor.target_id, descriptor, fds)
-                    .map_err(fail)
-            }),
-            SessionCommand::Clear(target_id) => self
-                .shared
-                .with_session(|session| session.clear(target_id).map_err(fail)),
-            SessionCommand::Destroy => {
-                let mut state = self.shared.state.lock().map_err(fail)?;
-                if let Lifecycle::Connected(session) =
-                    std::mem::replace(&mut *state, Lifecycle::Destroyed)
-                    && let Ok(mut session) = session.lock()
-                {
-                    let _ = session.shutdown();
-                }
-                self.shared.cancel.store(true, Ordering::Release);
-                Ok(())
-            }
-        }
+            .ok_or_else(|| fail("task already run"))?
+            .wait()
     }
 
     fn resolve(&mut self, _env: napi::Env, _: Self::Output) -> Result<Self::JsValue> {
@@ -220,10 +210,49 @@ impl Task for SessionTask {
     }
 }
 
+/// Submit a command to the session actor, returning the handle that settles
+/// once the actor has applied it.
+fn enqueue(shared: &Arc<Shared>, command: SessionCommand) -> Arc<Completion> {
+    let completion = Completion::new();
+    let Ok(mut queue) = shared.commands.lock() else {
+        completion.settle(Err("overlay session state is unavailable".to_owned()));
+        return completion;
+    };
+    if queue.closed {
+        // Tearing down an already-ended session is the caller getting what it
+        // asked for, not a failure; anything else is genuinely too late.
+        let outcome = match command {
+            SessionCommand::Destroy => Ok(()),
+            _ => Err("overlay handle is destroyed".to_owned()),
+        };
+        completion.settle(outcome);
+        return completion;
+    }
+    if let Some(target_id) = command.frame_target() {
+        // Drop any frame for this target that has not been sent yet. It is
+        // already stale, and retaining it would only queue an obsolete paint
+        // and hold its file descriptors open.
+        queue.pending.retain(|envelope| {
+            if envelope.command.frame_target() == Some(target_id) {
+                envelope.completion.settle(Ok(()));
+                return false;
+            }
+            true
+        });
+    }
+    queue.pending.push_back(Envelope {
+        command,
+        completion: completion.clone(),
+    });
+    drop(queue);
+    shared.signal.notify_one();
+    completion
+}
+
+/// The JS-facing wrapper: resolves when the actor has applied the command.
 fn queue(shared: &Arc<Shared>, command: SessionCommand) -> AsyncTask<SessionTask> {
     AsyncTask::new(SessionTask {
-        shared: shared.clone(),
-        command: Some(command),
+        completion: Some(enqueue(shared, command)),
     })
 }
 #[napi]
@@ -246,11 +275,16 @@ impl Drop for OverlayHandle {
             events.callbacks.clear();
             events.pending.clear();
         }
-        if let Ok(mut state) = self.shared.state.lock()
-            && !matches!(*state, Lifecycle::Destroyed)
-        {
-            *state = Lifecycle::Destroyed;
+        if let Ok(mut queue) = self.shared.commands.lock() {
+            queue.closed = true;
+            for envelope in queue.pending.drain(..) {
+                envelope
+                    .completion
+                    .settle(Err("overlay handle is destroyed".to_owned()));
+            }
         }
+        // Release the actor if it is parked waiting for work.
+        self.shared.signal.notify_all();
     }
 }
 
@@ -284,7 +318,9 @@ impl OverlayHandle {
     }
     #[napi]
     pub fn destroy(&self) -> AsyncTask<SessionTask> {
-        self.shared.cancel.store(true, Ordering::Release);
+        // Cancellation is the actor's to set, once it has actually applied the
+        // shutdown. Raising it here made the actor exit before it could pop the
+        // command, so `destroy()` rejected on a session that shut down cleanly.
         if let Ok(mut events) = self.shared.events.lock() {
             events.callbacks.clear();
             events.pending.clear();
@@ -340,12 +376,15 @@ impl OverlayHandle {
             shared: self.shared.clone(),
         })
     }
+    /// Drain one buffered event. The actor owns the socket, so this reads the
+    /// events it has already received rather than competing for a recv.
     #[napi]
     pub fn poll_event(&self) -> Result<String> {
-        self.shared.with_session(|session| {
-            let event = session.recv().map_err(fail)?;
-            Ok(format!("{event:?}"))
-        })
+        let mut events = self.shared.events.lock().map_err(fail)?;
+        match events.pending.pop_front() {
+            Some((name, payload)) => Ok(format!("{name}:{payload}")),
+            None => Ok(String::new()),
+        }
     }
 }
 
@@ -494,8 +533,67 @@ fn emit_event(shared: &Shared, name: &str, payload: String) {
     state.pending.push_back((name.to_owned(), payload));
 }
 
-/// Receive authenticated agent events off the Node thread.
-fn start_event_pump(shared: Arc<Shared>, session: Arc<Mutex<HostSession>>) {
+/// Apply one command to the session. Runs only on the actor thread, so the
+/// order commands were submitted in is the order the host observes.
+fn apply_command(
+    session: &mut HostSession,
+    command: SessionCommand,
+) -> std::result::Result<(), String> {
+    let describe = |error: overlay_host::HostError| error.to_string();
+    match command {
+        SessionCommand::Visible(value) => session.set_visible(value).map_err(describe),
+        SessionCommand::Capture(value) => session.set_input_capture(value).map_err(describe),
+        SessionCommand::SurfaceFd { descriptor, fd } => {
+            session
+                .ensure_target(Target {
+                    target_id: descriptor.target_id,
+                    width: descriptor.width,
+                    height: descriptor.height,
+                })
+                .map_err(describe)?;
+            session
+                .send_shm(descriptor.target_id, descriptor, fd)
+                .map_err(describe)
+        }
+        SessionCommand::SurfaceBytes { descriptor, bytes } => {
+            let fd = sealed_memfd(&bytes).map_err(|error| error.to_string())?;
+            session
+                .ensure_target(Target {
+                    target_id: descriptor.target_id,
+                    width: descriptor.width,
+                    height: descriptor.height,
+                })
+                .map_err(describe)?;
+            session
+                .send_shm(descriptor.target_id, descriptor, fd)
+                .map_err(describe)
+        }
+        SessionCommand::Dmabuf { descriptor, fds } => {
+            session
+                .ensure_target(Target {
+                    target_id: descriptor.target_id,
+                    width: descriptor.width,
+                    height: descriptor.height,
+                })
+                .map_err(describe)?;
+            session
+                .send_dmabuf(descriptor.target_id, descriptor, fds)
+                .map_err(describe)
+        }
+        SessionCommand::Clear(target_id) => session.clear(target_id).map_err(describe),
+        SessionCommand::Destroy => {
+            let _ = session.shutdown();
+            Ok(())
+        }
+    }
+}
+
+/// The single thread that owns `HostSession`.
+///
+/// It both applies queued commands and receives agent events, which is what
+/// lets the session be owned outright: no lock is shared with a pump thread,
+/// and no command can be applied out of submission order.
+fn start_session_actor(shared: Arc<Shared>, mut session: HostSession) {
     thread::spawn(move || {
         let mut ping_sequence = 1u64;
         let mut last_ping = Instant::now();
@@ -503,71 +601,112 @@ fn start_event_pump(shared: Arc<Shared>, session: Arc<Mutex<HostSession>>) {
             if shared.cancel.load(Ordering::Acquire) {
                 break;
             }
-            let event = {
-                let mut guard = match session.lock() {
-                    Ok(guard) => guard,
-                    Err(_) => break,
+            // Apply everything queued, in submission order, before touching
+            // the socket for anything else.
+            let mut destroyed = false;
+            loop {
+                let envelope = match shared.commands.lock() {
+                    Ok(mut queue) => queue.pending.pop_front(),
+                    Err(_) => None,
                 };
-                if last_ping.elapsed() >= Duration::from_millis(500) {
-                    if guard.ping(ping_sequence).is_err() {
-                        emit_event(&shared, "disconnect", "disconnect".to_owned());
-                        break;
-                    }
-                    ping_sequence = ping_sequence.wrapping_add(1);
-                    last_ping = Instant::now();
+                let Some(envelope) = envelope else {
+                    break;
+                };
+                let stop = matches!(envelope.command, SessionCommand::Destroy);
+                let outcome = apply_command(&mut session, envelope.command);
+                envelope.completion.settle(outcome);
+                if stop {
+                    destroyed = true;
+                    break;
                 }
-                match guard.recv() {
-                    Ok(event) => Some(event),
-                    Err(overlay_host::HostError::Protocol(
-                        overlay_protocol::ProtocolError::Io(error),
-                    )) if matches!(
-                        error.kind(),
-                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
-                    ) =>
-                    {
-                        None
-                    }
-                    Err(_) => {
-                        emit_event(&shared, "disconnect", "disconnect".to_owned());
-                        break;
-                    }
+            }
+            if destroyed {
+                shared.cancel.store(true, Ordering::Release);
+                break;
+            }
+
+            if last_ping.elapsed() >= Duration::from_millis(500) {
+                if session.ping(ping_sequence).is_err() {
+                    emit_event(&shared, "disconnect", "disconnect".to_owned());
+                    break;
+                }
+                ping_sequence = ping_sequence.wrapping_add(1);
+                last_ping = Instant::now();
+            }
+
+            let event = match session.recv() {
+                Ok(event) => Some(event),
+                Err(overlay_host::HostError::Protocol(overlay_protocol::ProtocolError::Io(
+                    error,
+                ))) if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+                ) =>
+                {
+                    None
+                }
+                Err(_) => {
+                    emit_event(&shared, "disconnect", "disconnect".to_owned());
+                    break;
                 }
             };
-            if let Some(event) = event {
-                let (name, payload) = match event {
-                    HostEvent::TargetCreated(target) => (
-                        "target",
-                        format!(
-                            "created:{}:{}:{}",
-                            target.target_id, target.width, target.height
-                        ),
+            let Some(event) = event else {
+                // Idle: sleep only until a command arrives, so queued work is
+                // applied promptly instead of waiting out a fixed poll.
+                if let Ok(queue) = shared.commands.lock()
+                    && queue.pending.is_empty()
+                {
+                    let _ = shared.signal.wait_timeout(queue, Duration::from_millis(10));
+                }
+                continue;
+            };
+            let (name, payload) = match event {
+                HostEvent::TargetCreated(target) => (
+                    "target",
+                    format!(
+                        "created:{}:{}:{}",
+                        target.target_id, target.width, target.height
                     ),
-                    HostEvent::TargetDestroyed(target_id) => {
-                        ("target", format!("destroyed:{target_id}"))
-                    }
-                    HostEvent::Input(event) => (
-                        "input",
-                        format!(
-                            "{}:{}:{}:{}:{}:{}",
-                            event.target_id,
-                            event.kind,
-                            event.code,
-                            event.flags,
-                            event.value,
-                            event.value2
-                        ),
+                ),
+                HostEvent::TargetDestroyed(target_id) => {
+                    ("target", format!("destroyed:{target_id}"))
+                }
+                // The agent is the only authority for which target is
+                // composited into; the host forwards its choice verbatim.
+                HostEvent::TargetSelected(selection) => (
+                    "target",
+                    format!("selected:{}:{}", selection.target_id, selection.generation),
+                ),
+                HostEvent::Input(event) => (
+                    "input",
+                    format!(
+                        "{}:{}:{}:{}:{}:{}",
+                        event.target_id,
+                        event.kind,
+                        event.code,
+                        event.flags,
+                        event.value,
+                        event.value2
                     ),
-                    HostEvent::End(target_id) => ("end", target_id.to_string()),
-                    HostEvent::Consumed(consumed) => (
-                        "consumed",
-                        format!("{}:{}", consumed.target_id, consumed.sequence),
-                    ),
-                    HostEvent::Frame(frame) => ("frame", format!("{frame:?}")),
-                    _ => continue,
-                };
-                emit_event(&shared, name, payload);
-            } else {
-                thread::sleep(Duration::from_millis(10));
+                ),
+                HostEvent::End(target_id) => ("end", target_id.to_string()),
+                HostEvent::Consumed(consumed) => (
+                    "consumed",
+                    format!("{}:{}", consumed.target_id, consumed.sequence),
+                ),
+                HostEvent::Frame(frame) => ("frame", format!("{frame:?}")),
+                _ => continue,
+            };
+            emit_event(&shared, name, payload);
+        }
+        // Nothing will ever apply the remaining commands, so fail them rather
+        // than leaving awaiting JS promises pending forever.
+        if let Ok(mut queue) = shared.commands.lock() {
+            queue.closed = true;
+            for envelope in queue.pending.drain(..) {
+                envelope
+                    .completion
+                    .settle(Err("overlay session ended".to_owned()));
             }
         }
     });
@@ -609,7 +748,13 @@ impl ProfilerAttach {
         }
     }
 
-    fn run(&self, pid: u32, socket_name: &str, cookie: &str) -> Result<()> {
+    /// Run the attach helper under the caller's end-to-end deadline.
+    ///
+    /// `Command::output()` waits forever, and the public attach timeout only
+    /// began once the agent accept started afterwards, so a wedged helper made
+    /// the documented timeout meaningless. The child is spawned, polled against
+    /// `deadline`, then killed and reaped if it overruns.
+    fn run(&self, pid: u32, socket_name: &str, cookie: &str, deadline: Instant) -> Result<()> {
         let mut command = if self.tool.ends_with(".dll") {
             let mut command = Command::new("dotnet");
             command.arg(&self.tool);
@@ -619,26 +764,52 @@ impl ProfilerAttach {
         };
         command
             .envs(std::env::vars())
-            .env("VOSULAY_ATTACH_TARGET_PID", pid.to_string());
-        let output = command
+            .env("VOSULAY_ATTACH_TARGET_PID", pid.to_string())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let mut child = command
             .arg(pid.to_string())
             .arg(&self.profiler)
             .arg(&self.agent)
             .arg(socket_name)
             .arg(cookie)
             .arg(std::process::id().to_string())
-            .output()
+            .spawn()
             .map_err(fail)?;
-        if output.status.success() {
-            return Ok(());
+        loop {
+            match child.try_wait().map_err(fail)? {
+                Some(status) if status.success() => return Ok(()),
+                Some(status) => {
+                    let detail = child
+                        .wait_with_output()
+                        .map(|output| String::from_utf8_lossy(&output.stderr).trim().to_owned())
+                        .unwrap_or_default();
+                    return Err(fail(format!("profiler attach exited {status}: {detail}")));
+                }
+                None => {}
+            }
+            if Instant::now() >= deadline {
+                // Kill and reap: an orphaned helper would otherwise linger as a
+                // zombie holding the one-shot socket open.
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(fail(
+                    "profiler attach did not finish before the attach deadline",
+                ));
+            }
+            thread::sleep(Duration::from_millis(10));
         }
-        let detail = String::from_utf8_lossy(&output.stderr);
-        Err(fail(format!(
-            "profiler attach exited {}: {}",
-            output.status,
-            detail.trim()
-        )))
     }
+}
+
+/// Time left before `deadline`, or an error when it has already passed. Used
+/// to hand the *remaining* budget to each stage of an attach.
+fn remaining(deadline: Instant) -> Result<Duration> {
+    let now = Instant::now();
+    if now >= deadline {
+        return Err(fail("attach deadline elapsed before the agent connected"));
+    }
+    Ok(deadline - now)
 }
 pub struct AttachTask {
     pid: u32,
@@ -651,13 +822,16 @@ impl Task for AttachTask {
     type JsValue = OverlayHandle;
 
     fn compute(&mut self) -> Result<Self::Output> {
+        // One deadline covers helper spawn and agent accept together, so the
+        // caller's timeout bounds the whole attach rather than just its tail.
+        let deadline = Instant::now() + self.timeout;
         let host = Host::new(self.pid).map_err(fail)?;
         let socket_name = hex(host.endpoint().name());
         let cookie = hex(&host.cookie());
         if let Some(attach) = &self.attach {
-            attach.run(self.pid, &socket_name, &cookie)?;
+            attach.run(self.pid, &socket_name, &cookie, deadline)?;
         }
-        connect_handle(host, socket_name, cookie, self.timeout)
+        connect_handle(host, socket_name, cookie, remaining(deadline)?)
     }
 
     fn resolve(&mut self, _env: Env, handle: Self::Output) -> Result<Self::JsValue> {
@@ -870,16 +1044,20 @@ fn connect_handle(
     let pid = session.peer_pid();
     let capabilities = session.capabilities();
     session.set_nonblocking().map_err(fail)?;
-    let session = Arc::new(Mutex::new(session));
     let shared = Arc::new(Shared {
-        state: Mutex::new(Lifecycle::Connected(session.clone())),
+        commands: Mutex::new(CommandQueue {
+            pending: VecDeque::new(),
+            closed: false,
+        }),
+        signal: Condvar::new(),
         cancel,
         events: Mutex::new(EventState {
             callbacks: HashMap::new(),
             pending: VecDeque::with_capacity(MAX_PENDING_EVENTS),
         }),
     });
-    start_event_pump(shared.clone(), session);
+    // Ownership moves to the actor: nothing else may touch the socket.
+    start_session_actor(shared.clone(), session);
     Ok(OverlayHandle {
         pid,
         capabilities,
@@ -898,8 +1076,18 @@ pub fn launch_vulkan(options: VulkanLaunchOptions) -> AsyncTask<VulkanLaunchTask
 
 #[cfg(test)]
 mod launch_tests {
-    use super::{prepend_layer_name, prepend_preload, prepend_search_path};
-    use std::{ffi::OsStr, path::Path};
+    use super::{
+        CommandQueue, Completion, DRM_FORMAT_ARGB8888, DmabufDescriptor, EventState,
+        SessionCommand, Shared, enqueue, prepend_layer_name, prepend_preload, prepend_search_path,
+        remaining,
+    };
+    use std::{
+        collections::{HashMap, VecDeque},
+        ffi::OsStr,
+        path::Path,
+        sync::{Arc, Condvar, Mutex, atomic::AtomicBool, atomic::Ordering},
+        time::{Duration, Instant},
+    };
 
     #[test]
     fn packaged_layer_precedes_existing_vulkan_configuration() {
@@ -942,5 +1130,172 @@ mod launch_tests {
     fn unrepresentable_preload_paths_are_rejected() {
         assert!(prepend_preload(Path::new("/app dir/agent.so"), None).is_err());
         assert!(prepend_preload(Path::new("/app:dir/agent.so"), None).is_err());
+    }
+
+    fn test_shared() -> Arc<Shared> {
+        Arc::new(Shared {
+            commands: Mutex::new(CommandQueue {
+                pending: VecDeque::new(),
+                closed: false,
+            }),
+            signal: Condvar::new(),
+            cancel: Arc::new(AtomicBool::new(false)),
+            events: Mutex::new(EventState {
+                callbacks: HashMap::new(),
+                pending: VecDeque::new(),
+            }),
+        })
+    }
+
+    fn frame_command(target_id: u64, width: u32) -> SessionCommand {
+        SessionCommand::Dmabuf {
+            descriptor: DmabufDescriptor {
+                target_id,
+                sequence: u64::from(width),
+                width,
+                height: 4,
+                fourcc: DRM_FORMAT_ARGB8888,
+                modifier: 0,
+                planes: Vec::new(),
+            },
+            fds: Vec::new(),
+        }
+    }
+
+    /// Snapshot of the queue as (is_frame, target) pairs, in apply order.
+    fn queued(shared: &Arc<Shared>) -> Vec<Option<u64>> {
+        shared
+            .commands
+            .lock()
+            .unwrap()
+            .pending
+            .iter()
+            .map(|envelope| envelope.command.frame_target())
+            .collect()
+    }
+
+    #[test]
+    fn a_control_command_never_overtakes_an_earlier_frame() {
+        // The reordering the actor exists to prevent: a frame queued first
+        // must reach the host before a clear queued after it.
+        let shared = test_shared();
+        enqueue(&shared, frame_command(1, 64));
+        enqueue(&shared, SessionCommand::Clear(1));
+        assert_eq!(queued(&shared), vec![Some(1), None]);
+    }
+
+    #[test]
+    fn a_newer_frame_supersedes_an_unsent_one_for_the_same_target() {
+        let shared = test_shared();
+        enqueue(&shared, frame_command(1, 64));
+        enqueue(&shared, frame_command(1, 128));
+        let pending = shared.commands.lock().unwrap();
+        assert_eq!(
+            pending.pending.len(),
+            1,
+            "only the newest frame is worth sending"
+        );
+        let sequence = match &pending.pending[0].command {
+            SessionCommand::Dmabuf { descriptor, .. } => descriptor.sequence,
+            _ => panic!("expected the newer frame"),
+        };
+        assert_eq!(sequence, 128);
+    }
+
+    #[test]
+    fn superseding_settles_the_replaced_frame_instead_of_stranding_it() {
+        let shared = test_shared();
+        let stranded = enqueue(&shared, frame_command(1, 64));
+        enqueue(&shared, frame_command(1, 128));
+        // An awaiting JS promise must resolve rather than hang forever.
+        assert!(stranded.wait().is_ok());
+    }
+
+    #[test]
+    fn frames_for_different_targets_do_not_supersede_each_other() {
+        let shared = test_shared();
+        enqueue(&shared, frame_command(1, 64));
+        enqueue(&shared, frame_command(2, 64));
+        assert_eq!(queued(&shared), vec![Some(1), Some(2)]);
+    }
+
+    #[test]
+    fn control_commands_are_never_superseded() {
+        let shared = test_shared();
+        enqueue(&shared, SessionCommand::Visible(true));
+        enqueue(&shared, SessionCommand::Capture(true));
+        enqueue(&shared, SessionCommand::Visible(false));
+        assert_eq!(queued(&shared), vec![None, None, None]);
+    }
+
+    #[test]
+    fn a_closed_queue_fails_commands_rather_than_hanging() {
+        // After the actor exits, an awaiting JS promise must reject instead of
+        // waiting for a thread that will never apply the command.
+        let shared = test_shared();
+        shared.commands.lock().unwrap().closed = true;
+        let completion = enqueue(&shared, SessionCommand::Visible(true));
+        assert!(queued(&shared).is_empty(), "nothing may be left queued");
+        let error = completion.wait().unwrap_err();
+        assert!(error.to_string().contains("destroyed"));
+    }
+
+    #[test]
+    fn destroying_an_already_ended_session_succeeds() {
+        // `destroy()` used to raise the cancel flag before queueing, so the
+        // actor exited without applying the command and a clean shutdown was
+        // reported as "overlay session ended".
+        let shared = test_shared();
+        shared.commands.lock().unwrap().closed = true;
+        assert!(enqueue(&shared, SessionCommand::Destroy).wait().is_ok());
+    }
+
+    #[test]
+    fn destroy_is_applied_by_the_actor_rather_than_short_circuited() {
+        let shared = test_shared();
+        let completion = enqueue(&shared, SessionCommand::Destroy);
+        // It must reach the queue: the actor is what shuts the socket down and
+        // only then settles this handle.
+        assert_eq!(queued(&shared), vec![None]);
+        assert!(
+            !shared.cancel.load(Ordering::Acquire),
+            "the actor owns cancellation"
+        );
+        drop(completion);
+    }
+
+    #[test]
+    fn a_completion_reports_the_applied_outcome_once() {
+        let completion = Completion::new();
+        completion.settle(Ok(()));
+        assert!(completion.wait().is_ok());
+
+        let failed = Completion::new();
+        failed.settle(Err("host rejected the frame".to_owned()));
+        let error = failed.wait().unwrap_err();
+        assert!(error.to_string().contains("host rejected the frame"));
+    }
+
+    #[test]
+    fn a_settled_completion_keeps_its_first_outcome() {
+        // The actor settles a command exactly once; a later supersede must not
+        // rewrite an outcome the caller may already have observed.
+        let completion = Completion::new();
+        completion.settle(Ok(()));
+        completion.settle(Err("late".to_owned()));
+        assert!(completion.wait().is_ok());
+    }
+
+    #[test]
+    fn remaining_shrinks_toward_the_deadline_and_then_fails() {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let first = remaining(deadline).unwrap();
+        let second = remaining(deadline).unwrap();
+        assert!(second <= first, "the budget only ever shrinks");
+        assert!(first <= Duration::from_secs(30));
+
+        // An overrunning helper leaves nothing for the accept, which must be
+        // reported instead of restarting a fresh full-length timeout.
+        assert!(remaining(Instant::now() - Duration::from_millis(1)).is_err());
     }
 }

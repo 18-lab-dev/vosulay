@@ -17,6 +17,10 @@ export declare class OverlayHandle {
   setVisible(visible: boolean): Promise<unknown>
   captureInput(capture: boolean): Promise<unknown>
   createSurface(): OverlaySurface
+  /**
+   * Drain one buffered event. The actor owns the socket, so this reads the
+   * events it has already received rather than competing for a recv.
+   */
   pollEvent(): string
 }
 
