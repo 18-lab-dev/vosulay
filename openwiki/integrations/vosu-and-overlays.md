@@ -1,53 +1,98 @@
 ---
-type: Integration Boundary
-title: vosu catalog, overlay sources, and local IPC
-description: Describes vosulay's HTTP/HTML integration with a vosu instance, safe URL construction, local HTML overlay serving, single-instance IPC controls, and the security constraints at each boundary.
-resource: src/api.rs
-tags: [integrations, vosu, http, ipc, security, overlays]
+type: Integration Guide
+title: vosu, local overlay, remote profile, and in-game renderer integrations
+description: Documents vosulay's external boundaries, URL construction, catalog parsing, local capabilities, remote authorization, and platform-native rendering.
+tags: [integration, vosu, overlays, electron, security, linux, windows]
 ---
 
-# vosu catalog, overlay sources, and local IPC
+# vosu, local overlay, remote profile, and in-game renderer integrations
 
-## vosu counter catalog
+## vosu and Tosu-compatible services
 
-[`src/api.rs`](../../src/api.rs) requests `<base>/api/counters/search/` with a 10-second deadline and a 2 MiB response limit. It requires an HTML/XHTML response and parses result cards matching `.result-item[data-overlay-id]`. Metadata comes from `.calu[n][a][v]`; an optional `.settings-button` marks counters with settings. Width and height metadata are read from `[nft="width"]` and `[nft="height"]` using numeric `nfv` values, with a `500x300` fallback.
+The shared Electron host defaults to `http://127.0.0.1:24050/`. `--vosu-url` accepts an absolute `http:` or `https:` base without credentials, query, or fragment. `--fps-limit` accepts `1..240`; the default is `60`.
 
-The parser preserves source order and returns `InstalledCounter` records containing ID, name, author, version, dimensions, settings availability, and a counter URL. The frontend uses these records to populate the catalog and place known counters. The settings and available-counter links are constructed by Rust in [`src/ffi.rs`](../../src/ffi.rs): `/settings?overlay=<id>` and `/available`.
+[`desktop/src/main/counters.ts`](../../desktop/src/main/counters.ts) requests `/api/counters/search/`. It accepts HTML/XHTML only, enforces a 10-second deadline and 2 MiB body limit (declared and streamed), decodes strict UTF-8, and parses both modern Vosu counter cards and legacy Tosu result markup. Unrecognized non-empty markup is an error rather than an empty catalog. Dimensions below the valid threshold fall back to `500x300`.
 
-Base URLs must be absolute HTTP(S) URLs with a host, no credentials, and no query or fragment. The helper normalizes a trailing slash before joining paths. Counter IDs are query-encoded for settings URLs and path-segment encoded for counter URLs.
+[`desktop/src/main/urls.ts`](../../desktop/src/main/urls.ts) constructs counter, settings, available-catalog, and search URLs. Counter IDs are encoded with the same path-segment semantics as the historical Rust URL crate so persisted URLs remain byte-identical across platforms.
 
-Some counter bundles expect `window.COUNTER_PATH` before their own scripts execute. [`counterMetadataScript`](../../src/qt/qt_shell.cpp) is installed in WebEngine's MainWorld at DocumentCreation with subframe execution enabled. It returns without changing anything unless the frame's origin exactly equals the configured vosu origin, and it never overwrites an existing string-valued `window.COUNTER_PATH`. Otherwise it takes the frame pathname's containing folder (or the pathname itself when it ends in `/`), splits out empty components, decodes every segment, joins them with `/`, and assigns the non-empty result. Invalid URLs or path decoding failures leave the global unset.
+The manager bridge refreshes the installed catalog, opens settings or the available catalog through Electron's external-shell API, and reports failures back into the manager document. Vosu/Tosu remains a separate process and HTTP service; vosulay never embeds or modifies it.
 
-## Custom and local HTML overlays
+## Local HTML overlays
 
-The manager accepts HTTP(S) and capability-bearing `vosulay-overlay` sources. Local filesystem paths are never sent directly to WebEngine.
+[`desktop/src/main/local-overlays.ts`](../../desktop/src/main/local-overlays.ts) registers the privileged secure `vosulay-overlay:` scheme before Electron readiness. Selecting a regular file creates a random 128-bit capability token and a canonical base64url-encoded directory root. Runtime authorization binds that token to exactly one canonical root.
 
-Local HTML selection goes through the XDG Desktop Portal `OpenFile` request, restricted to one HTML/HTM selection. Before opening the chooser, the Qt shell hides the overlay view and releases input capture; on cancellation, failure, or completion it restores the previous visibility and reapplies capture according to the current editing state. The returned URI must be a valid local `file://` URL. Its target must be a regular readable file with a case-insensitive `.html` or `.htm` suffix and must open successfully for read-only access.
+Serving enforces all of the following:
 
-For an accepted file, the shell canonicalizes both the file and its containing directory, verifies that the file is inside that directory, and creates a `vosulay-overlay` URL with a fresh 128-bit hexadecimal host token. The scheme handler authorizes that token for exactly the canonical root encoded in the URL; a token cannot later be rebound to another root. Each request must carry a valid authorized token and the identical canonical root. The requested path is canonicalized again, rejected if it escapes the root (including through traversal or symlinks), and served only when it is a readable regular file that opens read-only. The handler replies with the MIME type detected for that file.
+- `GET` only;
+- lowercase 32-hex token and canonical base64url root encoding;
+- absolute canonical directory root;
+- decoded non-empty path segments with no dot components, slash, backslash, or NUL;
+- final realpath confinement beneath the root;
+- readable regular-file target;
+- MIME type derived from the target, defaulting to `application/octet-stream`.
 
-This boundary is security-sensitive: do not replace canonical path checks with string prefix checks, broaden the allowed schemes without reviewing WebEngine settings, or expose arbitrary local filesystem paths. The frontend’s accepted schemes and the C++ handler’s authorization rules must remain consistent with the [configuration model](../domain/configuration.md).
+Symlink escapes and roots that become non-canonical fail closed. Imported profiles must re-authorize every local capability before configuration persistence. Overlay URLs are therefore capabilities, not general filesystem paths; avoid logging or publishing them.
 
-The Qt manager's native `QWebChannel` is attached only to WebEngine's `ApplicationWorld`. The bridge bootstrap also runs only in that isolated world and only in the main frame; `assets/manager.js` relays messages through a same-document custom DOM event. Overlay frames run in `MainWorld`, receive no `qt.webChannelTransport` or native object, and cannot invoke configuration writes or native dialogs through the manager bridge. Preserve both the isolated script world and `runsOnSubFrames=false`.
+## Manager and Chromium boundary
+
+`vosulay://manager/index.html` is generated by [`desktop/src/main/manager-document.ts`](../../desktop/src/main/manager-document.ts) from packaged CSS and JavaScript. The same document is used in the Windows and Linux in-game BrowserWindow. `HostBridge` serializes renderer requests, enforces revision-aware saves, and re-authorizes local URLs before accepting configuration.
+
+Electron denies permission requests and checks globally. The manager BrowserWindow is transparent, hidden, context-isolated, sandboxed, and has no Node integration. The compatibility setting **Allow unrestricted SharedArrayBuffer** removes Chromium cross-origin isolation only for trusted overlay deployments that require it; changing the setting restarts affected overlay documents.
 
 ## Remote profile pages
 
-Linux [`src/remote.rs`](../../src/remote.rs) and Windows [`windows/src/main/remote-server.ts`](../../windows/src/main/remote-server.ts) expose a view-only HTTP service on `0.0.0.0:5050`. A generated 256-bit credential prefixes every protected route: `/access/<credential>/overlay` renders the active profile, with the single `profile=<positive 1-based index>` query selecting another profile. `/access/<credential>/local/<capability>/...` forwards local custom-overlay resources. The remote form intentionally uses the capability as an opaque server-side registry key and never discloses the encoded absolute root carried by the internal `vosulay-overlay` URL. HTTP(S) custom overlays load directly in the client, while counter URLs are built against the validated request authority when the configured vosu URL is loopback so remote clients can reach the same machine.
+The host listens on `0.0.0.0:5050` for view-only profile pages. Routes are credential-scoped:
 
-The credential is generated on first config load and persists in `AppSettings.remote_access_token`; the settings dialog asks for the LAN IP or hostname that clients use, persists it as `remote_access_host`, and displays a ready-to-copy URL. Protected requests must use either the literal listener destination or this exact configured host in `Host`, preventing any other attacker-controlled DNS authority from being accepted after rebinding to loopback. Profile-document requests reject cross-origin `Origin` and `Sec-Fetch-Site: cross-site`. Local-resource routes additionally accept the `Origin: null` and cross-site metadata emitted by an opaque sandbox, but only after the same credential, peer allowlist, and local capability checks succeed. Requests also check the peer against `AppSettings.allowed_ips`; loopback is always allowed, and configured entries may be exact IPs or four-part IPv4 wildcard patterns.
+- `/access/<64-hex credential>/overlay`
+- `/access/<64-hex credential>/overlay?profile=<positive 1-based index>`
+- `/access/<64-hex credential>/local/<capability>/<relative path>`
 
-The Linux implementation uses three-second read/write timeouts, caps requests at 16 KiB and active connections at 32, and shuts down only after request workers drain. Windows keeps a normalized configuration snapshot in memory, rejects overload before route or filesystem work, caps active handlers at 32 and header bytes at 16 KiB, applies three-second request deadlines, and limits connection admission. Remote profile pages are view-only: unprotected routes return 404, bad credentials or browser metadata return 403, unsupported routes return 404, and non-GET/HEAD methods return 405.
+Access requires every independent check to pass:
 
-Forwarded local overlay frames are sandboxed with `allow-scripts` only. Omitting `allow-same-origin` gives each local frame an opaque origin even though its resource URL shares the profile page's HTTP origin, preventing its scripts from reading the parent DOM or other capability URLs. Local files therefore use `Cross-Origin-Resource-Policy: cross-origin` so classic scripts, styles, and images load, plus the narrowly scoped `Access-Control-Allow-Origin: null` needed for relative `fetch` and module scripts from that opaque origin. HTTP(S) custom overlays retain `allow-scripts allow-same-origin` because they are genuinely cross-origin from the profile page.
+1. Request method is `GET` or `HEAD`.
+2. `Host` exactly identifies the actual local listener address/port, configured remote hostname, or loopback `localhost`; this prevents DNS-rebinding authorization through an attacker-controlled hostname.
+3. Fetch Metadata is absent, same-site, same-origin, or navigation-like `none`. The local-file route additionally accepts the sandboxed opaque-browser case `Sec-Fetch-Site: cross-site` with `Origin: null`.
+4. Peer address is loopback or matches the comma-separated IP/wildcard allowlist.
+5. The path credential matches the persistent 256-bit token in constant time.
 
-This is a network-facing boundary, so preserve the credential, authority and route-specific browser-metadata checks, request bounds, HTML escaping, no-store responses, local capability confinement, opaque remote local-resource paths, and the local-frame CORP/CORS policy when changing either implementation. The server is started by the platform entrypoint and shares the [configuration model](../domain/configuration.md).
+The server limits request headers to 16 KiB, active requests to 32, request/header/keepalive timeouts to three seconds, and requests per socket to 100. Responses are `no-store` and `nosniff`.
 
-## Local IPC and attachment
+Profile documents contain no editor or native bridge. Forwarded local frames use `sandbox="allow-scripts"` without `allow-same-origin`; external HTTP(S) overlays use `sandbox="allow-scripts allow-same-origin"`; vosu counter frames remain unsandboxed for their existing same-origin integration. Local assets return `Cross-Origin-Resource-Policy: cross-origin` and `Access-Control-Allow-Origin: null`, allowing scripts, styles, images, relative fetch, and modules inside the opaque sandbox without giving local overlay JavaScript the profile page's origin. The profile page itself returns a restrictive CSP, `Referrer-Policy: no-referrer`, and `Cross-Origin-Resource-Policy: same-origin`.
 
-The shell creates a per-user Unix local socket in the runtime directory, with a temporary-directory fallback. New invocations can send newline-delimited JSON commands to toggle editing, toggle overlay visibility, quit, or set geometry. In particular, `--edit`/`-e` sends `toggle-edit`, so it toggles editing in the already-running instance. Payloads are capped at 4096 bytes and connections/read operations have short timeouts. Geometry is accepted only when the running instance was started with `--attach`.
+Rotating `remote_access_token` revokes old URLs immediately. `remote_access_host` is the explicit hostname accepted in `Host`; `allowed_ips` authorizes peers but does not relax authority, browser metadata, or credential checks.
 
-[`extra/attach.sh`](../../extra/attach.sh) validates four non-negative numeric arguments and delegates to `vosulay --ipc-geometry`. The [operations page](../operations/build-and-run.md) lists the complete CLI surface and the single-instance failure behavior.
+## Windows in-game renderer
 
-## Testing and change guidance
+[`desktop/src/main/windows-overlay-provider.ts`](../../desktop/src/main/windows-overlay-provider.ts) dynamically loads `@asdf-overlay/core`, `@asdf-overlay/electron`, and `@paymoapp/active-window` only on Windows. The manager uses Electron offscreen rendering into asdf's shared GPU surface. The manager process discovers configured osu executables, prefers the foreground target, preserves visibility/editing across reconciliation, and redirects blocked game input to Electron while editing.
 
-`src/api.rs` tests cover escaped metadata, ordering, fallback dimensions, URL construction, HTTP status/content limits, and deadlines. [`src/ffi.rs`](../../src/ffi.rs) tests cover settings encoding and base URL rejection. The C++ overlay handler and IPC server have no separate test suite in the repository; changes there need careful manual testing and should preserve the bounds and authorization checks.
+Windows native packages are optional and excluded from Linux artifacts. Windows behavior remains the reference provider while Linux uses the Rust backend.
+
+## Linux in-game renderer
+
+[`desktop/src/main/linux-overlay-provider.ts`](../../desktop/src/main/linux-overlay-provider.ts) loads the staged `@vosulay/overlay-native` N-API addon on Linux. Discovery supports explicit `--pid` values and process filenames (default `osu!.exe` and `osulazer.exe`). `--launch-vulkan <executable> -- [args...]` launches a target with the packaged implicit-layer manifest and a session-specific authenticated endpoint already present before Vulkan instance creation.
+
+The native boundary is split deliberately:
+
+- `overlay-protocol`: bounded explicit codecs plus abstract `AF_UNIX` `SOCK_SEQPACKET` transport and ancillary FDs;
+- `overlay-host`: random session cookie/socket, peer credential/process-group authentication, target/frame ownership, and events;
+- `overlay-node`: JavaScript API, event pump, profiler attach, and Vulkan launcher;
+- `overlay-agent-core`: fail-open connection, latest-frame mailbox, bounded input queue, and disconnect/capture watchdog;
+- `overlay-agent-gl`: GLX/EGL/SDL presentation hooks, SHM and DMA-BUF import, composition, and SDL input capture;
+- `overlay-vulkan-layer`: loader negotiation, Vulkan object/swapchain tracking, external-memory import, synchronization, and present-time composition;
+- `overlay-dotnet-bootstrap`: minimal native CLR profiler plus DiagnosticsClient attach executable.
+
+Every session authenticates a random cookie, expected UID, target PID or authenticated process group, protocol version, and capabilities. Packets and FD counts are bounded; unexpected ancillary data is rejected. The present path never waits for host I/O or a new frame. Latest frame wins, stale resources are acknowledged/released, host disconnect releases capture, and compositor failures leave the original game presentation running.
+
+Electron shared textures arrive through offscreen `paint` events. The Linux process forwards DMA-BUF plane descriptors and duplicated FDs to Rust and calls Electron's `release()` as soon as native ownership is established or the frame is dropped. A bounded SHM path remains available when direct import is unavailable. Editing input from SDL is normalized in the native protocol and dispatched back into the hidden Electron document, using Chromium DevTools Protocol fallbacks where necessary.
+
+## Native lazer and Wine/Proton
+
+Native .NET lazer late attach uses `DiagnosticsClient.AttachProfiler()` to load the minimal profiler bootstrap into an already-running CLR. The profiler then loads and starts the GL agent; it does not contain renderer logic. The attach tool and profiler library are staged outside ASAR and validated during packaging.
+
+Vulkan and DXVK/Wine targets should be launched through `--launch-vulkan` so the layer exists at instance creation. The implicit layer stays dormant without a valid vosulay session. Secure post-instance Vulkan injection is intentionally not treated as equivalent to launch-time layer activation.
+
+Stable osu! under Wine/Proton was exercised as an integration diagnostic, but the local Proton 11 Wine-Mono runtime terminated during startup and a side-loaded .NET Framework runtime did not produce a valid CLR process. That environment result is not evidence against native stable attachment; repeat with a known-good stable Wine prefix before claiming support.
+
+## Verification boundaries
+
+Service tests cover catalog parsing/bounds, URL parity, local path confinement, configuration revisions, remote authentication/authority/browser metadata, profile sandboxing, provider reconciliation, and package contents. Native tests cover codecs, credentials, packets/FDs, lifecycle, frame consumption, capture fail-open, and launch authentication. Significant compositor or input changes additionally require a live target smoke test; unit tests do not prove graphics state restoration or game interaction.

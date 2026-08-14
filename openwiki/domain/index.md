@@ -1,9 +1,9 @@
 ---
 type: Documentation Index
-title: "Domain"
-description: "Files and subdirectories in Domain."
+title: Domain
+description: Canonical configuration, profiles, overlay placement, revisions, and persistence concepts.
 ---
 
-# Files
+# Domain
 
-- [Configuration and overlay placement model](configuration.md) - Documents vosulay's versioned JSON configuration, profile and placement concepts, normalization invariants, geometry limits, and atomic persistence behavior shared by Rust and the manager frontend.
+- [Configuration and overlay placement model](configuration.md) - Documents the shared TypeScript schema, profiles and ordered placements, normalization limits, remote settings, revision conflicts, and atomic platform-aware persistence.

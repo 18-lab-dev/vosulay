@@ -1,9 +1,9 @@
 ---
 type: Documentation Index
-title: "Operations"
-description: "Files and subdirectories in Operations."
+title: Operations
+description: Build, launch, diagnostics, shutdown, and packaging runbooks.
 ---
 
-# Files
+# Operations
 
-- [Build, launch, and operate vosulay](build-and-run.md) - Practical runbook for building vosulay's Rust and Qt stack, satisfying native dependencies, using command-line and IPC controls, selecting displays, and understanding packaging and automation files.
+- [Build, launch, operate, and package vosulay](build-and-run.md) - Prerequisites and commands for Electron, Linux native staging, native lazer attach, Vulkan/DXVK launch, remote service, shutdown, AppImage, and Windows distributions.

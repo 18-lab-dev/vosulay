@@ -1,9 +1,9 @@
 ---
 type: Documentation Index
-title: "Architecture"
-description: "Files and subdirectories in Architecture."
+title: Architecture
+description: Architecture documentation for the shared Electron host and platform in-game overlay providers.
 ---
 
-# Files
+# Architecture
 
-- [vosulay runtime architecture](overview.md) - Explains how the Rust entrypoint, CXX bridge, Qt WebEngine shell, embedded manager frontend, workers, tray controls, and platform-specific overlay behavior compose into the vosulay application.
+- [vosulay architecture overview](overview.md) - Explains the canonical Electron host, shared services, Windows asdf provider, Linux authenticated native stack, offscreen frame ownership, input, packaging, and shutdown invariants.

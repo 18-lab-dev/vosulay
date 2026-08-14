@@ -5,11 +5,11 @@
   <img src="assets/branding/vosulay-logo.svg" alt="vosulay" width="720">
 </picture>
 
-**Cross-platform in-game overlay manager for vosu — native Rust + Qt 6 on Linux, in-game Electron injection on Windows.**
+**Cross-platform in-game Electron overlay manager for vosu.**
 
 </div>
 
-vosulay displays Vosu/Tosu-compatible counters and provides an edit mode for arranging them. Layouts are stored as profiles, and overlays can come from a Vosu or Tosu-compatible counter catalog, HTTP(S) URLs, or local HTML files. Vosu remains a separate process; the Windows in-game renderer is packaged only with vosulay.
+vosulay displays Vosu/Tosu-compatible counters and provides an edit mode for arranging them. Layouts are stored as profiles, and overlays can come from a Vosu or Tosu-compatible counter catalog, HTTP(S) URLs, or local HTML files. Vosu remains a separate process.
 
 ## Features
 
@@ -17,111 +17,118 @@ vosulay displays Vosu/Tosu-compatible counters and provides an edit mode for arr
 - Maintain multiple overlay profiles.
 - Discover installed counters from a local Vosu or Tosu instance.
 - Add remote or local custom HTML overlays.
-- Render WebGPU overlays through Dawn's native Vulkan backend.
-- Run click-through overlays on Wayland and X11.
-- Render directly in osu! stable and lazer windows on Windows.
-- Control Linux visibility, edit mode, geometry, and shutdown through Linux's external local IPC interface (Linux-specific).
-- Serve view-only profile pages to browsers and streaming clients on the local network.
+- Render overlays inside the game presentation rather than through a desktop overlay window.
+- Use one Electron manager, configuration store, local-overlay boundary, remote server, and tray on Linux and Windows.
+- Serve credential-protected, view-only profile pages to browsers and streaming clients on the local network.
 
-## Linux
+## Runtime architecture
 
-The Linux build requires Qt 6.11.1 development packages and a Dawn-enabled Qt
-WebEngine. Stock Qt WebEngine builds disable Dawn, so `build.rs` rejects them
-instead of silently exposing `navigator.gpu` without a working adapter.
+`desktop/` contains the canonical Electron application for Linux and Windows. It renders the manager in a hidden GPU-accelerated offscreen `BrowserWindow`, while a platform provider composites that renderer into osu!:
 
-Install the normal Qt WebEngine build dependencies, `gperf`, and Python's
-`html5lib`, then build the pinned WebEngine variant into a separate prefix:
+- Windows uses `@asdf-overlay/core` and `@asdf-overlay/electron`.
+- Linux uses the Rust workspace in `native/`: an authenticated Node-API host, GL agent, .NET profiler bootstrap for late attach to native lazer, and a Vulkan loader layer for launch-time targets such as Wine/DXVK.
+
+Electron frames reach the game through the transport its graphics context can actually use: DMA-BUF shared textures where an imported buffer is sampleable, and bounded shared memory otherwise, which is what Wine and X11/SDL GLX contexts negotiate. The native agents keep the latest usable frame, never wait for the host on a game presentation thread, reject an unusable import instead of erasing the game's frame, and fall through to the original swap/present when overlay state is unavailable. Qt, CXX, LayerShellQt, and the transparent Linux desktop overlay are no longer runtime or build dependencies.
+
+See the [architecture overview](openwiki/architecture/overview.md) for the component and security boundaries.
+
+## Controls
+
+`Ctrl+Shift+Space` enters or leaves edit mode. `Ctrl+Alt+Shift+H` shows or hides overlays. While editing, `Ctrl+I` toggles overlay interaction and `Ctrl+R` refreshes the selected overlay; Delete removes the selected overlay and Escape exits edit mode. Reload, edit, visibility, and exit controls are also available from the tray.
+
+Display-mode input passes to the game. The Linux GL agent captures SDL input only while editing and redirects it to Electron; host or agent disconnect clears capture. The Vulkan/Wine path currently provides in-game presentation but does not implement the GL agent's SDL input redirection.
+
+## Build and package
+
+Node.js 22 or newer is required. Build and test the shared Electron host from `desktop/`:
 
 ```sh
-extra/build-webgpu-qt.sh "$HOME/.local/opt/vosulay-qt-webgpu"
-```
-
-Apply the six environment exports printed by the helper while running Cargo.
-They select the custom WebEngine at build time. `build.rs` records the validated
-library, subprocess, resource, and locale paths in the executable, so a
-`cargo install --path .` binary runs without those exports. Non-empty runtime
-`QTWEBENGINE*` variables still override the recorded defaults.
-
-```sh
-cargo build --release
-./target/release/vosulay
-```
-
-For Linux command-line options, monitor selection, frame limiting, attachment mode, and IPC controls, see [Build and run](openwiki/operations/build-and-run.md).
-
-## Windows
-
-The Windows host requires 64-bit Windows and a separately running vosu instance. It follows the most recently focused discovered `osu!.exe` or `osulazer.exe` client, remains attached while another application has focus, and switches only when another game client receives focus. It attaches only that game client rather than both simultaneously, and renders the manager UI through `@asdf-overlay`'s shared GPU surface inside the game presentation rather than a transparent desktop window. The composed overlay is therefore available to OBS Game Capture.
-
-Ctrl+Shift+Space is the sole Windows global shortcut; press it in game to enter or leave edit mode. While editing, Ctrl+I toggles overlay interaction and Ctrl+R refreshes the selected overlay; Delete removes the selected overlay and Escape exits edit mode. Reload, edit, and exit controls are also available from the system tray.
-
-If a native input capture or release request stalls for five seconds, vosulay exits immediately so Windows closes the injected connection and restores input to osu!. Restart vosulay to attach again.
-
-To build from source with Node.js 22 or newer:
-
-```powershell
-cd windows
+cd desktop
 npm ci
 npm run typecheck
 npm test
+npm run build
+```
+
+Build Windows setup and portable artifacts on Windows:
+
+```powershell
+cd desktop
+npm ci
 npm run dist:win
 ```
 
-The build produces two x64 distributions: `windows\dist\vosulay-<version>-setup.exe` is the NSIS installer, while `windows\dist\vosulay-<version>-portable.exe` is the portable executable. Install the setup executable for the normal installed distribution, or run the portable executable directly.
+Build the Linux x64 AppImage on Linux with Rust 1.96.1, Cargo, and the .NET 8 SDK installed:
 
-The installed distribution stores its configuration at `%APPDATA%\vosulay\config.json`. The portable distribution stores its configuration beside the executable at `<executable directory>\data\config.json`.
+```sh
+cd desktop
+npm ci
+npm run dist:linux
+```
 
-The Windows host accepts `--vosu-url`/`-t`, `--fps-limit`/`-f`, repeatable `--pid`, and repeatable `--process-name` options.
+`dist:linux` builds the napi-rs addon, GL agent, profiler bootstrap and self-contained attach tool, Vulkan layer and manifest; stages them outside ASAR; builds Electron; packages the AppImage; and verifies the required resources. Artifacts are written to `desktop/dist/`.
 
-## Remote profile pages
+For native-only development:
 
-vosulay listens on `0.0.0.0:5050` and serves the active profile at
-`http://<vosulay-host>:5050/overlay`. Use `?profile=1` to select a profile by
-its 1-based position. Clients must use the machine's loopback or LAN address,
-not the `0.0.0.0` bind address.
+```sh
+cd native
+cargo fmt --check
+cargo test --workspace
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+npm ci
+npm run build
+npm test
+```
 
-Remote access is controlled by **Settings → Remote overlay server → Allowed
-client IPs**. Loopback is always allowed; remote entries can be exact IP
-addresses or four-part IPv4 patterns such as `192.168.*.*`. The profile page
-loads vosu counters directly rather than proxying them, so the same remote
-client IPs must also be allowed by vosu. HTTP(S) custom overlays load directly;
-local HTML overlay resources remain confined to their authorized roots and are
-served through vosulay to allowed clients.
+See [Build and run](openwiki/operations/build-and-run.md) for launch modes and prerequisites, and [Testing guidance](openwiki/testing/guidance.md) for the complete verification matrix.
 
-## Measured overlay overhead
+## Linux launch modes
 
-These are machine-specific observations, not performance promises. On 2026-07-26, a Ryzen 9 9950X3D/RTX 5090 host ran sequential 8-vCPU Windows and Linux VMs through three counterbalanced ON-OFF pairs, with 30 seconds of warmup and 120 seconds of measurement per condition. Both products rendered the same HTML at 1280x720. The table reports the median of the three within-pair ON minus OFF deltas.
+Native osu!lazer can be attached after it starts through .NET's profiler-attach API:
 
-| Primary full-stack ON-OFF delta | Upstream tosu on Windows | vosulay on Linux |
-| --- | ---: | ---: |
-| CPU (percentage points of one logical CPU) | +31.114192 (+3.8893% of 8-vCPU capacity) | +14.000311 (+1.7500% of 8-vCPU capacity) |
-| Private memory | +384.654894 MiB | +412.209097 MiB |
-| Working set / summed RSS | +498.781637 MiB working set | +1121.972011 MiB summed RSS |
-| GPU utilization | +12.214876 percentage points | +2.520661 percentage points |
-| VRAM | +19.181818 MiB | +107.512397 MiB |
-| GPU power | Not captured | +11.568760 W |
+```sh
+vosulay --pid <lazer-pid>
+```
 
-ON ran the game, required daemon, and overlay renderer/host; OFF ran the same game and required daemon with only the overlay renderer/host disabled. The primary paired delta therefore captures all work induced by enabling the overlay, including work charged outside renderer processes, rather than measuring the renderer process tree alone. Process-tree memory sums can double-count shared pages.
+The packaged host supplies the attach tool, profiler bootstrap, and GL agent automatically. In source-tree development, set `VOSULAY_NATIVE_ROOT` to a staged native-resource directory.
 
-Windows and Linux use different display stacks and frame policies. The side-by-side values are therefore directional context for these tested configurations, not a platform-neutral comparison or a universal winner.
+Vulkan must be enabled before the target creates its Vulkan instance, so vosulay launches that target:
 
-## Development
+```sh
+vosulay --launch-vulkan <executable> -- <target arguments>
+```
 
-See [Testing guidance](openwiki/testing/guidance.md) for the development and verification workflow.
+For Wine, pass the Wine executable as `<executable>` and the Windows game path in `<target arguments>`. vosulay sets the explicit layer path and per-session authenticated socket variables only for that child process; the layer stays dormant without a valid host session.
 
-## Engineering documentation
-
-[OpenWiki](openwiki/quickstart.md) is the canonical source for detailed engineering documentation. Start with the [quickstart](openwiki/quickstart.md) for architecture, workflows, integrations, testing guidance, and the source map.
-
-## Security
-
-`vosulay-overlay` local HTML overlays run in a secure context, but overlay pages are not cross-origin isolated. As a result, `SharedArrayBuffer` is unavailable by default.
-
-The **Allow unrestricted SharedArrayBuffer** setting is a compatibility opt-in. Enabling it requires a restart and affects every remote URL and local HTML overlay. It bypasses a Chromium Spectre mitigation, so use it only when every overlay is fully trusted.
+Common options are `--vosu-url`/`-t`, `--fps-limit`/`-f`, repeatable `--pid`, and repeatable `--process-name`. `--launch-vulkan` cannot be combined with `--pid`.
 
 ## Configuration
 
-See [Configuration](openwiki/domain/configuration.md) for the configuration model, storage, and persistence behavior.
+Installed builds store configuration under the platform application-data directory as `vosulay/config.json`. Windows portable builds use `<executable directory>/data/config.json`. Writes are revision-checked and atomic. The schema and normalization rules are documented in [Configuration](openwiki/domain/configuration.md).
+
+## Remote profile pages
+
+vosulay listens on `0.0.0.0:5050`. Copy the complete **Remote access URL** from Settings; protected routes use a persistent generated credential:
+
+```text
+http://<vosulay-host>:5050/access/<credential>/overlay
+```
+
+Add `?profile=1` to select a profile by its 1-based position. Clients must use the machine's loopback or configured LAN host, not the `0.0.0.0` bind address.
+
+Remote access is controlled by **Settings → Remote overlay server → Allowed client IPs**. Loopback is always allowed; remote entries can be exact IP addresses or four-part IPv4 patterns such as `192.168.*.*`. The profile page loads vosu counters directly, so the same client addresses may also need access to vosu. HTTP(S) custom overlays load directly. Local HTML resources remain confined to authorized roots and are forwarded through opaque capability URLs in sandboxed frames.
+
+## Security
+
+`vosulay-overlay` local HTML overlays run in a secure context, but overlay pages are not cross-origin isolated. `SharedArrayBuffer` is therefore unavailable by default.
+
+The **Allow unrestricted SharedArrayBuffer** setting is a compatibility opt-in. Enabling it requires a restart and affects every remote URL and local HTML overlay. It bypasses a Chromium Spectre mitigation; enable it only when every overlay is trusted.
+
+The Linux native socket is an abstract `AF_UNIX` `SOCK_SEQPACKET` endpoint with a random suffix and 256-bit cookie. Both sides validate peer credentials, target identity, protocol version, message bounds, descriptor fields, and ancillary FD counts. It is never exposed over TCP.
+
+## Engineering documentation
+
+[OpenWiki](openwiki/quickstart.md) is the canonical engineering documentation. Updates remain manual and local; do not add an OpenWiki GitHub Actions workflow.
 
 ## License
 

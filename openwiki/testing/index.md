@@ -1,9 +1,9 @@
 ---
 type: Documentation Index
-title: "Testing"
-description: "Files and subdirectories in Testing."
+title: Testing
+description: Verification guidance for Electron services, native protocol/addon/agents, packaging, and live games.
 ---
 
-# Files
+# Testing
 
-- [vosulay testing guidance](guidance.md) - Maps the repository's Rust unit tests to parser, configuration, bridge, and embedded-UI behavior, and explains native build prerequisites and uncovered Qt/frontend areas.
+- [vosulay testing guidance](guidance.md) - Maps deterministic TypeScript and Rust tests, Node-API fake-agent integration, security matrices, package verification, and live native lazer/Vulkan/Wine scenarios.
