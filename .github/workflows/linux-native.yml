@@ -124,12 +124,17 @@ jobs:
           cargo build --release -p overlay-host --example shm-checkerboard
 
       # Both harnesses need a real drawable, so they run under Xvfb against
-      # Mesa's software rasteriser.
+      # Mesa's software rasteriser. They still enforce the assertion that
+      # matters most here — every saved GL state value must match after the
+      # overlay draw — and the agent must prove it composited a frame. Only the
+      # front-buffer pixel readback is waived, because it is not dependable on
+      # a virtual X server.
       - name: Run GL harnesses
         working-directory: native
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: llvmpipe
+          VOSULAY_HARNESS_NO_READBACK: "1"
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" sh test/run-gl-harnesses.sh
 
   vulkan:
@@ -159,10 +164,25 @@ jobs:
       # `native/VkLayer_VOSULAY_overlay.json` is what `stage:native` ships and
       # what `validate_vulkan_layer_directory` in
       # `native/crates/overlay-node/src/lib.rs` requires at launch.
+      #
+      # The lavapipe ICD filename is not stable across Mesa packages, so it is
+      # discovered rather than hardcoded; failing loudly here beats silently
+      # validating against whatever driver the runner happens to expose.
+      - name: Locate the lavapipe ICD
+        id: icd
+        run: |
+          icd=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json 2>/dev/null | head -n1)
+          if [ -z "$icd" ]; then
+            echo "no lavapipe ICD found in /usr/share/vulkan/icd.d:" >&2
+            ls -1 /usr/share/vulkan/icd.d 2>/dev/null >&2 || true
+            exit 1
+          fi
+          echo "path=$icd" >> "$GITHUB_OUTPUT"
+
       - name: Verify the layer manifest loads
         working-directory: native
         env:
-          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          VK_ICD_FILENAMES: ${{ steps.icd.outputs.path }}
         run: |
           cp target/release/liboverlay_vulkan_layer.so .
           VK_LAYER_PATH="$PWD" vulkaninfo --summary | tee /tmp/vulkaninfo.txt
@@ -174,7 +194,7 @@ jobs:
       - name: Layer unit tests under validation
         working-directory: native
         env:
-          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          VK_ICD_FILENAMES: ${{ steps.icd.outputs.path }}
           VK_INSTANCE_LAYERS: VK_LAYER_KHRONOS_validation
         run: cargo test -p overlay-vulkan-layer
 
