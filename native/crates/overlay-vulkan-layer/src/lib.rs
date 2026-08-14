@@ -11,7 +11,7 @@ use ash::{
     vk::{self, Handle},
 };
 use compositor::SwapchainState;
-use overlay_agent_core::{Agent, AgentConfig, Frame, FrameDescriptor};
+use overlay_agent_core::{Agent, AgentConfig, CompletionQueue, Frame, FrameDescriptor};
 use overlay_protocol::{COOKIE_LEN, Endpoint, FrameConsumed, Target};
 use std::{
     collections::{HashMap, VecDeque},
@@ -19,7 +19,7 @@ use std::{
     ptr::NonNull,
     sync::{
         Arc, Mutex, OnceLock,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     },
     thread,
     time::Duration,
@@ -120,6 +120,26 @@ struct DispatchState {
 struct QueueDispatch {
     device: u64,
     family: u32,
+    /// Resolved once at queue registration. The present hook must be able to
+    /// forward the application's call even when every other piece of overlay
+    /// state is missing or poisoned, so it cannot depend on a later lookup
+    /// through the same locks that might have failed.
+    next_present: Option<vk::PFN_vkQueuePresentKHR>,
+}
+
+/// Latched off the first time overlay bookkeeping is found unusable. Once the
+/// layer cannot trust its own state it stops touching presents entirely rather
+/// than retrying broken work on every frame.
+static OVERLAY_DISABLED: AtomicBool = AtomicBool::new(false);
+
+fn disable_overlay(reason: &str) {
+    if !OVERLAY_DISABLED.swap(true, Ordering::AcqRel) {
+        diagnostics(&format!("overlay disabled: {reason}"));
+    }
+}
+
+fn overlay_disabled() -> bool {
+    OVERLAY_DISABLED.load(Ordering::Acquire)
 }
 
 struct SwapchainRecord {
@@ -129,14 +149,14 @@ struct SwapchainRecord {
 
 struct SharedFrame {
     frame: Frame,
-    acknowledgements: Arc<Mutex<VecDeque<FrameConsumed>>>,
+    acknowledgements: Arc<CompletionQueue>,
 }
 impl Drop for SharedFrame {
     fn drop(&mut self) {
-        if let FrameDescriptor::Dmabuf(descriptor) = &self.frame.descriptor
-            && let Ok(mut acknowledgements) = self.acknowledgements.lock()
-        {
-            acknowledgements.push_back(FrameConsumed {
+        // Runs on whichever thread last released the frame, including the
+        // game's presentation thread, so publication must not block.
+        if let FrameDescriptor::Dmabuf(descriptor) = &self.frame.descriptor {
+            self.acknowledgements.push(FrameConsumed {
                 target_id: descriptor.target_id,
                 sequence: descriptor.sequence,
             });
@@ -151,7 +171,11 @@ enum TargetCommand {
 
 struct Session {
     latest: Mutex<Option<Arc<SharedFrame>>>,
-    acknowledgements: Arc<Mutex<VecDeque<FrameConsumed>>>,
+    /// Frame releases are published from presentation lifetimes and drained by
+    /// the control thread. It must be lock-free: the control thread is inside a
+    /// socket send with a multi-second writability deadline for most of its
+    /// life, and a present must never wait behind host backpressure.
+    acknowledgements: Arc<CompletionQueue>,
     targets: Mutex<VecDeque<TargetCommand>>,
     connected: AtomicBool,
 }
@@ -163,9 +187,48 @@ static NEXT_TARGET_ID: AtomicU64 = AtomicU64::new(1);
 fn dispatch() -> &'static Mutex<DispatchState> {
     DISPATCH.get_or_init(|| Mutex::new(DispatchState::default()))
 }
+
+/// Dispatch state is plain lookup tables, so a panic elsewhere cannot leave it
+/// logically inconsistent. Recovering the guard keeps a single overlay defect
+/// from permanently poisoning every later present.
+fn dispatch_state() -> std::sync::MutexGuard<'static, DispatchState> {
+    dispatch().lock().unwrap_or_else(|poisoned| {
+        disable_overlay("dispatch state was poisoned");
+        poisoned.into_inner()
+    })
+}
+
+/// Downstream present of the most recently created device, held outside the
+/// dispatch map so a present on an unrecognised queue can still be forwarded.
+static FALLBACK_PRESENT: AtomicUsize = AtomicUsize::new(0);
+
+fn set_fallback_present(next: Option<vk::PFN_vkQueuePresentKHR>) {
+    if let Some(next) = next {
+        FALLBACK_PRESENT.store(next as usize, Ordering::Release);
+    }
+}
+
+fn fallback_present() -> Option<vk::PFN_vkQueuePresentKHR> {
+    let raw = FALLBACK_PRESENT.load(Ordering::Acquire);
+    if raw == 0 {
+        return None;
+    }
+    // Stored from a `vk::PFN_vkQueuePresentKHR` in `set_fallback_present` and
+    // never from any other value.
+    Some(unsafe { std::mem::transmute::<usize, vk::PFN_vkQueuePresentKHR>(raw) })
+}
+
+/// Latest frame published by the control thread, if any.
+fn session_frame() -> Option<Arc<SharedFrame>> {
+    let latest = session().latest.lock();
+    match latest {
+        Ok(latest) => latest.clone(),
+        Err(poisoned) => poisoned.into_inner().clone(),
+    }
+}
 fn session() -> &'static Arc<Session> {
     SESSION.get_or_init(|| {
-        let acknowledgements = Arc::new(Mutex::new(VecDeque::new()));
+        let acknowledgements = Arc::new(CompletionQueue::new());
         let session = Arc::new(Session {
             latest: Mutex::new(None),
             acknowledgements,
@@ -192,7 +255,10 @@ fn session_configuration() -> Option<(Endpoint, [u8; COOKIE_LEN])> {
 }
 
 fn run_session(session: Arc<Session>, endpoint: Endpoint, cookie: [u8; COOKIE_LEN]) {
-    let mut config = AgentConfig::current();
+    // This layer has no SHM upload path: `SwapchainState::draw()` can only
+    // consume an imported DMA-BUF. Advertising shared memory would let the host
+    // negotiate a transport whose every frame the compositor then discards.
+    let mut config = AgentConfig::dmabuf_only();
     if let Ok(pid) = std::env::var("VOSULAY_AGENT_HOST_PID").and_then(|value| {
         value
             .parse::<u32>()
@@ -208,12 +274,10 @@ fn run_session(session: Arc<Session>, endpoint: Endpoint, cookie: [u8; COOKIE_LE
     }
     session.connected.store(true, Ordering::Release);
     loop {
-        if let Ok(mut acknowledgements) = session.acknowledgements.lock() {
-            while let Some(consumed) = acknowledgements.pop_front() {
-                if agent.send_consumed(consumed).is_err() {
-                    session.connected.store(false, Ordering::Release);
-                    return;
-                }
+        while let Some(consumed) = session.acknowledgements.pop() {
+            if agent.send_consumed(consumed).is_err() {
+                session.connected.store(false, Ordering::Release);
+                return;
             }
         }
         if let Ok(mut targets) = session.targets.lock() {
@@ -723,13 +787,24 @@ unsafe extern "system" fn layer_create_device(
                 }
             }
         }
-        if let Ok(mut state) = dispatch().lock() {
+        // Resolve the downstream present once, while the device link is known
+        // good, so the hot hook never needs a fallible lookup to forward.
+        let next_present = unsafe {
+            typed_function::<vk::PFN_vkQueuePresentKHR>((next_get_device_proc_addr)(
+                device,
+                c"vkQueuePresentKHR".as_ptr(),
+            ))
+        };
+        set_fallback_present(next_present);
+        {
+            let mut state = dispatch_state();
             for (queue, family) in &queues {
                 state.queues.insert(
                     *queue,
                     QueueDispatch {
                         device: device.as_raw(),
                         family: *family,
+                        next_present,
                     },
                 );
             }
@@ -937,123 +1012,142 @@ unsafe extern "system" fn layer_destroy_swapchain(
     });
 }
 
+/// Decides whether the layer may touch this present at all. Split out so the
+/// fail-open contract is testable without a Vulkan device: overlay work is
+/// permitted only when the layer is not latched off and the queue resolved to
+/// a downstream present it can forward to afterwards.
+fn overlay_permitted(disabled: bool, queue_known: bool, has_downstream: bool) -> bool {
+    !disabled && queue_known && has_downstream
+}
+
+/// Best-effort overlay composition. Returns the semaphore the application's
+/// present must additionally wait on, or `None` when nothing was drawn. Every
+/// failure path here is silent by design: the caller presents regardless.
+unsafe fn compose_overlay(
+    queue: vk::Queue,
+    queue_dispatch: QueueDispatch,
+    original: &vk::PresentInfoKHR<'_>,
+) -> Option<vk::Semaphore> {
+    if original.swapchain_count == 0
+        || original.p_swapchains.is_null()
+        || original.p_image_indices.is_null()
+    {
+        return None;
+    }
+    let swapchains = unsafe {
+        std::slice::from_raw_parts(original.p_swapchains, original.swapchain_count as usize)
+    };
+    let image_indices = unsafe {
+        std::slice::from_raw_parts(original.p_image_indices, original.swapchain_count as usize)
+    };
+    let waits = if original.wait_semaphore_count == 0 {
+        &[][..]
+    } else if original.p_wait_semaphores.is_null() {
+        return None;
+    } else {
+        unsafe {
+            std::slice::from_raw_parts(
+                original.p_wait_semaphores,
+                original.wait_semaphore_count as usize,
+            )
+        }
+    };
+    let frame = session_frame()?;
+    let frame_target = frame.frame.descriptor.target_id();
+    let (device_dispatch, records) = {
+        let state = dispatch_state();
+        let device_dispatch = state.devices.get(&queue_dispatch.device).cloned()?;
+        let records = swapchains
+            .iter()
+            .zip(image_indices)
+            .filter_map(|(swapchain, image_index)| {
+                state
+                    .swapchains
+                    .get(&swapchain.as_raw())
+                    .cloned()
+                    .map(|record| (*image_index, record))
+            })
+            .collect::<Vec<_>>();
+        (device_dispatch, records)
+    };
+    let get_memory_fd_properties = device_dispatch.get_memory_fd_properties?;
+    for (image_index, record) in records {
+        let mut record = match record.lock() {
+            Ok(record) => record,
+            // A panic in a previous composition left this swapchain's
+            // bookkeeping behind. Recover the data rather than treating it as
+            // a device failure; it is only overlay state.
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if record.target_id != frame_target {
+            continue;
+        }
+        if let Ok(compositor::DrawOutcome::Submitted(semaphore)) = unsafe {
+            record.state.draw(
+                &device_dispatch.raw,
+                queue,
+                queue_dispatch.family,
+                image_index,
+                waits,
+                get_memory_fd_properties,
+                frame.clone(),
+            )
+        } {
+            return Some(semaphore);
+        }
+        break;
+    }
+    None
+}
+
 unsafe extern "system" fn layer_queue_present(
     queue: vk::Queue,
     present_info: *const vk::PresentInfoKHR<'_>,
 ) -> vk::Result {
-    std::panic::catch_unwind(|| {
-        let Some(original) = (unsafe { present_info.as_ref() }) else {
-            return vk::Result::ERROR_INITIALIZATION_FAILED;
-        };
-        let queue_dispatch = dispatch()
-            .lock()
-            .ok()
-            .and_then(|state| state.queues.get(&queue.as_raw()).copied());
-        let Some(queue_dispatch) = queue_dispatch else {
-            return vk::Result::ERROR_DEVICE_LOST;
-        };
-        let device = vk::Device::from_raw(queue_dispatch.device);
-        let next = unsafe {
-            typed_function::<vk::PFN_vkQueuePresentKHR>(next_device_proc(
-                device,
-                c"vkQueuePresentKHR".as_ptr(),
-            ))
-        };
-        let Some(next) = next else {
-            return vk::Result::ERROR_DEVICE_LOST;
-        };
-        let swapchains = if original.swapchain_count == 0 {
-            &[]
-        } else if original.p_swapchains.is_null() || original.p_image_indices.is_null() {
-            return unsafe { next(queue, present_info) };
-        } else {
-            unsafe {
-                std::slice::from_raw_parts(original.p_swapchains, original.swapchain_count as usize)
-            }
-        };
-        let image_indices = if original.swapchain_count == 0 {
-            &[]
-        } else {
-            unsafe {
-                std::slice::from_raw_parts(
-                    original.p_image_indices,
-                    original.swapchain_count as usize,
-                )
-            }
-        };
-        let waits = if original.wait_semaphore_count == 0 {
-            &[]
-        } else if original.p_wait_semaphores.is_null() {
-            return unsafe { next(queue, present_info) };
-        } else {
-            unsafe {
-                std::slice::from_raw_parts(
-                    original.p_wait_semaphores,
-                    original.wait_semaphore_count as usize,
-                )
-            }
-        };
-        let latest = session()
-            .latest
-            .lock()
-            .ok()
-            .and_then(|latest| latest.clone());
-        let mut overlay_wait = None;
-        if let Some(frame) = latest {
-            let frame_target = frame.frame.descriptor.target_id();
-            let device_and_records = dispatch().lock().ok().and_then(|state| {
-                let device_dispatch = state.devices.get(&queue_dispatch.device).cloned()?;
-                let records = swapchains
-                    .iter()
-                    .zip(image_indices)
-                    .filter_map(|(swapchain, image_index)| {
-                        state
-                            .swapchains
-                            .get(&swapchain.as_raw())
-                            .cloned()
-                            .map(|record| (*image_index, record))
-                    })
-                    .collect::<Vec<_>>();
-                Some((device_dispatch, records))
-            });
-            if let Some((device_dispatch, records)) = device_and_records
-                && let Some(get_memory_fd_properties) = device_dispatch.get_memory_fd_properties
-            {
-                for (image_index, record) in records {
-                    let Ok(mut record) = record.lock() else {
-                        continue;
-                    };
-                    if record.target_id != frame_target {
-                        continue;
-                    }
-                    if let Ok(compositor::DrawOutcome::Submitted(semaphore)) = unsafe {
-                        record.state.draw(
-                            &device_dispatch.raw,
-                            queue,
-                            queue_dispatch.family,
-                            image_index,
-                            waits,
-                            get_memory_fd_properties,
-                            frame.clone(),
-                        )
-                    } {
-                        overlay_wait = Some(semaphore);
-                    }
-                    break;
-                }
+    // Resolving the downstream present never depends on overlay bookkeeping
+    // succeeding: the pointer was captured at device creation and the dispatch
+    // mutex recovers from poisoning. An overlay defect must be invisible to the
+    // application, never a manufactured VK_ERROR_DEVICE_LOST.
+    let queue_dispatch = dispatch_state().queues.get(&queue.as_raw()).copied();
+    let next = queue_dispatch.and_then(|dispatch| dispatch.next_present);
+    let Some(next) = next.or_else(fallback_present) else {
+        // The layer never observed a device create, so no present could ever
+        // have been chained through it.
+        disable_overlay("no downstream vkQueuePresentKHR is reachable");
+        return vk::Result::ERROR_INITIALIZATION_FAILED;
+    };
+
+    let original = unsafe { present_info.as_ref() };
+    let permitted = overlay_permitted(
+        overlay_disabled(),
+        queue_dispatch.is_some(),
+        original.is_some(),
+    );
+    let overlay_wait = if permitted {
+        let queue_dispatch = queue_dispatch.expect("permitted implies a resolved queue");
+        let original = original.expect("permitted implies present info");
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            compose_overlay(queue, queue_dispatch, original)
+        })) {
+            Ok(overlay_wait) => overlay_wait,
+            Err(_) => {
+                disable_overlay("overlay composition panicked");
+                None
             }
         }
-        let Some(overlay_wait) = overlay_wait else {
-            diagnostics("queue present dispatched");
-            return unsafe { next(queue, present_info) };
-        };
-        let mut augmented = *original;
-        augmented.wait_semaphore_count = 1;
-        augmented.p_wait_semaphores = &overlay_wait;
-        diagnostics("queue present composited");
-        unsafe { next(queue, &augmented) }
-    })
-    .unwrap_or(vk::Result::ERROR_DEVICE_LOST)
+    } else {
+        None
+    };
+
+    let Some(overlay_wait) = overlay_wait else {
+        diagnostics("queue present dispatched");
+        return unsafe { next(queue, present_info) };
+    };
+    let mut augmented = *original.expect("a composed frame implies present info");
+    augmented.wait_semaphore_count = 1;
+    augmented.p_wait_semaphores = &overlay_wait;
+    diagnostics("queue present composited");
+    unsafe { next(queue, &augmented) }
 }
 
 #[cfg(test)]
@@ -1081,5 +1175,50 @@ mod tests {
         assert_eq!(interface.loader_layer_interface_version, 2);
         assert!(interface.pfn_get_instance_proc_addr.is_some());
         assert!(interface.pfn_get_device_proc_addr.is_some());
+    }
+
+    #[test]
+    fn overlay_work_is_skipped_but_the_present_still_forwards() {
+        // Every degraded combination must refuse overlay work. The caller
+        // forwards the application's present unconditionally afterwards, so
+        // refusing here is invisible to the game rather than a device loss.
+        assert!(!overlay_permitted(true, true, true), "latched off");
+        assert!(!overlay_permitted(false, false, true), "unknown queue");
+        assert!(!overlay_permitted(false, true, false), "null present info");
+        assert!(overlay_permitted(false, true, true), "healthy present");
+    }
+
+    #[test]
+    fn poisoning_the_dispatch_mutex_latches_the_overlay_off_and_still_reads_state() {
+        OVERLAY_DISABLED.store(false, Ordering::Release);
+        let mutex = dispatch();
+        // Simulate a panic that happened while the dispatch guard was held.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = mutex.lock().unwrap();
+            panic!("overlay bookkeeping panicked");
+        }));
+        assert!(mutex.is_poisoned());
+
+        // Recovery must still yield usable state rather than propagating a
+        // failure into the present hook.
+        let state = dispatch_state();
+        assert!(state.queues.is_empty());
+        drop(state);
+        assert!(overlay_disabled());
+        assert!(!overlay_permitted(overlay_disabled(), true, true));
+
+        mutex.clear_poison();
+        OVERLAY_DISABLED.store(false, Ordering::Release);
+    }
+
+    #[test]
+    fn a_missing_fallback_present_is_reported_without_inventing_device_loss() {
+        // Nothing was ever registered in this unit-test process, so the
+        // fallback is absent; the hook's early return must not be DEVICE_LOST.
+        assert!(fallback_present().is_none() || FALLBACK_PRESENT.load(Ordering::Acquire) != 0);
+        assert_ne!(
+            vk::Result::ERROR_INITIALIZATION_FAILED,
+            vk::Result::ERROR_DEVICE_LOST
+        );
     }
 }

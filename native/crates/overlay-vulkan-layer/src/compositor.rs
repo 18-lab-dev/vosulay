@@ -19,7 +19,10 @@ pub(crate) struct SwapchainState {
     pub(crate) extent: vk::Extent2D,
     pub(crate) images: Vec<vk::Image>,
     resources: Option<Resources>,
-    retained_frame: Option<Arc<SharedFrame>>,
+    /// The frame each image's last submission sampled, held until that image
+    /// is drawn into again. Its fence has been observed signalled by then, so
+    /// the DMA-BUF cannot be recycled while the GPU is still reading it.
+    retained_frames: Vec<Option<Arc<SharedFrame>>>,
     disabled: bool,
 }
 
@@ -30,13 +33,14 @@ impl SwapchainState {
         extent: vk::Extent2D,
         images: Vec<vk::Image>,
     ) -> Self {
+        let retained_frames = (0..images.len()).map(|_| None).collect();
         Self {
             device,
             format,
             extent,
             images,
             resources: None,
-            retained_frame: None,
+            retained_frames,
             disabled: false,
         }
     }
@@ -81,7 +85,10 @@ impl SwapchainState {
         };
         match result {
             Ok(DrawOutcome::Submitted(_)) => {
-                self.retained_frame = Some(frame);
+                // Replaces the frame this image previously sampled. That
+                // submission has completed, so releasing it now is safe;
+                // releasing on any earlier event would not be.
+                self.retained_frames[image_index as usize] = Some(frame);
             }
             Err(_) => self.disabled = true,
             Ok(DrawOutcome::Busy) => {}
@@ -93,7 +100,9 @@ impl SwapchainState {
         if let Some(resources) = self.resources.take() {
             unsafe { resources.destroy(raw) };
         }
-        self.retained_frame.take();
+        // `Resources::destroy` waited for device idle, so no submission can
+        // still be reading these frames.
+        self.retained_frames.clear();
     }
 }
 
@@ -119,13 +128,21 @@ struct Resources {
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
     descriptor_pool: vk::DescriptorPool,
-    descriptor_set: vk::DescriptorSet,
+    /// One set per swapchain image. A single shared set would be rewritten
+    /// while an earlier image's submission is still sampling through it.
+    descriptor_sets: Vec<vk::DescriptorSet>,
     sampler: vk::Sampler,
     command_pool: vk::CommandPool,
-    command_buffer: vk::CommandBuffer,
+    /// One command buffer per swapchain image, so recording for the current
+    /// image never has to wait for an unrelated image to retire.
+    command_buffers: Vec<vk::CommandBuffer>,
     finished: Vec<vk::Semaphore>,
     fences: Vec<vk::Fence>,
     imported: Option<ImportedSurface>,
+    /// Imports replaced while another image may still reference them. They are
+    /// freed once every fence is idle, which keeps composition of the current
+    /// image independent of that cleanup.
+    retiring: Vec<ImportedSurface>,
 }
 
 impl Resources {
@@ -246,17 +263,19 @@ impl Resources {
             raw.destroy_shader_module(fragment_module, None);
         }
 
+        let image_count = swapchain.images.len().max(1) as u32;
         let pool_size = vk::DescriptorPoolSize::default()
             .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .descriptor_count(1);
+            .descriptor_count(image_count);
         let pool_info = vk::DescriptorPoolCreateInfo::default()
-            .max_sets(1)
+            .max_sets(image_count)
             .pool_sizes(std::slice::from_ref(&pool_size));
         let descriptor_pool = unsafe { raw.create_descriptor_pool(&pool_info, None)? };
+        let per_image_layouts = vec![set_layouts[0]; image_count as usize];
         let allocate_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(descriptor_pool)
-            .set_layouts(&set_layouts);
-        let descriptor_set = unsafe { raw.allocate_descriptor_sets(&allocate_info)?[0] };
+            .set_layouts(&per_image_layouts);
+        let descriptor_sets = unsafe { raw.allocate_descriptor_sets(&allocate_info)? };
         let sampler_info = vk::SamplerCreateInfo::default()
             .mag_filter(vk::Filter::LINEAR)
             .min_filter(vk::Filter::LINEAR)
@@ -274,8 +293,23 @@ impl Resources {
         let command_info = vk::CommandBufferAllocateInfo::default()
             .command_pool(command_pool)
             .level(vk::CommandBufferLevel::PRIMARY)
-            .command_buffer_count(1);
-        let command_buffer = unsafe { raw.allocate_command_buffers(&command_info)?[0] };
+            .command_buffer_count(image_count);
+        let command_buffers = unsafe { raw.allocate_command_buffers(&command_info)? };
+
+        // Per-image synchronisation, created up front so the draw path has no
+        // allocation branch. Fences start signalled: nothing is in flight yet.
+        let mut finished = Vec::with_capacity(image_count as usize);
+        let mut fences = Vec::with_capacity(image_count as usize);
+        for _ in 0..image_count {
+            finished
+                .push(unsafe { raw.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)? });
+            fences.push(unsafe {
+                raw.create_fence(
+                    &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
+                    None,
+                )?
+            });
+        }
         let mut target_views = Vec::with_capacity(swapchain.images.len());
         let mut framebuffers = Vec::with_capacity(swapchain.images.len());
         for image in &swapchain.images {
@@ -310,13 +344,14 @@ impl Resources {
             pipeline_layout,
             pipeline,
             descriptor_pool,
-            descriptor_set,
+            descriptor_sets,
             sampler,
             command_pool,
-            command_buffer,
-            finished: Vec::new(),
-            fences: Vec::new(),
+            command_buffers,
+            finished,
+            fences,
             imported: None,
+            retiring: Vec::new(),
         })
     }
 
@@ -333,35 +368,28 @@ impl Resources {
         descriptor: &overlay_protocol::DmabufDescriptor,
         fds: &[OwnedFd],
     ) -> Result<DrawOutcome, vk::Result> {
-        while self.finished.len() < self.framebuffers.len() {
-            self.finished
-                .push(unsafe { raw.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)? });
-            self.fences.push(unsafe {
-                raw.create_fence(
-                    &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
-                    None,
-                )?
-            });
+        let index = image_index as usize;
+        let (Some(&fence), Some(&finished)) = (self.fences.get(index), self.finished.get(index))
+        else {
+            return Err(vk::Result::ERROR_UNKNOWN);
+        };
+        // Only this image's previous submission matters. Gating on every fence
+        // let one in-flight image suppress composition for unrelated images
+        // that were already idle.
+        if !unsafe { raw.get_fence_status(fence)? } {
+            return Ok(DrawOutcome::Busy);
         }
-        let fence = self.fences[image_index as usize];
-        let finished = self.finished[image_index as usize];
-        for submitted in &self.fences {
-            if !unsafe { raw.get_fence_status(*submitted)? } {
-                return Ok(DrawOutcome::Busy);
-            }
-        }
+        unsafe { self.retire_unused_imports(raw)? };
         let identity = dmabuf_identity(fds.first().ok_or(vk::Result::ERROR_FORMAT_NOT_SUPPORTED)?)?;
         let needs_import = self
             .imported
             .as_ref()
             .is_none_or(|surface| surface.identity != identity);
         if needs_import {
+            // Another image may still be sampling the outgoing import, so it is
+            // queued for teardown instead of being destroyed underneath it.
             if let Some(surface) = self.imported.take() {
-                unsafe {
-                    raw.destroy_image_view(surface.view, None);
-                    raw.destroy_image(surface.image, None);
-                    raw.free_memory(surface.memory, None);
-                }
+                self.retiring.push(surface);
             }
             self.imported = Some(self.import_surface(
                 raw,
@@ -371,18 +399,19 @@ impl Resources {
                 identity,
             )?);
         }
+        let descriptor_set = self.descriptor_sets[index];
+        let command_buffer = self.command_buffers[index];
         let imported = self.imported.as_ref().expect("surface imported");
         let image_info = vk::DescriptorImageInfo::default()
             .sampler(self.sampler)
             .image_view(imported.view)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
         let write = vk::WriteDescriptorSet::default()
-            .dst_set(self.descriptor_set)
+            .dst_set(descriptor_set)
             .dst_binding(0)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .image_info(std::slice::from_ref(&image_info));
         unsafe { raw.update_descriptor_sets(&[write], &[]) };
-        let command_buffer = self.command_buffer;
         unsafe {
             raw.reset_fences(&[fence])?;
         }
@@ -467,7 +496,7 @@ impl Resources {
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
                 0,
-                &[self.descriptor_set],
+                &[descriptor_set],
                 &[],
             );
             raw.cmd_set_viewport(
@@ -528,6 +557,28 @@ impl Resources {
             raw.queue_submit(queue, &[submit], fence)?;
         }
         Ok(DrawOutcome::Submitted(finished))
+    }
+
+    /// Free imports that were replaced while other images were still in
+    /// flight. Composition never waits on this: it only runs once every fence
+    /// is idle, and otherwise leaves the surfaces queued for a later present.
+    unsafe fn retire_unused_imports(&mut self, raw: &Device) -> Result<(), vk::Result> {
+        if self.retiring.is_empty() {
+            return Ok(());
+        }
+        for fence in &self.fences {
+            if !unsafe { raw.get_fence_status(*fence)? } {
+                return Ok(());
+            }
+        }
+        for surface in self.retiring.drain(..) {
+            unsafe {
+                raw.destroy_image_view(surface.view, None);
+                raw.destroy_image(surface.image, None);
+                raw.free_memory(surface.memory, None);
+            }
+        }
+        Ok(())
     }
 
     fn import_surface(
@@ -649,7 +700,8 @@ impl Resources {
 
     unsafe fn destroy(self, raw: &Device) {
         let _ = unsafe { raw.device_wait_idle() };
-        if let Some(surface) = self.imported {
+        // The device is idle, so every deferred import is now unreferenced.
+        for surface in self.imported.into_iter().chain(self.retiring) {
             unsafe {
                 raw.destroy_image_view(surface.view, None);
                 raw.destroy_image(surface.image, None);
@@ -688,10 +740,18 @@ unsafe fn shader_module(raw: &Device, bytes: &[u8]) -> Result<vk::ShaderModule, 
     unsafe { raw.create_shader_module(&vk::ShaderModuleCreateInfo::default().code(code), None) }
 }
 
+/// Map a DRM fourcc to the Vulkan format that reads the same bytes.
+///
+/// DRM names channels in register order on a little-endian host, Vulkan names
+/// them in memory order, so the two spellings are byte-reversed:
+/// `DRM_FORMAT_ARGB8888` ("AR24") is B,G,R,A in memory and therefore
+/// `B8G8R8A8_UNORM`, while `DRM_FORMAT_ABGR8888` ("AB24") is R,G,B,A and
+/// therefore `R8G8B8A8_UNORM`. Mapping these the other way round swaps red and
+/// blue in every imported frame.
 fn fourcc_format(fourcc: u32) -> Option<vk::Format> {
     match fourcc {
-        0x3432_5241 => Some(vk::Format::R8G8B8A8_UNORM),
-        0x3432_4241 => Some(vk::Format::B8G8R8A8_UNORM),
+        overlay_protocol::DRM_FORMAT_ARGB8888 => Some(vk::Format::B8G8R8A8_UNORM),
+        overlay_protocol::DRM_FORMAT_ABGR8888 => Some(vk::Format::R8G8B8A8_UNORM),
         _ => None,
     }
 }
@@ -706,4 +766,67 @@ fn dmabuf_identity(fd: &OwnedFd) -> Result<DmabufIdentity, vk::Result> {
         device: stat.st_dev,
         inode: stat.st_ino,
     })
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One opaque pixel written in memory order B=0x10, G=0x20, R=0x30,
+    /// A=0xFF. That is exactly what Chromium hands us as BGRA, and what
+    /// `DRM_FORMAT_ARGB8888` names.
+    const PIXEL: [u8; 4] = [0x10, 0x20, 0x30, 0xFF];
+
+    /// `ash` is built without default features here, so `vk::Format` has no
+    /// `Debug`; compare explicitly rather than through `assert_eq!`.
+    fn maps_to(fourcc: u32, expected: vk::Format) -> bool {
+        fourcc_format(fourcc) == Some(expected)
+    }
+
+    #[test]
+    fn argb8888_reads_as_bgra_in_memory_order() {
+        assert!(maps_to(
+            overlay_protocol::DRM_FORMAT_ARGB8888,
+            vk::Format::B8G8R8A8_UNORM
+        ));
+        // B8G8R8A8 takes byte 0 as blue and byte 2 as red, which recovers the
+        // colour that was written. The reversed mapping read 0x10 as red and
+        // 0x30 as blue, swapping the channels on every imported frame.
+        let (blue, green, red, alpha) = (PIXEL[0], PIXEL[1], PIXEL[2], PIXEL[3]);
+        assert_eq!((blue, green, red, alpha), (0x10, 0x20, 0x30, 0xFF));
+        assert!(!maps_to(
+            overlay_protocol::DRM_FORMAT_ARGB8888,
+            vk::Format::R8G8B8A8_UNORM
+        ));
+    }
+
+    #[test]
+    fn abgr8888_reads_as_rgba_in_memory_order() {
+        assert!(maps_to(
+            overlay_protocol::DRM_FORMAT_ABGR8888,
+            vk::Format::R8G8B8A8_UNORM
+        ));
+        assert!(!maps_to(
+            overlay_protocol::DRM_FORMAT_ABGR8888,
+            vk::Format::B8G8R8A8_UNORM
+        ));
+    }
+
+    #[test]
+    fn fourcc_codes_are_the_ascii_they_claim_to_be() {
+        // Guards the mapping against a mistyped literal: "AR24" and "AB24".
+        assert_eq!(
+            overlay_protocol::DRM_FORMAT_ARGB8888.to_le_bytes(),
+            *b"AR24"
+        );
+        assert_eq!(
+            overlay_protocol::DRM_FORMAT_ABGR8888.to_le_bytes(),
+            *b"AB24"
+        );
+    }
+
+    #[test]
+    fn unknown_fourcc_is_rejected_rather_than_guessed() {
+        assert!(fourcc_format(u32::from_le_bytes(*b"XR24")).is_none());
+        assert!(fourcc_format(0).is_none());
+    }
 }
