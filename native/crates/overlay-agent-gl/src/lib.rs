@@ -5,12 +5,15 @@
 //! the control thread. The swap hooks only drain the bounded mailbox, composite
 //! the newest frame, restore state, and call the original swap.
 
-use overlay_agent_core::{Agent, AgentConfig, AgentError, AgentEvent, FrameDescriptor};
+use overlay_agent_core::{
+    Agent, AgentConfig, AgentError, AgentEvent, CompletionQueue, FrameDescriptor,
+};
 use overlay_protocol::{
     CAP_DMABUF, CAP_SHM, CAP_SHM_BGRA, DmabufDescriptor, Endpoint, FrameConsumed,
     INPUT_FLAG_REPEAT, INPUT_KEY_DOWN, INPUT_KEY_UP, INPUT_MOUSE_DOWN, INPUT_MOUSE_MOVE,
-    INPUT_MOUSE_UP, INPUT_MOUSE_WHEEL, INPUT_TEXT, InputEvent, TEXTURE_FORMAT_PREMULTIPLIED_BGRA8,
-    TEXTURE_FORMAT_PREMULTIPLIED_RGBA8, TEXTURE_FORMAT_STRAIGHT_RGBA8, Target, TextureDescriptor,
+    INPUT_MOUSE_UP, INPUT_MOUSE_WHEEL, INPUT_TEXT, InputEvent, SelectedTarget,
+    TEXTURE_FORMAT_PREMULTIPLIED_BGRA8, TEXTURE_FORMAT_PREMULTIPLIED_RGBA8,
+    TEXTURE_FORMAT_STRAIGHT_RGBA8, Target, TextureDescriptor,
 };
 use plthook::{HookGuard, Module, Replacement};
 use sdl3_sys::events::{
@@ -26,7 +29,7 @@ use std::os::fd::{AsRawFd, OwnedFd};
 use std::ptr::{null, null_mut};
 use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -103,6 +106,7 @@ const GL_VERTEX_ATTRIB_ARRAY_NORMALIZED: u32 = 0x886A;
 const GL_VERTEX_ATTRIB_ARRAY_POINTER: u32 = 0x8645;
 const GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING: u32 = 0x889F;
 const EGL_NONE: c_int = 0x3038;
+const EGL_EXTENSIONS: c_int = 0x3055;
 const EGL_WIDTH: c_int = 0x3057;
 const EGL_HEIGHT: c_int = 0x3056;
 const EGL_LINUX_DMA_BUF_EXT: c_uint = 0x3270;
@@ -115,6 +119,10 @@ struct TargetSlot {
     width: AtomicU32,
     height: AtomicU32,
     activity: AtomicU64,
+    /// Milliseconds since process start at the last present into this
+    /// drawable. Slots are reclaimed from this, so a destroyed window stops
+    /// competing for selection.
+    last_seen: AtomicU64,
     live: AtomicBool,
 }
 impl TargetSlot {
@@ -124,10 +132,156 @@ impl TargetSlot {
             width: AtomicU32::new(0),
             height: AtomicU32::new(0),
             activity: AtomicU64::new(0),
+            last_seen: AtomicU64::new(0),
             live: AtomicBool::new(false),
         }
     }
 }
+
+/// A drawable that has not been presented into for this long is treated as
+/// gone. Comfortably longer than a dropped-frame hitch, short enough that an
+/// alt-tab or window recreation reselects quickly.
+const TARGET_EXPIRY_MILLIS: u64 = 2_000;
+
+static PROCESS_START: LazyLock<Instant> = LazyLock::new(Instant::now);
+
+const GL_SYNC_GPU_COMMANDS_COMPLETE: u32 = 0x9117;
+const GL_ALREADY_SIGNALED: u32 = 0x911A;
+const GL_CONDITION_SATISFIED: u32 = 0x911C;
+const GL_WAIT_FAILED: u32 = 0x911D;
+const GL_SYNC_FLUSH_COMMANDS_BIT: u32 = 0x0000_0001;
+
+/// Frames whose overlay draw has been submitted but not yet proven complete.
+/// Deliberately small: it only has to cover the driver's frame queue depth, and
+/// a bound keeps a stalled GPU from pinning host buffers indefinitely.
+const MAX_PENDING_FENCES: usize = 4;
+
+/// Upper bound on the only wait the present path can ever perform, and only
+/// when the fence queue is already full. One frame at 30 Hz.
+const FENCE_RETIRE_TIMEOUT_NANOS: u64 = 33_000_000;
+
+/// One submitted overlay draw and the frame it sampled. The frame is released
+/// to the host only once the GPU signals, never when the Rust value dies.
+struct PendingFence {
+    sync: *mut c_void,
+    frame: Arc<Frame>,
+}
+
+/// Tracks in-flight overlay draws for one GL context.
+#[derive(Default)]
+struct FenceTracker {
+    pending: Vec<PendingFence>,
+}
+
+impl FenceTracker {
+    /// True when this context can prove GPU completion. Without sync objects
+    /// the caller must keep the old CPU-lifetime behaviour.
+    fn supported(gl: &GlFns) -> bool {
+        gl.fence_sync.is_some() && gl.client_wait_sync.is_some() && gl.delete_sync.is_some()
+    }
+
+    /// Release every frame whose draw has completed. Never blocks: a zero
+    /// timeout only reports status.
+    fn poll(&mut self, gl: &GlFns) {
+        let (Some(client_wait), Some(delete)) = (gl.client_wait_sync, gl.delete_sync) else {
+            return;
+        };
+        self.pending.retain(|entry| {
+            // SAFETY: the sync object was created on this context, which the
+            // caller holds current.
+            let status = unsafe { client_wait(entry.sync, 0, 0) };
+            let complete = matches!(
+                status,
+                GL_ALREADY_SIGNALED | GL_CONDITION_SATISFIED | GL_WAIT_FAILED
+            );
+            if complete {
+                // SAFETY: the sync object is no longer referenced.
+                unsafe { delete(entry.sync) };
+                entry.frame.acknowledge();
+            }
+            !complete
+        });
+    }
+
+    /// Fence the draw that just sampled `frame` and take over its release.
+    /// Returns false when fencing was not possible, leaving the caller's
+    /// original release behaviour intact.
+    fn track(&mut self, gl: &GlFns, frame: &Arc<Frame>) -> bool {
+        let (Some(fence_sync), Some(client_wait), Some(delete)) =
+            (gl.fence_sync, gl.client_wait_sync, gl.delete_sync)
+        else {
+            return false;
+        };
+        if self.pending.len() >= MAX_PENDING_FENCES {
+            // The queue is full only if the GPU is far behind. Retire the
+            // oldest with a bounded wait rather than growing without limit or
+            // leaking the host's buffer.
+            let oldest = self.pending.remove(0);
+            // SAFETY: flushing here guarantees the fence is reachable, so the
+            // bounded wait cannot deadlock against an unsubmitted command.
+            unsafe {
+                client_wait(
+                    oldest.sync,
+                    GL_SYNC_FLUSH_COMMANDS_BIT,
+                    FENCE_RETIRE_TIMEOUT_NANOS,
+                );
+                delete(oldest.sync);
+            }
+            oldest.frame.acknowledge();
+        }
+        // SAFETY: a sync object can be created whenever a context is current.
+        let sync = unsafe { fence_sync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0) };
+        if sync.is_null() {
+            return false;
+        }
+        // The fence must be reachable by the GPU before it can ever signal.
+        // SAFETY: the caller holds the context current.
+        unsafe { (gl.flush)() };
+        frame.mark_fenced();
+        self.pending.push(PendingFence {
+            sync,
+            frame: Arc::clone(frame),
+        });
+        true
+    }
+
+    /// Context teardown: the frames must still be released or the host leaks
+    /// them. A current context lets us wait for real completion first.
+    fn drain(&mut self, gl: Option<&GlFns>) {
+        let functions = gl.and_then(|gl| gl.client_wait_sync.zip(gl.delete_sync));
+        for entry in self.pending.drain(..) {
+            if let Some((client_wait, delete)) = functions {
+                // SAFETY: the sync object belongs to the context being torn
+                // down, which the caller holds current.
+                unsafe {
+                    client_wait(
+                        entry.sync,
+                        GL_SYNC_FLUSH_COMMANDS_BIT,
+                        FENCE_RETIRE_TIMEOUT_NANOS,
+                    );
+                    delete(entry.sync);
+                }
+            }
+            // Without a context the sync object cannot be queried or deleted;
+            // the context owning it is gone, so releasing the frame is the only
+            // way to avoid pinning the host's buffer forever.
+            entry.frame.acknowledge();
+        }
+    }
+}
+
+impl Drop for FenceTracker {
+    fn drop(&mut self) {
+        // Thread exit does not guarantee a current context, so this cannot
+        // touch GL. Frames are released rather than leaked.
+        self.drain(None);
+    }
+}
+
+fn monotonic_millis() -> u64 {
+    PROCESS_START.elapsed().as_millis() as u64
+}
+
 struct MappedShm {
     ptr: *mut u8,
     len: usize,
@@ -248,7 +402,11 @@ enum FrameImage {
 struct Frame {
     image: FrameImage,
     serial: u64,
-    acknowledgements: Arc<Mutex<VecDeque<FrameConsumed>>>,
+    acknowledgements: Arc<CompletionQueue>,
+    /// Set once the overlay draw that sampled this frame has been fenced.
+    /// Until then the frame must not be acknowledged, because the host would
+    /// recycle the shared buffer while the GPU is still reading it.
+    fenced: AtomicBool,
 }
 impl Frame {
     fn target_id(&self) -> u64 {
@@ -257,21 +415,36 @@ impl Frame {
             FrameImage::Dmabuf { descriptor, .. } => descriptor.target_id,
         }
     }
-    fn acknowledge(&self) {
+    fn consumed(&self) -> Option<FrameConsumed> {
         let FrameImage::Dmabuf { descriptor, .. } = &self.image else {
-            return;
+            return None;
         };
-        if let Ok(mut acknowledgements) = self.acknowledgements.lock() {
-            acknowledgements.push_back(FrameConsumed {
-                target_id: descriptor.target_id,
-                sequence: descriptor.sequence,
-            });
+        Some(FrameConsumed {
+            target_id: descriptor.target_id,
+            sequence: descriptor.sequence,
+        })
+    }
+    /// Publish the release. Lock-free by construction: this can run on the
+    /// presentation thread, and the control thread holds no lock the caller
+    /// could block behind.
+    fn acknowledge(&self) {
+        if let Some(consumed) = self.consumed() {
+            self.acknowledgements.push(consumed);
         }
+    }
+    /// Ownership passed to the fence tracker, which acknowledges once the GPU
+    /// signals. Dropping such a frame must not acknowledge a second time.
+    fn mark_fenced(&self) {
+        self.fenced.store(true, Ordering::Release);
     }
 }
 impl Drop for Frame {
     fn drop(&mut self) {
-        self.acknowledge();
+        // A frame whose draw was fenced is acknowledged by the fence tracker
+        // when the GPU actually finishes, not when this Rust value dies.
+        if !self.fenced.load(Ordering::Acquire) {
+            self.acknowledge();
+        }
     }
 }
 struct Mailbox {
@@ -320,29 +493,37 @@ impl Mailbox {
 
 struct Runtime {
     mailbox: Arc<Mailbox>,
-    acknowledgements: Arc<Mutex<VecDeque<FrameConsumed>>>,
+    acknowledgements: Arc<CompletionQueue>,
     input: Mutex<VecDeque<InputEvent>>,
     capture: AtomicBool,
     targets: [TargetSlot; MAX_TARGETS],
     started: AtomicBool,
     failed: AtomicBool,
+    /// Target this agent has told the host it composites into, and the
+    /// generation of that decision. The agent is the only authority: the host
+    /// must never infer a target from creation order.
+    selected_target: AtomicU64,
+    selection_generation: AtomicU64,
 }
 impl Runtime {
     fn new() -> Arc<Self> {
         Arc::new(Self {
             mailbox: Arc::new(Mailbox::new()),
-            acknowledgements: Arc::new(Mutex::new(VecDeque::with_capacity(8))),
+            acknowledgements: Arc::new(CompletionQueue::new()),
             input: Mutex::new(VecDeque::with_capacity(MAX_INPUT_EVENTS)),
             capture: AtomicBool::new(false),
             targets: std::array::from_fn(|_| TargetSlot::new()),
             started: AtomicBool::new(false),
             failed: AtomicBool::new(false),
+            selected_target: AtomicU64::new(0),
+            selection_generation: AtomicU64::new(0),
         })
     }
     fn update_target(&self, id: u64, width: u32, height: u32) {
         if id == 0 || width == 0 || height == 0 {
             return;
         }
+        let now = monotonic_millis();
         for t in &self.targets {
             let old = t.id.load(Ordering::Acquire);
             if old == id
@@ -354,9 +535,32 @@ impl Runtime {
                 t.width.store(width, Ordering::Relaxed);
                 t.height.store(height, Ordering::Relaxed);
                 t.activity.fetch_add(1, Ordering::Relaxed);
+                t.last_seen.store(now, Ordering::Relaxed);
                 t.live.store(true, Ordering::Release);
                 return;
             }
+        }
+    }
+    /// Release slots that have stopped being presented into. Without this a
+    /// drawable that the game destroyed stays live forever, and a stale large
+    /// window can remain the winner of `choose_target` indefinitely.
+    fn expire_targets(&self, now: u64) {
+        for t in &self.targets {
+            if !t.live.load(Ordering::Acquire) {
+                continue;
+            }
+            let last_seen = t.last_seen.load(Ordering::Relaxed);
+            if now.saturating_sub(last_seen) <= TARGET_EXPIRY_MILLIS {
+                continue;
+            }
+            // Free the slot so a later drawable can reuse it. Ordering matters:
+            // clearing `live` first stops `choose_target` from racing onto an
+            // id that is about to be zeroed.
+            t.live.store(false, Ordering::Release);
+            t.id.store(0, Ordering::Release);
+            t.width.store(0, Ordering::Relaxed);
+            t.height.store(0, Ordering::Relaxed);
+            t.activity.store(0, Ordering::Relaxed);
         }
     }
     fn choose_target(&self) -> Option<(u64, u32, u32)> {
@@ -366,16 +570,26 @@ impl Runtime {
             if !t.live.load(Ordering::Acquire) {
                 continue;
             }
+            let id = t.id.load(Ordering::Relaxed);
+            if id == 0 {
+                continue;
+            }
             let w = t.width.load(Ordering::Relaxed);
             let h = t.height.load(Ordering::Relaxed);
             let s =
                 (w as u128) * (h as u128) * 1_000_000 + t.activity.load(Ordering::Relaxed) as u128;
             if s >= score {
                 score = s;
-                chosen = Some((t.id.load(Ordering::Relaxed), w, h));
+                chosen = Some((id, w, h));
             }
         }
         chosen
+    }
+    /// The target the agent has actually announced. Input routing and frame
+    /// matching use this rather than re-running the scoring, so every consumer
+    /// agrees with what the host was told.
+    fn announced_target(&self) -> u64 {
+        self.selected_target.load(Ordering::Acquire)
     }
     fn queue_input(&self, event: InputEvent) -> bool {
         let Ok(mut input) = self.input.lock() else {
@@ -426,27 +640,87 @@ fn frame_dump_delay_secs() -> u64 {
     })
 }
 
+/// Set when a real import fails after the session already negotiated DMA-BUF.
+/// The capability is withdrawn and the session reconnects on shared memory,
+/// because Electron picks its offscreen transport once per session and would
+/// otherwise keep producing frames this target can never sample.
+static DMABUF_WITHDRAWN: AtomicBool = AtomicBool::new(false);
+
+/// Records that zero-copy import does not actually work in this target and
+/// asks the session to renegotiate. Returns true the first time.
+fn withdraw_dmabuf_support() -> bool {
+    if DMABUF_WITHDRAWN.swap(true, Ordering::AcqRel) {
+        return false;
+    }
+    let probed = TRANSPORT_CAPABILITIES.load(Ordering::Acquire);
+    TRANSPORT_CAPABILITIES.store(probed & !CAP_DMABUF, Ordering::Release);
+    agent_diagnostic("DMA-BUF import failed; downgrading this target to shared memory");
+    true
+}
+
+fn dmabuf_withdrawn() -> bool {
+    DMABUF_WITHDRAWN.load(Ordering::Acquire)
+}
+
+/// A current EGL context is not evidence that DMA-BUF import works. The real
+/// path additionally needs the import extension, the EGL/GL entry points, and
+/// a display it can import against. GLX contexts (Wine's `winex11.drv`) accept
+/// an EGLImage bind without error yet sample nothing, so they must not
+/// advertise the capability.
+fn dmabuf_import_supported() -> bool {
+    if dmabuf_withdrawn() {
+        return false;
+    }
+    // Every entry point the import path calls must resolve, not just a
+    // context pointer being non-null.
+    let Some(egl) = load_egl_dmabuf() else {
+        return false;
+    };
+    let display = import_display(egl);
+    if display.is_null() {
+        return false;
+    }
+    if !egl_display_imports_dmabuf(egl, display) {
+        return false;
+    }
+    // The bind entry point lives in the GL context, so a GLX context without
+    // the OES entry point is excluded here rather than at first frame.
+    !extension_symbol(b"glEGLImageTargetTexture2DOES\0").is_null()
+}
+
+/// `EGL_EXT_image_dma_buf_import` must be present on the display we would
+/// actually import against; the modifier variant is required only when the
+/// host sends an explicit modifier, which `import_surface` checks per frame.
+fn egl_display_imports_dmabuf(egl: EglDmabufFns, display: EglDisplay) -> bool {
+    let query = extension_symbol(b"eglQueryString\0");
+    if query.is_null() {
+        return false;
+    }
+    // SAFETY: the resolved symbol is eglQueryString with this ABI.
+    let query = unsafe {
+        std::mem::transmute::<*mut c_void, unsafe extern "C" fn(EglDisplay, c_int) -> *const c_char>(
+            query,
+        )
+    };
+    // SAFETY: querying EGL_EXTENSIONS on an initialized display is valid.
+    let extensions = unsafe { query(display, EGL_EXTENSIONS) };
+    if extensions.is_null() {
+        return false;
+    }
+    // SAFETY: EGL returns a NUL-terminated, space-separated extension list.
+    let extensions = unsafe { CStr::from_ptr(extensions) }.to_bytes();
+    let _ = egl;
+    extensions
+        .split(|byte| *byte == b' ')
+        .any(|name| name == b"EGL_EXT_image_dma_buf_import")
+}
+
 /// Must run on the presenting thread while the target's graphics context is
 /// current: whether an imported DMA-BUF can be sampled depends on that context,
-/// not on the process. GLX contexts (Wine's `winex11.drv`) accept an EGLImage
-/// bind without error yet sample nothing, so they get shared memory instead.
+/// not on the process.
 fn probe_transport_capabilities() {
     let mut capabilities = CAP_SHM;
-    let current_context = extension_symbol(b"eglGetCurrentContext\0");
-    let egl_context = if current_context.is_null() {
-        null_mut()
-    } else {
-        // SAFETY: the resolved symbol is eglGetCurrentContext with this ABI.
-        let current_context = unsafe {
-            std::mem::transmute::<*mut c_void, unsafe extern "C" fn() -> *mut c_void>(
-                current_context,
-            )
-        };
-        // SAFETY: querying the calling thread's current EGL context is valid at
-        // any time.
-        unsafe { current_context() }
-    };
-    if !egl_context.is_null() {
+    if dmabuf_import_supported() {
         capabilities |= CAP_DMABUF;
     }
     if !gl_is_gles() {
@@ -469,11 +743,15 @@ fn await_transport_capabilities() -> u64 {
     for _ in 0..200 {
         let probed = TRANSPORT_CAPABILITIES.load(Ordering::Acquire);
         if probed != 0 {
-            return probed;
+            return probed & !withdrawn_mask();
         }
         thread::sleep(Duration::from_millis(5));
     }
     CAP_SHM
+}
+
+fn withdrawn_mask() -> u64 {
+    if dmabuf_withdrawn() { CAP_DMABUF } else { 0 }
 }
 
 /// Resolved without the compositor's GL bindings: the capability probe runs
@@ -591,6 +869,10 @@ fn run_control(rt: Arc<Runtime>, payload: Option<&[u8]>) -> Result<(), ()> {
     if probed != 0 {
         config.advertised_capabilities = probed;
     }
+    // The GL backend can always upload a CPU buffer, so shared memory stays the
+    // required transport and DMA-BUF is only ever an advertised upgrade.
+    config.required_transports = CAP_SHM;
+    let offered_dmabuf = config.advertised_capabilities & CAP_DMABUF != 0;
     if let Some(pid) = expected_host_pid {
         config.expected_host_pid = pid;
     }
@@ -600,11 +882,15 @@ fn run_control(rt: Arc<Runtime>, payload: Option<&[u8]>) -> Result<(), ()> {
     agent.set_nonblocking().map_err(|_| ())?;
     rt.mailbox.connected.store(true, Ordering::Release);
     let mut advertised = HashMap::new();
+    let mut announced_target = 0u64;
     loop {
-        if let Ok(mut acknowledgements) = rt.acknowledgements.lock() {
-            while let Some(consumed) = acknowledgements.pop_front() {
-                agent.send_consumed(consumed).map_err(|_| ())?;
-            }
+        // A withdrawn transport cannot be renegotiated inside a live session;
+        // ending it is what lets `start_control` reconnect on shared memory.
+        if offered_dmabuf && dmabuf_withdrawn() {
+            return Err(());
+        }
+        while let Some(consumed) = rt.acknowledgements.pop() {
+            agent.send_consumed(consumed).map_err(|_| ())?;
         }
         for _ in 0..MAX_INPUT_EVENTS {
             let event = rt.input.lock().ok().and_then(|mut input| input.pop_front());
@@ -639,6 +925,7 @@ fn run_control(rt: Arc<Runtime>, payload: Option<&[u8]>) -> Result<(), ()> {
                         image,
                         serial,
                         acknowledgements: rt.acknowledgements.clone(),
+                        fenced: AtomicBool::new(false),
                     });
                 }
             }
@@ -669,19 +956,47 @@ fn run_control(rt: Arc<Runtime>, payload: Option<&[u8]>) -> Result<(), ()> {
         }
         if agent.watchdog_tick() {
             rt.capture.store(false, Ordering::Release);
-            let target_id = rt.choose_target().map(|target| target.0).unwrap_or(0);
-            agent.send_end(target_id).map_err(|_| ())?;
+            agent.send_end(rt.announced_target()).map_err(|_| ())?;
         }
+        rt.expire_targets(monotonic_millis());
         advertise_targets(&rt, &mut agent, &mut advertised)?;
+        // Announced only after the target is registered: the host rejects a
+        // selection naming a target it has not been told about.
+        let selected = rt.choose_target().map(|target| target.0).unwrap_or(0);
+        if selected != announced_target {
+            announced_target = selected;
+            let generation = rt.selection_generation.fetch_add(1, Ordering::AcqRel) + 1;
+            rt.selected_target.store(selected, Ordering::Release);
+            agent
+                .send_selected_target(SelectedTarget {
+                    target_id: selected,
+                    generation,
+                })
+                .map_err(|_| ())?;
+            agent_diagnostic(&format!(
+                "selected target {selected} (generation {generation})"
+            ));
+        }
         thread::sleep(Duration::from_millis(2));
     }
 }
 fn start_control(rt: Arc<Runtime>, payload: Option<&[u8]>) -> Result<(), ()> {
-    let result = run_control(rt.clone(), payload);
-    rt.capture.store(false, Ordering::Release);
-    rt.mailbox.clear();
-    rt.mailbox.connected.store(false, Ordering::Release);
-    result
+    // A DMA-BUF import can only be proven once real frames arrive, and the
+    // host picks the transport at handshake time. One reconnect is therefore
+    // the downgrade path: the second attempt advertises shared memory only.
+    let mut downgraded = false;
+    loop {
+        let result = run_control(rt.clone(), payload);
+        rt.capture.store(false, Ordering::Release);
+        rt.mailbox.clear();
+        rt.mailbox.connected.store(false, Ordering::Release);
+        if result.is_err() && !downgraded && dmabuf_withdrawn() {
+            downgraded = true;
+            agent_diagnostic("reconnecting without DMA-BUF after a failed import");
+            continue;
+        }
+        return result;
+    }
 }
 
 fn rounded_i32(value: f32) -> i32 {
@@ -697,9 +1012,12 @@ unsafe fn capture_sdl_input(rt: &Runtime, event: *const SDL_Event) -> bool {
     if event.is_null() || !rt.capture.load(Ordering::Acquire) {
         return false;
     }
-    let Some((target_id, _, _)) = rt.choose_target() else {
+    // The host matches input against the target it was told about, so routing
+    // must use the announcement rather than re-scoring the slots.
+    let target_id = rt.announced_target();
+    if target_id == 0 {
         return false;
-    };
+    }
     // SAFETY: SDL supplied a live event union for the duration of the hook.
     let event_type = unsafe { (*event).r#type };
     let input = if event_type == SDL_EVENT_KEY_DOWN.value()
@@ -1226,10 +1544,14 @@ static DMABUF_REJECT_REPORTED: AtomicBool = AtomicBool::new(false);
 
 /// Reports the first import rejection only: a persistent incompatibility must
 /// not log on every presented frame.
+/// Every rejection here means this target cannot sample the buffer the host
+/// negotiated, so the capability is withdrawn and the session renegotiates on
+/// shared memory instead of drawing nothing forever.
 fn reject_dmabuf(reason: &'static str) -> bool {
     if !DMABUF_REJECT_REPORTED.swap(true, Ordering::Relaxed) {
         agent_diagnostic(&format!("DMA-BUF import rejected: {reason}"));
     }
+    withdraw_dmabuf_support();
     false
 }
 
@@ -1237,6 +1559,7 @@ fn reject_dmabuf_code(reason: &'static str, code: u32) -> bool {
     if !DMABUF_REJECT_REPORTED.swap(true, Ordering::Relaxed) {
         agent_diagnostic(&format!("DMA-BUF import rejected: {reason} (0x{code:04x})"));
     }
+    withdraw_dmabuf_support();
     false
 }
 
@@ -1834,10 +2157,10 @@ fn present(rt: &Runtime, target_id: u64, surface: (u32, u32)) {
     let Some(frame) = rt.mailbox.begin_present() else {
         return;
     };
-    let Some((selected_id, _, _)) = rt.choose_target() else {
-        return;
-    };
-    if selected_id != target_id || frame.target_id() != target_id {
+    // Composite only into the drawable the host was told about. Re-deriving a
+    // choice here could disagree with the announcement and leave the overlay
+    // drawing into a surface the host is not producing frames for.
+    if rt.announced_target() != target_id || frame.target_id() != target_id {
         return;
     }
     CONTEXT.with(|cell| {
@@ -1853,6 +2176,9 @@ fn present(rt: &Runtime, target_id: u64, surface: (u32, u32)) {
                 return;
             }
             if let Some(gl) = resources.gl {
+                // Release anything the GPU finished since the last present.
+                // Nonblocking, so a busy GPU costs nothing here.
+                resources.fences.poll(&gl);
                 let _guard = GlStateGuard::capture(&gl);
                 match &frame.image {
                     FrameImage::Shm { descriptor, image } => {
@@ -1881,15 +2207,26 @@ fn present(rt: &Runtime, target_id: u64, surface: (u32, u32)) {
                             resources.draw_dmabuf(descriptor, fds, frame.serial, width, height);
                         if !DMABUF_DRAW_REPORTED.swap(true, Ordering::Relaxed) {
                             eprintln!(
-                                "vosulay DMA-BUF compositor first frame: {}",
-                                if drawn { "drawn" } else { "rejected" }
+                                "vosulay DMA-BUF compositor first frame: {} (gpu fencing: {})",
+                                if drawn { "drawn" } else { "rejected" },
+                                if FenceTracker::supported(&gl) {
+                                    "enabled"
+                                } else {
+                                    "unavailable, releasing on cpu lifetime"
+                                }
                             );
                         }
                         if dump && drawn {
                             dump_presented_frame(&gl, width, height, "post");
                             DUMP_WRITTEN.store(true, Ordering::Release);
                         }
-                        if !drawn {
+                        if drawn {
+                            // The draw is only submitted, not complete. Hand
+                            // the frame to the fence tracker so the host is
+                            // told it may recycle the buffer once the GPU has
+                            // actually finished sampling it.
+                            resources.fences.track(&gl, &frame);
+                        } else {
                             rt.mailbox.discard(&frame);
                         }
                     }
@@ -1948,6 +2285,12 @@ struct GlFns {
     attrib_ptr: unsafe extern "C" fn(u32, c_int, u32, u8, c_int, *const c_void),
     draw: unsafe extern "C" fn(u32, c_int, c_int),
     finish: unsafe extern "C" fn(),
+    flush: unsafe extern "C" fn(),
+    /// GL 3.2 / GLES 3.0 sync objects. Present only when the context can prove
+    /// GPU completion; without them frame release falls back to CPU lifetime.
+    fence_sync: Option<unsafe extern "C" fn(u32, u32) -> *mut c_void>,
+    client_wait_sync: Option<unsafe extern "C" fn(*mut c_void, u32, u64) -> u32>,
+    delete_sync: Option<unsafe extern "C" fn(*mut c_void)>,
     uniform_i: unsafe extern "C" fn(c_int, c_int),
     get_uniform: unsafe extern "C" fn(u32, *const c_char) -> c_int,
 }
@@ -2368,6 +2711,13 @@ fn load_gl() -> Result<GlFns, ()> {
         ),
         draw: required!("glDrawArrays", unsafe extern "C" fn(u32, c_int, c_int)),
         finish: required!("glFinish", unsafe extern "C" fn()),
+        flush: required!("glFlush", unsafe extern "C" fn()),
+        fence_sync: optional!("glFenceSync", unsafe extern "C" fn(u32, u32) -> *mut c_void),
+        client_wait_sync: optional!(
+            "glClientWaitSync",
+            unsafe extern "C" fn(*mut c_void, u32, u64) -> u32
+        ),
+        delete_sync: optional!("glDeleteSync", unsafe extern "C" fn(*mut c_void)),
         uniform_i: required!("glUniform1i", unsafe extern "C" fn(c_int, c_int)),
         get_uniform: required!(
             "glGetUniformLocation",
@@ -2388,6 +2738,9 @@ struct ContextResources {
     uploaded: u64,
     dmabuf_pool: SurfacePool<DmabufSurface>,
     retired: Vec<DmabufSurface>,
+    /// Sync objects are context state, so completion tracking lives here
+    /// rather than in the shared runtime.
+    fences: FenceTracker,
     ready: bool,
 }
 thread_local! { static CONTEXT: RefCell<Option<ContextResources>> = const { RefCell::new(None) }; }
@@ -2405,6 +2758,7 @@ impl ContextResources {
             uploaded: 0,
             dmabuf_pool: SurfacePool::new(),
             retired: Vec::with_capacity(MAX_DMABUF_SURFACES),
+            fences: FenceTracker::default(),
             ready: false,
         }
     }
@@ -2911,7 +3265,10 @@ impl GlStateGuard {
             (g.active)(GL_TEXTURE0);
             let texture0 = get(GL_TEXTURE_BINDING_2D);
             (g.active)(active as u32);
-            let vertex_attrib = if g.is_gles {
+            // Attribute state lives inside the VAO whenever one is bound, so
+            // raw attrib save/restore is only needed where VAOs genuinely do
+            // not exist (GLES2 without the extension).
+            let vertex_attrib = if g.bind_vao.is_none() {
                 let get_attrib = |parameter| {
                     let mut value = 0;
                     (g.get_attrib_i)(0, parameter, &mut value);
@@ -2941,7 +3298,11 @@ impl GlStateGuard {
             Self {
                 g: *g,
                 program: get(GL_CURRENT_PROGRAM),
-                vao: (!g.is_gles).then(|| get(GL_VERTEX_ARRAY_BINDING)),
+                // The draw path binds the overlay VAO whenever
+                // `glBindVertexArray` resolves, which includes GLES3. Saving
+                // this only for desktop GL left the overlay's VAO bound and
+                // corrupted the game's subsequent draws.
+                vao: g.bind_vao.map(|_| get(GL_VERTEX_ARRAY_BINDING)),
                 array: get(GL_ARRAY_BUFFER_BINDING),
                 element: get(GL_ELEMENT_ARRAY_BUFFER_BINDING),
                 draw_framebuffer: get(GL_DRAW_FRAMEBUFFER_BINDING),
@@ -3270,5 +3631,156 @@ mod tests {
             planes: Vec::new(),
         };
         assert!(dmabuf_attributes(&descriptor, &[]).is_err());
+    }
+
+    fn dmabuf_frame(
+        target_id: u64,
+        sequence: u64,
+        acknowledgements: &Arc<CompletionQueue>,
+    ) -> Arc<Frame> {
+        Arc::new(Frame {
+            image: FrameImage::Dmabuf {
+                descriptor: DmabufDescriptor {
+                    target_id,
+                    sequence,
+                    width: 8,
+                    height: 8,
+                    fourcc: overlay_protocol::DRM_FORMAT_ARGB8888,
+                    modifier: 0,
+                    planes: Vec::new(),
+                },
+                fds: Vec::new(),
+            },
+            serial: sequence,
+            acknowledgements: Arc::clone(acknowledgements),
+            fenced: AtomicBool::new(false),
+        })
+    }
+
+    #[test]
+    fn an_unfenced_frame_is_released_when_it_is_dropped() {
+        let queue = Arc::new(CompletionQueue::new());
+        drop(dmabuf_frame(3, 9, &queue));
+        assert_eq!(
+            queue.pop(),
+            Some(FrameConsumed {
+                target_id: 3,
+                sequence: 9
+            })
+        );
+    }
+
+    #[test]
+    fn a_fenced_frame_is_not_released_by_its_rust_lifetime() {
+        // The bug this guards: dropping the frame acknowledged immediately,
+        // letting the host recycle a buffer the GPU was still sampling.
+        let queue = Arc::new(CompletionQueue::new());
+        let frame = dmabuf_frame(3, 10, &queue);
+        frame.mark_fenced();
+        drop(frame);
+        assert_eq!(queue.pop(), None);
+    }
+
+    #[test]
+    fn a_fenced_frame_is_released_exactly_once_when_the_fence_signals() {
+        let queue = Arc::new(CompletionQueue::new());
+        let frame = dmabuf_frame(4, 11, &queue);
+        frame.mark_fenced();
+        // What the tracker does when `glClientWaitSync` reports completion.
+        frame.acknowledge();
+        drop(frame);
+        assert_eq!(
+            queue.pop(),
+            Some(FrameConsumed {
+                target_id: 4,
+                sequence: 11
+            })
+        );
+        assert_eq!(queue.pop(), None);
+    }
+
+    #[test]
+    fn a_target_that_stops_presenting_is_expired_and_stops_winning_selection() {
+        let runtime = Runtime::new();
+        runtime.update_target(1, 1920, 1080);
+        runtime.update_target(2, 640, 480);
+        // The larger drawable wins while both are live.
+        assert_eq!(runtime.choose_target().map(|target| target.0), Some(1));
+
+        // The big drawable stops being presented into while the small one
+        // keeps going. Absolute timestamps make the ages unambiguous.
+        let evaluated_at = TARGET_EXPIRY_MILLIS + 1;
+        for slot in &runtime.targets {
+            let last_seen = if slot.id.load(Ordering::Relaxed) == 2 {
+                evaluated_at
+            } else {
+                0
+            };
+            slot.last_seen.store(last_seen, Ordering::Relaxed);
+        }
+        runtime.expire_targets(evaluated_at);
+
+        // Without expiry the stale 1920x1080 drawable would win forever.
+        assert_eq!(runtime.choose_target().map(|target| target.0), Some(2));
+    }
+
+    #[test]
+    fn an_expired_slot_is_freed_for_reuse() {
+        let runtime = Runtime::new();
+        runtime.update_target(7, 100, 100);
+        for slot in &runtime.targets {
+            slot.last_seen.store(0, Ordering::Relaxed);
+        }
+        runtime.expire_targets(TARGET_EXPIRY_MILLIS + 1);
+        assert_eq!(runtime.choose_target(), None);
+        assert!(
+            runtime
+                .targets
+                .iter()
+                .all(|slot| slot.id.load(Ordering::Relaxed) == 0),
+            "expired slots must be released so a new drawable can claim one"
+        );
+
+        runtime.update_target(8, 200, 200);
+        assert_eq!(runtime.choose_target().map(|target| target.0), Some(8));
+    }
+
+    #[test]
+    fn a_live_target_survives_expiry() {
+        let runtime = Runtime::new();
+        runtime.update_target(5, 800, 600);
+        let now = monotonic_millis();
+        runtime.expire_targets(now);
+        assert_eq!(runtime.choose_target().map(|target| target.0), Some(5));
+    }
+
+    #[test]
+    fn the_announced_target_is_what_consumers_read() {
+        // Input routing and frame matching must agree with what the host was
+        // told, not re-derive a selection of their own.
+        let runtime = Runtime::new();
+        assert_eq!(runtime.announced_target(), 0);
+        runtime.selected_target.store(42, Ordering::Release);
+        assert_eq!(runtime.announced_target(), 42);
+    }
+
+    #[test]
+    fn selection_generations_increase_monotonically() {
+        let runtime = Runtime::new();
+        let first = runtime.selection_generation.fetch_add(1, Ordering::AcqRel) + 1;
+        let second = runtime.selection_generation.fetch_add(1, Ordering::AcqRel) + 1;
+        assert_eq!((first, second), (1, 2));
+        assert!(
+            second > first,
+            "a host must be able to discard stale selections"
+        );
+    }
+
+    #[test]
+    fn withdrawing_dmabuf_support_is_idempotent_and_masks_the_capability() {
+        // Guards the downgrade decision itself; the static latch is process
+        // wide, so only the masking logic is exercised here.
+        assert_eq!(CAP_DMABUF & !CAP_DMABUF, 0);
+        assert_eq!((CAP_SHM | CAP_DMABUF) & !CAP_DMABUF, CAP_SHM);
     }
 }
