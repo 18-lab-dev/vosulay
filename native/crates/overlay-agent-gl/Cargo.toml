@@ -1,0 +1,16 @@
+[package]
+name = "overlay-agent-gl"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+overlay-agent-core = { path = "../overlay-agent-core" }
+overlay-protocol = { path = "../overlay-protocol" }
+libc.workspace = true
+plthook-native = "0.1"
+sdl3-sys = { version = "0.6.8", default-features = false, features = ["no-link"] }

@@ -1,0 +1,11 @@
+[package]
+name = "overlay-protocol"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+getrandom.workspace = true
+libc.workspace = true
+thiserror.workspace = true

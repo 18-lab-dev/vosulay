@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <Target Name="BuildNativeEglTarget" BeforeTargets="Build">
+    <Exec Command="cc -std=c11 -O2 -fPIC -shared &quot;$(MSBuildProjectDirectory)/egl-target.c&quot; -o &quot;$(TargetDir)libvosulay-egl-target.so&quot; -lEGL -lGLESv2" />
+  </Target>
+</Project>

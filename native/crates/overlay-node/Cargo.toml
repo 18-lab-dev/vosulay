@@ -1,0 +1,19 @@
+[package]
+name = "overlay-node"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+overlay-host = { path = "../overlay-host" }
+overlay-protocol = { path = "../overlay-protocol" }
+libc.workspace = true
+napi = { version = "3", features = ["napi4", "async"] }
+napi-derive = "3"
+
+[build-dependencies]
+napi-build = "2"

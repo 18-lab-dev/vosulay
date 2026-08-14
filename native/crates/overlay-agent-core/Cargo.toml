@@ -1,0 +1,11 @@
+[package]
+name = "overlay-agent-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+overlay-protocol = { path = "../overlay-protocol" }
+libc.workspace = true
+thiserror.workspace = true

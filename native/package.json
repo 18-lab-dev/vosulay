@@ -1,0 +1,21 @@
+{
+  "name": "@vosu/overlay-node",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authenticated Linux overlay host N-API addon",
+  "main": "./overlay-node.linux-x64-gnu.node",
+  "types": "./index.d.ts",
+  "files": ["*.node", "index.d.ts"],
+  "scripts": {
+    "build": "napi build --platform --release --package overlay-node",
+    "test": "node --test test/**/*.test.mjs"
+  },
+  "napi": {
+    "name": "overlay-node",
+    "triples": { "defaults": true }
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.8.6"
+  },
+  "engines": { "node": ">=22" }
+}

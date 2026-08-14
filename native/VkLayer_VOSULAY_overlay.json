@@ -1,0 +1,17 @@
+{
+  "file_format_version": "1.1.2",
+  "layer": {
+    "name": "VK_LAYER_VOSULAY_overlay",
+    "type": "GLOBAL",
+    "library_path": "./liboverlay_vulkan_layer.so",
+    "api_version": "1.4.0",
+    "implementation_version": "1",
+    "description": "Vosulay authenticated in-game overlay compositor",
+    "enable_environment": {
+      "VOSULAY_VULKAN_LAYER": "1"
+    },
+    "disable_environment": {
+      "DISABLE_VOSULAY_VULKAN_LAYER": "1"
+    }
+  }
+}

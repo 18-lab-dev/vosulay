@@ -1,0 +1,709 @@
+use super::SharedFrame;
+use ash::{Device, vk};
+use overlay_agent_core::FrameDescriptor;
+use std::{
+    os::fd::{AsRawFd, OwnedFd},
+    sync::Arc,
+};
+
+pub(crate) enum DrawOutcome {
+    Submitted(vk::Semaphore),
+    Busy,
+}
+
+pub(crate) type GetMemoryFdProperties = vk::PFN_vkGetMemoryFdPropertiesKHR;
+
+pub(crate) struct SwapchainState {
+    pub(crate) device: vk::Device,
+    pub(crate) format: vk::Format,
+    pub(crate) extent: vk::Extent2D,
+    pub(crate) images: Vec<vk::Image>,
+    resources: Option<Resources>,
+    retained_frame: Option<Arc<SharedFrame>>,
+    disabled: bool,
+}
+
+impl SwapchainState {
+    pub(crate) fn new(
+        device: vk::Device,
+        format: vk::Format,
+        extent: vk::Extent2D,
+        images: Vec<vk::Image>,
+    ) -> Self {
+        Self {
+            device,
+            format,
+            extent,
+            images,
+            resources: None,
+            retained_frame: None,
+            disabled: false,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn draw(
+        &mut self,
+        raw: &Device,
+        queue: vk::Queue,
+        queue_family: u32,
+        image_index: u32,
+        wait_semaphores: &[vk::Semaphore],
+        get_memory_fd_properties: GetMemoryFdProperties,
+        frame: Arc<SharedFrame>,
+    ) -> Result<DrawOutcome, vk::Result> {
+        if self.disabled || image_index as usize >= self.images.len() {
+            return Err(vk::Result::ERROR_UNKNOWN);
+        }
+        let descriptor = match &frame.frame.descriptor {
+            FrameDescriptor::Dmabuf(descriptor) if descriptor.planes.len() == 1 => descriptor,
+            _ => return Err(vk::Result::ERROR_FORMAT_NOT_SUPPORTED),
+        };
+        if self.resources.is_none() {
+            self.resources = Some(unsafe { Resources::new(raw, self, queue_family)? });
+        }
+        let resources = self.resources.as_mut().expect("resources initialized");
+        if resources.queue_family != queue_family {
+            return Err(vk::Result::ERROR_FEATURE_NOT_PRESENT);
+        }
+        let result = unsafe {
+            resources.draw(
+                raw,
+                queue,
+                image_index,
+                self.images[image_index as usize],
+                self.extent,
+                wait_semaphores,
+                get_memory_fd_properties,
+                descriptor,
+                &frame.frame.fds,
+            )
+        };
+        match result {
+            Ok(DrawOutcome::Submitted(_)) => {
+                self.retained_frame = Some(frame);
+            }
+            Err(_) => self.disabled = true,
+            Ok(DrawOutcome::Busy) => {}
+        }
+        result
+    }
+
+    pub(crate) unsafe fn destroy(&mut self, raw: &Device) {
+        if let Some(resources) = self.resources.take() {
+            unsafe { resources.destroy(raw) };
+        }
+        self.retained_frame.take();
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct DmabufIdentity {
+    device: u64,
+    inode: u64,
+}
+
+struct ImportedSurface {
+    image: vk::Image,
+    memory: vk::DeviceMemory,
+    view: vk::ImageView,
+    identity: DmabufIdentity,
+}
+
+struct Resources {
+    queue_family: u32,
+    render_pass: vk::RenderPass,
+    target_views: Vec<vk::ImageView>,
+    framebuffers: Vec<vk::Framebuffer>,
+    descriptor_layout: vk::DescriptorSetLayout,
+    pipeline_layout: vk::PipelineLayout,
+    pipeline: vk::Pipeline,
+    descriptor_pool: vk::DescriptorPool,
+    descriptor_set: vk::DescriptorSet,
+    sampler: vk::Sampler,
+    command_pool: vk::CommandPool,
+    command_buffer: vk::CommandBuffer,
+    finished: Vec<vk::Semaphore>,
+    fences: Vec<vk::Fence>,
+    imported: Option<ImportedSurface>,
+}
+
+impl Resources {
+    unsafe fn new(
+        raw: &Device,
+        swapchain: &SwapchainState,
+        queue_family: u32,
+    ) -> Result<Self, vk::Result> {
+        let attachment = vk::AttachmentDescription::default()
+            .format(swapchain.format)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::LOAD)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .initial_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
+        let color = vk::AttachmentReference::default()
+            .attachment(0)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+        let subpass = vk::SubpassDescription::default()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(std::slice::from_ref(&color));
+        let dependency = vk::SubpassDependency::default()
+            .src_subpass(vk::SUBPASS_EXTERNAL)
+            .dst_subpass(0)
+            .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+            .dst_access_mask(
+                vk::AccessFlags::COLOR_ATTACHMENT_READ | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            );
+        let render_pass_info = vk::RenderPassCreateInfo::default()
+            .attachments(std::slice::from_ref(&attachment))
+            .subpasses(std::slice::from_ref(&subpass))
+            .dependencies(std::slice::from_ref(&dependency));
+        let render_pass = unsafe { raw.create_render_pass(&render_pass_info, None)? };
+
+        let binding = vk::DescriptorSetLayoutBinding::default()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+        let descriptor_layout_info =
+            vk::DescriptorSetLayoutCreateInfo::default().bindings(std::slice::from_ref(&binding));
+        let descriptor_layout =
+            unsafe { raw.create_descriptor_set_layout(&descriptor_layout_info, None)? };
+        let set_layouts = [descriptor_layout];
+        let pipeline_layout_info =
+            vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
+        let pipeline_layout = unsafe { raw.create_pipeline_layout(&pipeline_layout_info, None)? };
+
+        let vertex_module =
+            unsafe { shader_module(raw, include_bytes!("../shaders/overlay.vert.spv"))? };
+        let fragment_module =
+            unsafe { shader_module(raw, include_bytes!("../shaders/overlay.frag.spv"))? };
+        let main = c"main";
+        let stages = [
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::VERTEX)
+                .module(vertex_module)
+                .name(main),
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::FRAGMENT)
+                .module(fragment_module)
+                .name(main),
+        ];
+        let vertex_input = vk::PipelineVertexInputStateCreateInfo::default();
+        let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
+            .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+        let viewport_state = vk::PipelineViewportStateCreateInfo::default()
+            .viewport_count(1)
+            .scissor_count(1);
+        let raster = vk::PipelineRasterizationStateCreateInfo::default()
+            .polygon_mode(vk::PolygonMode::FILL)
+            .cull_mode(vk::CullModeFlags::NONE)
+            .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+            .line_width(1.0);
+        let multisample = vk::PipelineMultisampleStateCreateInfo::default()
+            .rasterization_samples(vk::SampleCountFlags::TYPE_1);
+        let blend_attachment = vk::PipelineColorBlendAttachmentState::default()
+            .blend_enable(true)
+            .src_color_blend_factor(vk::BlendFactor::ONE)
+            .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+            .color_blend_op(vk::BlendOp::ADD)
+            .src_alpha_blend_factor(vk::BlendFactor::ONE)
+            .dst_alpha_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+            .alpha_blend_op(vk::BlendOp::ADD)
+            .color_write_mask(vk::ColorComponentFlags::RGBA);
+        let blend = vk::PipelineColorBlendStateCreateInfo::default()
+            .attachments(std::slice::from_ref(&blend_attachment));
+        let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+        let dynamic = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
+        let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
+            .stages(&stages)
+            .vertex_input_state(&vertex_input)
+            .input_assembly_state(&input_assembly)
+            .viewport_state(&viewport_state)
+            .rasterization_state(&raster)
+            .multisample_state(&multisample)
+            .color_blend_state(&blend)
+            .dynamic_state(&dynamic)
+            .layout(pipeline_layout)
+            .render_pass(render_pass)
+            .subpass(0);
+        let pipeline = match unsafe {
+            raw.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
+        } {
+            Ok(mut pipelines) => pipelines.remove(0),
+            Err((_, error)) => {
+                unsafe {
+                    raw.destroy_shader_module(vertex_module, None);
+                    raw.destroy_shader_module(fragment_module, None);
+                }
+                return Err(error);
+            }
+        };
+        unsafe {
+            raw.destroy_shader_module(vertex_module, None);
+            raw.destroy_shader_module(fragment_module, None);
+        }
+
+        let pool_size = vk::DescriptorPoolSize::default()
+            .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1);
+        let pool_info = vk::DescriptorPoolCreateInfo::default()
+            .max_sets(1)
+            .pool_sizes(std::slice::from_ref(&pool_size));
+        let descriptor_pool = unsafe { raw.create_descriptor_pool(&pool_info, None)? };
+        let allocate_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(descriptor_pool)
+            .set_layouts(&set_layouts);
+        let descriptor_set = unsafe { raw.allocate_descriptor_sets(&allocate_info)?[0] };
+        let sampler_info = vk::SamplerCreateInfo::default()
+            .mag_filter(vk::Filter::LINEAR)
+            .min_filter(vk::Filter::LINEAR)
+            .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
+            .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .max_lod(0.0);
+        let sampler = unsafe { raw.create_sampler(&sampler_info, None)? };
+
+        let command_pool_info = vk::CommandPoolCreateInfo::default()
+            .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+            .queue_family_index(queue_family);
+        let command_pool = unsafe { raw.create_command_pool(&command_pool_info, None)? };
+        let command_info = vk::CommandBufferAllocateInfo::default()
+            .command_pool(command_pool)
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_buffer_count(1);
+        let command_buffer = unsafe { raw.allocate_command_buffers(&command_info)?[0] };
+        let mut target_views = Vec::with_capacity(swapchain.images.len());
+        let mut framebuffers = Vec::with_capacity(swapchain.images.len());
+        for image in &swapchain.images {
+            let view_info = vk::ImageViewCreateInfo::default()
+                .image(*image)
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .format(swapchain.format)
+                .subresource_range(
+                    vk::ImageSubresourceRange::default()
+                        .aspect_mask(vk::ImageAspectFlags::COLOR)
+                        .level_count(1)
+                        .layer_count(1),
+                );
+            let view = unsafe { raw.create_image_view(&view_info, None)? };
+            let framebuffer_info = vk::FramebufferCreateInfo::default()
+                .render_pass(render_pass)
+                .attachments(std::slice::from_ref(&view))
+                .width(swapchain.extent.width)
+                .height(swapchain.extent.height)
+                .layers(1);
+            let framebuffer = unsafe { raw.create_framebuffer(&framebuffer_info, None)? };
+            target_views.push(view);
+            framebuffers.push(framebuffer);
+        }
+
+        Ok(Self {
+            queue_family,
+            render_pass,
+            target_views,
+            framebuffers,
+            descriptor_layout,
+            pipeline_layout,
+            pipeline,
+            descriptor_pool,
+            descriptor_set,
+            sampler,
+            command_pool,
+            command_buffer,
+            finished: Vec::new(),
+            fences: Vec::new(),
+            imported: None,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    unsafe fn draw(
+        &mut self,
+        raw: &Device,
+        queue: vk::Queue,
+        image_index: u32,
+        target: vk::Image,
+        extent: vk::Extent2D,
+        wait_semaphores: &[vk::Semaphore],
+        get_memory_fd_properties: GetMemoryFdProperties,
+        descriptor: &overlay_protocol::DmabufDescriptor,
+        fds: &[OwnedFd],
+    ) -> Result<DrawOutcome, vk::Result> {
+        while self.finished.len() < self.framebuffers.len() {
+            self.finished
+                .push(unsafe { raw.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)? });
+            self.fences.push(unsafe {
+                raw.create_fence(
+                    &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
+                    None,
+                )?
+            });
+        }
+        let fence = self.fences[image_index as usize];
+        let finished = self.finished[image_index as usize];
+        for submitted in &self.fences {
+            if !unsafe { raw.get_fence_status(*submitted)? } {
+                return Ok(DrawOutcome::Busy);
+            }
+        }
+        let identity = dmabuf_identity(fds.first().ok_or(vk::Result::ERROR_FORMAT_NOT_SUPPORTED)?)?;
+        let needs_import = self
+            .imported
+            .as_ref()
+            .is_none_or(|surface| surface.identity != identity);
+        if needs_import {
+            if let Some(surface) = self.imported.take() {
+                unsafe {
+                    raw.destroy_image_view(surface.view, None);
+                    raw.destroy_image(surface.image, None);
+                    raw.free_memory(surface.memory, None);
+                }
+            }
+            self.imported = Some(self.import_surface(
+                raw,
+                descriptor,
+                fds,
+                get_memory_fd_properties,
+                identity,
+            )?);
+        }
+        let imported = self.imported.as_ref().expect("surface imported");
+        let image_info = vk::DescriptorImageInfo::default()
+            .sampler(self.sampler)
+            .image_view(imported.view)
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+        let write = vk::WriteDescriptorSet::default()
+            .dst_set(self.descriptor_set)
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(std::slice::from_ref(&image_info));
+        unsafe { raw.update_descriptor_sets(&[write], &[]) };
+        let command_buffer = self.command_buffer;
+        unsafe {
+            raw.reset_fences(&[fence])?;
+        }
+        unsafe {
+            raw.reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
+        }
+        let begin = vk::CommandBufferBeginInfo::default()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+        unsafe {
+            raw.begin_command_buffer(command_buffer, &begin)?;
+        }
+        let imported = self.imported.as_ref().expect("surface imported");
+        let acquire = vk::ImageMemoryBarrier::default()
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .old_layout(if needs_import {
+                vk::ImageLayout::UNDEFINED
+            } else {
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+            })
+            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .src_queue_family_index(vk::QUEUE_FAMILY_FOREIGN_EXT)
+            .dst_queue_family_index(self.queue_family)
+            .image(imported.image)
+            .subresource_range(
+                vk::ImageSubresourceRange::default()
+                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                    .level_count(1)
+                    .layer_count(1),
+            );
+        unsafe {
+            raw.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[acquire],
+            );
+        }
+        let to_color = vk::ImageMemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::MEMORY_READ)
+            .dst_access_mask(
+                vk::AccessFlags::COLOR_ATTACHMENT_READ | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            )
+            .old_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+            .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .image(target)
+            .subresource_range(
+                vk::ImageSubresourceRange::default()
+                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                    .level_count(1)
+                    .layer_count(1),
+            );
+        unsafe {
+            raw.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[to_color],
+            );
+        }
+        let render_begin = vk::RenderPassBeginInfo::default()
+            .render_pass(self.render_pass)
+            .framebuffer(self.framebuffers[image_index as usize])
+            .render_area(vk::Rect2D {
+                offset: vk::Offset2D::default(),
+                extent,
+            });
+        unsafe {
+            raw.cmd_begin_render_pass(command_buffer, &render_begin, vk::SubpassContents::INLINE);
+            raw.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline,
+            );
+            raw.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline_layout,
+                0,
+                &[self.descriptor_set],
+                &[],
+            );
+            raw.cmd_set_viewport(
+                command_buffer,
+                0,
+                &[vk::Viewport {
+                    x: 0.0,
+                    y: 0.0,
+                    width: extent.width as f32,
+                    height: extent.height as f32,
+                    min_depth: 0.0,
+                    max_depth: 1.0,
+                }],
+            );
+            raw.cmd_set_scissor(
+                command_buffer,
+                0,
+                &[vk::Rect2D {
+                    offset: vk::Offset2D::default(),
+                    extent,
+                }],
+            );
+            raw.cmd_draw(command_buffer, 3, 1, 0, 0);
+            raw.cmd_end_render_pass(command_buffer);
+            let imported = self.imported.as_ref().expect("surface imported");
+            let release = vk::ImageMemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::SHADER_READ)
+                .old_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .src_queue_family_index(self.queue_family)
+                .dst_queue_family_index(vk::QUEUE_FAMILY_FOREIGN_EXT)
+                .image(imported.image)
+                .subresource_range(
+                    vk::ImageSubresourceRange::default()
+                        .aspect_mask(vk::ImageAspectFlags::COLOR)
+                        .level_count(1)
+                        .layer_count(1),
+                );
+            raw.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[release],
+            );
+            raw.end_command_buffer(command_buffer)?;
+        }
+        let wait_stages =
+            vec![vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT; wait_semaphores.len()];
+        let submit = vk::SubmitInfo::default()
+            .wait_semaphores(wait_semaphores)
+            .wait_dst_stage_mask(&wait_stages)
+            .command_buffers(std::slice::from_ref(&command_buffer))
+            .signal_semaphores(std::slice::from_ref(&finished));
+        unsafe {
+            raw.queue_submit(queue, &[submit], fence)?;
+        }
+        Ok(DrawOutcome::Submitted(finished))
+    }
+
+    fn import_surface(
+        &self,
+        raw: &Device,
+        descriptor: &overlay_protocol::DmabufDescriptor,
+        fds: &[OwnedFd],
+        get_memory_fd_properties: GetMemoryFdProperties,
+        identity: DmabufIdentity,
+    ) -> Result<ImportedSurface, vk::Result> {
+        if descriptor.planes.len() != 1 || fds.len() != 1 {
+            return Err(vk::Result::ERROR_FORMAT_NOT_SUPPORTED);
+        }
+        let format =
+            fourcc_format(descriptor.fourcc).ok_or(vk::Result::ERROR_FORMAT_NOT_SUPPORTED)?;
+        let plane = &descriptor.planes[0];
+        let plane_layout = vk::SubresourceLayout::default()
+            .offset(plane.offset)
+            .row_pitch(plane.stride as u64)
+            .size(plane.size);
+        let modifier_info = vk::ImageDrmFormatModifierExplicitCreateInfoEXT::default()
+            .drm_format_modifier(descriptor.modifier)
+            .plane_layouts(std::slice::from_ref(&plane_layout));
+        let mut external_info = vk::ExternalMemoryImageCreateInfo::default()
+            .handle_types(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
+        external_info.p_next = (&raw const modifier_info).cast();
+        let image_info = vk::ImageCreateInfo::default()
+            .push_next(&mut external_info)
+            .image_type(vk::ImageType::TYPE_2D)
+            .format(format)
+            .extent(vk::Extent3D {
+                width: descriptor.width,
+                height: descriptor.height,
+                depth: 1,
+            })
+            .mip_levels(1)
+            .array_layers(1)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .tiling(vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
+            .usage(vk::ImageUsageFlags::SAMPLED)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .initial_layout(vk::ImageLayout::UNDEFINED);
+        let image = unsafe { raw.create_image(&image_info, None)? };
+        let requirements = unsafe { raw.get_image_memory_requirements(image) };
+        let mut fd_properties = vk::MemoryFdPropertiesKHR::default();
+        let properties_result = unsafe {
+            get_memory_fd_properties(
+                raw.handle(),
+                vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT,
+                fds[0].as_raw_fd(),
+                &mut fd_properties,
+            )
+        };
+        if properties_result != vk::Result::SUCCESS {
+            unsafe { raw.destroy_image(image, None) };
+            return Err(properties_result);
+        }
+        let memory_types = requirements.memory_type_bits & fd_properties.memory_type_bits;
+        if memory_types == 0 {
+            unsafe { raw.destroy_image(image, None) };
+            return Err(vk::Result::ERROR_INVALID_EXTERNAL_HANDLE);
+        }
+        let duplicated = unsafe { libc::dup(fds[0].as_raw_fd()) };
+        if duplicated < 0 {
+            unsafe { raw.destroy_image(image, None) };
+            return Err(vk::Result::ERROR_OUT_OF_HOST_MEMORY);
+        }
+        let mut import_info = vk::ImportMemoryFdInfoKHR::default()
+            .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT)
+            .fd(duplicated);
+        let allocation = vk::MemoryAllocateInfo::default()
+            .push_next(&mut import_info)
+            .allocation_size(requirements.size)
+            .memory_type_index(memory_types.trailing_zeros());
+        let memory = match unsafe { raw.allocate_memory(&allocation, None) } {
+            Ok(memory) => memory,
+            Err(error) => {
+                unsafe {
+                    libc::close(duplicated);
+                    raw.destroy_image(image, None)
+                };
+                return Err(error);
+            }
+        };
+        if let Err(error) = unsafe { raw.bind_image_memory(image, memory, 0) } {
+            unsafe {
+                raw.free_memory(memory, None);
+                raw.destroy_image(image, None)
+            };
+            return Err(error);
+        }
+        let view_info = vk::ImageViewCreateInfo::default()
+            .image(image)
+            .view_type(vk::ImageViewType::TYPE_2D)
+            .format(format)
+            .subresource_range(
+                vk::ImageSubresourceRange::default()
+                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                    .level_count(1)
+                    .layer_count(1),
+            );
+        let view = match unsafe { raw.create_image_view(&view_info, None) } {
+            Ok(view) => view,
+            Err(error) => {
+                unsafe {
+                    raw.free_memory(memory, None);
+                    raw.destroy_image(image, None)
+                };
+                return Err(error);
+            }
+        };
+        Ok(ImportedSurface {
+            image,
+            memory,
+            view,
+            identity,
+        })
+    }
+
+    unsafe fn destroy(self, raw: &Device) {
+        let _ = unsafe { raw.device_wait_idle() };
+        if let Some(surface) = self.imported {
+            unsafe {
+                raw.destroy_image_view(surface.view, None);
+                raw.destroy_image(surface.image, None);
+                raw.free_memory(surface.memory, None);
+            }
+        }
+        for framebuffer in self.framebuffers {
+            unsafe { raw.destroy_framebuffer(framebuffer, None) };
+        }
+        for view in self.target_views {
+            unsafe { raw.destroy_image_view(view, None) };
+        }
+        unsafe {
+            for fence in self.fences {
+                raw.destroy_fence(fence, None);
+            }
+            for semaphore in self.finished {
+                raw.destroy_semaphore(semaphore, None);
+            }
+            raw.destroy_command_pool(self.command_pool, None);
+            raw.destroy_sampler(self.sampler, None);
+            raw.destroy_descriptor_pool(self.descriptor_pool, None);
+            raw.destroy_pipeline(self.pipeline, None);
+            raw.destroy_pipeline_layout(self.pipeline_layout, None);
+            raw.destroy_descriptor_set_layout(self.descriptor_layout, None);
+            raw.destroy_render_pass(self.render_pass, None);
+        }
+    }
+}
+
+unsafe fn shader_module(raw: &Device, bytes: &[u8]) -> Result<vk::ShaderModule, vk::Result> {
+    if !bytes.len().is_multiple_of(4) {
+        return Err(vk::Result::ERROR_INVALID_SHADER_NV);
+    }
+    let code = unsafe { std::slice::from_raw_parts(bytes.as_ptr().cast::<u32>(), bytes.len() / 4) };
+    unsafe { raw.create_shader_module(&vk::ShaderModuleCreateInfo::default().code(code), None) }
+}
+
+fn fourcc_format(fourcc: u32) -> Option<vk::Format> {
+    match fourcc {
+        0x3432_5241 => Some(vk::Format::R8G8B8A8_UNORM),
+        0x3432_4241 => Some(vk::Format::B8G8R8A8_UNORM),
+        _ => None,
+    }
+}
+
+fn dmabuf_identity(fd: &OwnedFd) -> Result<DmabufIdentity, vk::Result> {
+    let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+    if unsafe { libc::fstat(fd.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
+        return Err(vk::Result::ERROR_INVALID_EXTERNAL_HANDLE);
+    }
+    let stat = unsafe { stat.assume_init() };
+    Ok(DmabufIdentity {
+        device: stat.st_dev,
+        inode: stat.st_ino,
+    })
+}

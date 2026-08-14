@@ -1,0 +1,15 @@
+[package]
+name = "overlay-vulkan-layer"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ash = { version = "0.38.0", default-features = false }
+libc.workspace = true
+overlay-agent-core = { path = "../overlay-agent-core" }
+overlay-protocol = { path = "../overlay-protocol" }

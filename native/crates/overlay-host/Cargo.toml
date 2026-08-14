@@ -1,0 +1,11 @@
+[package]
+name = "overlay-host"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+libc.workspace = true
+overlay-protocol = { path = "../overlay-protocol" }
