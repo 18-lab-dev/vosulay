@@ -325,8 +325,9 @@ impl OverlayHandle {
     pub fn get_pid(&self) -> u32 {
         self.pid
     }
-    /// Frame transports the attached target can actually use. The Electron host
-    /// picks shared textures or CPU bitmaps from this.
+    /// Frame transports exposed to Electron for this attachment. The GL attach
+    /// path currently masks DMA-BUF until its GPU-completion contract is safe;
+    /// the explicit Vulkan launch keeps zero-copy enabled.
     #[napi]
     pub fn supports_dmabuf(&self) -> bool {
         self.capabilities & CAP_DMABUF != 0
@@ -850,7 +851,10 @@ impl Task for AttachTask {
         if let Some(attach) = &self.attach {
             attach.run(self.pid, &socket_name, &cookie, deadline)?;
         }
-        connect_handle(host, socket_name, cookie, remaining(deadline)?)
+        // The GL backend's current DMA-BUF fence/reconnect path cannot yet
+        // prove last GPU use across repeated presents. Keep the negotiated
+        // session but expose SHM to Electron until that contract is replaced.
+        connect_handle(host, socket_name, cookie, remaining(deadline)?, false)
     }
 
     fn resolve(&mut self, _env: Env, handle: Self::Output) -> Result<Self::JsValue> {
@@ -913,6 +917,7 @@ impl Task for VulkanLaunchTask {
             socket_name,
             cookie,
             Duration::from_secs(u64::from(options.timeout.unwrap_or(30).clamp(1, 120))),
+            true,
         )
     }
 
@@ -1055,13 +1060,18 @@ fn connect_handle(
     socket_name: String,
     cookie: String,
     timeout: Duration,
+    expose_dmabuf: bool,
 ) -> Result<OverlayHandle> {
     let cancel = Arc::new(AtomicBool::new(false));
     let session = host
         .accept_cancellable_timeout(&cancel, timeout)
         .map_err(fail)?;
     let pid = session.peer_pid();
-    let capabilities = session.capabilities();
+    let capabilities = if expose_dmabuf {
+        session.capabilities()
+    } else {
+        session.capabilities() & !CAP_DMABUF
+    };
     session.set_nonblocking().map_err(fail)?;
     let shared = Arc::new(Shared {
         commands: Mutex::new(CommandQueue {
