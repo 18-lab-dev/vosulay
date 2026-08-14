@@ -165,6 +165,16 @@ impl SessionCommand {
             _ => None,
         }
     }
+
+    /// A DMA-BUF command that never reached the socket can be released locally:
+    /// no agent or GPU has observed its duplicated descriptors. SurfaceFd and
+    /// SurfaceBytes do not hold a Chromium release token on the JS side.
+    fn locally_consumed(&self) -> Option<(u64, u64)> {
+        match self {
+            Self::Dmabuf { descriptor, .. } => Some((descriptor.target_id, descriptor.sequence)),
+            _ => None,
+        }
+    }
 }
 
 enum SessionCommand {
@@ -228,12 +238,18 @@ fn enqueue(shared: &Arc<Shared>, command: SessionCommand) -> Arc<Completion> {
         completion.settle(outcome);
         return completion;
     }
+    let mut locally_consumed = Vec::new();
     if let Some(target_id) = command.frame_target() {
         // Drop any frame for this target that has not been sent yet. It is
         // already stale, and retaining it would only queue an obsolete paint
-        // and hold its file descriptors open.
+        // and hold its file descriptors open. DMA-BUFs also need an explicit
+        // local consumed event so Electron can release the texture token that
+        // would otherwise wait forever for an agent acknowledgement.
         queue.pending.retain(|envelope| {
             if envelope.command.frame_target() == Some(target_id) {
+                if let Some(consumed) = envelope.command.locally_consumed() {
+                    locally_consumed.push(consumed);
+                }
                 envelope.completion.settle(Ok(()));
                 return false;
             }
@@ -245,6 +261,9 @@ fn enqueue(shared: &Arc<Shared>, command: SessionCommand) -> Arc<Completion> {
         completion: completion.clone(),
     });
     drop(queue);
+    for (target_id, sequence) in locally_consumed {
+        emit_event(shared, "consumed", format!("{target_id}:{sequence}"));
+    }
     shared.signal.notify_one();
     completion
 }
@@ -1203,12 +1222,20 @@ mod launch_tests {
     }
 
     #[test]
-    fn superseding_settles_the_replaced_frame_instead_of_stranding_it() {
+    fn superseding_settles_and_releases_the_unsent_dma_buf() {
         let shared = test_shared();
         let stranded = enqueue(&shared, frame_command(1, 64));
         enqueue(&shared, frame_command(1, 128));
         // An awaiting JS promise must resolve rather than hang forever.
         assert!(stranded.wait().is_ok());
+        let events = shared.events.lock().unwrap();
+        assert!(
+            events
+                .pending
+                .iter()
+                .any(|(name, payload)| name == "consumed" && payload == "1:64"),
+            "a frame dropped before socket submission is immediately safe to release"
+        );
     }
 
     #[test]
