@@ -6,9 +6,11 @@ import {
     cdpInput,
     offscreenPreference,
     electronInput,
-    nextTarget,
+    EMPTY_TARGET_STATE,
+    nextTargetState,
     parseInput,
     parseTargetEvent,
+    StartupTransaction,
 } from "../src/main/linux-overlay-process";
 import { NativeSharedTexture } from "../src/main/linux-overlay-provider";
 
@@ -107,23 +109,142 @@ test("maps Electron RGBA and rejects unsupported shared textures", () => {
     ), null);
 });
 
-test("target destruction stops forwarding until a replacement target arrives", () => {
+test("creating a target registers it without making it active", () => {
     const created = parseTargetEvent("created:9:640:480");
     assert.deepEqual(created, {
         kind: "created",
         target: { id: 9, width: 640, height: 480 },
     });
-    assert.deepEqual(nextTarget(null, created!), { id: 9, width: 640, height: 480 });
-    assert.deepEqual(
-        nextTarget({ id: 9, width: 640, height: 480 }, parseTargetEvent("destroyed:8")!),
-        { id: 9, width: 640, height: 480 },
-    );
-    assert.equal(
-        nextTarget({ id: 9, width: 640, height: 480 }, parseTargetEvent("destroyed:9")!),
-        null,
-    );
+    // Creation order used to imply selection, which is what let Electron and
+    // the agent disagree about where frames should go.
+    const state = nextTargetState(EMPTY_TARGET_STATE, created!);
+    assert.equal(state.active, null);
+    assert.deepEqual(state.known.get(9), { id: 9, width: 640, height: 480 });
+});
+
+test("the agent's selection decides the active target", () => {
+    let state = nextTargetState(EMPTY_TARGET_STATE, parseTargetEvent("created:9:640:480")!);
+    state = nextTargetState(state, parseTargetEvent("created:11:1920:1080")!);
+    // The most recently created target is not automatically the winner.
+    state = nextTargetState(state, parseTargetEvent("selected:9:1")!);
+    assert.deepEqual(state.active, { id: 9, width: 640, height: 480 });
+    assert.equal(state.generation, 1);
+
+    state = nextTargetState(state, parseTargetEvent("selected:11:2")!);
+    assert.deepEqual(state.active, { id: 11, width: 1920, height: 1080 });
+});
+
+test("a stale selection never undoes a newer one", () => {
+    let state = nextTargetState(EMPTY_TARGET_STATE, parseTargetEvent("created:9:640:480")!);
+    state = nextTargetState(state, parseTargetEvent("created:11:1920:1080")!);
+    state = nextTargetState(state, parseTargetEvent("selected:11:5")!);
+    const reordered = nextTargetState(state, parseTargetEvent("selected:9:4")!);
+    assert.equal(reordered, state, "an older generation must be ignored outright");
+    assert.deepEqual(reordered.active, { id: 11, width: 1920, height: 1080 });
+});
+
+test("selecting target zero clears the active target", () => {
+    let state = nextTargetState(EMPTY_TARGET_STATE, parseTargetEvent("created:9:640:480")!);
+    state = nextTargetState(state, parseTargetEvent("selected:9:1")!);
+    state = nextTargetState(state, parseTargetEvent("selected:0:2")!);
+    assert.equal(state.active, null);
+    assert.equal(state.generation, 2);
+});
+
+test("destroying the active target stops forwarding", () => {
+    let state = nextTargetState(EMPTY_TARGET_STATE, parseTargetEvent("created:9:640:480")!);
+    state = nextTargetState(state, parseTargetEvent("selected:9:1")!);
+
+    const unrelated = nextTargetState(state, parseTargetEvent("destroyed:8")!);
+    assert.deepEqual(unrelated.active, { id: 9, width: 640, height: 480 });
+
+    const destroyed = nextTargetState(state, parseTargetEvent("destroyed:9")!);
+    assert.equal(destroyed.active, null);
+    assert.equal(destroyed.known.has(9), false);
+});
+
+test("resizing the active target is reflected immediately", () => {
+    let state = nextTargetState(EMPTY_TARGET_STATE, parseTargetEvent("created:9:640:480")!);
+    state = nextTargetState(state, parseTargetEvent("selected:9:1")!);
+    state = nextTargetState(state, parseTargetEvent("created:9:1280:720")!);
+    assert.deepEqual(state.active, { id: 9, width: 1280, height: 720 });
+});
+
+test("a selection naming an unknown target clears rather than guesses", () => {
+    const state = nextTargetState(EMPTY_TARGET_STATE, parseTargetEvent("selected:42:1")!);
+    assert.equal(state.active, null);
+    assert.equal(state.generation, 1, "the decision is still newer than what came before");
+});
+
+test("rejects malformed target events", () => {
     assert.equal(parseTargetEvent("destroyed:0"), null);
     assert.equal(parseTargetEvent("destroyed:9:extra"), null);
+    assert.equal(parseTargetEvent("selected:9"), null);
+    assert.equal(parseTargetEvent("selected:9:0"), null, "generations start at one");
+    assert.equal(parseTargetEvent("selected:-1:1"), null);
+    assert.equal(parseTargetEvent("selected:9:x"), null);
+    assert.equal(parseTargetEvent("selected:9:1:2"), null);
+    // Zero is a valid selection only, never a valid target id.
+    assert.deepEqual(parseTargetEvent("selected:0:3"), {
+        kind: "selected",
+        targetId: 0,
+        generation: 3,
+    });
+});
+
+test("a failed createSurface releases the window and the native handle", async () => {
+    // The window is constructed before the surface exists, so a rejection here
+    // used to leak both: no LinuxOverlayProcess existed yet whose destroy()
+    // could have cleaned them up.
+    const released: string[] = [];
+    let windowDestroyed = false;
+    const startup = new StartupTransaction();
+
+    let failure: unknown;
+    try {
+        // Same acquisition order as LinuxOverlayProcess.create().
+        startup.acquire(() => {
+            released.push("native");
+        });
+        startup.acquire(() => {
+            if (!windowDestroyed) {
+                windowDestroyed = true;
+                released.push("window");
+            }
+        });
+        await Promise.reject(new Error("no DRM device"));
+    } catch (error) {
+        failure = error;
+        await startup.unwind();
+    }
+
+    assert.ok(failure instanceof Error);
+    assert.equal(failure.message, "no DRM device");
+    assert.deepEqual(released, ["window", "native"], "reverse acquisition order");
+    assert.equal(windowDestroyed, true);
+});
+
+test("a committed startup transaction releases nothing", async () => {
+    // Once the process instance exists it owns the resources, so unwinding
+    // must not destroy a live overlay.
+    const released: string[] = [];
+    const startup = new StartupTransaction();
+    startup.acquire(() => released.push("native"));
+    startup.acquire(() => released.push("window"));
+    startup.commit();
+    await startup.unwind();
+    assert.deepEqual(released, []);
+});
+
+test("a failing rollback does not prevent the others from running", async () => {
+    const released: string[] = [];
+    const startup = new StartupTransaction();
+    startup.acquire(() => released.push("native"));
+    startup.acquire(() => {
+        throw new Error("window teardown failed");
+    });
+    await startup.unwind();
+    assert.deepEqual(released, ["native"], "an earlier resource is still released");
 });
 
 test("validates and translates native SDL input events", () => {

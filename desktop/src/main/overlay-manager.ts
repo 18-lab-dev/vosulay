@@ -44,6 +44,24 @@ export interface OverlayManagerDependencies {
     scheduleScan?: (scan: () => void) => () => void;
 }
 
+/// Explicit `--pid` values win; otherwise the configured process names are
+/// resolved. Platform providers must reuse this rather than substituting their
+/// own set, or a default startup with no `--pid` discovers nothing at all.
+export async function discoverTargetPids(options: RuntimeOptions): Promise<Set<number>> {
+    if (options.pids.length > 0) {
+        return new Set(options.pids);
+    }
+    const matches = await Promise.all(
+        options.processNames.map((name) => findProcess("name", name, true)),
+    );
+    return new Set(
+        matches
+            .flat()
+            .map((process) => process.pid)
+            .filter((pid) => Number.isSafeInteger(pid) && pid > 0),
+    );
+}
+
 
 export class OverlayManager implements OverlayProvider {
     readonly events = new EventEmitter<{
@@ -219,19 +237,7 @@ export class OverlayManager implements OverlayProvider {
     }
 
     private async findTargetPids(): Promise<Set<number>> {
-        if (this.options.pids.length > 0) {
-            return new Set(this.options.pids);
-        }
-
-        const matches = await Promise.all(
-            this.options.processNames.map((name) => findProcess("name", name, true)),
-        );
-        return new Set(
-            matches
-                .flat()
-                .map((process) => process.pid)
-                .filter((pid) => Number.isSafeInteger(pid) && pid > 0),
-        );
+        return discoverTargetPids(this.options);
     }
 
     private queueReconcile(): Promise<void> {

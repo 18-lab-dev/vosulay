@@ -3,8 +3,10 @@ import test from "node:test";
 
 import type { ConfigStore } from "../src/main/config";
 import {
+    LinuxCandidateTracker,
     LinuxOverlayProvider,
     createLinuxOverlayProvider,
+    selectCandidatePid,
 } from "../src/main/linux-overlay-provider";
 import { createOverlayProvider } from "../src/main/provider-factory";
 import type { RuntimeOptions } from "../src/main/options";
@@ -77,11 +79,13 @@ test("launches Vulkan target through packaged native addon before provider start
                 scheduleScan: () => () => {},
             },
         );
+        // The GL agent must not be preloaded here: both backends would
+        // authenticate against the same one-shot socket and cookie, and
+        // whichever won first would claim the session.
         assert.deepEqual(calls, [{
             executable: "/games/osu.AppImage",
             args: ["--renderer=vulkan"],
             layerDirectory: "/packaged/native",
-            agentLibraryPath: "/packaged/native/liboverlay_agent_gl.so",
         }]);
         assert.ok(provider instanceof LinuxOverlayProvider);
         await provider.stop();
@@ -102,4 +106,56 @@ test("rejects unsupported host platforms", async () => {
         createOverlayProvider("darwin", options, configStore, registry),
         /Unsupported vosulay host platform: darwin/,
     );
+});
+
+test("candidate selection is stable and deterministic without a compositor signal", () => {
+    // Lowest PID wins: the earliest-started match is the game rather than a
+    // helper it spawned later.
+    assert.equal(selectCandidatePid(new Set([4242, 1337, 9001]), null), 1337);
+    // The current choice is kept while it is still running, so the overlay
+    // does not flap between two matching processes.
+    assert.equal(selectCandidatePid(new Set([4242, 1337]), 4242), 4242);
+    // ...but is replaced once it exits.
+    assert.equal(selectCandidatePid(new Set([4242]), 1337), 4242);
+    assert.equal(selectCandidatePid(new Set(), 4242), null);
+});
+
+test("the Linux tracker reports a discovered process as foreground", () => {
+    const tracker = new LinuxCandidateTracker();
+    const seen: Array<number | null> = [];
+    assert.equal(tracker.start((pid) => seen.push(pid)), null);
+
+    // Default startup has no --pid, so discovery is the only foreground signal.
+    tracker.observe(new Set([4242]));
+    assert.deepEqual(seen, [4242]);
+
+    // No change means no spurious reselection.
+    tracker.observe(new Set([4242, 9001]));
+    assert.deepEqual(seen, [4242]);
+
+    tracker.observe(new Set([9001]));
+    assert.deepEqual(seen, [4242, 9001]);
+
+    tracker.observe(new Set());
+    assert.deepEqual(seen, [4242, 9001, null]);
+});
+
+test("default Linux startup discovers targets by process name", async () => {
+    // The regression: replacing discovery with `options.pids` left the allowed
+    // set permanently empty whenever no --pid was supplied.
+    const provider = new LinuxOverlayProvider(
+        { ...options, pids: [], processNames: ["osu!.exe"] },
+        configStore,
+        registry,
+        {
+            native: {
+                attach: () => {
+                    throw new Error("no process should be attached in this test");
+                },
+            },
+            scheduleScan: () => () => {},
+        },
+    );
+    assert.ok(provider instanceof LinuxOverlayProvider);
+    await provider.stop();
 });

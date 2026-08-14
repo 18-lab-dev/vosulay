@@ -5,6 +5,7 @@ import type { ConfigStore } from "./config";
 import { LinuxOverlayProcess } from "./linux-overlay-process";
 import {
     OverlayManager,
+    discoverTargetPids,
     type ManagedOverlayProcess,
     type OverlayManagerDependencies,
 } from "./overlay-manager";
@@ -129,6 +130,48 @@ class LinuxPidTracker implements ForegroundTracker {
     }
 }
 
+/// Chooses which discovered process the overlay follows when there is no
+/// window-manager foreground signal. Linux has no equivalent of the Windows
+/// active-window API here, so selection must be deterministic instead of
+/// arbitrary: the current choice is kept while it is still running, and
+/// otherwise the lowest PID wins, which is the earliest-started match rather
+/// than a helper the game spawned later.
+export function selectCandidatePid(
+    candidates: ReadonlySet<number>,
+    current: number | null,
+): number | null {
+    if (current !== null && candidates.has(current)) return current;
+    let selected: number | null = null;
+    for (const pid of candidates) {
+        if (selected === null || pid < selected) selected = pid;
+    }
+    return selected;
+}
+
+/// Foreground tracker fed by process discovery rather than by a compositor.
+export class LinuxCandidateTracker implements ForegroundTracker {
+    private callback: ((pid: number | null) => void) | null = null;
+    private current: number | null = null;
+
+    start(onChanged: (pid: number | null) => void): number | null {
+        this.callback = onChanged;
+        return this.current;
+    }
+
+    stop(): void {
+        this.callback = null;
+    }
+
+    /// Called with each discovery result so the manager sees a foreground PID
+    /// on the default path, where no explicit `--pid` was supplied.
+    observe(candidates: ReadonlySet<number>): void {
+        const next = selectCandidatePid(candidates, this.current);
+        if (next === this.current) return;
+        this.current = next;
+        this.callback?.(next);
+    }
+}
+
 class NativeOverlayProcess implements ManagedOverlayProcess {
     readonly events = new EventEmitter<{ destroyed: [] }>();
     private destroyed = false;
@@ -238,11 +281,14 @@ export async function createLinuxOverlayProvider(
     if (addon.launchVulkan === undefined) {
         throw new Error("Native overlay addon does not expose launchVulkan(options)");
     }
+    // Exactly one backend per launch. Preloading the GL agent alongside the
+    // Vulkan layer pointed both at the same one-shot socket and cookie, so
+    // whichever authenticated first claimed the session and the other backend
+    // was left without an overlay.
     const handle = await addon.launchVulkan({
         executable: options.vulkanLaunch.executable,
         args: options.vulkanLaunch.args,
         layerDirectory: root,
-        agentLibraryPath: path.join(root, "liboverlay_agent_gl.so"),
     });
     if (!Number.isSafeInteger(handle.pid) || (handle.pid ?? 0) <= 0) {
         await handle.destroy();
@@ -292,12 +338,21 @@ export class LinuxOverlayProvider extends OverlayManager {
         const native = dependencies.native;
         const loadNative = dependencies.loadNative ?? defaultNativeLoader;
         const initialPid = options.pids[0] ?? null;
+        // Without an explicit `--pid` the manager must still find the game by
+        // process name. Replacing discovery with `options.pids` left the
+        // allowed set permanently empty, so the provider never attached on the
+        // default Linux startup path.
+        const candidates = new LinuxCandidateTracker();
         super(options, configStore, overlayRegistry, {
             ...dependencies,
             foregroundTracker: dependencies.foregroundTracker
-                ?? (initialPid === null ? new NoopForegroundTracker() : new LinuxPidTracker(initialPid)),
+                ?? (initialPid === null ? candidates : new LinuxPidTracker(initialPid)),
             discoverPids: dependencies.discoverPids
-                ?? (async () => new Set(options.pids)),
+                ?? (async () => {
+                    const discovered = await discoverTargetPids(options);
+                    candidates.observe(discovered);
+                    return discovered;
+                }),
             initializeProcess: dependencies.initializeProcess ?? (async (
                 pid: number,
                 editingTarget: EditingTarget,

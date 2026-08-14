@@ -33,7 +33,24 @@ export interface NativeTarget {
 }
 export type NativeTargetEvent =
     | { kind: "created"; target: NativeTarget }
-    | { kind: "destroyed"; targetId: number };
+    | { kind: "destroyed"; targetId: number }
+    | { kind: "selected"; targetId: number; generation: number };
+
+/// Which target the overlay composites into is decided by the agent, which
+/// knows the live drawables, and announced through `selected`. Creation order
+/// says nothing about it: a game can create a small offscreen drawable after
+/// its real window.
+export interface TargetState {
+    readonly known: ReadonlyMap<number, NativeTarget>;
+    readonly active: NativeTarget | null;
+    readonly generation: number;
+}
+
+export const EMPTY_TARGET_STATE: TargetState = {
+    known: new Map(),
+    active: null,
+    generation: 0,
+};
 interface NativeInputEvent {
     targetId: number;
     kind: number;
@@ -200,6 +217,15 @@ export function parseTargetEvent(value: unknown): NativeTargetEvent | null {
             ? { kind: "destroyed", targetId }
             : null;
     }
+    if (fields[0] === "selected" && fields.length === 3) {
+        const targetId = Number(fields[1]);
+        const generation = Number(fields[2]);
+        // Zero is the agent saying it has no drawable to composite into, so it
+        // is a valid selection where it would be an invalid target id.
+        if (!Number.isSafeInteger(targetId) || targetId < 0) return null;
+        if (!Number.isSafeInteger(generation) || generation <= 0) return null;
+        return { kind: "selected", targetId, generation };
+    }
     if (fields[0] !== "created" || fields.length !== 4) return null;
     const target = { id: Number(fields[1]), width: Number(fields[2]), height: Number(fields[3]) };
     if (!Number.isSafeInteger(target.id) || target.id <= 0
@@ -208,12 +234,36 @@ export function parseTargetEvent(value: unknown): NativeTargetEvent | null {
     return { kind: "created", target };
 }
 
-export function nextTarget(
-    current: NativeTarget | null,
+/// Apply one target event. Registration and selection are deliberately
+/// separate: creating a drawable only makes it known, and only the agent's
+/// `selected` announcement changes which one is composited into. Treating
+/// creation as selection made Electron and the agent disagree, so frames were
+/// produced for one target while the agent composited another.
+export function nextTargetState(
+    state: TargetState,
     event: NativeTargetEvent,
-): NativeTarget | null {
-    if (event.kind === "created") return event.target;
-    return current?.id === event.targetId ? null : current;
+): TargetState {
+    if (event.kind === "created") {
+        const known = new Map(state.known);
+        known.set(event.target.id, event.target);
+        // A resize of the active target must be reflected immediately.
+        const active = state.active?.id === event.target.id ? event.target : state.active;
+        return { known, active, generation: state.generation };
+    }
+    if (event.kind === "destroyed") {
+        if (!state.known.has(event.targetId) && state.active?.id !== event.targetId) {
+            return state;
+        }
+        const known = new Map(state.known);
+        known.delete(event.targetId);
+        const active = state.active?.id === event.targetId ? null : state.active;
+        return { known, active, generation: state.generation };
+    }
+    // Selections can be observed out of order; an older one must never undo a
+    // newer decision.
+    if (event.generation <= state.generation) return state;
+    const active = event.targetId === 0 ? null : state.known.get(event.targetId) ?? null;
+    return { known: state.known, active, generation: event.generation };
 }
 
 function parseConsumed(value: unknown): number | null {
@@ -251,6 +301,37 @@ export function bitmapFrame(
     return { descriptor: { targetId, width, height, stride }, bitmap };
 }
 
+/// Tracks resources acquired while building an overlay process so a failure
+/// part-way through releases all of them.
+///
+/// Construction acquires a `BrowserWindow` before the native surface exists,
+/// so until the `LinuxOverlayProcess` instance is built there is no `destroy()`
+/// that could clean anything up. Each step registers its own rollback and a
+/// failure unwinds them in reverse acquisition order.
+export class StartupTransaction {
+    private readonly rollbacks: Array<() => Promise<void> | void> = [];
+
+    acquire(release: () => Promise<void> | void): void {
+        this.rollbacks.push(release);
+    }
+
+    /// Ownership has transferred to a value that can release these itself.
+    commit(): void {
+        this.rollbacks.length = 0;
+    }
+
+    async unwind(): Promise<void> {
+        for (const release of this.rollbacks.reverse()) {
+            try {
+                await release();
+            } catch {
+                // Teardown failures must not mask the original error.
+            }
+        }
+        this.rollbacks.length = 0;
+    }
+}
+
 export class LinuxOverlayProcess implements ManagedOverlayProcess {
     readonly events = new EventEmitter<{ destroyed: [] }>();
     readonly window: BrowserWindowType;
@@ -258,7 +339,7 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
 
     private readonly bridge: HostBridge;
     private readonly surface: NativeOverlaySurface;
-    private target: NativeTarget | null = null;
+    private targets: TargetState = EMPTY_TARGET_STATE;
     private destroyed = false;
     private destroyedEmitted = false;
     private visible: boolean;
@@ -321,50 +402,70 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
     ): Promise<LinuxOverlayProcess> {
         // Electron is a runtime facade in Node tests and the real module in the packaged main process.
         const { app, BrowserWindow } = createRequire(import.meta.url)("electron") as ElectronRuntime;
-        const window = new BrowserWindow({
-            show: false,
-            frame: false,
-            transparent: true,
-            backgroundColor: "#00000000",
-            webPreferences: {
-                preload: path.join(app.getAppPath(), "out/preload/index.js"),
-                contextIsolation: true,
-                sandbox: true,
-                nodeIntegration: false,
-                offscreen: offscreenPreference(native),
-                transparent: true,
-                backgroundThrottling: false,
-                additionalArguments: [`--vosulay-vosu-url=${options.vosuUrl.href}`],
-            },
-        });
-        window.setSize(FALLBACK_WIDTH, FALLBACK_HEIGHT, false);
-        window.webContents.setFrameRate(options.fpsLimit);
-        window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-        window.webContents.on("will-attach-webview", (event) => event.preventDefault());
-        window.webContents.on("will-navigate", (event) => event.preventDefault());
+        const startup = new StartupTransaction();
 
-        const createSurface = native.createSurface;
-        if (createSurface === undefined) throw new Error("Native overlay does not expose createSurface()");
-        const process = new LinuxOverlayProcess(
-            pid,
-            native,
-            window,
-            await createSurface.call(native),
-            editingTarget,
-            options,
-            configStore,
-            overlayRegistry,
-            visible,
-        );
         try {
-            await window.loadURL(MANAGER_URL);
-            window.webContents.navigationHistory.clear();
-            window.webContents.debugger.attach("1.3");
-            process.debuggerAttached = true;
-            await native.setVisible?.(visible);
-            return process;
+            const createSurface = native.createSurface;
+            if (createSurface === undefined) {
+                throw new Error("Native overlay does not expose createSurface()");
+            }
+            startup.acquire(() => native.destroy());
+
+            const window = new BrowserWindow({
+                show: false,
+                frame: false,
+                transparent: true,
+                backgroundColor: "#00000000",
+                webPreferences: {
+                    preload: path.join(app.getAppPath(), "out/preload/index.js"),
+                    contextIsolation: true,
+                    sandbox: true,
+                    nodeIntegration: false,
+                    offscreen: offscreenPreference(native),
+                    transparent: true,
+                    backgroundThrottling: false,
+                    additionalArguments: [`--vosulay-vosu-url=${options.vosuUrl.href}`],
+                },
+            });
+            startup.acquire(() => {
+                if (!window.isDestroyed()) window.destroy();
+            });
+            window.setSize(FALLBACK_WIDTH, FALLBACK_HEIGHT, false);
+            window.webContents.setFrameRate(options.fpsLimit);
+            window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+            window.webContents.on("will-attach-webview", (event) => event.preventDefault());
+            window.webContents.on("will-navigate", (event) => event.preventDefault());
+
+            // The window already exists here, which is exactly why this step
+            // used to leak it when the native surface could not be created.
+            const surface = await createSurface.call(native);
+
+            const process = new LinuxOverlayProcess(
+                pid,
+                native,
+                window,
+                surface,
+                editingTarget,
+                options,
+                configStore,
+                overlayRegistry,
+                visible,
+            );
+            // Ownership has transferred; `destroy()` now releases everything.
+            startup.commit();
+            try {
+                await window.loadURL(MANAGER_URL);
+                window.webContents.navigationHistory.clear();
+                window.webContents.debugger.attach("1.3");
+                process.debuggerAttached = true;
+                await native.setVisible?.(visible);
+                return process;
+            } catch (error) {
+                await process.destroy();
+                throw error;
+            }
         } catch (error) {
-            await process.destroy();
+            await startup.unwind();
             throw error;
         }
     }
@@ -384,7 +485,7 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
             this.window.webContents.debugger.detach();
         }
         try {
-            await this.surface.clear?.(this.target?.id ?? 0);
+            await this.surface.clear?.(this.targets.active?.id ?? 0);
         } catch (error) {
             failure = error;
         }
@@ -410,7 +511,7 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
     async setVisible(visible: boolean): Promise<void> {
         this.visible = visible;
         await this.native.setVisible?.(visible);
-        if (!visible && this.target !== null) await this.surface.clear?.(this.target.id);
+        if (!visible && this.targets.active !== null) await this.surface.clear?.(this.targets.active.id);
     }
 
     async flushPendingSave(): Promise<void> {
@@ -424,10 +525,13 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
     private readonly handleTarget = (value: unknown): void => {
         const event = parseTargetEvent(value);
         if (event === null || this.destroyed) return;
-        const target = nextTarget(this.target, event);
-        if (target === this.target) return;
+        const previous = this.targets.active;
+        this.targets = nextTargetState(this.targets, event);
+        const target = this.targets.active;
+        if (target === previous) return;
+        // The composition target changed, so any frame still in flight belongs
+        // to a surface that is no longer being drawn.
         this.releasePendingTextures();
-        this.target = target;
         if (target !== null && !this.window.isDestroyed()) {
             this.window.setSize(target.width, target.height, false);
         }
@@ -456,7 +560,7 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
 
     private readonly handleInput = (value: unknown): void => {
         const input = parseInput(value);
-        if (input === null || input.targetId !== this.target?.id || this.destroyed || !this.editing) {
+        if (input === null || input.targetId !== this.targets.active?.id || this.destroyed || !this.editing) {
             return;
         }
         const command = cdpInput(input);
@@ -492,11 +596,11 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
             const size = image.getSize();
             console.info(
                 `Native overlay paint: transport=${texture === undefined ? "bitmap" : "shared-texture"}`
-                + ` size=${size.width}x${size.height} target=${this.target !== null}`
+                + ` size=${size.width}x${size.height} target=${this.targets.active !== null}`
                 + ` visible=${this.visible}`,
             );
         }
-        const target = this.target;
+        const target = this.targets.active;
         if (this.destroyed || !this.visible || target === null) {
             texture?.release();
             return;
