@@ -13,7 +13,7 @@ use thiserror::Error;
 
 pub const MAGIC: [u8; 8] = *b"VOSUOVLY";
 pub const MAJOR_VERSION: u16 = 1;
-pub const MINOR_VERSION: u16 = 0;
+pub const MINOR_VERSION: u16 = 1;
 pub const HEADER_LEN: usize = 28;
 pub const MAX_PACKET: usize = 64 * 1024;
 pub const MAX_PAYLOAD: usize = MAX_PACKET - HEADER_LEN;
@@ -34,6 +34,9 @@ pub const CAP_DMABUF: u64 = 1 << 1;
 /// Shared-memory frames in Chromium's native BGRA order, avoiding a per-frame
 /// channel swizzle on the host.
 pub const CAP_SHM_BGRA: u64 = 1 << 2;
+/// The presenting backend can drive offscreen rendering from game presents.
+/// Without this bit the host keeps its legacy fixed-rate renderer running.
+pub const CAP_FRAME_REQUEST: u64 = 1 << 3;
 /// Every capability that can carry frame pixels. A usable session must grant at
 /// least one of these, but which one is backend-specific: the GL agent accepts
 /// either, while the Vulkan layer can only consume DMA-BUF.
@@ -127,6 +130,9 @@ pub enum MessageKind {
     /// target it will composite into. The host must follow this selection
     /// instead of inferring one from target-creation order.
     SelectTarget = 17,
+    /// Agent to host: one or more game presents occurred for the selected
+    /// target. Requests are latest-wins and may be coalesced by every hop.
+    FrameRequest = 18,
 }
 
 impl TryFrom<u16> for MessageKind {
@@ -150,6 +156,7 @@ impl TryFrom<u16> for MessageKind {
             15 => Self::Shutdown,
             16 => Self::Error,
             17 => Self::SelectTarget,
+            18 => Self::FrameRequest,
             other => return Err(ProtocolError::MessageKind(other)),
         })
     }
@@ -392,6 +399,42 @@ impl SelectedTarget {
             target_id: u64::from_le_bytes(p[..8].try_into().unwrap()),
             generation: u64::from_le_bytes(p[8..].try_into().unwrap()),
         })
+    }
+}
+
+/// Coalescible demand signal emitted by the presenting backend. `sequence`
+/// advances whenever the game presents the selected target; the host only
+/// needs the newest value and never treats a request as a resource release.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameRequest {
+    pub target_id: u64,
+    pub sequence: u64,
+}
+impl FrameRequest {
+    pub const LEN: usize = 16;
+    pub fn encode(self) -> Result<[u8; Self::LEN], ProtocolError> {
+        self.validate()?;
+        let mut bytes = [0u8; Self::LEN];
+        bytes[..8].copy_from_slice(&self.target_id.to_le_bytes());
+        bytes[8..].copy_from_slice(&self.sequence.to_le_bytes());
+        Ok(bytes)
+    }
+    pub fn decode(bytes: &[u8]) -> Result<Self, ProtocolError> {
+        if bytes.len() != Self::LEN {
+            return Err(ProtocolError::InvalidPayload);
+        }
+        let request = Self {
+            target_id: u64::from_le_bytes(bytes[..8].try_into().unwrap()),
+            sequence: u64::from_le_bytes(bytes[8..].try_into().unwrap()),
+        };
+        request.validate()?;
+        Ok(request)
+    }
+    pub fn validate(&self) -> Result<(), ProtocolError> {
+        if self.target_id == 0 || self.sequence == 0 {
+            return Err(ProtocolError::InvalidPayload);
+        }
+        Ok(())
     }
 }
 
@@ -694,7 +737,7 @@ impl Endpoint {
     fn addr(&self) -> Result<(libc::sockaddr_un, libc::socklen_t), ProtocolError> {
         if self.name.len() + 1 > 108 {
             return Err(ProtocolError::InvalidPayload);
-        };
+        }
         let mut addr: libc::sockaddr_un = unsafe { mem::zeroed() };
         addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
         addr.sun_path[0] = 0;
@@ -1227,8 +1270,44 @@ mod tests {
     }
 
     #[test]
+    fn frame_request_roundtrips_and_is_fd_free() {
+        let request = FrameRequest {
+            target_id: 0x1122_3344_5566_7788,
+            sequence: 9,
+        };
+        let encoded = request.encode().unwrap();
+        assert_eq!(FrameRequest::decode(&encoded).unwrap(), request);
+        assert!(FrameRequest::decode(&encoded[..15]).is_err());
+        assert!(FrameRequest {
+            target_id: 0,
+            sequence: 1,
+        }
+        .encode()
+        .is_err());
+        assert!(FrameRequest {
+            target_id: 1,
+            sequence: 0,
+        }
+        .encode()
+        .is_err());
+
+        assert_eq!(
+            MessageKind::try_from(18).unwrap(),
+            MessageKind::FrameRequest
+        );
+        assert_eq!(expected_fd_count(MessageKind::FrameRequest), 0);
+        let packet = Packet::new(
+            MessageKind::FrameRequest,
+            request.sequence,
+            encoded.to_vec(),
+            vec![File::open("/dev/null").unwrap().into()],
+        );
+        assert!(matches!(packet, Err(ProtocolError::FdCount { .. })));
+    }
+
+    #[test]
     fn transport_mask_covers_exactly_the_frame_carrying_capabilities() {
         assert_eq!(CAP_TRANSPORT_MASK, CAP_SHM | CAP_DMABUF);
-        assert_eq!(CAP_TRANSPORT_MASK & CAP_SHM_BGRA, 0);
+        assert_eq!(CAP_TRANSPORT_MASK & (CAP_SHM_BGRA | CAP_FRAME_REQUEST), 0);
     }
 }
