@@ -1,0 +1,129 @@
+name: PR2 source patch
+
+on:
+  push:
+    branches:
+      - feat/cross-platform-electron-linux-overlay
+    paths:
+      - ".github/workflows/pr2-source-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/cross-platform-electron-linux-overlay
+          fetch-depth: 0
+      - name: Apply source edits
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("native/crates/overlay-agent-gl/src/lib.rs")
+          text = path.read_text()
+
+          old = '''static DMABUF_DRAW_REPORTED: AtomicBool = AtomicBool::new(false);
+          static TEXTURE_REPORTED: AtomicBool = AtomicBool::new(false);
+          static DMABUF_REJECT_REPORTED: AtomicBool = AtomicBool::new(false);
+          '''
+          new = '''static DMABUF_DRAW_REPORTED: AtomicBool = AtomicBool::new(false);
+          static TEXTURE_REPORTED: AtomicBool = AtomicBool::new(false);
+          static DMABUF_REJECT_REPORTED: AtomicBool = AtomicBool::new(false);
+          static MEMORY_OBJECT_IMPORT_REPORTED: AtomicBool = AtomicBool::new(false);
+          static EGL_IMPORT_REPORTED: AtomicBool = AtomicBool::new(false);
+          '''
+          if old not in text:
+              raise SystemExit("diagnostic statics anchor missing")
+          text = text.replace(old, new, 1)
+
+          old = '''    Ok(DmabufSurface {
+                  backing: DmabufBacking::MemoryObject {
+                      memory,
+                      delete: memory_fns.delete,
+                  },
+                  texture,
+              })
+          }
+          '''
+          new = '''    if !MEMORY_OBJECT_IMPORT_REPORTED.swap(true, Ordering::AcqRel) {
+                  agent_diagnostic("DMA-BUF import path: GL_EXT_memory_object_fd");
+              }
+              Ok(DmabufSurface {
+                  backing: DmabufBacking::MemoryObject {
+                      memory,
+                      delete: memory_fns.delete,
+                  },
+                  texture,
+              })
+          }
+          '''
+          if old not in text:
+              raise SystemExit("memory-object return anchor missing")
+          text = text.replace(old, new, 1)
+
+          old = '''        Ok(DmabufSurface {
+                      backing: DmabufBacking::Egl {
+                          image,
+                          display,
+                          destroy_image: egl.destroy_image,
+                          _fd: retained_fd,
+                      },
+                      texture,
+                  })
+              }
+          }
+          '''
+          new = '''        if !EGL_IMPORT_REPORTED.swap(true, Ordering::AcqRel) {
+                      agent_diagnostic("DMA-BUF import path: EGLImage");
+                  }
+                  Ok(DmabufSurface {
+                      backing: DmabufBacking::Egl {
+                          image,
+                          display,
+                          destroy_image: egl.destroy_image,
+                          _fd: retained_fd,
+                      },
+                      texture,
+                  })
+              }
+          }
+          '''
+          if old not in text:
+              raise SystemExit("EGL return anchor missing")
+          text = text.replace(old, new, 1)
+
+          old = '''                            if !resources.fences.track(&gl, frame.as_arc()) {
+                                      reject_dmabuf("GL sync objects unavailable");
+                                      rt.mailbox.discard(&frame);
+                                  }
+          '''
+          new = '''                            if !resources.fences.track(&gl, frame.as_arc()) {
+                                      // The draw was already submitted. If the driver refuses
+                                      // to create its retirement fence, a one-off finish is the
+                                      // only safe proof that Chromium may reclaim this buffer.
+                                      // This is an exceptional downgrade path, never normal hot-path
+                                      // synchronization.
+                                      unsafe { (gl.finish)() };
+                                      reject_dmabuf("GL sync object creation failed");
+                                      rt.mailbox.discard(&frame);
+                                  }
+          '''
+          if old not in text:
+              raise SystemExit("fence failure anchor missing")
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+          cargo fmt --manifest-path native/Cargo.toml --all
+          rm .github/workflows/pr2-source-patch.yml
+          git config user.name "Sxlvia"
+          git config user.email "212748636+qt715@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(native): prove completion before GLX downgrade"
+          git push origin HEAD:feat/cross-platform-electron-linux-overlay
