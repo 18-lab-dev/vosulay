@@ -28,7 +28,7 @@ vosulay displays Vosu/Tosu-compatible counters and provides an edit mode for arr
 - Windows uses `@asdf-overlay/core` and `@asdf-overlay/electron`.
 - Linux uses the Rust workspace in `native/`: an authenticated Node-API host, GL agent, .NET profiler bootstrap for late attach to native lazer, and a Vulkan loader layer for launch-time targets such as Wine/DXVK.
 
-Electron frames reach the game through the transport its graphics context can actually use: DMA-BUF shared textures where an imported buffer is sampleable, and bounded shared memory otherwise, which is what Wine and X11/SDL GLX contexts negotiate. The native agents keep the latest usable frame, never wait for the host on a game presentation thread, reject an unusable import instead of erasing the game's frame, and fall through to the original swap/present when overlay state is unavailable. Qt, CXX, LayerShellQt, and the transparent Linux desktop overlay are no longer runtime or build dependencies.
+Electron frames reach the game through the transport its graphics context can actually use. Vulkan imports DMA-BUF directly. Desktop GL/GLX prefers `GL_EXT_memory_object` + `GL_EXT_memory_object_fd`, importing Chromium's native-pixmap FD with `glImportMemoryFdEXT`/`glTexStorageMem2DEXT`; EGL/GLES can use EGLImage import. Shared-memory BGRA remains the compatibility path. A failed real DMA-BUF import withdraws the capability and disconnects the native session so the manager can recreate the offscreen renderer in CPU/SHM mode. The native agents keep the latest usable frame, never wait for the host on a normal game presentation path, reject an unusable import instead of erasing the game's frame, and fall through to the original swap/present when overlay state is unavailable. Qt, CXX, LayerShellQt, and the transparent Linux desktop overlay are no longer runtime or build dependencies.
 
 See the [architecture overview](openwiki/architecture/overview.md) for the component and security boundaries.
 
@@ -91,6 +91,14 @@ vosulay --pid <lazer-pid>
 ```
 
 The packaged host supplies the attach tool, profiler bootstrap, and GL agent automatically. In source-tree development, set `VOSULAY_NATIVE_ROOT` to a staged native-resource directory.
+
+Wine/stable GLX uses the same GL agent. When the presenting context supports the required GL memory-object and sync extensions, DMA-BUF is enabled by default. With `VOSULAY_NATIVE_DIAGNOSTICS=1`, a successful zero-copy import reports:
+
+```text
+vosulay GL agent: DMA-BUF import path: GL_EXT_memory_object_fd
+```
+
+Set `VOSULAY_GL_SHM_ONLY=1` to force the CPU/SHM compatibility path while diagnosing driver or native-pixmap import problems. If a real DMA-BUF import fails, vosulay withdraws DMA-BUF for that target process and re-attaches using SHM rather than trying the unreliable EGLImage-in-GLX path.
 
 Vulkan must be enabled before the target creates its Vulkan instance, so vosulay launches that target:
 
