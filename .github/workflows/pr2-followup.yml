@@ -1,0 +1,23 @@
+name: PR 2 follow-up patch
+
+on:
+  push:
+    branches:
+      - feat/cross-platform-electron-linux-overlay
+    paths:
+      - ".github/workflows/pr2-followup.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: pr2-followup-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  paused:
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "PR #2 follow-up workflow temporarily paused"
