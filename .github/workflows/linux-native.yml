@@ -1,18 +1,6 @@
 name: Linux Native
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "native/**"
-      - "desktop/**"
-      - ".github/workflows/linux-native.yml"
-  pull_request:
-    paths:
-      - "native/**"
-      - "desktop/**"
-      - ".github/workflows/linux-native.yml"
   workflow_dispatch:
 
 concurrency:
