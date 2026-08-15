@@ -57,7 +57,6 @@ test("maps Electron BGRA DMA-BUF metadata without copying plane descriptors", ()
     );
 });
 
-
 test("targets that cannot sample imported buffers receive CPU frames", () => {
     assert.deepEqual(offscreenPreference({ supportsDmabuf: () => true }), {
         useSharedTexture: true,
@@ -88,6 +87,7 @@ test("CPU frames are forwarded with tightly packed BGRA geometry", () => {
         null,
     );
 });
+
 test("maps Electron RGBA and rejects unsupported shared textures", () => {
     assert.equal(NativeSharedTexture.fromElectron(
         1,
@@ -115,8 +115,6 @@ test("creating a target registers it without making it active", () => {
         kind: "created",
         target: { id: 9, width: 640, height: 480 },
     });
-    // Creation order used to imply selection, which is what let Electron and
-    // the agent disagree about where frames should go.
     const state = nextTargetState(EMPTY_TARGET_STATE, created!);
     assert.equal(state.active, null);
     assert.deepEqual(state.known.get(9), { id: 9, width: 640, height: 480 });
@@ -125,7 +123,6 @@ test("creating a target registers it without making it active", () => {
 test("the agent's selection decides the active target", () => {
     let state = nextTargetState(EMPTY_TARGET_STATE, parseTargetEvent("created:9:640:480")!);
     state = nextTargetState(state, parseTargetEvent("created:11:1920:1080")!);
-    // The most recently created target is not automatically the winner.
     state = nextTargetState(state, parseTargetEvent("selected:9:1")!);
     assert.deepEqual(state.active, { id: 9, width: 640, height: 480 });
     assert.equal(state.generation, 1);
@@ -184,7 +181,6 @@ test("rejects malformed target events", () => {
     assert.equal(parseTargetEvent("selected:-1:1"), null);
     assert.equal(parseTargetEvent("selected:9:x"), null);
     assert.equal(parseTargetEvent("selected:9:1:2"), null);
-    // Zero is a valid selection only, never a valid target id.
     assert.deepEqual(parseTargetEvent("selected:0:3"), {
         kind: "selected",
         targetId: 0,
@@ -193,16 +189,12 @@ test("rejects malformed target events", () => {
 });
 
 test("a failed createSurface releases the window and the native handle", async () => {
-    // The window is constructed before the surface exists, so a rejection here
-    // used to leak both: no LinuxOverlayProcess existed yet whose destroy()
-    // could have cleaned them up.
     const released: string[] = [];
     let windowDestroyed = false;
     const startup = new StartupTransaction();
 
     let failure: unknown;
     try {
-        // Same acquisition order as LinuxOverlayProcess.create().
         startup.acquire(() => {
             released.push("native");
         });
@@ -225,8 +217,6 @@ test("a failed createSurface releases the window and the native handle", async (
 });
 
 test("a committed startup transaction releases nothing", async () => {
-    // Once the process instance exists it owns the resources, so unwinding
-    // must not destroy a live overlay.
     const released: string[] = [];
     const startup = new StartupTransaction();
     startup.acquire(() => released.push("native"));
@@ -269,10 +259,13 @@ test("validates and translates native SDL input events", () => {
         button: "left",
         clickCount: 2,
     });
-    assert.deepEqual(electronInput(parseInput("9:7:0:0:-120:240")!), {
+    assert.deepEqual(electronInput(
+        parseInput("9:7:0:0:-120:240")!,
+        { x: 123, y: 456 },
+    ), {
         type: "mouseWheel",
-        x: 0,
-        y: 0,
+        x: 123,
+        y: 456,
         deltaX: -120,
         deltaY: 240,
     });
@@ -295,7 +288,7 @@ test("rejects malformed or unsupported native input", () => {
     assert.equal(electronInput(parseInput("9:99:0:0:0:0")!), null);
 });
 
-test("maps native input to focus-independent CDP commands", () => {
+test("click counts never become keyboard modifiers in CDP translations", () => {
     assert.deepEqual(cdpInput(parseInput("9:4:0:0:123:456")!), {
         method: "Input.dispatchMouseEvent",
         params: { type: "mouseMoved", x: 123, y: 456, modifiers: 0 },
@@ -308,7 +301,21 @@ test("maps native input to focus-independent CDP commands", () => {
             y: 456,
             button: "left",
             clickCount: 2,
-            modifiers: 8,
+            modifiers: 0,
+        },
+    });
+    assert.deepEqual(cdpInput(
+        parseInput("9:7:0:0:-120:240")!,
+        { x: 321, y: 654 },
+    ), {
+        method: "Input.dispatchMouseEvent",
+        params: {
+            type: "mouseWheel",
+            x: 321,
+            y: 654,
+            deltaX: -120,
+            deltaY: 240,
+            modifiers: 0,
         },
     });
     assert.deepEqual(cdpInput(parseInput("9:3:0:0:955:0")!), {
