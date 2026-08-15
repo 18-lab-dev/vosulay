@@ -1,22 +1,8 @@
 name: Windows Build
 
+# Automatic runs are intentionally disabled to preserve GitHub Actions minutes.
+# Run this workflow explicitly from the Actions tab when validation is needed.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "assets/**"
-      - "windows/**"
-      - "src/api.rs"
-      - "src/config.rs"
-      - ".github/workflows/windows-build.yml"
-  pull_request:
-    paths:
-      - "assets/**"
-      - "windows/**"
-      - "src/api.rs"
-      - "src/config.rs"
-      - ".github/workflows/windows-build.yml"
   workflow_dispatch:
 
 concurrency:
