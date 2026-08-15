@@ -10,7 +10,7 @@ tags: [operations, build, electron, rust, linux, windows, appimage]
 
 ## Prerequisites
 
-All hosts require Node.js 22 or newer and npm. The Linux native build additionally requires:
+All hosts require Node.js 22 or newer and Bun 1.3.14. Bun is the package manager and package-script launcher; Node remains installed for Electron, napi-rs, and Node-shebang tooling. The Linux native build additionally requires:
 
 - Linux x86-64;
 - Rust `1.96.1` with `rustfmt` and `clippy` (pinned by [`rust-toolchain.toml`](../../rust-toolchain.toml));
@@ -25,13 +25,13 @@ Qt, CMake, CXX, LayerShellQt, a custom Dawn/WebEngine build, and Qt runtime path
 
 ```sh
 cd desktop
-npm ci
-npm run typecheck
-npm test
-npm run build
+bun install
+bun run typecheck
+bun run test
+bun run build
 ```
 
-`npm test` runs the TypeScript service, configuration, provider, Linux OSR/input, remote-server, and reconciliation tests. The normal source build emits `desktop/out/` but does not stage Linux native binaries.
+`bun run test` dispatches the TypeScript service, configuration, provider, Linux OSR/input, remote-server, and reconciliation tests. The normal source build emits `desktop/out/` but does not stage Linux native binaries.
 
 The application entrypoint accepts:
 
@@ -51,11 +51,11 @@ cd native
 cargo fmt --check
 cargo test --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-npm ci
-npm run build
+bun install
+bun run build
 ```
 
-The npm build invokes napi-rs and writes `native/crates/overlay-node/overlay-node.linux-x64-gnu.node`. Native libraries are written below `native/target/{debug,release}`.
+The Bun-dispatched build invokes napi-rs and writes `native/crates/overlay-node/overlay-node.linux-x64-gnu.node`. Native libraries are written below `native/target/{debug,release}`.
 
 Run the Node-API fake-agent lifecycle after building the addon and fake agent:
 
@@ -64,10 +64,10 @@ cd native
 cargo build -p overlay-agent-core --bin overlay-fake-agent
 VOSULAY_NATIVE_ADDON="$PWD/crates/overlay-node/overlay-node.linux-x64-gnu.node" \
 VOSULAY_FAKE_AGENT="$PWD/target/debug/overlay-fake-agent" \
-npm test
+bun run test
 ```
 
-This integration path proves the JavaScript/addon/host/seqpacket/agent lifecycle without injecting a graphics application.
+This integration path proves the JavaScript/addon/host/seqpacket/agent lifecycle without injecting a graphics application. The test itself intentionally remains on Node's test runtime; Bun only dispatches the package script.
 
 ## Stage source-tree native resources
 
@@ -75,7 +75,7 @@ The Electron Linux provider expects one resource root containing the addon, agen
 
 ```sh
 cd desktop
-npm run stage:native
+bun run stage:native
 ```
 
 `desktop/scripts/stage-native.mjs` performs a release napi build, release GL/profiler/Vulkan builds, and self-contained `dotnet publish`; then replaces `desktop/build/native/`. Every required file must be non-empty. Set this variable for an unpackaged source run:
@@ -92,7 +92,7 @@ Start vosu/Tosu first if counter discovery is needed. Then start native lazer an
 
 ```sh
 cd desktop
-VOSULAY_NATIVE_ROOT="$PWD/build/native" npm exec electron-vite dev -- --pid <lazer-pid>
+VOSULAY_NATIVE_ROOT="$PWD/build/native" bun run electron-vite dev -- --pid <lazer-pid>
 ```
 
 A packaged equivalent is:
@@ -144,7 +144,7 @@ For source development:
 ```sh
 cd desktop
 VOSULAY_NATIVE_ROOT="$PWD/build/native" \
-npm exec electron-vite dev -- --launch-vulkan /path/to/target -- <target arguments>
+bun run electron-vite dev -- --launch-vulkan /path/to/target -- <target arguments>
 ```
 
 The launcher sets the session endpoint/cookie, `VK_LAYER_PATH`, and `VOSULAY_VULKAN_LAYER=1` only in the child environment. [`native/VkLayer_VOSULAY_overlay.json`](../../native/VkLayer_VOSULAY_overlay.json) resolves `liboverlay_vulkan_layer.so` relative to the staged manifest. Without a valid session the implicit layer remains dormant. `DISABLE_VOSULAY_VULKAN_LAYER=1` explicitly disables it.
@@ -172,8 +172,8 @@ SIGTERM, SIGINT, the Electron session-end event, tray Exit, and app quit use one
 
 ```sh
 cd desktop
-npm ci
-npm run dist:linux
+bun install
+bun run dist:linux
 ```
 
 This runs native staging, Electron build, electron-builder AppImage packaging, and package verification. Outputs:
@@ -189,10 +189,10 @@ On Windows x64:
 
 ```powershell
 cd desktop
-npm ci
-npm run dist:win
+bun install
+bun run dist:win
 ```
 
 Outputs are `vosulay-<version>-setup.exe` and `vosulay-<version>-portable.exe`. Verification requires the asdf/paymo native resources and rejects Linux addon/agent artifacts. Portable configuration remains next to the executable under `data/`.
 
-The Windows build workflow typechecks, tests, and bundles on pushes/pull requests. Tag `v*` runs the Windows release workflow and publishes the setup and portable artifacts. OpenWiki updates remain manual/local; never add a scheduled or manually dispatched OpenWiki workflow.
+The Windows build and release workflows are manual-only while development is active. OpenWiki updates remain manual/local; never add a scheduled or automatically triggered OpenWiki workflow.
