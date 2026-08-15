@@ -1,0 +1,102 @@
+name: GL import ownership check
+
+on:
+  push:
+    branches:
+      - feat/cross-platform-electron-linux-overlay
+    paths:
+      - ".github/workflows/gl-import-check.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/cross-platform-electron-linux-overlay
+          fetch-depth: 0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: native
+      - name: Fix failed-import FD ownership
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("native/crates/overlay-agent-gl/src/lib.rs")
+          text = path.read_text()
+          text = text.replace(
+              'use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd};',
+              'use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};',
+              1,
+          )
+          old = '''    let owned = unsafe { OwnedFd::from_raw_fd(duplicate) };
+              let mut memory = 0;
+              let mut texture = 0;
+              unsafe {
+                  (memory_fns.create)(1, &mut memory);
+                  if memory == 0 {
+                      return Err(());
+                  }
+                  while (g.get_error)() != 0 {}
+                  // The GL call takes ownership of the duplicated descriptor.
+                  (memory_fns.import_fd)(
+                      memory,
+                      import_size,
+                      GL_HANDLE_TYPE_OPAQUE_FD_EXT,
+                      owned.into_raw_fd(),
+                  );
+                  if (g.get_error)() != 0 {
+                      (memory_fns.delete)(1, &memory);
+                      return Err(());
+                  }
+          '''
+          new = '''    let mut memory = 0;
+              let mut texture = 0;
+              unsafe {
+                  (memory_fns.create)(1, &mut memory);
+                  if memory == 0 {
+                      libc::close(duplicate);
+                      return Err(());
+                  }
+                  while (g.get_error)() != 0 {}
+                  // glImportMemoryFdEXT takes ownership only on a successful
+                  // import. Keep the raw duplicate until the error check so a
+                  // rejected Chromium pixmap cannot leak an fd during fallback.
+                  (memory_fns.import_fd)(
+                      memory,
+                      import_size,
+                      GL_HANDLE_TYPE_OPAQUE_FD_EXT,
+                      duplicate,
+                  );
+                  if (g.get_error)() != 0 {
+                      libc::close(duplicate);
+                      (memory_fns.delete)(1, &memory);
+                      return Err(());
+                  }
+          '''
+          if old not in text:
+              raise SystemExit("memory import ownership anchor missing")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          cargo fmt --manifest-path native/Cargo.toml --all
+      - name: Lint GL agent
+        working-directory: native
+        run: cargo clippy -p overlay-agent-gl --all-targets -- -D warnings
+      - name: Test GL agent
+        working-directory: native
+        run: cargo test -p overlay-agent-gl
+      - name: Commit patch and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/gl-import-check.yml
+          git add -A
+          git config user.name "Sxlvia"
+          git config user.email "212748636+qt715@users.noreply.github.com"
+          git commit -m "fix(native): close rejected GL import descriptors"
+          git push origin HEAD:feat/cross-platform-electron-linux-overlay
