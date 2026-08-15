@@ -26,7 +26,7 @@ use std::collections::{HashMap, VecDeque};
 use std::ffi::{CStr, c_char, c_int, c_uint, c_ulong, c_void};
 use std::mem::{align_of, size_of};
 use std::ops::Deref;
-use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, OwnedFd};
 use std::ptr::{null, null_mut};
 use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU64, Ordering};
@@ -2720,23 +2720,21 @@ fn import_memory_object_surface(
     if duplicate < 0 {
         return Err(());
     }
-    let owned = unsafe { OwnedFd::from_raw_fd(duplicate) };
     let mut memory = 0;
     let mut texture = 0;
     unsafe {
         (memory_fns.create)(1, &mut memory);
         if memory == 0 {
+            libc::close(duplicate);
             return Err(());
         }
         while (g.get_error)() != 0 {}
-        // The GL call takes ownership of the duplicated descriptor.
-        (memory_fns.import_fd)(
-            memory,
-            import_size,
-            GL_HANDLE_TYPE_OPAQUE_FD_EXT,
-            owned.into_raw_fd(),
-        );
+        // glImportMemoryFdEXT takes ownership only on a successful
+        // import. Keep the raw duplicate until the error check so a
+        // rejected Chromium pixmap cannot leak an fd during fallback.
+        (memory_fns.import_fd)(memory, import_size, GL_HANDLE_TYPE_OPAQUE_FD_EXT, duplicate);
         if (g.get_error)() != 0 {
+            libc::close(duplicate);
             (memory_fns.delete)(1, &memory);
             return Err(());
         }
