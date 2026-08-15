@@ -1,6 +1,22 @@
 name: Windows Build
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "assets/**"
+      - "desktop/**"
+      - "src/api.rs"
+      - "src/config.rs"
+      - ".github/workflows/windows-build.yml"
+  pull_request:
+    paths:
+      - "assets/**"
+      - "desktop/**"
+      - "src/api.rs"
+      - "src/config.rs"
+      - ".github/workflows/windows-build.yml"
   workflow_dispatch:
 
 concurrency:
