@@ -1592,6 +1592,8 @@ static SDL_SWAP_REPORTED: AtomicBool = AtomicBool::new(false);
 static DMABUF_DRAW_REPORTED: AtomicBool = AtomicBool::new(false);
 static TEXTURE_REPORTED: AtomicBool = AtomicBool::new(false);
 static DMABUF_REJECT_REPORTED: AtomicBool = AtomicBool::new(false);
+static MEMORY_OBJECT_IMPORT_REPORTED: AtomicBool = AtomicBool::new(false);
+static EGL_IMPORT_REPORTED: AtomicBool = AtomicBool::new(false);
 
 /// Reports the first import rejection only: a persistent incompatibility must
 /// not log on every presented frame.
@@ -2282,7 +2284,13 @@ fn present(rt: &Runtime, target_id: u64, surface: (u32, u32)) {
                             // completion proof exists, so withdraw DMA-BUF and
                             // retire the frame without acknowledging early.
                             if !resources.fences.track(&gl, frame.as_arc()) {
-                                reject_dmabuf("GL sync objects unavailable");
+                                // The draw was already submitted. If the driver refuses
+                                // to create its retirement fence, a one-off finish is the
+                                // only safe proof that Chromium may reclaim this buffer.
+                                // This is an exceptional downgrade path, never normal hot-path
+                                // synchronization.
+                                unsafe { (gl.finish)() };
+                                reject_dmabuf("GL sync object creation failed");
                                 rt.mailbox.discard(&frame);
                             }
                         } else {
@@ -2756,6 +2764,9 @@ fn import_memory_object_surface(
             return Err(());
         }
     }
+    if !MEMORY_OBJECT_IMPORT_REPORTED.swap(true, Ordering::AcqRel) {
+        agent_diagnostic("DMA-BUF import path: GL_EXT_memory_object_fd");
+    }
     Ok(DmabufSurface {
         backing: DmabufBacking::MemoryObject {
             memory,
@@ -2819,6 +2830,9 @@ fn import_egl_surface(
             (g.delete_textures)(1, &texture);
             (egl.destroy_image)(display, image);
             return Err(());
+        }
+        if !EGL_IMPORT_REPORTED.swap(true, Ordering::AcqRel) {
+            agent_diagnostic("DMA-BUF import path: EGLImage");
         }
         Ok(DmabufSurface {
             backing: DmabufBacking::Egl {
