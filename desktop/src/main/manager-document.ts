@@ -13,11 +13,22 @@ export function encodeJavaScriptString(source: string): string {
         .replaceAll("\u2029", "\\u2029");
 }
 
-export function buildManagerDocumentFromSources(template: string, css: string, javascript: string, fpsLimit: number): string {
+function webGpuDelegationGuard(trustedCounterOrigin: string): string {
+    const origin = encodeJavaScriptString(trustedCounterOrigin);
+    return `(()=>{const trusted=${origin};const original=HTMLIFrameElement.prototype.setAttribute;HTMLIFrameElement.prototype.setAttribute=function(name,value){if(String(name).toLowerCase()==="allow"&&typeof value==="string"&&/(?:^|;)\\s*webgpu\\s*(?:;|$)/i.test(value)){let permitted=false;try{const source=new URL(this.src||this.getAttribute("src")||"",document.baseURI);permitted=source.protocol==="vosulay-overlay:"||Boolean(trusted)&&source.origin===trusted;}catch{}if(!permitted){value=value.split(";").map(part=>part.trim()).filter(part=>part&&part.toLowerCase()!=="webgpu").join("; ");}}return original.call(this,name,value);};})();`;
+}
+
+export function buildManagerDocumentFromSources(
+    template: string,
+    css: string,
+    javascript: string,
+    fpsLimit: number,
+    trustedCounterOrigin = "",
+): string {
     if (!Number.isInteger(fpsLimit) || fpsLimit <= 0 || fpsLimit > 240) throw new Error("manager FPS limit must be between 1 and 240");
     const occurrences = template.split(BOOTSTRAP_MARKER).length - 1;
     if (occurrences !== 1) throw new Error(`manager template must contain exactly one ${BOOTSTRAP_MARKER} marker`);
-    const bootstrap = `window.__VOSULAY_FPS_LIMIT__=${fpsLimit};(()=>{const style=document.createElement("style");style.textContent=${encodeJavaScriptString(css)};document.head.appendChild(style);(0,eval)(${encodeJavaScriptString(javascript)});})();`;
+    const bootstrap = `window.__VOSULAY_FPS_LIMIT__=${fpsLimit};(()=>{const style=document.createElement("style");style.textContent=${encodeJavaScriptString(css)};document.head.appendChild(style);${webGpuDelegationGuard(trustedCounterOrigin)}(0,eval)(${encodeJavaScriptString(javascript)});})();`;
     return template.replace(BOOTSTRAP_MARKER, bootstrap);
 }
 
@@ -38,11 +49,12 @@ function loadManagerAsset(filename: string): string {
     }
 }
 
-export function buildManagerDocument(fpsLimit: number): string {
+export function buildManagerDocument(fpsLimit: number, trustedCounterOrigin = ""): string {
     return buildManagerDocumentFromSources(
         loadManagerAsset("manager.html"),
         loadManagerAsset("manager.css"),
         loadManagerAsset("manager.js"),
         fpsLimit,
+        trustedCounterOrigin,
     );
 }
