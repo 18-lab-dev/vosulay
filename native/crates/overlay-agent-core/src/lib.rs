@@ -4,9 +4,9 @@ pub mod completion;
 pub use completion::CompletionQueue;
 
 use overlay_protocol::{
-    BoolValue, CAP_DMABUF, CAP_SHM, COOKIE_LEN, DmabufDescriptor, Endpoint, FrameConsumed, Hello,
-    InputEvent, MessageKind, Packet, ProtocolError, SelectedTarget, Seqpacket, Target,
-    TextureDescriptor,
+    BoolValue, CAP_DMABUF, CAP_FRAME_REQUEST, CAP_SHM, COOKIE_LEN, DmabufDescriptor, Endpoint,
+    FrameConsumed, FrameRequest, Hello, InputEvent, MessageKind, Packet, ProtocolError,
+    SelectedTarget, Seqpacket, Target, TextureDescriptor,
 };
 use std::{
     collections::VecDeque,
@@ -55,7 +55,7 @@ impl AgentConfig {
             expected_host_uid: unsafe { libc::geteuid() },
             capabilities: 0,
             required_transports: CAP_SHM,
-            advertised_capabilities: CAP_SHM,
+            advertised_capabilities: CAP_SHM | CAP_FRAME_REQUEST,
             watchdog: Duration::from_secs(2),
         }
     }
@@ -68,7 +68,7 @@ impl AgentConfig {
         Self {
             capabilities: 0,
             required_transports: CAP_DMABUF,
-            advertised_capabilities: CAP_DMABUF,
+            advertised_capabilities: CAP_DMABUF | CAP_FRAME_REQUEST,
             ..Self::current()
         }
     }
@@ -103,6 +103,7 @@ impl FrameMailbox {
 
 pub struct Agent {
     conn: Seqpacket,
+    granted_capabilities: u64,
     capture: bool,
     capture_since: Option<Instant>,
     watchdog: Duration,
@@ -156,6 +157,7 @@ impl Agent {
     pub fn from_connected(conn: Seqpacket, watchdog: Duration) -> Self {
         Self {
             conn,
+            granted_capabilities: 0,
             capture: false,
             capture_since: None,
             watchdog,
@@ -210,6 +212,7 @@ impl Agent {
         }
         Ok(Self {
             conn,
+            granted_capabilities: granted,
             capture: false,
             capture_since: None,
             watchdog: config.watchdog,
@@ -221,6 +224,9 @@ impl Agent {
     }
     pub fn is_disconnected(&self) -> bool {
         self.disconnected
+    }
+    pub fn supports_frame_requests(&self) -> bool {
+        self.granted_capabilities & CAP_FRAME_REQUEST != 0
     }
     pub fn as_raw_fd(&self) -> std::os::fd::RawFd {
         self.conn.as_raw_fd()
@@ -241,7 +247,7 @@ impl Agent {
                         )
                 ) =>
             {
-                // A nonblocking socket can be temporarily idle.  Keep the
+                // A nonblocking socket can be temporarily idle. Keep the
                 // authenticated connection alive so the watchdog can run.
                 Err(error.into())
             }
@@ -289,6 +295,20 @@ impl Agent {
             MessageKind::Consumed,
             consumed.sequence,
             consumed.encode().to_vec(),
+            Vec::new(),
+        )?)
+    }
+    /// Ask the host for one current offscreen frame. Presents may be coalesced,
+    /// so the monotonically advancing sequence is observability, not a promise
+    /// that the producer will render every intermediate value.
+    pub fn send_frame_request(&mut self, request: FrameRequest) -> Result<(), AgentError> {
+        if !self.supports_frame_requests() {
+            return Ok(());
+        }
+        self.send_packet(&Packet::new(
+            MessageKind::FrameRequest,
+            request.sequence,
+            request.encode()?.to_vec(),
             Vec::new(),
         )?)
     }
@@ -461,7 +481,9 @@ impl Agent {
                 }
                 Ok(AgentEvent::Ping)
             }
-            MessageKind::Input => Err(ProtocolError::InvalidPayload.into()),
+            MessageKind::Input | MessageKind::FrameRequest => {
+                Err(ProtocolError::InvalidPayload.into())
+            }
             _ => Ok(AgentEvent::Error),
         })();
         if result.is_err() {
@@ -534,6 +556,28 @@ mod tests {
                 if error.kind() == std::io::ErrorKind::WouldBlock
         ));
         assert!(!agent.is_disconnected());
+    }
+
+    #[test]
+    fn frame_request_is_negotiated_and_sent_without_fds() {
+        let current = AgentConfig::current();
+        let dmabuf = AgentConfig::dmabuf_only();
+        assert_ne!(current.advertised_capabilities & CAP_FRAME_REQUEST, 0);
+        assert_ne!(dmabuf.advertised_capabilities & CAP_FRAME_REQUEST, 0);
+
+        let (a, b) = Seqpacket::pair().unwrap();
+        let mut agent = Agent::from_connected(a, Duration::from_secs(2));
+        agent.granted_capabilities = CAP_FRAME_REQUEST;
+        let request = FrameRequest {
+            target_id: 7,
+            sequence: 11,
+        };
+        agent.send_frame_request(request).unwrap();
+        let packet = b.recv().unwrap();
+        assert_eq!(packet.header.kind, MessageKind::FrameRequest);
+        assert_eq!(packet.header.request_id, request.sequence);
+        assert_eq!(FrameRequest::decode(&packet.payload).unwrap(), request);
+        assert!(packet.fds.is_empty());
     }
 
     #[test]
