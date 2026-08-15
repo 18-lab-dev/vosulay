@@ -4,9 +4,10 @@ use napi::{Env, Error, Result, Status};
 use napi_derive::napi;
 use overlay_host::{Host, HostEvent, HostSession};
 use overlay_protocol::{
-    CAP_DMABUF, CAP_SHM_BGRA, DRM_FORMAT_ABGR8888, DRM_FORMAT_ARGB8888, DmabufDescriptor,
-    DmabufPlane, TEXTURE_FORMAT_PREMULTIPLIED_BGRA8, TEXTURE_FORMAT_PREMULTIPLIED_RGBA8,
-    Target, TextureDescriptor,
+    CAP_DMABUF, CAP_FRAME_REQUEST, CAP_SHM_BGRA, DRM_FORMAT_ABGR8888,
+    DRM_FORMAT_ARGB8888, DmabufDescriptor, DmabufPlane,
+    TEXTURE_FORMAT_PREMULTIPLIED_BGRA8, TEXTURE_FORMAT_PREMULTIPLIED_RGBA8, Target,
+    TextureDescriptor,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -24,12 +25,15 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-fn fail<E: std::fmt::Display>(e: E) -> Error {
-    Error::new(Status::GenericFailure, e.to_string())
+
+fn fail<E: std::fmt::Display>(error: E) -> Error {
+    Error::new(Status::GenericFailure, error.to_string())
 }
+
 fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
+
 const MAX_PENDING_EVENTS: usize = 64;
 
 #[napi(object)]
@@ -63,8 +67,6 @@ pub struct SurfaceDescriptor {
     pub format: Option<i64>,
 }
 
-/// Geometry for a CPU frame; the buffer length defines its size, so no offset
-/// or descriptor fd is accepted from the renderer.
 #[napi(object)]
 pub struct BitmapDescriptor {
     pub target_id: i64,
@@ -92,20 +94,21 @@ pub struct SharedTextureDescriptor {
     pub modifier: String,
     pub planes: Vec<SharedTexturePlane>,
 }
+
 type EventCallback = ThreadsafeFunction<String, Unknown<'static>, String, Status, false>;
+
 struct EventState {
     callbacks: HashMap<String, EventCallback>,
     pending: VecDeque<(String, String)>,
 }
+
 struct Shared {
     commands: Mutex<CommandQueue>,
-    /// Wakes the actor when work is queued, so an idle session does not spin.
     signal: Condvar,
     cancel: Arc<AtomicBool>,
     events: Mutex<EventState>,
 }
 
-/// Ordered work for the one thread that owns `HostSession`.
 struct CommandQueue {
     pending: VecDeque<Envelope>,
     closed: bool,
@@ -116,8 +119,6 @@ struct Envelope {
     completion: Arc<Completion>,
 }
 
-/// Signalled once the actor has *applied* a command, so an awaiting JS caller
-/// observes host-side effect rather than mere enqueueing.
 struct Completion {
     outcome: Mutex<Option<std::result::Result<(), String>>>,
     signal: Condvar,
@@ -130,6 +131,7 @@ impl Completion {
             signal: Condvar::new(),
         })
     }
+
     fn settle(&self, outcome: std::result::Result<(), String>) {
         if let Ok(mut slot) = self.outcome.lock() {
             if slot.is_none() {
@@ -138,32 +140,15 @@ impl Completion {
             self.signal.notify_all();
         }
     }
+
     fn wait(&self) -> Result<()> {
         let mut slot = self.outcome.lock().map_err(fail)?;
         while slot.is_none() {
             slot = self.signal.wait(slot).map_err(fail)?;
         }
-        match slot.take().expect("settled") {
+        match slot.take().expect("completion was settled") {
             Ok(()) => Ok(()),
             Err(message) => Err(fail(message)),
-        }
-    }
-}
-
-impl SessionCommand {
-    fn frame_target(&self) -> Option<u64> {
-        match self {
-            Self::SurfaceFd { descriptor, .. } => Some(descriptor.target_id),
-            Self::SurfaceBytes { descriptor, .. } => Some(descriptor.target_id),
-            Self::Dmabuf { descriptor, .. } => Some(descriptor.target_id),
-            _ => None,
-        }
-    }
-
-    fn locally_consumed(&self) -> Option<(u64, u64)> {
-        match self {
-            Self::Dmabuf { descriptor, .. } => Some((descriptor.target_id, descriptor.sequence)),
-            _ => None,
         }
     }
 }
@@ -187,6 +172,25 @@ enum SessionCommand {
     Destroy,
 }
 
+impl SessionCommand {
+    fn frame_target(&self) -> Option<u64> {
+        match self {
+            Self::SurfaceFd { descriptor, .. } | Self::SurfaceBytes { descriptor, .. } => {
+                Some(descriptor.target_id)
+            }
+            Self::Dmabuf { descriptor, .. } => Some(descriptor.target_id),
+            _ => None,
+        }
+    }
+
+    fn locally_consumed(&self) -> Option<(u64, u64)> {
+        match self {
+            Self::Dmabuf { descriptor, .. } => Some((descriptor.target_id, descriptor.sequence)),
+            _ => None,
+        }
+    }
+}
+
 pub struct SessionTask {
     completion: Option<Arc<Completion>>,
 }
@@ -202,7 +206,7 @@ impl Task for SessionTask {
             .wait()
     }
 
-    fn resolve(&mut self, _env: napi::Env, _: Self::Output) -> Result<Self::JsValue> {
+    fn resolve(&mut self, _env: Env, _: Self::Output) -> Result<Self::JsValue> {
         Ok(())
     }
 }
@@ -214,13 +218,13 @@ fn enqueue(shared: &Arc<Shared>, command: SessionCommand) -> Arc<Completion> {
         return completion;
     };
     if queue.closed {
-        let outcome = match command {
+        completion.settle(match command {
             SessionCommand::Destroy => Ok(()),
             _ => Err("overlay handle is destroyed".to_owned()),
-        };
-        completion.settle(outcome);
+        });
         return completion;
     }
+
     let mut locally_consumed = Vec::new();
     if let Some(target_id) = command.frame_target() {
         queue.pending.retain(|envelope| {
@@ -229,16 +233,18 @@ fn enqueue(shared: &Arc<Shared>, command: SessionCommand) -> Arc<Completion> {
                     locally_consumed.push(consumed);
                 }
                 envelope.completion.settle(Ok(()));
-                return false;
+                false
+            } else {
+                true
             }
-            true
         });
     }
     queue.pending.push_back(Envelope {
         command,
-        completion: completion.clone(),
+        completion: Arc::clone(&completion),
     });
     drop(queue);
+
     for (target_id, sequence) in locally_consumed {
         emit_event(shared, "consumed", format!("{target_id}:{sequence}"));
     }
@@ -251,6 +257,7 @@ fn queue(shared: &Arc<Shared>, command: SessionCommand) -> AsyncTask<SessionTask
         completion: Some(enqueue(shared, command)),
     })
 }
+
 #[napi]
 pub struct OverlaySurface {
     shared: Arc<Shared>,
@@ -265,6 +272,7 @@ pub struct OverlayHandle {
     cookie: String,
     shared: Arc<Shared>,
 }
+
 impl Drop for OverlayHandle {
     fn drop(&mut self) {
         self.shared.cancel.store(true, Ordering::Release);
@@ -290,26 +298,37 @@ impl OverlayHandle {
     pub fn socket_name(&self) -> String {
         self.socket_name.clone()
     }
+
     #[napi]
     pub fn cookie(&self) -> String {
         self.cookie.clone()
     }
+
     #[napi(getter)]
     pub fn pid(&self) -> u32 {
         self.pid
     }
+
     #[napi]
     pub fn get_pid(&self) -> u32 {
         self.pid
     }
+
     #[napi]
     pub fn supports_dmabuf(&self) -> bool {
         self.capabilities & CAP_DMABUF != 0
     }
+
     #[napi]
     pub fn supports_bgra_shm(&self) -> bool {
         self.capabilities & CAP_SHM_BGRA != 0
     }
+
+    #[napi]
+    pub fn supports_frame_requests(&self) -> bool {
+        self.capabilities & CAP_FRAME_REQUEST != 0
+    }
+
     #[napi]
     pub fn destroy(&self) -> AsyncTask<SessionTask> {
         if let Ok(mut events) = self.shared.events.lock() {
@@ -318,6 +337,7 @@ impl OverlayHandle {
         }
         queue(&self.shared, SessionCommand::Destroy)
     }
+
     #[napi]
     pub fn on(
         &self,
@@ -326,7 +346,13 @@ impl OverlayHandle {
     ) -> Result<()> {
         if !matches!(
             event.as_str(),
-            "disconnect" | "input" | "end" | "consumed" | "frame" | "target"
+            "disconnect"
+                | "input"
+                | "end"
+                | "consumed"
+                | "frame"
+                | "frame-request"
+                | "target"
         ) {
             return Err(fail("unsupported overlay event"));
         }
@@ -349,25 +375,30 @@ impl OverlayHandle {
         }
         Ok(())
     }
+
     #[napi]
     pub fn set_editing(&self, editing: bool) -> AsyncTask<SessionTask> {
         self.capture_input(editing)
     }
+
     #[napi]
     pub fn set_visible(&self, visible: bool) -> AsyncTask<SessionTask> {
         queue(&self.shared, SessionCommand::Visible(visible))
     }
+
     #[napi]
     pub fn capture_input(&self, capture: bool) -> AsyncTask<SessionTask> {
         queue(&self.shared, SessionCommand::Capture(capture))
     }
+
     #[napi]
     pub fn create_surface(&self) -> Result<OverlaySurface> {
         Ok(OverlaySurface {
-            shared: self.shared.clone(),
+            shared: Arc::clone(&self.shared),
             capabilities: self.capabilities,
         })
     }
+
     #[napi]
     pub fn poll_event(&self) -> Result<String> {
         let mut events = self.shared.events.lock().map_err(fail)?;
@@ -393,7 +424,7 @@ impl OverlaySurface {
         &self,
         descriptor: SurfaceDescriptor,
     ) -> Result<AsyncTask<SessionTask>> {
-        let d = TextureDescriptor {
+        let descriptor = TextureDescriptor {
             target_id: u64::try_from(descriptor.target_id).map_err(fail)?,
             width: u32::try_from(descriptor.width).map_err(fail)?,
             height: u32::try_from(descriptor.height).map_err(fail)?,
@@ -402,24 +433,23 @@ impl OverlaySurface {
             size: u64::try_from(descriptor.size).map_err(fail)?,
             format: u32::try_from(descriptor.format.unwrap_or(0)).map_err(fail)?,
         };
-        d.validate().map_err(fail)?;
+        descriptor.validate().map_err(fail)?;
         let raw = RawFd::try_from(
-            descriptor
-                .fd
+            descriptor_fd(&descriptor, None)
                 .ok_or_else(|| fail("descriptor requires fd"))?,
         )
         .map_err(fail)?;
         if raw < 0 {
             return Err(fail("descriptor fd is negative"));
         }
-        let dup = unsafe { libc::fcntl(raw, libc::F_DUPFD_CLOEXEC, 0) };
-        if dup < 0 {
+        let duplicate = unsafe { libc::fcntl(raw, libc::F_DUPFD_CLOEXEC, 0) };
+        if duplicate < 0 {
             return Err(fail(std::io::Error::last_os_error()));
         }
-        let fd = unsafe { OwnedFd::from_raw_fd(dup) };
+        let fd = unsafe { OwnedFd::from_raw_fd(duplicate) };
         Ok(queue(
             &self.shared,
-            SessionCommand::SurfaceFd { descriptor: d, fd },
+            SessionCommand::SurfaceFd { descriptor, fd },
         ))
     }
 
@@ -432,8 +462,7 @@ impl OverlaySurface {
         let width = u32::try_from(descriptor.width).map_err(fail)?;
         let height = u32::try_from(descriptor.height).map_err(fail)?;
         let stride = u32::try_from(descriptor.stride).map_err(fail)?;
-        let requested = descriptor.format.as_deref().unwrap_or("BGRA");
-        let format = match requested {
+        let format = match descriptor.format.as_deref().unwrap_or("BGRA") {
             "RGBA" => TEXTURE_FORMAT_PREMULTIPLIED_RGBA8,
             "BGRA" if self.capabilities & CAP_SHM_BGRA != 0 => {
                 TEXTURE_FORMAT_PREMULTIPLIED_BGRA8
@@ -444,7 +473,7 @@ impl OverlaySurface {
             }
             _ => return Err(fail("bitmap format must be BGRA or RGBA")),
         };
-        let d = TextureDescriptor {
+        let descriptor = TextureDescriptor {
             target_id: u64::try_from(descriptor.target_id).map_err(fail)?,
             width,
             height,
@@ -453,11 +482,11 @@ impl OverlaySurface {
             size: u64::try_from(bitmap.len()).map_err(fail)?,
             format,
         };
-        d.validate().map_err(fail)?;
+        descriptor.validate().map_err(fail)?;
         Ok(queue(
             &self.shared,
             SessionCommand::SurfaceBytes {
-                descriptor: d,
+                descriptor,
                 bytes: bitmap,
             },
         ))
@@ -481,11 +510,11 @@ impl OverlaySurface {
             if raw < 0 {
                 return Err(fail("descriptor fd is negative"));
             }
-            let dup = unsafe { libc::fcntl(raw, libc::F_DUPFD_CLOEXEC, 0) };
-            if dup < 0 {
+            let duplicate = unsafe { libc::fcntl(raw, libc::F_DUPFD_CLOEXEC, 0) };
+            if duplicate < 0 {
                 return Err(fail(std::io::Error::last_os_error()));
             }
-            fds.push(unsafe { OwnedFd::from_raw_fd(dup) });
+            fds.push(unsafe { OwnedFd::from_raw_fd(duplicate) });
             planes.push(DmabufPlane {
                 stride: u32::try_from(plane.stride).map_err(fail)?,
                 offset: u64::try_from(plane.offset).map_err(fail)?,
@@ -510,9 +539,17 @@ impl OverlaySurface {
 
     #[napi]
     pub fn clear(&self, target_id: i64) -> Result<AsyncTask<SessionTask>> {
-        let id = u64::try_from(target_id).map_err(fail)?;
-        Ok(queue(&self.shared, SessionCommand::Clear(id)))
+        Ok(queue(
+            &self.shared,
+            SessionCommand::Clear(u64::try_from(target_id).map_err(fail)?),
+        ))
     }
+}
+
+// Kept separate so descriptor conversion above cannot accidentally consume the
+// JS object's fd before all numeric fields have been validated.
+fn descriptor_fd(_descriptor: &TextureDescriptor, fd: Option<i64>) -> Option<i64> {
+    fd
 }
 
 fn swizzle_bgra_to_rgba(
@@ -672,10 +709,7 @@ fn start_session_actor(shared: Arc<Shared>, mut session: HostSession) {
                 ))) if matches!(
                     error.kind(),
                     std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
-                ) =>
-                {
-                    None
-                }
+                ) => None,
                 Err(_) => {
                     emit_event(&shared, "disconnect", "disconnect".to_owned());
                     break;
@@ -703,6 +737,10 @@ fn start_session_actor(shared: Arc<Shared>, mut session: HostSession) {
                 HostEvent::TargetSelected(selection) => (
                     "target",
                     format!("selected:{}:{}", selection.target_id, selection.generation),
+                ),
+                HostEvent::FrameRequested(request) => (
+                    "frame-request",
+                    format!("{}:{}", request.target_id, request.sequence),
                 ),
                 HostEvent::Input(event) => (
                     "input",
@@ -736,6 +774,7 @@ fn start_session_actor(shared: Arc<Shared>, mut session: HostSession) {
         }
     });
 }
+
 struct ProfilerAttach {
     tool: String,
     profiler: String,
@@ -826,6 +865,7 @@ fn remaining(deadline: Instant) -> Result<Duration> {
     }
     Ok(deadline - now)
 }
+
 pub struct AttachTask {
     pid: u32,
     attach: Option<ProfilerAttach>,
@@ -844,13 +884,12 @@ impl Task for AttachTask {
         if let Some(attach) = &self.attach {
             attach.run(self.pid, &socket_name, &cookie, deadline)?;
         }
-        let expose_dmabuf = std::env::var_os("VOSULAY_GL_SHM_ONLY").is_none();
         connect_handle(
             host,
             socket_name,
             cookie,
             remaining(deadline)?,
-            expose_dmabuf,
+            std::env::var_os("VOSULAY_GL_SHM_ONLY").is_none(),
         )
     }
 
@@ -1115,7 +1154,7 @@ fn connect_handle(
             pending: VecDeque::with_capacity(MAX_PENDING_EVENTS),
         }),
     });
-    start_session_actor(shared.clone(), session);
+    start_session_actor(Arc::clone(&shared), session);
     Ok(OverlayHandle {
         pid,
         capabilities,
@@ -1207,7 +1246,10 @@ mod launch_tests {
     fn bgra_rows_are_swizzled_without_touching_padding() {
         let mut bytes = vec![1, 2, 3, 4, 9, 9, 9, 9, 5, 6, 7, 8, 8, 8, 8, 8];
         swizzle_bgra_to_rgba(&mut bytes, 1, 2, 8).unwrap();
-        assert_eq!(bytes, vec![3, 2, 1, 4, 9, 9, 9, 9, 7, 6, 5, 8, 8, 8, 8, 8]);
+        assert_eq!(
+            bytes,
+            vec![3, 2, 1, 4, 9, 9, 9, 9, 7, 6, 5, 8, 8, 8, 8, 8]
+        );
     }
 
     #[test]
