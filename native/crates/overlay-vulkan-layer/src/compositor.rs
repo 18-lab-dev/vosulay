@@ -12,7 +12,11 @@ pub(crate) enum DrawOutcome {
 }
 
 pub(crate) type GetMemoryFdProperties = vk::PFN_vkGetMemoryFdPropertiesKHR;
+pub(crate) type GetImageMemoryRequirements2 = vk::PFN_vkGetImageMemoryRequirements2;
+pub(crate) type GetPhysicalDeviceImageFormatProperties2 =
+    vk::PFN_vkGetPhysicalDeviceImageFormatProperties2;
 const MAX_IMPORTED_SURFACES: usize = 4;
+const MAX_PRESENT_WAITS: usize = 16;
 
 pub(crate) struct SwapchainState {
     pub(crate) device: vk::Device,
@@ -20,9 +24,9 @@ pub(crate) struct SwapchainState {
     pub(crate) extent: vk::Extent2D,
     pub(crate) images: Vec<vk::Image>,
     resources: Option<Resources>,
-    /// The frame each image's last submission sampled, held until that image
-    /// is drawn into again. Its fence has been observed signalled by then, so
-    /// the DMA-BUF cannot be recycled while the GPU is still reading it.
+    /// The frame each image's last submission sampled. Fences are polled on
+    /// every present, including presents with no current overlay frame, so a
+    /// hide/clear cannot strand Chromium release callbacks indefinitely.
     retained_frames: Vec<Option<Arc<SharedFrame>>>,
     disabled: bool,
 }
@@ -46,20 +50,36 @@ impl SwapchainState {
         }
     }
 
+    /// Release producer frames whose per-image submissions have completed.
+    /// This is deliberately independent of drawing another overlay frame.
+    pub(crate) unsafe fn retire_completed(&mut self, raw: &Device) -> Result<(), vk::Result> {
+        let Some(resources) = self.resources.as_mut() else {
+            return Ok(());
+        };
+        for index in resources.completed_images(raw)? {
+            self.retained_frames[index].take();
+        }
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) unsafe fn draw(
         &mut self,
         raw: &Device,
+        physical_device: vk::PhysicalDevice,
         queue: vk::Queue,
         queue_family: u32,
         image_index: u32,
         wait_semaphores: &[vk::Semaphore],
         get_memory_fd_properties: GetMemoryFdProperties,
+        get_image_memory_requirements2: GetImageMemoryRequirements2,
+        get_image_format_properties2: GetPhysicalDeviceImageFormatProperties2,
         frame: Arc<SharedFrame>,
     ) -> Result<DrawOutcome, vk::Result> {
         if self.disabled || image_index as usize >= self.images.len() {
             return Err(vk::Result::ERROR_UNKNOWN);
         }
+        unsafe { self.retire_completed(raw)? };
         let descriptor = match &frame.frame.descriptor {
             FrameDescriptor::Dmabuf(descriptor) if descriptor.planes.len() == 1 => descriptor,
             _ => return Err(vk::Result::ERROR_FORMAT_NOT_SUPPORTED),
@@ -74,21 +94,21 @@ impl SwapchainState {
         let result = unsafe {
             resources.draw(
                 raw,
+                physical_device,
                 queue,
                 image_index,
                 self.images[image_index as usize],
                 self.extent,
                 wait_semaphores,
                 get_memory_fd_properties,
+                get_image_memory_requirements2,
+                get_image_format_properties2,
                 descriptor,
                 &frame.frame.fds,
             )
         };
         match result {
             Ok(DrawOutcome::Submitted(_)) => {
-                // Replaces the frame this image previously sampled. That
-                // submission has completed, so releasing it now is safe;
-                // releasing on any earlier event would not be.
                 self.retained_frames[image_index as usize] = Some(frame);
             }
             Err(_) => self.disabled = true,
@@ -372,16 +392,30 @@ impl Resources {
         })
     }
 
+    fn completed_images(&mut self, raw: &Device) -> Result<Vec<usize>, vk::Result> {
+        let mut completed = Vec::new();
+        for (index, fence) in self.fences.iter().copied().enumerate() {
+            if self.image_imports[index].is_some() && unsafe { raw.get_fence_status(fence)? } {
+                self.image_imports[index] = None;
+                completed.push(index);
+            }
+        }
+        Ok(completed)
+    }
+
     #[allow(clippy::too_many_arguments)]
     unsafe fn draw(
         &mut self,
         raw: &Device,
+        physical_device: vk::PhysicalDevice,
         queue: vk::Queue,
         image_index: u32,
         target: vk::Image,
         extent: vk::Extent2D,
         wait_semaphores: &[vk::Semaphore],
         get_memory_fd_properties: GetMemoryFdProperties,
+        get_image_memory_requirements2: GetImageMemoryRequirements2,
+        get_image_format_properties2: GetPhysicalDeviceImageFormatProperties2,
         descriptor: &overlay_protocol::DmabufDescriptor,
         fds: &[OwnedFd],
     ) -> Result<DrawOutcome, vk::Result> {
@@ -390,14 +424,9 @@ impl Resources {
         else {
             return Err(vk::Result::ERROR_UNKNOWN);
         };
-        // Only this image's previous submission matters. Gating on every fence
-        // let one in-flight image suppress composition for unrelated images
-        // that were already idle.
         if !unsafe { raw.get_fence_status(fence)? } {
             return Ok(DrawOutcome::Busy);
         }
-        // This image's prior use is now complete, so its import is eligible for
-        // LRU eviction even when another image remains in flight.
         self.image_imports[index] = None;
         let key = dmabuf_key(
             descriptor,
@@ -431,8 +460,17 @@ impl Resources {
                 };
                 slot
             };
-            let imported =
-                self.import_surface(raw, descriptor, fds, get_memory_fd_properties, key, serial)?;
+            let imported = self.import_surface(
+                raw,
+                physical_device,
+                descriptor,
+                fds,
+                get_memory_fd_properties,
+                get_image_memory_requirements2,
+                get_image_format_properties2,
+                key,
+                serial,
+            )?;
             if slot == self.imports.len() {
                 self.imports.push(imported);
             } else {
@@ -455,17 +493,11 @@ impl Resources {
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .image_info(std::slice::from_ref(&image_info));
         unsafe { raw.update_descriptor_sets(&[write], &[]) };
-        unsafe {
-            raw.reset_fences(&[fence])?;
-        }
-        unsafe {
-            raw.reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
-        }
+        unsafe { raw.reset_fences(&[fence])? };
+        unsafe { raw.reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())? };
         let begin = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-        unsafe {
-            raw.begin_command_buffer(command_buffer, &begin)?;
-        }
+        unsafe { raw.begin_command_buffer(command_buffer, &begin)? };
         let acquire = vk::ImageMemoryBarrier::default()
             .dst_access_mask(vk::AccessFlags::SHADER_READ)
             .old_layout(if newly_imported {
@@ -521,7 +553,7 @@ impl Resources {
         }
         let render_begin = vk::RenderPassBeginInfo::default()
             .render_pass(self.render_pass)
-            .framebuffer(self.framebuffers[image_index as usize])
+            .framebuffer(self.framebuffers[index])
             .render_area(vk::Rect2D {
                 offset: vk::Offset2D::default(),
                 extent,
@@ -587,26 +619,30 @@ impl Resources {
             );
             raw.end_command_buffer(command_buffer)?;
         }
-        let wait_stages =
-            vec![vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT; wait_semaphores.len()];
+        if wait_semaphores.len() > MAX_PRESENT_WAITS {
+            return Ok(DrawOutcome::Busy);
+        }
+        let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT; MAX_PRESENT_WAITS];
         let submit = vk::SubmitInfo::default()
             .wait_semaphores(wait_semaphores)
-            .wait_dst_stage_mask(&wait_stages)
+            .wait_dst_stage_mask(&wait_stages[..wait_semaphores.len()])
             .command_buffers(std::slice::from_ref(&command_buffer))
             .signal_semaphores(std::slice::from_ref(&finished));
-        unsafe {
-            raw.queue_submit(queue, &[submit], fence)?;
-        }
+        unsafe { raw.queue_submit(queue, &[submit], fence)? };
         self.image_imports[index] = Some(key);
         Ok(DrawOutcome::Submitted(finished))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn import_surface(
         &self,
         raw: &Device,
+        physical_device: vk::PhysicalDevice,
         descriptor: &overlay_protocol::DmabufDescriptor,
         fds: &[OwnedFd],
         get_memory_fd_properties: GetMemoryFdProperties,
+        get_image_memory_requirements2: GetImageMemoryRequirements2,
+        get_image_format_properties2: GetPhysicalDeviceImageFormatProperties2,
         key: DmabufKey,
         last_used: u64,
     ) -> Result<ImportedSurface, vk::Result> {
@@ -615,11 +651,20 @@ impl Resources {
         }
         let format =
             fourcc_format(descriptor.fourcc).ok_or(vk::Result::ERROR_FORMAT_NOT_SUPPORTED)?;
+        ensure_import_supported(
+            physical_device,
+            format,
+            descriptor.modifier,
+            get_image_format_properties2,
+        )?;
         let plane = &descriptor.planes[0];
+        // VkImageDrmFormatModifierExplicitCreateInfoEXT requires every
+        // VkSubresourceLayout::size entry to be zero. The allocation size is
+        // learned from the image's memory requirements, not copied from the FD.
         let plane_layout = vk::SubresourceLayout::default()
             .offset(plane.offset)
             .row_pitch(plane.stride as u64)
-            .size(plane.size);
+            .size(0);
         let modifier_info = vk::ImageDrmFormatModifierExplicitCreateInfoEXT::default()
             .drm_format_modifier(descriptor.modifier)
             .plane_layouts(std::slice::from_ref(&plane_layout));
@@ -643,7 +688,16 @@ impl Resources {
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .initial_layout(vk::ImageLayout::UNDEFINED);
         let image = unsafe { raw.create_image(&image_info, None)? };
-        let requirements = unsafe { raw.get_image_memory_requirements(image) };
+
+        let requirements_info = vk::ImageMemoryRequirementsInfo2::default().image(image);
+        let mut dedicated_requirements = vk::MemoryDedicatedRequirements::default();
+        let mut requirements2 =
+            vk::MemoryRequirements2::default().push_next(&mut dedicated_requirements);
+        unsafe {
+            get_image_memory_requirements2(raw.handle(), &requirements_info, &mut requirements2)
+        };
+        let requirements = requirements2.memory_requirements;
+
         let mut fd_properties = vk::MemoryFdPropertiesKHR::default();
         let properties_result = unsafe {
             get_memory_fd_properties(
@@ -662,14 +716,21 @@ impl Resources {
             unsafe { raw.destroy_image(image, None) };
             return Err(vk::Result::ERROR_INVALID_EXTERNAL_HANDLE);
         }
-        let duplicated = unsafe { libc::dup(fds[0].as_raw_fd()) };
+        let duplicated = unsafe { libc::fcntl(fds[0].as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
         if duplicated < 0 {
             unsafe { raw.destroy_image(image, None) };
             return Err(vk::Result::ERROR_OUT_OF_HOST_MEMORY);
         }
+        let mut dedicated_info = vk::MemoryDedicatedAllocateInfo::default().image(image);
         let mut import_info = vk::ImportMemoryFdInfoKHR::default()
             .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT)
             .fd(duplicated);
+        if dedicated_requirements.requires_dedicated_allocation != 0
+            || dedicated_requirements.prefers_dedicated_allocation != 0
+        {
+            import_info.p_next = (&mut dedicated_info as *mut vk::MemoryDedicatedAllocateInfo<'_>)
+                .cast();
+        }
         let allocation = vk::MemoryAllocateInfo::default()
             .push_next(&mut import_info)
             .allocation_size(requirements.size)
@@ -722,7 +783,6 @@ impl Resources {
 
     unsafe fn destroy(self, raw: &Device) {
         let _ = unsafe { raw.device_wait_idle() };
-        // The device is idle, so every cached import is now unreferenced.
         for surface in self.imports {
             unsafe { destroy_imported_surface(raw, surface) };
         }
@@ -750,6 +810,46 @@ impl Resources {
     }
 }
 
+fn ensure_import_supported(
+    physical_device: vk::PhysicalDevice,
+    format: vk::Format,
+    modifier: u64,
+    get_image_format_properties2: GetPhysicalDeviceImageFormatProperties2,
+) -> Result<(), vk::Result> {
+    let mut drm_info = vk::PhysicalDeviceImageDrmFormatModifierInfoEXT::default()
+        .drm_format_modifier(modifier)
+        .sharing_mode(vk::SharingMode::EXCLUSIVE);
+    let mut external_info = vk::PhysicalDeviceExternalImageFormatInfo::default()
+        .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
+    let format_info = vk::PhysicalDeviceImageFormatInfo2::default()
+        .format(format)
+        .ty(vk::ImageType::TYPE_2D)
+        .tiling(vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
+        .usage(vk::ImageUsageFlags::SAMPLED)
+        .push_next(&mut external_info)
+        .push_next(&mut drm_info);
+    let mut external_properties = vk::ExternalImageFormatProperties::default();
+    let mut properties =
+        vk::ImageFormatProperties2::default().push_next(&mut external_properties);
+    let result = unsafe {
+        get_image_format_properties2(physical_device, &format_info, &mut properties)
+    };
+    if result != vk::Result::SUCCESS {
+        return Err(result);
+    }
+    let external = external_properties.external_memory_properties;
+    if !external
+        .external_memory_features
+        .contains(vk::ExternalMemoryFeatureFlags::IMPORTABLE)
+        || !external
+            .compatible_handle_types
+            .contains(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT)
+    {
+        return Err(vk::Result::ERROR_FORMAT_NOT_SUPPORTED);
+    }
+    Ok(())
+}
+
 unsafe fn shader_module(raw: &Device, bytes: &[u8]) -> Result<vk::ShaderModule, vk::Result> {
     if !bytes.len().is_multiple_of(4) {
         return Err(vk::Result::ERROR_INVALID_SHADER_NV);
@@ -759,13 +859,6 @@ unsafe fn shader_module(raw: &Device, bytes: &[u8]) -> Result<vk::ShaderModule, 
 }
 
 /// Map a DRM fourcc to the Vulkan format that reads the same bytes.
-///
-/// DRM names channels in register order on a little-endian host, Vulkan names
-/// them in memory order, so the two spellings are byte-reversed:
-/// `DRM_FORMAT_ARGB8888` ("AR24") is B,G,R,A in memory and therefore
-/// `B8G8R8A8_UNORM`, while `DRM_FORMAT_ABGR8888` ("AB24") is R,G,B,A and
-/// therefore `R8G8B8A8_UNORM`. Mapping these the other way round swaps red and
-/// blue in every imported frame.
 fn fourcc_format(fourcc: u32) -> Option<vk::Format> {
     match fourcc {
         overlay_protocol::DRM_FORMAT_ARGB8888 => Some(vk::Format::B8G8R8A8_UNORM),
@@ -815,19 +908,24 @@ fn dmabuf_key(
         plane_size: plane.size,
     })
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// One opaque pixel written in memory order B=0x10, G=0x20, R=0x30,
-    /// A=0xFF. That is exactly what Chromium hands us as BGRA, and what
-    /// `DRM_FORMAT_ARGB8888` names.
     const PIXEL: [u8; 4] = [0x10, 0x20, 0x30, 0xFF];
 
-    /// `ash` is built without default features here, so `vk::Format` has no
-    /// `Debug`; compare explicitly rather than through `assert_eq!`.
     fn maps_to(fourcc: u32, expected: vk::Format) -> bool {
         fourcc_format(fourcc) == Some(expected)
+    }
+
+    #[test]
+    fn explicit_modifier_plane_layout_uses_zero_size() {
+        let layout = vk::SubresourceLayout::default()
+            .offset(64)
+            .row_pitch(4096)
+            .size(0);
+        assert_eq!(layout.size, 0);
     }
 
     #[test]
@@ -836,9 +934,6 @@ mod tests {
             overlay_protocol::DRM_FORMAT_ARGB8888,
             vk::Format::B8G8R8A8_UNORM
         ));
-        // B8G8R8A8 takes byte 0 as blue and byte 2 as red, which recovers the
-        // colour that was written. The reversed mapping read 0x10 as red and
-        // 0x30 as blue, swapping the channels on every imported frame.
         let (blue, green, red, alpha) = (PIXEL[0], PIXEL[1], PIXEL[2], PIXEL[3]);
         assert_eq!((blue, green, red, alpha), (0x10, 0x20, 0x30, 0xFF));
         assert!(!maps_to(
@@ -861,7 +956,6 @@ mod tests {
 
     #[test]
     fn fourcc_codes_are_the_ascii_they_claim_to_be() {
-        // Guards the mapping against a mistyped literal: "AR24" and "AB24".
         assert_eq!(
             overlay_protocol::DRM_FORMAT_ARGB8888.to_le_bytes(),
             *b"AR24"
