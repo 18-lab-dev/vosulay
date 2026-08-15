@@ -27,7 +27,7 @@ if (process.platform !== "linux" || process.arch !== "x64") {
     throw new Error("Linux native staging currently supports linux-x64 only");
 }
 
-run("npm", ["run", "build"], nativeRoot);
+run("bun", ["run", "build"], nativeRoot);
 run(
     "cargo",
     [
