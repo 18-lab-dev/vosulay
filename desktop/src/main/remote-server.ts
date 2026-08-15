@@ -189,7 +189,11 @@ function renderPlacement(placement: Placement, vosuUrl: URL, credential: string)
         : resolved.kind === "remote"
             ? ` sandbox="allow-scripts allow-same-origin"`
             : "";
-    return `<iframe src="${htmlEscape(resolved.source)}" title="${htmlEscape(title)}" allow="autoplay; webgpu" loading="eager"${sandbox} referrerpolicy="no-referrer" style="${style}"></iframe>`;
+    // Arbitrary remote URLs are untrusted content. They retain ordinary media
+    // access but do not receive GPU delegation by default. Installed counters
+    // and HMAC-authenticated local overlays are the explicitly trusted sources.
+    const allow = resolved.kind === "remote" ? "autoplay" : "autoplay; webgpu";
+    return `<iframe src="${htmlEscape(resolved.source)}" title="${htmlEscape(title)}" allow="${allow}" loading="eager"${sandbox} referrerpolicy="no-referrer" style="${style}"></iframe>`;
 }
 
 export function renderProfileDocument(profile: Profile, runtime: RuntimeOptions, credential: string, requestHost?: string): string {
