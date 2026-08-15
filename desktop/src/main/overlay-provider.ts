@@ -1,4 +1,4 @@
-import EventEmitter from "node:events";
+import type EventEmitter from "node:events";
 
 import type { EditingTarget } from "./types";
 
@@ -13,10 +13,10 @@ export interface OverlayProvider extends EditingTarget {
         visibilityChanged: [visible: boolean];
     }>;
     readonly visible: boolean;
-    setVisibility(visible: boolean): Promise<void>;
-    toggleVisibility(): Promise<void>;
-    flushAll(): Promise<void>;
-    reloadAll(): Promise<void>;
-    start(): void;
-    stop(): Promise<void>;
+    setVisibility: (visible: boolean) => Promise<void>;
+    toggleVisibility: () => Promise<void>;
+    flushAll: () => Promise<void>;
+    reloadAll: () => Promise<void>;
+    start: () => void;
+    stop: () => Promise<void>;
 }

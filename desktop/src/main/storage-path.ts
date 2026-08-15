@@ -7,10 +7,12 @@ export interface ConfigStoragePaths {
 
 export function resolveStoragePaths(
     appDataDirectory: string,
-    portableExecutableDirectory?: string
+    portableExecutableDirectory?: string,
 ): ConfigStoragePaths {
     let dataDirectory: string;
-    if (portableExecutableDirectory !== undefined) {
+    if (portableExecutableDirectory === undefined) {
+        dataDirectory = join(appDataDirectory, "vosulay");
+    } else {
         if (portableExecutableDirectory.length === 0) {
             throw new Error("portable executable directory must not be empty");
         }
@@ -18,11 +20,9 @@ export function resolveStoragePaths(
             throw new Error("portable executable directory must be absolute");
         }
         dataDirectory = join(portableExecutableDirectory, "data");
-    } else {
-        dataDirectory = join(appDataDirectory, "vosulay");
     }
     return {
-        dataDirectory,
         configPath: join(dataDirectory, "config.json"),
+        dataDirectory,
     };
 }

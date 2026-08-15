@@ -1,7 +1,7 @@
 import type { ConfigStore } from "./config";
 import {
-    OverlayManager,
     type ManagedOverlayProcess,
+    OverlayManager,
     type OverlayManagerDependencies,
 } from "./overlay-manager";
 import { WindowsForegroundTracker } from "./foreground-tracker";
@@ -20,21 +20,23 @@ export class WindowsOverlayProvider extends OverlayManager {
         super(options, configStore, overlayRegistry, {
             ...dependencies,
             foregroundTracker: dependencies.foregroundTracker ?? new WindowsForegroundTracker(),
-            initializeProcess: dependencies.initializeProcess ?? (async (
-                pid: number,
-                editingTarget: EditingTarget,
-                visible: boolean,
-            ): Promise<ManagedOverlayProcess> => {
-                const { OverlayProcess } = await import("./overlay-process");
-                return OverlayProcess.initialize(
-                    pid,
-                    options,
-                    configStore,
-                    overlayRegistry,
-                    editingTarget,
-                    visible,
-                );
-            }),
+            initializeProcess:
+                dependencies.initializeProcess ??
+                (async (
+                    pid: number,
+                    editingTarget: EditingTarget,
+                    visible: boolean,
+                ): Promise<ManagedOverlayProcess> => {
+                    const { OverlayProcess } = await import("./overlay-process");
+                    return OverlayProcess.initialize(
+                        pid,
+                        options,
+                        configStore,
+                        overlayRegistry,
+                        editingTarget,
+                        visible,
+                    );
+                }),
         });
     }
 }

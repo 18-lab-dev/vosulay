@@ -2,15 +2,8 @@
     "extends": "./tsconfig.json",
     "compilerOptions": {
         "composite": true,
-        "types": [
-            "node",
-            "electron"
-        ],
+        "types": ["node", "electron"],
         "noEmit": true
     },
-    "include": [
-        "electron.vite.config.ts",
-        "src/main/**/*.ts",
-        "src/preload/**/*.ts"
-    ]
+    "include": ["electron.vite.config.ts", "src/main/**/*.ts", "src/preload/**/*.ts"]
 }

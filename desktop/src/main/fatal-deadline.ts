@@ -9,9 +9,9 @@ export async function withFatalDeadline(
     operation: () => PromiseLike<void> | void,
     timeoutMs: number,
     message: string,
-    fatalExit: FatalExit = fatalProcessExit
+    fatalExit: FatalExit = fatalProcessExit,
 ): Promise<void> {
-    let timer: NodeJS.Timeout | null = null;
+    let timer: NodeJS.Timeout | undefined = undefined;
     const timeout = new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => {
             try {
@@ -23,12 +23,9 @@ export async function withFatalDeadline(
     });
 
     try {
-        await Promise.race([
-            timeout,
-            Promise.resolve().then(operation)
-        ]);
+        await Promise.race([timeout, Promise.resolve().then(operation)]);
     } finally {
-        if (timer !== null) {
+        if (timer !== undefined) {
             clearTimeout(timer);
         }
     }

@@ -14,14 +14,13 @@ import type { LocalOverlayRegistry } from "../src/main/local-overlays";
 import { WindowsOverlayProvider } from "../src/main/windows-overlay-provider";
 
 const options: RuntimeOptions = {
-    vosuUrl: new URL("http://127.0.0.1:24050/"),
-    fpsLimit: 60,
-    pids: [],
-    processNames: ["osu!.exe"],
-};
-
-const configStore = {} as ConfigStore;
-const registry = {} as LocalOverlayRegistry;
+        fpsLimit: 60,
+        pids: [],
+        processNames: ["osu!.exe"],
+        vosuUrl: new URL("http://127.0.0.1:24050/"),
+    },
+    configStore = {} as ConfigStore,
+    registry = {} as LocalOverlayRegistry;
 
 function providerFor(platform: NodeJS.Platform) {
     return createOverlayProvider(platform, options, configStore, registry, {
@@ -43,25 +42,25 @@ test("selects Linux provider without loading Windows modules", async () => {
 });
 
 test("launches Vulkan target through packaged native addon before provider start", async () => {
-    const calls: unknown[] = [];
-    const handle = {
-        pid: 4242,
-        destroy: async () => {},
-        setVisible: async () => {},
-        setEditing: async () => {},
-        on(event: string) {
-            assert.equal(event, "disconnect");
+    const calls: unknown[] = [],
+        handle = {
+            destroy: async () => {},
+            on(event: string) {
+                assert.equal(event, "disconnect");
+            },
+            pid: 4242,
+            setEditing: async () => {},
+            setVisible: async () => {},
         },
-    };
-    const previousRoot = process.env.VOSULAY_NATIVE_ROOT;
+        previousRoot = process.env.VOSULAY_NATIVE_ROOT;
     process.env.VOSULAY_NATIVE_ROOT = "/packaged/native";
     try {
         const provider = await createLinuxOverlayProvider(
             {
                 ...options,
                 vulkanLaunch: {
-                    executable: "/games/osu.AppImage",
                     args: ["--renderer=vulkan"],
+                    executable: "/games/osu.AppImage",
                 },
             },
             configStore,
@@ -80,18 +79,23 @@ test("launches Vulkan target through packaged native addon before provider start
             },
         );
         // The GL agent must not be preloaded here: both backends would
-        // authenticate against the same one-shot socket and cookie, and
-        // whichever won first would claim the session.
-        assert.deepEqual(calls, [{
-            executable: "/games/osu.AppImage",
-            args: ["--renderer=vulkan"],
-            layerDirectory: "/packaged/native",
-        }]);
+        // Authenticate against the same one-shot socket and cookie, and
+        // Whichever won first would claim the session.
+        assert.deepEqual(calls, [
+            {
+                args: ["--renderer=vulkan"],
+                executable: "/games/osu.AppImage",
+                layerDirectory: "/packaged/native",
+            },
+        ]);
         assert.ok(provider instanceof LinuxOverlayProvider);
         await provider.stop();
     } finally {
-        if (previousRoot === undefined) delete process.env.VOSULAY_NATIVE_ROOT;
-        else process.env.VOSULAY_NATIVE_ROOT = previousRoot;
+        if (previousRoot === undefined) {
+            delete process.env.VOSULAY_NATIVE_ROOT;
+        } else {
+            process.env.VOSULAY_NATIVE_ROOT = previousRoot;
+        }
     }
 });
 
@@ -110,20 +114,23 @@ test("rejects unsupported host platforms", async () => {
 
 test("candidate selection is stable and deterministic without a compositor signal", () => {
     // Lowest PID wins: the earliest-started match is the game rather than a
-    // helper it spawned later.
-    assert.equal(selectCandidatePid(new Set([4242, 1337, 9001]), null), 1337);
+    // Helper it spawned later.
+    assert.equal(selectCandidatePid(new Set([4242, 1337, 9001])), 1337);
     // The current choice is kept while it is still running, so the overlay
-    // does not flap between two matching processes.
+    // Does not flap between two matching processes.
     assert.equal(selectCandidatePid(new Set([4242, 1337]), 4242), 4242);
     // ...but is replaced once it exits.
     assert.equal(selectCandidatePid(new Set([4242]), 1337), 4242);
-    assert.equal(selectCandidatePid(new Set(), 4242), null);
+    assert.equal(selectCandidatePid(new Set(), 4242), undefined);
 });
 
 test("the Linux tracker reports a discovered process as foreground", () => {
-    const tracker = new LinuxCandidateTracker();
-    const seen: Array<number | null> = [];
-    assert.equal(tracker.start((pid) => seen.push(pid)), null);
+    const tracker = new LinuxCandidateTracker(),
+        seen: (number | undefined)[] = [];
+    assert.equal(
+        tracker.start((pid) => seen.push(pid)),
+        undefined,
+    );
 
     // Default startup has no --pid, so discovery is the only foreground signal.
     tracker.observe(new Set([4242]));
@@ -137,12 +144,12 @@ test("the Linux tracker reports a discovered process as foreground", () => {
     assert.deepEqual(seen, [4242, 9001]);
 
     tracker.observe(new Set());
-    assert.deepEqual(seen, [4242, 9001, null]);
+    assert.deepEqual(seen, [4242, 9001, undefined]);
 });
 
 test("default Linux startup discovers targets by process name", async () => {
     // The regression: replacing discovery with `options.pids` left the allowed
-    // set permanently empty whenever no --pid was supplied.
+    // Set permanently empty whenever no --pid was supplied.
     const provider = new LinuxOverlayProvider(
         { ...options, pids: [], processNames: ["osu!.exe"] },
         configStore,

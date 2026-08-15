@@ -5,33 +5,21 @@ export declare class OverlayHandle {
   cookie(): string
   get pid(): number
   getPid(): number
-  /**
-   * Frame transports the attached target can actually use. The Electron host
-   * picks shared textures or CPU bitmaps from this.
-   */
   supportsDmabuf(): boolean
   supportsBgraShm(): boolean
+  supportsFrameRequests(): boolean
   destroy(): Promise<unknown>
   on(event: string, callback: ((arg: string) => unknown)): void
   setEditing(editing: boolean): Promise<unknown>
   setVisible(visible: boolean): Promise<unknown>
   captureInput(capture: boolean): Promise<unknown>
   createSurface(): OverlaySurface
-  /**
-   * Drain one buffered event. The actor owns the socket, so this reads the
-   * events it has already received rather than competing for a recv.
-   */
   pollEvent(): string
 }
 
 export declare class OverlaySurface {
   updateSharedTexture(descriptor: SurfaceDescriptor): Promise<unknown>
   updateDescriptor(descriptor: SurfaceDescriptor): Promise<unknown>
-  /**
-   * Shared-memory path for targets that cannot sample an imported DMA-BUF.
-   * The bitmap is Chromium's premultiplied BGRA, copied into a sealed memfd
-   * so the agent maps a buffer the host can no longer resize.
-   */
   updateBitmap(descriptor: BitmapDescriptor, bitmap: Buffer): Promise<unknown>
   updateDmabuf(descriptor: SharedTextureDescriptor): Promise<unknown>
   clear(targetId: number): Promise<unknown>
@@ -47,15 +35,12 @@ export interface AttachOptions {
   timeout?: number
 }
 
-/**
- * Geometry for a CPU frame; the buffer length defines its size, so no offset
- * or descriptor fd is accepted from the renderer.
- */
 export interface BitmapDescriptor {
   targetId: number
   width: number
   height: number
   stride: number
+  format?: string
 }
 
 export declare function launchVulkan(options: VulkanLaunchOptions): Promise<OverlayHandle>

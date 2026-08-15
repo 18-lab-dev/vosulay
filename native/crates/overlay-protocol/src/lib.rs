@@ -1287,18 +1287,22 @@ mod tests {
         let encoded = request.encode().unwrap();
         assert_eq!(FrameRequest::decode(&encoded).unwrap(), request);
         assert!(FrameRequest::decode(&encoded[..15]).is_err());
-        assert!(FrameRequest {
-            target_id: 0,
-            sequence: 1,
-        }
-        .encode()
-        .is_err());
-        assert!(FrameRequest {
-            target_id: 1,
-            sequence: 0,
-        }
-        .encode()
-        .is_err());
+        assert!(
+            FrameRequest {
+                target_id: 0,
+                sequence: 1,
+            }
+            .encode()
+            .is_err()
+        );
+        assert!(
+            FrameRequest {
+                target_id: 1,
+                sequence: 0,
+            }
+            .encode()
+            .is_err()
+        );
 
         assert_eq!(
             MessageKind::try_from(18).unwrap(),

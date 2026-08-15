@@ -5,10 +5,10 @@ export interface ActiveWindowInfo {
 }
 
 export interface ActiveWindowApi {
-    initialize(): void;
-    getActiveWindow(): ActiveWindowInfo;
-    subscribe(callback: (windowInfo: ActiveWindowInfo | null) => void): number;
-    unsubscribe(watchId: number): void;
+    initialize: () => void;
+    getActiveWindow: () => ActiveWindowInfo;
+    subscribe: (callback: (windowInfo: ActiveWindowInfo | undefined) => void) => number;
+    unsubscribe: (watchId: number) => void;
 }
 
 interface ActiveWindowModule {
@@ -16,13 +16,13 @@ interface ActiveWindowModule {
 }
 
 export interface ForegroundTracker {
-    start(onChanged: (pid: number | null) => void): number | null;
-    stop(): void;
+    start: (onChanged: (pid: number | undefined) => void) => number | undefined;
+    stop: () => void;
 }
 
 export class NoopForegroundTracker implements ForegroundTracker {
-    start(_onChanged: (pid: number | null) => void): number | null {
-        return null;
+    start(_onChanged: (pid: number | undefined) => void): number | undefined {
+        return undefined;
     }
 
     stop(): void {}
@@ -33,41 +33,47 @@ export interface ForegroundTrackerDependencies {
     scheduleReadback?: (poll: () => void) => () => void;
 }
 
-function validPid(windowInfo: ActiveWindowInfo | null): number | null {
+function validPid(windowInfo: ActiveWindowInfo | undefined): number | undefined {
     const pid = windowInfo?.pid;
-    return Number.isSafeInteger(pid) && pid !== undefined && pid > 0 ? pid : null;
+    return Number.isSafeInteger(pid) && pid !== undefined && pid > 0 ? pid : undefined;
 }
 
 export class WindowsForegroundTracker implements ForegroundTracker {
     private readonly loadActiveWindow: () => ActiveWindowApi;
     private readonly scheduleReadback: (poll: () => void) => () => void;
-    private activeWindow: ActiveWindowApi | null = null;
-    private watchId: number | null = null;
-    private cancelReadback: (() => void) | null = null;
-    private lastPid: number | null = null;
+    private activeWindow: ActiveWindowApi | undefined = undefined;
+    private watchId: number | undefined = undefined;
+    private cancelReadback: (() => void) | undefined = undefined;
+    private lastPid: number | undefined = undefined;
 
     constructor(dependencies: ForegroundTrackerDependencies = {}) {
-        this.loadActiveWindow = dependencies.loadActiveWindow ?? (() => {
-            const module = createRequire(import.meta.url)("@paymoapp/active-window") as ActiveWindowModule;
-            return module.ActiveWindow;
-        });
-        this.scheduleReadback = dependencies.scheduleReadback ?? ((poll) => {
-            const timer = setInterval(poll, 100);
-            return () => clearInterval(timer);
-        });
+        this.loadActiveWindow =
+            dependencies.loadActiveWindow ??
+            (() => {
+                const module = createRequire(import.meta.url)(
+                    "@paymoapp/active-window",
+                ) as ActiveWindowModule;
+                return module.ActiveWindow;
+            });
+        this.scheduleReadback =
+            dependencies.scheduleReadback ??
+            ((poll) => {
+                const timer = setInterval(poll, 100);
+                return () => clearInterval(timer);
+            });
     }
 
-    start(onChanged: (pid: number | null) => void): number | null {
-        if (this.watchId !== null || this.cancelReadback !== null) {
+    start(onChanged: (pid: number | undefined) => void): number | undefined {
+        if (this.watchId !== undefined || this.cancelReadback !== undefined) {
             throw new Error("Foreground tracker is already running");
         }
 
         this.activeWindow = this.loadActiveWindow();
         this.activeWindow.initialize();
 
-        let pendingPid: number | null | undefined;
-        let seeding = true;
-        const publish = (pid: number | null): void => {
+        let pendingPid: number | undefined,
+            seeding = true;
+        const publish = (pid: number | undefined): void => {
             if (pid !== this.lastPid) {
                 this.lastPid = pid;
                 onChanged(pid);
@@ -82,38 +88,38 @@ export class WindowsForegroundTracker implements ForegroundTracker {
             }
         });
 
-        let currentPid: number | null;
+        let currentPid: number | undefined;
         try {
             currentPid = validPid(this.activeWindow.getActiveWindow());
         } catch {
-            currentPid = pendingPid ?? null;
+            currentPid = pendingPid ?? undefined;
         }
         this.lastPid = currentPid;
         seeding = false;
 
         this.cancelReadback = this.scheduleReadback(() => {
-            const activeWindow = this.activeWindow;
-            if (activeWindow === null) {
+            const { activeWindow } = this;
+            if (activeWindow === undefined) {
                 return;
             }
             try {
                 publish(validPid(activeWindow.getActiveWindow()));
             } catch {
-                publish(null);
+                publish();
             }
         });
         return currentPid;
     }
 
     stop(): void {
-        const activeWindow = this.activeWindow;
-        const watchId = this.watchId;
-        this.activeWindow = null;
-        this.watchId = null;
-        this.lastPid = null;
+        const { activeWindow } = this,
+            { watchId } = this;
+        this.activeWindow = undefined;
+        this.watchId = undefined;
+        this.lastPid = undefined;
         this.cancelReadback?.();
-        this.cancelReadback = null;
-        if (activeWindow !== null && watchId !== null) {
+        this.cancelReadback = undefined;
+        if (activeWindow !== undefined && watchId !== undefined) {
             activeWindow.unsubscribe(watchId);
         }
     }

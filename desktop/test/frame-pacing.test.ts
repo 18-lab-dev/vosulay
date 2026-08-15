@@ -12,15 +12,29 @@ class FakeWebContents extends EventEmitter {
     stops = 0;
     invalidates = 0;
 
-    isDestroyed(): boolean { return false; }
-    isPainting(): boolean { return this.painting; }
-    startPainting(): void { this.painting = true; this.starts += 1; }
-    stopPainting(): void { this.painting = false; this.stops += 1; }
-    invalidate(): void { this.invalidates += 1; }
+    isDestroyed(): boolean {
+        return false;
+    }
+    isPainting(): boolean {
+        return this.painting;
+    }
+    startPainting(): void {
+        this.painting = true;
+        this.starts += 1;
+    }
+    stopPainting(): void {
+        this.painting = false;
+        this.stops += 1;
+    }
+    invalidate(): void {
+        this.invalidates += 1;
+    }
 }
 
 class FakeNative extends EventEmitter {
-    supportsFrameRequests(): boolean { return true; }
+    supportsFrameRequests(): boolean {
+        return true;
+    }
 }
 
 function processFor(webContents: FakeWebContents): ManagedOverlayProcess & {
@@ -30,30 +44,35 @@ function processFor(webContents: FakeWebContents): ManagedOverlayProcess & {
 } {
     const events = new EventEmitter<{ destroyed: [] }>();
     return {
-        pid: 7,
-        events,
-        window: { webContents },
-        visibleCalls: [],
+        async destroy() {
+            this.destroyed = true;
+            events.emit("destroyed");
+        },
         destroyed: false,
-        async destroy() { this.destroyed = true; events.emit("destroyed"); },
-        async setEditing() {},
-        async setVisible(value: boolean) { this.visibleCalls.push(value); },
+        events,
         async flushPendingSave() {},
+        pid: 7,
         async reload() {},
+        async setEditing() {},
+        async setVisible(value: boolean) {
+            this.visibleCalls.push(value);
+        },
+        visibleCalls: [],
+        window: { webContents },
     };
 }
 
 test("frame request parsing rejects malformed or non-monotonic primitives", () => {
-    assert.deepEqual(parseFrameRequest("7:9"), { targetId: 7, sequence: 9 });
-    for (const value of ["", "7", "7:0", "0:1", "x:1", "1:x", "1:2:3", null]) {
-        assert.equal(parseFrameRequest(value), null);
+    assert.deepEqual(parseFrameRequest("7:9"), { sequence: 9, targetId: 7 });
+    for (const value of ["", "7", "7:0", "0:1", "x:1", "1:x", "1:2:3", undefined]) {
+        assert.equal(parseFrameRequest(value), undefined);
     }
 });
 
 test("negotiated pacing coalesces requests and stops after the delivered paint", async () => {
-    const webContents = new FakeWebContents();
-    const native = new FakeNative();
-    const process = processFor(webContents);
+    const webContents = new FakeWebContents(),
+        native = new FakeNative(),
+        process = processFor(webContents);
     enableNativeFramePacing(process, native as unknown as NativeOverlayHandle);
 
     assert.equal(webContents.painting, false, "continuous OSR is stopped immediately");
@@ -81,8 +100,8 @@ test("negotiated pacing coalesces requests and stops after the delivered paint",
 });
 
 test("agents without demand capability retain fixed-rate painting", () => {
-    const webContents = new FakeWebContents();
-    const process = processFor(webContents);
+    const webContents = new FakeWebContents(),
+        process = processFor(webContents);
     enableNativeFramePacing(process, {
         supportsFrameRequests: () => false,
     } as NativeOverlayHandle);

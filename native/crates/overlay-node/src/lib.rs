@@ -4,10 +4,9 @@ use napi::{Env, Error, Result, Status};
 use napi_derive::napi;
 use overlay_host::{Host, HostEvent, HostSession};
 use overlay_protocol::{
-    CAP_DMABUF, CAP_FRAME_REQUEST, CAP_SHM_BGRA, DRM_FORMAT_ABGR8888,
-    DRM_FORMAT_ARGB8888, DmabufDescriptor, DmabufPlane,
-    TEXTURE_FORMAT_PREMULTIPLIED_BGRA8, TEXTURE_FORMAT_PREMULTIPLIED_RGBA8, Target,
-    TextureDescriptor,
+    CAP_DMABUF, CAP_FRAME_REQUEST, CAP_SHM_BGRA, DRM_FORMAT_ABGR8888, DRM_FORMAT_ARGB8888,
+    DmabufDescriptor, DmabufPlane, TEXTURE_FORMAT_PREMULTIPLIED_BGRA8,
+    TEXTURE_FORMAT_PREMULTIPLIED_RGBA8, Target, TextureDescriptor,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -346,13 +345,7 @@ impl OverlayHandle {
     ) -> Result<()> {
         if !matches!(
             event.as_str(),
-            "disconnect"
-                | "input"
-                | "end"
-                | "consumed"
-                | "frame"
-                | "frame-request"
-                | "target"
+            "disconnect" | "input" | "end" | "consumed" | "frame" | "frame-request" | "target"
         ) {
             return Err(fail("unsupported overlay event"));
         }
@@ -468,9 +461,7 @@ impl OverlaySurface {
         let stride = u32::try_from(descriptor.stride).map_err(fail)?;
         let format = match descriptor.format.as_deref().unwrap_or("BGRA") {
             "RGBA" => TEXTURE_FORMAT_PREMULTIPLIED_RGBA8,
-            "BGRA" if self.capabilities & CAP_SHM_BGRA != 0 => {
-                TEXTURE_FORMAT_PREMULTIPLIED_BGRA8
-            }
+            "BGRA" if self.capabilities & CAP_SHM_BGRA != 0 => TEXTURE_FORMAT_PREMULTIPLIED_BGRA8,
             "BGRA" => {
                 swizzle_bgra_to_rgba(&mut bitmap, width, height, stride)?;
                 TEXTURE_FORMAT_PREMULTIPLIED_RGBA8
@@ -550,12 +541,7 @@ impl OverlaySurface {
     }
 }
 
-fn swizzle_bgra_to_rgba(
-    bytes: &mut [u8],
-    width: u32,
-    height: u32,
-    stride: u32,
-) -> Result<()> {
+fn swizzle_bgra_to_rgba(bytes: &mut [u8], width: u32, height: u32, stride: u32) -> Result<()> {
     let row_pixels = usize::try_from(width)
         .map_err(fail)?
         .checked_mul(4)
@@ -707,7 +693,10 @@ fn start_session_actor(shared: Arc<Shared>, mut session: HostSession) {
                 ))) if matches!(
                     error.kind(),
                     std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
-                ) => None,
+                ) =>
+                {
+                    None
+                }
                 Err(_) => {
                     emit_event(&shared, "disconnect", "disconnect".to_owned());
                     break;
@@ -946,9 +935,7 @@ impl Task for VulkanLaunchTask {
         let mut child = command.spawn().map_err(fail)?;
         let pid = child.id();
         host.set_expected_process_group(pid);
-        let timeout = Duration::from_secs(u64::from(
-            options.timeout.unwrap_or(30).clamp(1, 120),
-        ));
+        let timeout = Duration::from_secs(u64::from(options.timeout.unwrap_or(30).clamp(1, 120)));
         match connect_handle(host, socket_name, cookie, timeout, true) {
             Ok(handle) => {
                 reap_child(child);
@@ -1244,10 +1231,7 @@ mod launch_tests {
     fn bgra_rows_are_swizzled_without_touching_padding() {
         let mut bytes = vec![1, 2, 3, 4, 9, 9, 9, 9, 5, 6, 7, 8, 8, 8, 8, 8];
         swizzle_bgra_to_rgba(&mut bytes, 1, 2, 8).unwrap();
-        assert_eq!(
-            bytes,
-            vec![3, 2, 1, 4, 9, 9, 9, 9, 7, 6, 5, 8, 8, 8, 8, 8]
-        );
+        assert_eq!(bytes, vec![3, 2, 1, 4, 9, 9, 9, 9, 7, 6, 5, 8, 8, 8, 8, 8]);
     }
 
     #[test]

@@ -7,6 +7,7 @@ interface PaintingWebContents {
     startPainting(): void;
     stopPainting(): void;
     invalidate(): void;
+    setFrameRate(frameRate: number): void;
     on(event: "paint", listener: () => void): unknown;
     off(event: "paint", listener: () => void): unknown;
 }
@@ -22,23 +23,35 @@ export interface ParsedFrameRequest {
     sequence: number;
 }
 
-export function parseFrameRequest(value: unknown): ParsedFrameRequest | null {
-    if (typeof value !== "string") return null;
+export function parseFrameRequest(value: unknown): ParsedFrameRequest | undefined {
+    if (typeof value !== "string") {
+        return undefined;
+    }
     const fields = value.split(":");
-    if (fields.length !== 2) return null;
-    const targetId = Number(fields[0]);
-    const sequence = Number(fields[1]);
-    if (!Number.isSafeInteger(targetId) || targetId <= 0
-        || !Number.isSafeInteger(sequence) || sequence <= 0) return null;
-    return { targetId, sequence };
+    if (fields.length !== 2) {
+        return undefined;
+    }
+    const targetId = Number(fields[0]),
+        sequence = Number(fields[1]);
+    if (
+        !Number.isSafeInteger(targetId) ||
+        targetId <= 0 ||
+        !Number.isSafeInteger(sequence) ||
+        sequence <= 0
+    ) {
+        return undefined;
+    }
+    return { sequence, targetId };
 }
 
-function selectedTarget(value: unknown): number | null | undefined {
-    if (typeof value !== "string") return undefined;
+function selectedTarget(value: unknown): number | undefined {
+    if (typeof value !== "string") {
+        return undefined;
+    }
     const fields = value.split(":");
     if (fields[0] === "selected" && fields.length === 3) {
         const targetId = Number(fields[1]);
-        return Number.isSafeInteger(targetId) && targetId >= 0 ? targetId || null : undefined;
+        return Number.isSafeInteger(targetId) && targetId >= 0 ? targetId || undefined : undefined;
     }
     if (fields[0] === "destroyed" && fields.length === 2) {
         const targetId = Number(fields[1]);
@@ -57,52 +70,73 @@ export function enableNativeFramePacing(
     process: PaceableProcess,
     native: NativeOverlayHandle,
 ): void {
-    if (!(native.supportsFrameRequests?.() ?? false) || native.on === undefined) return;
+    if (!(native.supportsFrameRequests?.() ?? false) || native.on === undefined) {
+        return;
+    }
 
-    const webContents = process.window.webContents;
-    let activeTarget: number | null = null;
-    let visible = true;
-    let destroyed = false;
-    let pendingSequence = 0;
-    let deliveredSequence = 0;
+    const { webContents } = process.window;
+    let activeTarget: number | undefined = undefined,
+        deliveredSequence = 0,
+        destroyed = false,
+        pendingSequence = 0,
+        visible = true;
 
     const stop = (): void => {
-        if (!webContents.isDestroyed?.() && webContents.isPainting()) {
-            webContents.stopPainting();
-        }
-    };
-    const requestPaint = (): void => {
-        if (destroyed || !visible || activeTarget === null || webContents.isDestroyed?.()) return;
-        if (!webContents.isPainting()) webContents.startPainting();
-        webContents.invalidate();
-    };
-    const onTarget = (value: unknown): void => {
-        const selected = selectedTarget(value);
-        if (selected === undefined) return;
-        if (selected !== null && selected < 0) {
-            if (activeTarget === -selected) activeTarget = null;
-        } else {
-            activeTarget = selected;
-        }
-        stop();
-    };
-    const onFrameRequest = (value: unknown): void => {
-        const request = parseFrameRequest(value);
-        if (request === null) return;
-        if (activeTarget !== null && request.targetId !== activeTarget) return;
-        activeTarget ??= request.targetId;
-        if (request.sequence <= pendingSequence) return;
-        pendingSequence = request.sequence;
-        requestPaint();
-    };
-    const onPaint = (): void => {
-        deliveredSequence = pendingSequence;
-        queueMicrotask(() => {
-            if (destroyed) return;
-            if (pendingSequence === deliveredSequence) stop();
-            else requestPaint();
-        });
-    };
+            if (!webContents.isDestroyed?.() && webContents.isPainting()) {
+                webContents.stopPainting();
+            }
+        },
+        requestPaint = (): void => {
+            if (destroyed || !visible || activeTarget === undefined || webContents.isDestroyed?.()) {
+                return;
+            }
+            if (!webContents.isPainting()) {
+                webContents.startPainting();
+            }
+            webContents.invalidate();
+        },
+        onTarget = (value: unknown): void => {
+            const selected = selectedTarget(value);
+            if (selected === undefined) {
+                return;
+            }
+            if (selected !== undefined && selected < 0) {
+                if (activeTarget === -selected) {
+                    activeTarget = undefined;
+                }
+            } else {
+                activeTarget = selected;
+            }
+            stop();
+        },
+        onFrameRequest = (value: unknown): void => {
+            const request = parseFrameRequest(value);
+            if (request === undefined) {
+                return;
+            }
+            if (activeTarget !== undefined && request.targetId !== activeTarget) {
+                return;
+            }
+            activeTarget ??= request.targetId;
+            if (request.sequence <= pendingSequence) {
+                return;
+            }
+            pendingSequence = request.sequence;
+            requestPaint();
+        },
+        onPaint = (): void => {
+            deliveredSequence = pendingSequence;
+            queueMicrotask(() => {
+                if (destroyed) {
+                    return;
+                }
+                if (pendingSequence === deliveredSequence) {
+                    stop();
+                } else {
+                    requestPaint();
+                }
+            });
+        };
 
     native.on("target", onTarget);
     native.on("frame-request", onFrameRequest);
@@ -113,7 +147,9 @@ export function enableNativeFramePacing(
     process.setVisible = async (nextVisible: boolean): Promise<void> => {
         await originalVisible(nextVisible);
         visible = nextVisible;
-        if (!visible) stop();
+        if (!visible) {
+            stop();
+        }
     };
 
     const originalDestroy = process.destroy.bind(process);

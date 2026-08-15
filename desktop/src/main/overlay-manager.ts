@@ -7,30 +7,33 @@ import type { ConfigStore } from "./config";
 import type { LocalOverlayRegistry } from "./local-overlays";
 import type { EditingTarget } from "./types";
 import type { OverlayProvider } from "./overlay-provider";
-import { NoopForegroundTracker, type ForegroundTracker } from "./foreground-tracker";
+import { type ForegroundTracker, NoopForegroundTracker } from "./foreground-tracker";
 
 const findProcessModule: unknown = createRequire(import.meta.url)("find-process");
-if (!findProcessModule || typeof findProcessModule !== "object"
-    || !("default" in findProcessModule) || typeof findProcessModule.default !== "function") {
+if (
+    !findProcessModule ||
+    typeof findProcessModule !== "object" ||
+    !("default" in findProcessModule) ||
+    typeof findProcessModule.default !== "function"
+) {
     throw new Error("find-process did not expose its process lookup function");
 }
-const findProcess = findProcessModule.default as typeof findProcessType;
-
-const PROCESS_SCAN_INTERVAL_MS = 1_000;
+const findProcess = findProcessModule.default as typeof findProcessType,
+    PROCESS_SCAN_INTERVAL_MS = 1000;
 
 export interface ManagedOverlayProcess {
     readonly pid: number;
     readonly events: EventEmitter<{ destroyed: [] }>;
     readonly window?: {
         webContents?: {
-            setFrameRate(frameRate: number): void;
+            setFrameRate: (frameRate: number) => void;
         };
     };
-    destroy(): Promise<void>;
-    setEditing(editing: boolean): Promise<void>;
-    setVisible(visible: boolean): Promise<void>;
-    flushPendingSave(): Promise<void>;
-    reload(): Promise<void>;
+    destroy: () => Promise<void>;
+    setEditing: (editing: boolean) => Promise<void>;
+    setVisible: (visible: boolean) => Promise<void>;
+    flushPendingSave: () => Promise<void>;
+    reload: () => Promise<void>;
 }
 
 export interface OverlayManagerDependencies {
@@ -62,7 +65,6 @@ export async function discoverTargetPids(options: RuntimeOptions): Promise<Set<n
     );
 }
 
-
 export class OverlayManager implements OverlayProvider {
     readonly events = new EventEmitter<{
         editingChanged: [editing: boolean];
@@ -70,15 +72,17 @@ export class OverlayManager implements OverlayProvider {
     }>();
     private readonly foregroundTracker: ForegroundTracker;
     private readonly discoverPids: () => Promise<Set<number>>;
-    private readonly initializeProcess: NonNullable<OverlayManagerDependencies["initializeProcess"]>;
+    private readonly initializeProcess: NonNullable<
+        OverlayManagerDependencies["initializeProcess"]
+    >;
     private readonly scheduleScan: NonNullable<OverlayManagerDependencies["scheduleScan"]>;
     private allowedPids = new Set<number>();
-    private foregroundPid: number | null = null;
-    private lastFocusedGamePid: number | null = null;
-    private active: { pid: number; process: ManagedOverlayProcess } | null = null;
-    private cancelScan: (() => void) | null = null;
-    private scanPromise: Promise<void> | null = null;
-    private stopPromise: Promise<void> | null = null;
+    private foregroundPid: number | undefined = undefined;
+    private lastFocusedGamePid: number | undefined = undefined;
+    private active: { pid: number; process: ManagedOverlayProcess } | undefined = undefined;
+    private cancelScan: (() => void) | undefined = undefined;
+    private scanPromise: Promise<void> | undefined = undefined;
+    private stopPromise: Promise<void> | undefined = undefined;
     private transitionTail: Promise<void> = Promise.resolve();
     private stopped = true;
     private editingValue = false;
@@ -92,13 +96,17 @@ export class OverlayManager implements OverlayProvider {
     ) {
         this.foregroundTracker = dependencies.foregroundTracker ?? new NoopForegroundTracker();
         this.discoverPids = dependencies.discoverPids ?? (() => this.findTargetPids());
-        this.initializeProcess = dependencies.initializeProcess ?? (async () => {
-            throw new Error("OverlayManager requires a platform overlay process initializer");
-        });
-        this.scheduleScan = dependencies.scheduleScan ?? ((scan) => {
-            const timer = setInterval(scan, PROCESS_SCAN_INTERVAL_MS);
-            return () => clearInterval(timer);
-        });
+        this.initializeProcess =
+            dependencies.initializeProcess ??
+            (async () => {
+                throw new Error("OverlayManager requires a platform overlay process initializer");
+            });
+        this.scheduleScan =
+            dependencies.scheduleScan ??
+            ((scan) => {
+                const timer = setInterval(scan, PROCESS_SCAN_INTERVAL_MS);
+                return () => clearInterval(timer);
+            });
     }
 
     get editing(): boolean {
@@ -114,7 +122,7 @@ export class OverlayManager implements OverlayProvider {
             return;
         }
         this.stopped = false;
-        this.stopPromise = null;
+        this.stopPromise = undefined;
         let receivedForegroundEvent = false;
         try {
             const initialForegroundPid = this.foregroundTracker.start((pid) => {
@@ -123,7 +131,7 @@ export class OverlayManager implements OverlayProvider {
                 }
                 receivedForegroundEvent = true;
                 this.foregroundPid = pid;
-                if (pid !== null && this.allowedPids.has(pid)) {
+                if (pid !== undefined && this.allowedPids.has(pid)) {
                     this.lastFocusedGamePid = pid;
                 }
                 void this.queueReconcile();
@@ -192,11 +200,11 @@ export class OverlayManager implements OverlayProvider {
         this.stopped = true;
         this.editingValue = false;
         this.visibleValue = true;
-        this.foregroundPid = null;
-        this.lastFocusedGamePid = null;
+        this.foregroundPid = undefined;
+        this.lastFocusedGamePid = undefined;
         this.allowedPids.clear();
         this.cancelScan?.();
-        this.cancelScan = null;
+        this.cancelScan = undefined;
         try {
             this.foregroundTracker.stop();
         } catch (error) {
@@ -204,21 +212,21 @@ export class OverlayManager implements OverlayProvider {
         }
 
         const pendingScan = this.scanPromise;
-        if (pendingScan !== null) {
+        if (pendingScan !== undefined) {
             await pendingScan;
         }
         await this.queueReconcile();
     }
 
     private scan(): void {
-        if (this.stopped || this.scanPromise !== null) {
+        if (this.stopped || this.scanPromise !== undefined) {
             return;
         }
         const pendingScan = this.runScan();
         this.scanPromise = pendingScan;
         void pendingScan.finally(() => {
             if (this.scanPromise === pendingScan) {
-                this.scanPromise = null;
+                this.scanPromise = undefined;
             }
         });
     }
@@ -251,30 +259,30 @@ export class OverlayManager implements OverlayProvider {
         return transition;
     }
 
-    private desiredPid(): number | null {
+    private desiredPid(): number | undefined {
         if (this.stopped) {
-            return null;
+            return undefined;
         }
-        if (this.foregroundPid !== null && this.allowedPids.has(this.foregroundPid)) {
+        if (this.foregroundPid !== undefined && this.allowedPids.has(this.foregroundPid)) {
             this.lastFocusedGamePid = this.foregroundPid;
         }
-        if (this.lastFocusedGamePid === null || !this.allowedPids.has(this.lastFocusedGamePid)) {
-            this.lastFocusedGamePid = null;
-            return null;
+        if (this.lastFocusedGamePid === undefined || !this.allowedPids.has(this.lastFocusedGamePid)) {
+            this.lastFocusedGamePid = undefined;
+            return undefined;
         }
         return this.lastFocusedGamePid;
     }
 
     private async reconcileSelection(): Promise<void> {
         const desiredPid = this.desiredPid();
-        if (this.active !== null && this.active.pid !== desiredPid) {
+        if (this.active !== undefined && this.active.pid !== desiredPid) {
             const previous = this.active;
-            this.active = null;
+            this.active = undefined;
             await previous.process.destroy();
         }
 
         const currentDesiredPid = this.desiredPid();
-        if (currentDesiredPid === null) {
+        if (currentDesiredPid === undefined) {
             return;
         }
         if (this.active?.pid === currentDesiredPid) {
@@ -284,11 +292,7 @@ export class OverlayManager implements OverlayProvider {
 
         let process: ManagedOverlayProcess;
         try {
-            process = await this.initializeProcess(
-                currentDesiredPid,
-                this,
-                this.visibleValue,
-            );
+            process = await this.initializeProcess(currentDesiredPid, this, this.visibleValue);
         } catch (error) {
             console.error(`Failed to attach vosulay overlay to PID ${currentDesiredPid}`, error);
             return;
@@ -298,7 +302,7 @@ export class OverlayManager implements OverlayProvider {
         process.events.once("destroyed", () => {
             destroyed = true;
             if (this.active?.process === process) {
-                this.active = null;
+                this.active = undefined;
                 if (!this.stopped) {
                     void this.queueReconcile();
                 }
@@ -331,18 +335,17 @@ export class OverlayManager implements OverlayProvider {
         console.log(`Attached vosulay overlay to PID ${currentDesiredPid}`);
     }
 
-    private async applyState(
-        active: { pid: number; process: ManagedOverlayProcess },
-    ): Promise<void> {
+    private async applyState(active: {
+        pid: number;
+        process: ManagedOverlayProcess;
+    }): Promise<void> {
         try {
             await active.process.setVisible(this.visibleValue);
-            await active.process.setEditing(
-                this.visibleValue && this.editingValue,
-            );
+            await active.process.setEditing(this.visibleValue && this.editingValue);
         } catch (error) {
             console.error(`Failed to apply overlay state for PID ${active.pid}`, error);
             if (this.active?.process === active.process) {
-                this.active = null;
+                this.active = undefined;
             }
             await active.process.destroy();
         }

@@ -1,53 +1,46 @@
-import { createRequire } from 'node:module';
-import EventEmitter from 'node:events';
-import path from 'node:path';
+import { createRequire } from "node:module";
+import EventEmitter from "node:events";
+import path from "node:path";
 
 import {
-    app,
     BrowserWindow,
     type Event as ElectronEvent,
     type Input,
-    type WebContents
-} from 'electron';
+    type WebContents,
+    app,
+} from "electron";
 
-import type { RuntimeOptions } from './options';
-import type { ConfigStore } from './config';
-import type { LocalOverlayRegistry } from './local-overlays';
-import type { EditingTarget } from './types';
+import type { RuntimeOptions } from "./options";
+import type { ConfigStore } from "./config";
+import type { LocalOverlayRegistry } from "./local-overlays";
+import type { EditingTarget } from "./types";
 import {
     type EditShortcutCommand,
     type NativeEditShortcutInput,
     NativeEditShortcutState,
-    editShortcutCommand
-} from './edit-shortcut';
-import {
-    chooseOverlayTarget,
-    type GpuLuid,
-    type OverlayTarget
-} from './overlay-target';
-import { HostBridge } from './host-bridge';
-import {
-    fatalProcessExit,
-    withFatalDeadline
-} from './fatal-deadline';
+    editShortcutCommand,
+} from "./edit-shortcut";
+import { type GpuLuid, type OverlayTarget, chooseOverlayTarget } from "./overlay-target";
+import { HostBridge } from "./host-bridge";
+import { fatalProcessExit, withFatalDeadline } from "./fatal-deadline";
 
 type OverlayEventListener<Args extends unknown[]> = (...args: Args) => void;
 
 interface OverlayEvent {
-    on(event: 'added', listener: OverlayEventListener<[number, number, number, GpuLuid]>): void;
-    on(event: 'resized', listener: OverlayEventListener<[number, number, number]>): void;
-    on(event: 'destroyed', listener: OverlayEventListener<[number]>): void;
-    on(event: 'error', listener: OverlayEventListener<[unknown]>): void;
-    on(event: 'disconnected', listener: OverlayEventListener<[]>): void;
-    on(event: 'keyboard_input', listener: OverlayEventListener<[number, KeyboardInput]>): void;
-    on(event: 'input_blocking_ended', listener: OverlayEventListener<[number]>): void;
-    off(event: 'added', listener: OverlayEventListener<[number, number, number, GpuLuid]>): void;
-    off(event: 'resized', listener: OverlayEventListener<[number, number, number]>): void;
-    off(event: 'destroyed', listener: OverlayEventListener<[number]>): void;
-    off(event: 'error', listener: OverlayEventListener<[unknown]>): void;
-    off(event: 'disconnected', listener: OverlayEventListener<[]>): void;
-    off(event: 'keyboard_input', listener: OverlayEventListener<[number, KeyboardInput]>): void;
-    off(event: 'input_blocking_ended', listener: OverlayEventListener<[number]>): void;
+    on(event: "added", listener: OverlayEventListener<[number, number, number, GpuLuid]>): void;
+    on(event: "resized", listener: OverlayEventListener<[number, number, number]>): void;
+    on(event: "destroyed", listener: OverlayEventListener<[number]>): void;
+    on(event: "error", listener: OverlayEventListener<[unknown]>): void;
+    on(event: "disconnected", listener: OverlayEventListener<[]>): void;
+    on(event: "keyboard_input", listener: OverlayEventListener<[number, KeyboardInput]>): void;
+    on(event: "input_blocking_ended", listener: OverlayEventListener<[number]>): void;
+    off(event: "added", listener: OverlayEventListener<[number, number, number, GpuLuid]>): void;
+    off(event: "resized", listener: OverlayEventListener<[number, number, number]>): void;
+    off(event: "destroyed", listener: OverlayEventListener<[number]>): void;
+    off(event: "error", listener: OverlayEventListener<[unknown]>): void;
+    off(event: "disconnected", listener: OverlayEventListener<[]>): void;
+    off(event: "keyboard_input", listener: OverlayEventListener<[number, KeyboardInput]>): void;
+    off(event: "input_blocking_ended", listener: OverlayEventListener<[number]>): void;
 }
 
 interface OverlayInstance {
@@ -61,16 +54,12 @@ interface OverlayInstance {
         top: unknown,
         right: unknown,
         bottom: unknown,
-        left: unknown
+        left: unknown,
     ): Promise<void> | void;
 }
 
 interface OverlayModule {
-    attach(
-        dllDirectory: string,
-        pid: number,
-        timeoutMs: number
-    ): Promise<OverlayInstance>;
+    attach(dllDirectory: string, pid: number, timeoutMs: number): Promise<OverlayInstance>;
 }
 
 interface OverlayInput {
@@ -80,13 +69,13 @@ interface OverlayInput {
 interface OverlayInputModule {
     connect(
         target: { readonly id: number; readonly overlay: OverlayInstance },
-        webContents: WebContents
+        webContents: WebContents,
     ): OverlayInput;
 }
 
 interface SurfaceEvents {
-    on(event: 'error', listener: OverlayEventListener<[unknown]>): void;
-    off(event: 'error', listener: OverlayEventListener<[unknown]>): void;
+    on(event: "error", listener: OverlayEventListener<[unknown]>): void;
+    off(event: "error", listener: OverlayEventListener<[unknown]>): void;
 }
 
 interface OverlaySurface {
@@ -98,7 +87,7 @@ interface OverlaySurfaceModule {
     connect(
         target: { readonly id: number; readonly overlay: OverlayInstance },
         luid: GpuLuid,
-        webContents: WebContents
+        webContents: WebContents,
     ): OverlaySurface;
 }
 
@@ -116,34 +105,33 @@ interface KeyboardInput extends NativeEditShortcutInput {
 }
 
 const loadWindowsOverlayRuntime = (): WindowsOverlayRuntime => {
-    const require = createRequire(import.meta.url);
-    const core = require('@asdf-overlay/core') as {
-        readonly Overlay: OverlayModule;
-        readonly defaultDllDir: () => string;
-        readonly length: (value: number) => unknown;
-    };
-    const input = require('@asdf-overlay/electron/input') as {
-        readonly ElectronOverlayInput: OverlayInputModule;
-    };
-    const surface = require('@asdf-overlay/electron/surface') as {
-        readonly ElectronOverlaySurface: OverlaySurfaceModule;
-    };
-    return {
-        overlay: core.Overlay,
-        defaultDllDir: core.defaultDllDir,
-        length: core.length,
-        input: input.ElectronOverlayInput,
-        surface: surface.ElectronOverlaySurface
-    };
-};
-const MANAGER_URL = 'vosulay://manager/index.html';
-const PRELOAD_PATH = path.join(app.getAppPath(), 'out/preload/index.js');
-const OVERLAY_ATTACH_TIMEOUT_MS = 5_000;
-const OVERLAY_WINDOW_TIMEOUT_MS = 30_000;
-const OVERLAY_WINDOW_SETTLE_MS = 250;
-const INPUT_REQUEST_TIMEOUT_MS = 5_000;
+        const require = createRequire(import.meta.url),
+            core = require("@asdf-overlay/core") as {
+                readonly Overlay: OverlayModule;
+                readonly defaultDllDir: () => string;
+                readonly length: (value: number) => unknown;
+            },
+            input = require("@asdf-overlay/electron/input") as {
+                readonly ElectronOverlayInput: OverlayInputModule;
+            },
+            surface = require("@asdf-overlay/electron/surface") as {
+                readonly ElectronOverlaySurface: OverlaySurfaceModule;
+            };
+        return {
+            defaultDllDir: core.defaultDllDir,
+            input: input.ElectronOverlayInput,
+            length: core.length,
+            overlay: core.Overlay,
+            surface: surface.ElectronOverlaySurface,
+        };
+    },
+    MANAGER_URL = "vosulay://manager/index.html",
+    PRELOAD_PATH = path.join(app.getAppPath(), "out/preload/index.js"),
+    INPUT_REQUEST_TIMEOUT_MS = 5000,
+    OVERLAY_ATTACH_TIMEOUT_MS = 5000,
+    OVERLAY_WINDOW_SETTLE_MS = 250,
+    OVERLAY_WINDOW_TIMEOUT_MS = 30_000;
 const INPUT_UNBLOCK_RETRY_MS = 50;
-
 
 export class OverlayProcess implements EditingTarget {
     readonly events = new EventEmitter<{ destroyed: [] }>();
@@ -153,13 +141,13 @@ export class OverlayProcess implements EditingTarget {
 
     private readonly hwnd: number;
     private readonly luid: GpuLuid;
-    private surface: OverlaySurface | null;
+    private surface: OverlaySurface | undefined;
     private readonly bridge: HostBridge;
-    private input: OverlayInput | null = null;
-    private resolveInputUnblocked: (() => void) | null = null;
-    private inputCapturePromise: Promise<void> | null = null;
-    private inputUnblockPromise: Promise<void> | null = null;
-    private destroyPromise: Promise<void> | null = null;
+    private input: OverlayInput | undefined = undefined;
+    private resolveInputUnblocked: (() => void) | undefined = undefined;
+    private inputCapturePromise: Promise<void> | undefined = undefined;
+    private inputUnblockPromise: Promise<void> | undefined = undefined;
+    private destroyPromise: Promise<void> | undefined = undefined;
     private destroying = false;
     private rendererLoaded = false;
     private destroyed = false;
@@ -172,73 +160,59 @@ export class OverlayProcess implements EditingTarget {
     private readonly nativeEditShortcuts = new NativeEditShortcutState();
     private readonly handleNativeKeyboardInput = (
         nativeHwnd: number,
-        input: KeyboardInput
+        input: KeyboardInput,
     ): void => {
         if (nativeHwnd !== this.hwnd) {
             return;
         }
 
-        if (input.kind === 'Key' && input.state === 'Released') {
+        if (input.kind === "Key" && input.state === "Released") {
             if (input.key.code === 0x49) {
-                this.consumedNativeEditShortcutKeys.delete('i');
+                this.consumedNativeEditShortcutKeys.delete("i");
             } else if (input.key.code === 0x52) {
-                this.consumedNativeEditShortcutKeys.delete('r');
+                this.consumedNativeEditShortcutKeys.delete("r");
             }
         }
 
         const command = this.nativeEditShortcuts.handle(input);
-        if (
-            command === null
-            || this.destroying
-            || this.destroyed
-            || !this.editingValue
-        ) {
+        if (command === undefined || this.destroying || this.destroyed || !this.editingValue) {
             return;
         }
 
-        this.consumedNativeEditShortcutKeys.add(
-            command === 'toggle-interaction' ? 'i' : 'r'
-        );
+        this.consumedNativeEditShortcutKeys.add(command === "toggle-interaction" ? "i" : "r");
         this.sendEditShortcutCommand(command);
     };
-    private readonly handleBeforeInputEvent = (
-        event: ElectronEvent,
-        input: Input
-    ): void => {
-        const key = input.key.toLowerCase();
-        const wasPressed = this.pressedEditShortcutKeys.has(key);
-        if (input.type === 'keyUp') {
+    private readonly handleBeforeInputEvent = (event: ElectronEvent, input: Input): void => {
+        const key = input.key.toLowerCase(),
+            wasPressed = this.pressedEditShortcutKeys.has(key);
+        if (input.type === "keyUp") {
             this.pressedEditShortcutKeys.delete(key);
             this.consumedNativeEditShortcutKeys.delete(key);
             return;
         }
-        if (input.type === 'keyDown' && (key === 'i' || key === 'r')) {
+        if (input.type === "keyDown" && (key === "i" || key === "r")) {
             this.pressedEditShortcutKeys.add(key);
         }
         if (this.destroying || this.destroyed || !this.editingValue) {
             return;
         }
 
-        const consumedByNative =
-            this.consumedNativeEditShortcutKeys.has(key);
-        const exactChord = input.type === 'keyDown'
-            && (
-                consumedByNative
-                || (
-                    input.control
-                    && !input.alt
-                    && !input.meta
-                    && !input.shift
-                    && (key === 'i' || key === 'r')
-                )
-            );
+        const consumedByNative = this.consumedNativeEditShortcutKeys.has(key),
+            exactChord =
+                input.type === "keyDown" &&
+                (consumedByNative ||
+                    (input.control &&
+                        !input.alt &&
+                        !input.meta &&
+                        !input.shift &&
+                        (key === "i" || key === "r")));
         if (!exactChord) {
             return;
         }
         event.preventDefault();
 
         const command = editShortcutCommand(input);
-        if (consumedByNative || command === null || wasPressed) {
+        if (consumedByNative || command === undefined || wasPressed) {
             return;
         }
         this.sendEditShortcutCommand(command);
@@ -255,12 +229,12 @@ export class OverlayProcess implements EditingTarget {
         overlay: OverlayInstance,
         window: BrowserWindow,
         luid: GpuLuid,
-        surface: OverlaySurface | null,
+        surface: OverlaySurface | undefined,
         private readonly editingTarget: EditingTarget,
         options: RuntimeOptions,
         configStore: ConfigStore,
         overlayRegistry: LocalOverlayRegistry,
-        private readonly runtime: WindowsOverlayRuntime
+        private readonly runtime: WindowsOverlayRuntime,
     ) {
         this.pid = pid;
         this.hwnd = hwnd;
@@ -268,39 +242,24 @@ export class OverlayProcess implements EditingTarget {
         this.window = window;
         this.luid = luid;
         this.surface = surface;
-        this.visibleValue = surface !== null;
+        this.visibleValue = surface !== undefined;
         this.bridge = new HostBridge(
             window.webContents,
             editingTarget,
             options,
             configStore,
-            overlayRegistry
+            overlayRegistry,
         );
-        window.webContents.on(
-            'before-input-event',
-            this.handleBeforeInputEvent
-        );
-        overlay.event.on(
-            'keyboard_input',
-            this.handleNativeKeyboardInput
-        );
-        overlay.event.on(
-            'resized',
-            (
-                resizedHwnd: number,
-                width: number,
-                height: number
-            ): void => {
-                if (resizedHwnd === this.hwnd && !this.window.isDestroyed()) {
-                    this.window.setSize(width, height, false);
-                }
+        window.webContents.on("before-input-event", this.handleBeforeInputEvent);
+        overlay.event.on("keyboard_input", this.handleNativeKeyboardInput);
+        overlay.event.on("resized", (resizedHwnd: number, width: number, height: number): void => {
+            if (resizedHwnd === this.hwnd && !this.window.isDestroyed()) {
+                this.window.setSize(width, height, false);
             }
-        );
-        overlay.event.on(
-            'input_blocking_ended',
-            (inputHwnd: number): void => {
+        });
+        overlay.event.on("input_blocking_ended", (inputHwnd: number): void => {
             if (inputHwnd === this.hwnd) {
-                const requested = this.resolveInputUnblocked !== null;
+                const requested = this.resolveInputUnblocked !== undefined;
                 this.releaseEditingInput();
                 this.finishInputUnblock();
                 if (
@@ -312,14 +271,14 @@ export class OverlayProcess implements EditingTarget {
                     void this.editingTarget.setEditing(false).catch((error: unknown) => {
                         console.error(
                             `Failed to reconcile ended input blocking for PID ${this.pid}`,
-                            error
+                            error,
                         );
                     });
                 }
             }
         });
-        this.surface?.events.on('error', this.handleSurfaceError);
-        window.on('closed', () => {
+        this.surface?.events.on("error", this.handleSurfaceError);
+        window.on("closed", () => {
             void this.destroy();
         });
 
@@ -347,18 +306,18 @@ export class OverlayProcess implements EditingTarget {
             const surface = this.runtime.surface.connect(
                 { id: this.hwnd, overlay: this.overlay },
                 this.luid,
-                this.window.webContents
+                this.window.webContents,
             );
-            surface.events.on('error', this.handleSurfaceError);
+            surface.events.on("error", this.handleSurfaceError);
             this.surface = surface;
             this.visibleValue = true;
             return;
         }
 
         await this.setEditing(false);
-        const surface = this.surface;
-        surface?.events.off('error', this.handleSurfaceError);
-        this.surface = null;
+        const { surface } = this;
+        surface?.events.off("error", this.handleSurfaceError);
+        this.surface = undefined;
         this.visibleValue = false;
         await surface?.disconnect();
     }
@@ -380,8 +339,8 @@ export class OverlayProcess implements EditingTarget {
         }
         if (!this.destroying && !this.destroyed) {
             await this.bridge.send({
-                type: 'editing',
-                editing: this.editingValue
+                editing: this.editingValue,
+                type: "editing",
             });
         }
     }
@@ -404,17 +363,14 @@ export class OverlayProcess implements EditingTarget {
     }
 
     destroy(): Promise<void> {
-        if (this.destroyPromise === null) {
+        if (this.destroyPromise === undefined) {
             this.destroying = true;
             // Defer the body so the shared promise is installed before any
-            // synchronous disconnect callback can re-enter destroy().
+            // Synchronous disconnect callback can re-enter destroy().
             this.destroyPromise = Promise.resolve()
                 .then(() => this.finishDestruction())
                 .catch((error: unknown) => {
-                    console.error(
-                        `Failed to tear down overlay for PID ${this.pid}`,
-                        error
-                    );
+                    console.error(`Failed to tear down overlay for PID ${this.pid}`, error);
                 });
         }
         return this.destroyPromise;
@@ -435,12 +391,12 @@ export class OverlayProcess implements EditingTarget {
     }
 
     private startBlockingInput(): Promise<void> {
-        if (this.inputCapturePromise === null) {
+        if (this.inputCapturePromise === undefined) {
             const capture = this.finishStartBlockingInput();
             this.inputCapturePromise = capture;
             const clear = (): void => {
                 if (this.inputCapturePromise === capture) {
-                    this.inputCapturePromise = null;
+                    this.inputCapturePromise = undefined;
                 }
             };
             void capture.then(clear, clear);
@@ -452,11 +408,9 @@ export class OverlayProcess implements EditingTarget {
         this.nativeEditShortcuts.clear();
         this.consumedNativeEditShortcutKeys.clear();
         await withFatalDeadline(
-            () => Promise.resolve(
-                this.overlay.blockInput(this.hwnd, true)
-            ),
+            () => Promise.resolve(this.overlay.blockInput(this.hwnd, true)),
             INPUT_REQUEST_TIMEOUT_MS,
-            `Native input capture timed out for PID ${this.pid}; terminating vosulay to release game input`
+            `Native input capture timed out for PID ${this.pid}; terminating vosulay to release game input`,
         );
 
         if (this.destroying || this.destroyed) {
@@ -467,7 +421,7 @@ export class OverlayProcess implements EditingTarget {
         try {
             this.input = this.runtime.input.connect(
                 { id: this.hwnd, overlay: this.overlay },
-                this.window.webContents
+                this.window.webContents,
             );
             this.editingValue = true;
             this.window.focusOnWebView();
@@ -478,12 +432,12 @@ export class OverlayProcess implements EditingTarget {
     }
 
     private stopBlockingInput(): Promise<void> {
-        if (this.inputUnblockPromise === null) {
+        if (this.inputUnblockPromise === undefined) {
             const unblock = this.finishStopBlockingInput();
             this.inputUnblockPromise = unblock;
             const clear = (): void => {
                 if (this.inputUnblockPromise === unblock) {
-                    this.inputUnblockPromise = null;
+                    this.inputUnblockPromise = undefined;
                 }
             };
             void unblock.then(clear, clear);
@@ -492,8 +446,8 @@ export class OverlayProcess implements EditingTarget {
     }
 
     private async finishStopBlockingInput(): Promise<void> {
-        let unblocked = false;
-        let resolveUnblocked!: () => void;
+        let resolveUnblocked!: () => void,
+            unblocked = false;
         const unblockedPromise = new Promise<void>((resolve) => {
             resolveUnblocked = () => {
                 unblocked = true;
@@ -506,35 +460,30 @@ export class OverlayProcess implements EditingTarget {
             await withFatalDeadline(
                 async () => {
                     while (!unblocked) {
-                        await Promise.resolve(
-                            this.overlay.blockInput(this.hwnd, false)
-                        );
+                        await Promise.resolve(this.overlay.blockInput(this.hwnd, false));
                         if (!unblocked) {
                             await Promise.race([
                                 unblockedPromise,
                                 new Promise<void>((resolve) => {
-                                    setTimeout(
-                                        resolve,
-                                        INPUT_UNBLOCK_RETRY_MS
-                                    );
-                                })
+                                    setTimeout(resolve, INPUT_UNBLOCK_RETRY_MS);
+                                }),
                             ]);
                         }
                     }
                 },
                 INPUT_REQUEST_TIMEOUT_MS,
-                `Native input release timed out for PID ${this.pid}; terminating vosulay to release game input`
+                `Native input release timed out for PID ${this.pid}; terminating vosulay to release game input`,
             );
         } finally {
             if (this.resolveInputUnblocked === resolveUnblocked) {
-                this.resolveInputUnblocked = null;
+                this.resolveInputUnblocked = undefined;
             }
         }
     }
 
     private finishInputUnblock(): void {
         const resolve = this.resolveInputUnblocked;
-        this.resolveInputUnblocked = null;
+        this.resolveInputUnblocked = undefined;
         resolve?.();
     }
 
@@ -544,14 +493,14 @@ export class OverlayProcess implements EditingTarget {
         } catch (error) {
             console.error(`Failed to disconnect overlay input for PID ${this.pid}`, error);
         }
-        this.input = null;
+        this.input = undefined;
         this.pressedEditShortcutKeys.clear();
         this.nativeEditShortcuts.clear();
         this.consumedNativeEditShortcutKeys.clear();
         this.editingValue = false;
         if (!this.window.isDestroyed()) {
             this.window.blurWebView();
-            void this.bridge.send({ type: 'editing', editing: false });
+            void this.bridge.send({ editing: false, type: "editing" });
         }
     }
 
@@ -569,12 +518,9 @@ export class OverlayProcess implements EditingTarget {
         try {
             this.overlay.destroy();
         } catch (error) {
-            console.error(
-                `Failed to destroy native overlay for PID ${this.pid}`,
-                error
-            );
+            console.error(`Failed to destroy native overlay for PID ${this.pid}`, error);
             fatalProcessExit(
-                `Native overlay teardown failed for PID ${this.pid}; terminating vosulay to release game input`
+                `Native overlay teardown failed for PID ${this.pid}; terminating vosulay to release game input`,
             );
         }
     }
@@ -583,40 +529,31 @@ export class OverlayProcess implements EditingTarget {
         if (this.destroyed) {
             return;
         }
-        this.overlay.event.off(
-            'keyboard_input',
-            this.handleNativeKeyboardInput
-        );
+        this.overlay.event.off("keyboard_input", this.handleNativeKeyboardInput);
         if (!this.window.isDestroyed()) {
-            const webContents = this.window.webContents;
+            const { webContents } = this.window;
             if (!webContents.isDestroyed()) {
-                webContents.removeListener(
-                    'before-input-event',
-                    this.handleBeforeInputEvent
-                );
+                webContents.removeListener("before-input-event", this.handleBeforeInputEvent);
             }
         }
         const capture = this.inputCapturePromise;
-        if (capture !== null) {
+        if (capture !== undefined) {
             try {
                 await capture;
             } catch (error) {
                 console.error(
                     `Failed to finish input capture before destroying PID ${this.pid}`,
-                    error
+                    error,
                 );
             }
         }
-        if (this.editingValue || this.inputUnblockPromise !== null) {
+        if (this.editingValue || this.inputUnblockPromise !== undefined) {
             try {
                 await this.stopBlockingInput();
             } catch (error) {
-                console.error(
-                    `Failed to release input before destroying PID ${this.pid}`,
-                    error
-                );
+                console.error(`Failed to release input before destroying PID ${this.pid}`, error);
                 fatalProcessExit(
-                    `Native input release failed for PID ${this.pid}; terminating vosulay to release game input`
+                    `Native input release failed for PID ${this.pid}; terminating vosulay to release game input`,
                 );
             }
         }
@@ -635,16 +572,16 @@ export class OverlayProcess implements EditingTarget {
         } catch (error) {
             console.error(`Failed to disconnect overlay input for PID ${this.pid}`, error);
         }
-        this.input = null;
+        this.input = undefined;
         try {
             this.bridge.dispose();
         } catch (error) {
             console.error(`Failed to dispose overlay bridge for PID ${this.pid}`, error);
         }
-        const surface = this.surface;
-        this.surface = null;
+        const { surface } = this;
+        this.surface = undefined;
         this.visibleValue = false;
-        surface?.events.off('error', this.handleSurfaceError);
+        surface?.events.off("error", this.handleSurfaceError);
         try {
             await surface?.disconnect();
         } catch (error) {
@@ -668,7 +605,7 @@ export class OverlayProcess implements EditingTarget {
         this.destroyed = true;
         if (!this.destroyedEmitted) {
             this.destroyedEmitted = true;
-            this.events.emit('destroyed');
+            this.events.emit("destroyed");
         }
     }
 
@@ -678,75 +615,73 @@ export class OverlayProcess implements EditingTarget {
         configStore: ConfigStore,
         overlayRegistry: LocalOverlayRegistry,
         editingTarget: EditingTarget,
-        visible: boolean
+        visible: boolean,
     ): Promise<OverlayProcess> {
-        const runtime = loadWindowsOverlayRuntime();
-        const overlay = await runtime.overlay.attach(
-            runtime.defaultDllDir().replaceAll('app.asar', 'app.asar.unpacked'),
-            pid,
-            OVERLAY_ATTACH_TIMEOUT_MS
-        );
-        let overlayWindow: BrowserWindow | null = null;
-        let surface: OverlaySurface | null = null;
-        let overlayProcess: OverlayProcess | null = null;
-        let targetHwnd: number | null = null;
-        let initializationError: unknown = null;
-        let initializationFailed = false;
-        let overlayConnected = true;
-        let rejectInitialization: ((reason: unknown) => void) | null = null;
-        let initializationComplete = false;
+        const runtime = loadWindowsOverlayRuntime(),
+            overlay = await runtime.overlay.attach(
+                runtime.defaultDllDir().replaceAll("app.asar", "app.asar.unpacked"),
+                pid,
+                OVERLAY_ATTACH_TIMEOUT_MS,
+            );
+        let initializationComplete = false,
+            initializationError: unknown = undefined,
+            initializationFailed = false,
+            overlayConnected = true,
+            overlayProcess: OverlayProcess | undefined = undefined,
+            overlayWindow: BrowserWindow | undefined = undefined,
+            rejectInitialization: ((reason: unknown) => void) | undefined = undefined,
+            surface: OverlaySurface | undefined = undefined,
+            targetHwnd: number | undefined = undefined;
 
         const failInitialization = (error: unknown): void => {
-            if (!initializationFailed) {
-                initializationFailed = true;
-                initializationError = error;
-            }
-            rejectInitialization?.(initializationError);
-        };
-        const onOverlayError = (error: unknown): void => {
-            if (initializationComplete) {
-                overlayProcess?.handleOverlayError(error);
-                return;
-            }
-            failInitialization(error);
-            if (overlayProcess !== null) {
-                void overlayProcess.destroy();
-            } else {
-                overlay.destroy();
-            }
-        };
-        const onOverlayDisconnected = (): void => {
-            overlayConnected = false;
-            if (overlayProcess !== null) {
-                overlayProcess.handleOverlayDisconnected();
-            }
-            if (!initializationComplete) {
+                if (!initializationFailed) {
+                    initializationFailed = true;
+                    initializationError = error;
+                }
+                rejectInitialization?.(initializationError);
+            },
+            onOverlayError = (error: unknown): void => {
+                if (initializationComplete) {
+                    overlayProcess?.handleOverlayError(error);
+                    return;
+                }
+                failInitialization(error);
+                if (overlayProcess === undefined) {
+                    overlay.destroy();
+                } else {
+                    void overlayProcess.destroy();
+                }
+            },
+            onOverlayDisconnected = (): void => {
+                overlayConnected = false;
+                if (overlayProcess !== undefined) {
+                    overlayProcess.handleOverlayDisconnected();
+                }
+                if (!initializationComplete) {
+                    failInitialization(new Error(`Overlay IPC disconnected for PID ${pid}`));
+                }
+            },
+            onTargetDestroyed = (destroyedHwnd: number): void => {
+                if (targetHwnd === undefined || destroyedHwnd !== targetHwnd) {
+                    return;
+                }
+                if (initializationComplete) {
+                    overlayProcess?.handleTargetDestroyed();
+                    return;
+                }
                 failInitialization(
-                    new Error(`Overlay IPC disconnected for PID ${pid}`)
+                    new Error(`Overlay target window ${destroyedHwnd} was destroyed`),
                 );
-            }
-        };
-        const onTargetDestroyed = (destroyedHwnd: number): void => {
-            if (targetHwnd === null || destroyedHwnd !== targetHwnd) {
-                return;
-            }
-            if (initializationComplete) {
-                overlayProcess?.handleTargetDestroyed();
-                return;
-            }
-            failInitialization(
-                new Error(`Overlay target window ${destroyedHwnd} was destroyed`)
-            );
-            if (overlayProcess !== null) {
-                void overlayProcess.destroy();
-            }
-        };
+                if (overlayProcess !== undefined) {
+                    void overlayProcess.destroy();
+                }
+            };
 
-        // asdf throws errors from its async event pump when no listener exists.
+        // Asdf throws errors from its async event pump when no listener exists.
         // Keep these listeners installed continuously from attach through teardown.
-        overlay.event.on('error', onOverlayError);
-        overlay.event.on('disconnected', onOverlayDisconnected);
-        overlay.event.on('destroyed', onTargetDestroyed);
+        overlay.event.on("error", onOverlayError);
+        overlay.event.on("disconnected", onOverlayDisconnected);
+        overlay.event.on("destroyed", onTargetDestroyed);
 
         const throwIfInitializationFailed = (): void => {
             if (initializationFailed) {
@@ -759,125 +694,121 @@ export class OverlayProcess implements EditingTarget {
                 [number, number, number, GpuLuid]
             >((resolve, reject) => {
                 const candidates = new Map<number, OverlayTarget>();
-                let timeout: NodeJS.Timeout | null = null;
-                let settleTimeout: NodeJS.Timeout | null = null;
-                let finished = false;
+                let finished = false,
+                    settleTimeout,
+                    timeout;
 
                 const describeCandidates = (): string => {
-                    const descriptions = [...candidates.values()].map((candidate) => (
-                        `${candidate.hwnd}:${candidate.width}x${candidate.height}`
-                        + `@${candidate.luid.high}:${candidate.luid.low}`
-                    ));
-                    return descriptions.length > 0 ? descriptions.join(', ') : 'none';
-                };
-                const cleanup = (): void => {
-                    if (finished) {
-                        return;
-                    }
-                    finished = true;
-                    if (timeout !== null) {
-                        clearTimeout(timeout);
-                    }
-                    if (settleTimeout !== null) {
-                        clearTimeout(settleTimeout);
-                    }
-                    overlay.event.off('added', onAdded);
-                    overlay.event.off('resized', onCandidateResized);
-                    overlay.event.off('destroyed', onCandidateDestroyed);
-                    rejectInitialization = null;
-                };
-                const selectBestCandidate = (): void => {
-                    const selected = chooseOverlayTarget(candidates.values());
-                    if (selected === null) {
-                        return;
-                    }
-                    targetHwnd = selected.hwnd;
-                    const observed = describeCandidates();
-                    cleanup();
-                    console.log(
-                        `Selected overlay window ${selected.hwnd} `
-                        + `(${selected.width}x${selected.height}) for PID ${pid}; `
-                        + `observed ${observed}`
-                    );
-                    resolve([
-                        selected.hwnd,
-                        selected.width,
-                        selected.height,
-                        selected.luid
-                    ]);
-                };
-                const scheduleSelection = (): void => {
-                    if (settleTimeout !== null) {
-                        clearTimeout(settleTimeout);
-                        settleTimeout = null;
-                    }
-                    if (chooseOverlayTarget(candidates.values()) !== null) {
-                        settleTimeout = setTimeout(
-                            selectBestCandidate,
-                            OVERLAY_WINDOW_SETTLE_MS
+                        const descriptions = [...candidates.values()].map(
+                            (candidate) =>
+                                `${candidate.hwnd}:${candidate.width}x${candidate.height}` +
+                                `@${candidate.luid.high}:${candidate.luid.low}`,
                         );
-                    }
-                };
-                const onAdded = (
-                    addedHwnd: number,
-                    addedWidth: number,
-                    addedHeight: number,
-                    addedLuid: GpuLuid
-                ): void => {
-                    candidates.set(addedHwnd, {
-                        hwnd: addedHwnd,
-                        width: addedWidth,
-                        height: addedHeight,
-                        luid: addedLuid
-                    });
-                    console.log(
-                        `Observed overlay window ${addedHwnd} `
-                        + `(${addedWidth}x${addedHeight}) for PID ${pid}`
-                    );
-                    scheduleSelection();
-                };
-                const onCandidateResized = (
-                    resizedHwnd: number,
-                    resizedWidth: number,
-                    resizedHeight: number
-                ): void => {
-                    const candidate = candidates.get(resizedHwnd);
-                    if (candidate === undefined) {
-                        return;
-                    }
-                    candidate.width = resizedWidth;
-                    candidate.height = resizedHeight;
-                    console.log(
-                        `Observed overlay window ${resizedHwnd} resize `
-                        + `to ${resizedWidth}x${resizedHeight} for PID ${pid}`
-                    );
-                    scheduleSelection();
-                };
-                const onCandidateDestroyed = (destroyedHwnd: number): void => {
-                    if (candidates.delete(destroyedHwnd)) {
+                        return descriptions.length > 0 ? descriptions.join(", ") : "none";
+                    },
+                    cleanup = (): void => {
+                        if (finished) {
+                            return;
+                        }
+                        finished = true;
+                        if (timeout !== undefined) {
+                            clearTimeout(timeout);
+                        }
+                        if (settleTimeout !== undefined) {
+                            clearTimeout(settleTimeout);
+                        }
+                        overlay.event.off("added", onAdded);
+                        overlay.event.off("resized", onCandidateResized);
+                        overlay.event.off("destroyed", onCandidateDestroyed);
+                        rejectInitialization = undefined;
+                    },
+                    selectBestCandidate = (): void => {
+                        const selected = chooseOverlayTarget(candidates.values());
+                        if (selected === undefined) {
+                            return;
+                        }
+                        targetHwnd = selected.hwnd;
+                        const observed = describeCandidates();
+                        cleanup();
                         console.log(
-                            `Overlay window ${destroyedHwnd} was destroyed `
-                            + `before selection for PID ${pid}`
+                            `Selected overlay window ${selected.hwnd} ` +
+                                `(${selected.width}x${selected.height}) for PID ${pid}; ` +
+                                `observed ${observed}`,
+                        );
+                        resolve([selected.hwnd, selected.width, selected.height, selected.luid]);
+                    },
+                    scheduleSelection = (): void => {
+                        if (settleTimeout !== undefined) {
+                            clearTimeout(settleTimeout);
+                            settleTimeout = undefined;
+                        }
+                        if (chooseOverlayTarget(candidates.values()) !== undefined) {
+                            settleTimeout = setTimeout(
+                                selectBestCandidate,
+                                OVERLAY_WINDOW_SETTLE_MS,
+                            );
+                        }
+                    },
+                    onAdded = (
+                        addedHwnd: number,
+                        addedWidth: number,
+                        addedHeight: number,
+                        addedLuid: GpuLuid,
+                    ): void => {
+                        candidates.set(addedHwnd, {
+                            height: addedHeight,
+                            hwnd: addedHwnd,
+                            luid: addedLuid,
+                            width: addedWidth,
+                        });
+                        console.log(
+                            `Observed overlay window ${addedHwnd} ` +
+                                `(${addedWidth}x${addedHeight}) for PID ${pid}`,
                         );
                         scheduleSelection();
-                    }
-                };
+                    },
+                    onCandidateResized = (
+                        resizedHwnd: number,
+                        resizedWidth: number,
+                        resizedHeight: number,
+                    ): void => {
+                        const candidate = candidates.get(resizedHwnd);
+                        if (candidate === undefined) {
+                            return;
+                        }
+                        candidate.width = resizedWidth;
+                        candidate.height = resizedHeight;
+                        console.log(
+                            `Observed overlay window ${resizedHwnd} resize ` +
+                                `to ${resizedWidth}x${resizedHeight} for PID ${pid}`,
+                        );
+                        scheduleSelection();
+                    },
+                    onCandidateDestroyed = (destroyedHwnd: number): void => {
+                        if (candidates.delete(destroyedHwnd)) {
+                            console.log(
+                                `Overlay window ${destroyedHwnd} was destroyed ` +
+                                    `before selection for PID ${pid}`,
+                            );
+                            scheduleSelection();
+                        }
+                    };
 
                 timeout = setTimeout(() => {
                     failInitialization(
                         new Error(
-                            `Timed out waiting for a viable overlay window for PID ${pid}; `
-                            + `observed ${describeCandidates()}`
-                        )
+                            `Timed out waiting for a viable overlay window for PID ${pid}; ` +
+                                `observed ${describeCandidates()}`,
+                        ),
                     );
                 }, OVERLAY_WINDOW_TIMEOUT_MS);
                 rejectInitialization = (reason) => {
                     cleanup();
                     reject(reason);
                 };
-                overlay.event.on('added', onAdded);
-                overlay.event.on('resized', onCandidateResized);
-                overlay.event.on('destroyed', onCandidateDestroyed);
+                overlay.event.on("added", onAdded);
+                overlay.event.on("resized", onCandidateResized);
+                overlay.event.on("destroyed", onCandidateDestroyed);
                 if (initializationFailed) {
                     rejectInitialization(initializationError);
                 }
@@ -893,55 +824,53 @@ export class OverlayProcess implements EditingTarget {
                 runtime.length(0),
                 runtime.length(0),
                 runtime.length(0),
-                runtime.length(0)
+                runtime.length(0),
             );
             throwIfInitializationFailed();
 
             const vosuOrigin = options.vosuUrl.origin;
             overlayWindow = new BrowserWindow({
-                show: false,
+                backgroundColor: "#00000000",
                 frame: false,
+                show: false,
                 transparent: true,
-                backgroundColor: '#00000000',
                 webPreferences: {
-                    preload: PRELOAD_PATH,
+                    additionalArguments: [`--vosulay-vosu-url=${options.vosuUrl.href}`],
+                    backgroundThrottling: false,
                     contextIsolation: true,
-                    sandbox: true,
                     nodeIntegration: false,
                     offscreen: {
+                        sharedTexturePixelFormat: "argb",
                         useSharedTexture: true,
-                        sharedTexturePixelFormat: 'argb'
                     },
+                    preload: PRELOAD_PATH,
+                    sandbox: true,
                     transparent: true,
-                    backgroundThrottling: false,
-                    additionalArguments: [
-                        `--vosulay-vosu-url=${options.vosuUrl.href}`
-                    ]
-                }
+                },
             });
             overlayWindow.setSize(width, height, false);
             await overlayWindow.loadURL(
-                'data:text/html,<style>html,body{background:transparent}</style>'
+                "data:text/html,<style>html,body{background:transparent}</style>",
             );
             throwIfInitializationFailed();
             overlayWindow.webContents.setWindowOpenHandler(() => ({
-                action: 'deny'
+                action: "deny",
             }));
-            overlayWindow.webContents.on('will-attach-webview', (event) => {
+            overlayWindow.webContents.on("will-attach-webview", (event) => {
                 event.preventDefault();
             });
-            overlayWindow.webContents.on('will-navigate', (event) => {
+            overlayWindow.webContents.on("will-navigate", (event) => {
                 event.preventDefault();
             });
 
-            overlayWindow.webContents.debugger.attach('1.3');
-            await overlayWindow.webContents.debugger.sendCommand('Page.enable');
+            overlayWindow.webContents.debugger.attach("1.3");
+            await overlayWindow.webContents.debugger.sendCommand("Page.enable");
             throwIfInitializationFailed();
             await overlayWindow.webContents.debugger.sendCommand(
-                'Page.addScriptToEvaluateOnNewDocument',
+                "Page.addScriptToEvaluateOnNewDocument",
                 {
-                    source: counterMetadataScript(vosuOrigin)
-                }
+                    source: counterMetadataScript(vosuOrigin),
+                },
             );
             throwIfInitializationFailed();
 
@@ -949,7 +878,7 @@ export class OverlayProcess implements EditingTarget {
                 surface = runtime.surface.connect(
                     { id: hwnd, overlay },
                     luid,
-                    overlayWindow.webContents
+                    overlayWindow.webContents,
                 );
             }
             overlayProcess = new OverlayProcess(
@@ -963,7 +892,7 @@ export class OverlayProcess implements EditingTarget {
                 options,
                 configStore,
                 overlayRegistry,
-                runtime
+                runtime,
             );
             throwIfInitializationFailed();
             await overlayWindow.loadURL(MANAGER_URL);
@@ -973,23 +902,18 @@ export class OverlayProcess implements EditingTarget {
             initializationComplete = true;
             return overlayProcess;
         } catch (error) {
-            if (overlayProcess !== null) {
-                await overlayProcess.destroy();
-            } else {
-                if (surface !== null) {
+            if (overlayProcess === undefined) {
+                if (surface !== undefined) {
                     try {
                         await surface.disconnect();
                     } catch (disconnectError) {
                         console.error(
                             `Failed to disconnect overlay surface for PID ${pid}`,
-                            disconnectError
+                            disconnectError,
                         );
                     }
                 }
-                if (
-                    overlayWindow !== null &&
-                    !overlayWindow.isDestroyed()
-                ) {
+                if (overlayWindow !== undefined && !overlayWindow.isDestroyed()) {
                     try {
                         if (overlayWindow.webContents.debugger.isAttached()) {
                             overlayWindow.webContents.debugger.detach();
@@ -997,7 +921,7 @@ export class OverlayProcess implements EditingTarget {
                     } catch (detachError) {
                         console.error(
                             `Failed to detach overlay debugger for PID ${pid}`,
-                            detachError
+                            detachError,
                         );
                     }
                     try {
@@ -1005,7 +929,7 @@ export class OverlayProcess implements EditingTarget {
                     } catch (windowError) {
                         console.error(
                             `Failed to destroy overlay window for PID ${pid}`,
-                            windowError
+                            windowError,
                         );
                     }
                 }
@@ -1016,10 +940,12 @@ export class OverlayProcess implements EditingTarget {
                     } catch (destroyError) {
                         console.error(
                             `Failed to destroy native overlay for PID ${pid}`,
-                            destroyError
+                            destroyError,
                         );
                     }
                 }
+            } else {
+                await overlayProcess.destroy();
             }
             throw error;
         }

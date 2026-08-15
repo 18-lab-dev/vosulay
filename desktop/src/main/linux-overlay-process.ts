@@ -3,8 +3,8 @@ import path from "node:path";
 
 import { createRequire } from "node:module";
 import type {
-    BrowserWindow as BrowserWindowType,
     BrowserWindowConstructorOptions,
+    BrowserWindow as BrowserWindowType,
     Rectangle,
     WebContentsPaintEventParams,
 } from "electron";
@@ -13,18 +13,18 @@ import type { ConfigStore } from "./config";
 import { HostBridge } from "./host-bridge";
 import type { LocalOverlayRegistry } from "./local-overlays";
 import {
-    NativeSharedTexture,
     type NativeBitmapDescriptor,
     type NativeOverlayHandle,
     type NativeOverlaySurface,
+    NativeSharedTexture,
 } from "./linux-overlay-provider";
 import type { ManagedOverlayProcess } from "./overlay-manager";
 import type { RuntimeOptions } from "./options";
 import type { EditingTarget } from "./types";
 
-const MANAGER_URL = "vosulay://manager/index.html";
-const FALLBACK_WIDTH = 1280;
-const FALLBACK_HEIGHT = 720;
+const FALLBACK_HEIGHT = 720,
+    FALLBACK_WIDTH = 1280,
+    MANAGER_URL = "vosulay://manager/index.html";
 
 export interface NativeTarget {
     id: number;
@@ -42,14 +42,14 @@ export type NativeTargetEvent =
 /// its real window.
 export interface TargetState {
     readonly known: ReadonlyMap<number, NativeTarget>;
-    readonly active: NativeTarget | null;
+    readonly active: NativeTarget | undefined;
     readonly generation: number;
 }
 
 export const EMPTY_TARGET_STATE: TargetState = {
-    known: new Map(),
-    active: null,
+    active: undefined,
     generation: 0,
+    known: new Map(),
 };
 interface NativeInputEvent {
     targetId: number;
@@ -65,112 +65,183 @@ interface PointerPosition {
     y: number;
 }
 
-const INPUT_KEY_DOWN = 1;
-const INPUT_KEY_UP = 2;
-const INPUT_TEXT = 3;
-const INPUT_MOUSE_MOVE = 4;
-const INPUT_MOUSE_DOWN = 5;
-const INPUT_MOUSE_UP = 6;
-const INPUT_MOUSE_WHEEL = 7;
-const INPUT_FLAG_REPEAT = 1 << 31;
+const INPUT_KEY_DOWN = 1,
+    INPUT_KEY_UP = 2,
+    INPUT_MOUSE_DOWN = 5,
+    INPUT_MOUSE_MOVE = 4,
+    INPUT_MOUSE_UP = 6,
+    INPUT_MOUSE_WHEEL = 7,
+    INPUT_TEXT = 3,
+    INPUT_FLAG_REPEAT = 1 << 31;
 
 function modifierNames(flags: number): Electron.InputEvent["modifiers"] {
     const modifiers: NonNullable<Electron.InputEvent["modifiers"]> = [];
-    if ((flags & 0x0001) !== 0 || (flags & 0x0002) !== 0) modifiers.push("shift");
-    if ((flags & 0x0040) !== 0 || (flags & 0x0080) !== 0) modifiers.push("control");
-    if ((flags & 0x0100) !== 0 || (flags & 0x0200) !== 0) modifiers.push("alt");
-    if ((flags & 0x0400) !== 0 || (flags & 0x0800) !== 0) modifiers.push("meta");
+    if ((flags & 0x00_01) !== 0 || (flags & 0x00_02) !== 0) {
+        modifiers.push("shift");
+    }
+    if ((flags & 0x00_40) !== 0 || (flags & 0x00_80) !== 0) {
+        modifiers.push("control");
+    }
+    if ((flags & 0x01_00) !== 0 || (flags & 0x02_00) !== 0) {
+        modifiers.push("alt");
+    }
+    if ((flags & 0x04_00) !== 0 || (flags & 0x08_00) !== 0) {
+        modifiers.push("meta");
+    }
     return modifiers.length === 0 ? undefined : modifiers;
 }
 
 function cdpModifiers(flags: number): number {
-    return (flags & 0x0c00 ? 4 : 0)
-        | (flags & 0x0003 ? 8 : 0)
-        | (flags & 0x00c0 ? 2 : 0)
-        | (flags & 0x0300 ? 1 : 0);
+    return (
+        (flags & 0x0C_00 ? 4 : 0) |
+        (flags & 0x00_03 ? 8 : 0) |
+        (flags & 0x00_c0 ? 2 : 0) |
+        (flags & 0x03_00 ? 1 : 0)
+    );
 }
 
-export function parseInput(value: unknown): NativeInputEvent | null {
-    if (typeof value !== "string") return null;
+export function parseInput(value: unknown): NativeInputEvent | undefined {
+    if (typeof value !== "string") {
+        return undefined;
+    }
     const fields = value.split(":").map(Number);
-    if (fields.length !== 6 || fields.some((field) => !Number.isSafeInteger(field))) return null;
+    if (fields.length !== 6 || fields.some((field) => !Number.isSafeInteger(field))) {
+        return undefined;
+    }
     const [targetId, kind, code, flags, first, second] = fields;
-    if (targetId === undefined || kind === undefined || code === undefined
-        || flags === undefined || first === undefined || second === undefined) return null;
-    return { targetId, kind, code, flags, value: first, value2: second };
+    if (
+        targetId === undefined ||
+        kind === undefined ||
+        code === undefined ||
+        flags === undefined ||
+        first === undefined ||
+        second === undefined
+    ) {
+        return undefined;
+    }
+    return { code, flags, kind, targetId, value: first, value2: second };
 }
 
 function mouseButton(code: number): "left" | "middle" | "right" | undefined {
-    if (code === 1) return "left";
-    if (code === 2) return "middle";
-    if (code === 3) return "right";
+    if (code === 1) {
+        return "left";
+    }
+    if (code === 2) {
+        return "middle";
+    }
+    if (code === 3) {
+        return "right";
+    }
     return undefined;
 }
 
-function keyCode(scancode: number, logical: number): string | null {
-    if (logical >= 32 && logical <= 126) return String.fromCodePoint(logical);
-    if (scancode >= 4 && scancode <= 29) return String.fromCharCode(65 + scancode - 4);
-    if (scancode >= 30 && scancode <= 38) return String(scancode - 29);
-    if (scancode === 39) return "0";
-    return new Map<number, string>([
-        [40, "Enter"], [41, "Escape"], [42, "Backspace"], [43, "Tab"], [44, "Space"],
-        [58, "F1"], [59, "F2"], [60, "F3"], [61, "F4"], [62, "F5"], [63, "F6"],
-        [64, "F7"], [65, "F8"], [66, "F9"], [67, "F10"], [68, "F11"], [69, "F12"],
-        [73, "Insert"], [74, "Home"], [75, "PageUp"], [76, "Delete"], [77, "End"],
-        [78, "PageDown"], [79, "Right"], [80, "Left"], [81, "Down"], [82, "Up"],
-    ]).get(scancode) ?? null;
+function keyCode(scancode: number, logical: number): string | undefined {
+    if (logical >= 32 && logical <= 126) {
+        return String.fromCodePoint(logical);
+    }
+    if (scancode >= 4 && scancode <= 29) {
+        return String.fromCharCode(65 + scancode - 4);
+    }
+    if (scancode >= 30 && scancode <= 38) {
+        return String(scancode - 29);
+    }
+    if (scancode === 39) {
+        return "0";
+    }
+    return (
+        new Map<number, string>([
+            [40, "Enter"],
+            [41, "Escape"],
+            [42, "Backspace"],
+            [43, "Tab"],
+            [44, "Space"],
+            [58, "F1"],
+            [59, "F2"],
+            [60, "F3"],
+            [61, "F4"],
+            [62, "F5"],
+            [63, "F6"],
+            [64, "F7"],
+            [65, "F8"],
+            [66, "F9"],
+            [67, "F10"],
+            [68, "F11"],
+            [69, "F12"],
+            [73, "Insert"],
+            [74, "Home"],
+            [75, "PageUp"],
+            [76, "Delete"],
+            [77, "End"],
+            [78, "PageDown"],
+            [79, "Right"],
+            [80, "Left"],
+            [81, "Down"],
+            [82, "Up"],
+        ]).get(scancode) ?? undefined
+    );
 }
 
 export function electronInput(
     input: NativeInputEvent,
     pointer: PointerPosition = { x: 0, y: 0 },
-): Electron.MouseInputEvent | Electron.MouseWheelInputEvent | Electron.KeyboardInputEvent | null {
+): Electron.MouseInputEvent | Electron.MouseWheelInputEvent | Electron.KeyboardInputEvent | undefined {
     if (input.kind === INPUT_MOUSE_MOVE) {
         return { type: "mouseMove", x: input.value, y: input.value2 };
     }
     if (input.kind === INPUT_MOUSE_DOWN || input.kind === INPUT_MOUSE_UP) {
         const button = mouseButton(input.code);
-        if (button === undefined) return null;
+        if (button === undefined) {
+            return undefined;
+        }
         return {
             type: input.kind === INPUT_MOUSE_DOWN ? "mouseDown" : "mouseUp",
             x: input.value,
             y: input.value2,
             button,
             // Mouse-button flags contain only SDL's click count. They are not
-            // keyboard modifier bits and must never be interpreted as such.
-            clickCount: Math.max(1, input.flags & 0xff),
+            // Keyboard modifier bits and must never be interpreted as such.
+            clickCount: Math.max(1, input.flags & 0xFF),
         };
     }
     if (input.kind === INPUT_MOUSE_WHEEL) {
         return {
+            deltaX: input.value,
+            deltaY: input.value2,
             type: "mouseWheel",
             x: pointer.x,
             y: pointer.y,
-            deltaX: input.value,
-            deltaY: input.value2,
         };
     }
     if (input.kind === INPUT_TEXT) {
-        if (input.value < 0 || input.value > 0x10ffff
-            || (input.value >= 0xd800 && input.value <= 0xdfff)) return null;
+        if (
+            input.value < 0 ||
+            input.value > 0x10FFFF ||
+            (input.value >= 0xd8_00 && input.value <= 0xDFFF)
+        ) {
+            return undefined;
+        }
         const text = String.fromCodePoint(input.value);
-        return { type: "char", keyCode: text };
+        return { keyCode: text, type: "char" };
     }
     if (input.kind === INPUT_KEY_DOWN || input.kind === INPUT_KEY_UP) {
         const key = keyCode(input.code, input.value);
-        if (key === null) return null;
+        if (key === undefined) {
+            return undefined;
+        }
         const event: Electron.KeyboardInputEvent = {
-            type: input.kind === INPUT_KEY_DOWN ? "keyDown" : "keyUp",
             keyCode: key,
+            type: input.kind === INPUT_KEY_DOWN ? "keyDown" : "keyUp",
         };
         let modifiers = modifierNames(input.flags);
         if ((input.flags & INPUT_FLAG_REPEAT) !== 0) {
             (modifiers ??= []).push("isautorepeat");
         }
-        if (modifiers !== undefined) event.modifiers = modifiers;
+        if (modifiers !== undefined) {
+            event.modifiers = modifiers;
+        }
         return event;
     }
-    return null;
+    return undefined;
 }
 
 /// Retained as a pure translator for tests and diagnostics. Runtime delivery
@@ -182,42 +253,75 @@ export function cdpInput(
 ): {
     method: string;
     params: Record<string, unknown>;
-} | null {
+} | undefined {
     if (input.kind === INPUT_MOUSE_MOVE) {
-        return { method: "Input.dispatchMouseEvent", params: {
-            type: "mouseMoved", x: input.value, y: input.value2, modifiers: 0,
-        } };
+        return {
+            method: "Input.dispatchMouseEvent",
+            params: {
+                modifiers: 0,
+                type: "mouseMoved",
+                x: input.value,
+                y: input.value2,
+            },
+        };
     }
     if (input.kind === INPUT_MOUSE_DOWN || input.kind === INPUT_MOUSE_UP) {
         const button = mouseButton(input.code);
-        if (button === undefined) return null;
-        return { method: "Input.dispatchMouseEvent", params: {
-            type: input.kind === INPUT_MOUSE_DOWN ? "mousePressed" : "mouseReleased",
-            x: input.value, y: input.value2, button,
-            clickCount: Math.max(1, input.flags & 0xff), modifiers: 0,
-        } };
+        if (button === undefined) {
+            return undefined;
+        }
+        return {
+            method: "Input.dispatchMouseEvent",
+            params: {
+                button,
+                clickCount: Math.max(1, input.flags & 0xFF),
+                modifiers: 0,
+                type: input.kind === INPUT_MOUSE_DOWN ? "mousePressed" : "mouseReleased",
+                x: input.value,
+                y: input.value2,
+            },
+        };
     }
     if (input.kind === INPUT_MOUSE_WHEEL) {
-        return { method: "Input.dispatchMouseEvent", params: {
-            type: "mouseWheel", x: pointer.x, y: pointer.y,
-            deltaX: input.value, deltaY: input.value2, modifiers: 0,
-        } };
+        return {
+            method: "Input.dispatchMouseEvent",
+            params: {
+                deltaX: input.value,
+                deltaY: input.value2,
+                modifiers: 0,
+                type: "mouseWheel",
+                x: pointer.x,
+                y: pointer.y,
+            },
+        };
     }
     if (input.kind === INPUT_TEXT) {
-        if (input.value < 0 || input.value > 0x10ffff
-            || (input.value >= 0xd800 && input.value <= 0xdfff)) return null;
+        if (
+            input.value < 0 ||
+            input.value > 0x10FFFF ||
+            (input.value >= 0xD8_00 && input.value <= 0xDF_FF)
+        ) {
+            return undefined;
+        }
         return { method: "Input.insertText", params: { text: String.fromCodePoint(input.value) } };
     }
     if (input.kind === INPUT_KEY_DOWN || input.kind === INPUT_KEY_UP) {
         const key = keyCode(input.code, input.value);
-        if (key === null) return null;
-        return { method: "Input.dispatchKeyEvent", params: {
-            type: input.kind === INPUT_KEY_DOWN ? "keyDown" : "keyUp",
-            key, code: key, modifiers: cdpModifiers(input.flags),
-            autoRepeat: (input.flags & INPUT_FLAG_REPEAT) !== 0,
-        } };
+        if (key === undefined) {
+            return undefined;
+        }
+        return {
+            method: "Input.dispatchKeyEvent",
+            params: {
+                autoRepeat: (input.flags & INPUT_FLAG_REPEAT) !== 0,
+                code: key,
+                key,
+                modifiers: cdpModifiers(input.flags),
+                type: input.kind === INPUT_KEY_DOWN ? "keyDown" : "keyUp",
+            },
+        };
     }
-    return null;
+    return undefined;
 }
 
 interface ElectronRuntime {
@@ -225,29 +329,44 @@ interface ElectronRuntime {
     BrowserWindow: new (options?: BrowserWindowConstructorOptions) => BrowserWindowType;
 }
 
-export function parseTargetEvent(value: unknown): NativeTargetEvent | null {
-    if (typeof value !== "string") return null;
+export function parseTargetEvent(value: unknown): NativeTargetEvent | undefined {
+    if (typeof value !== "string") {
+        return undefined;
+    }
     const fields = value.split(":");
     if (fields[0] === "destroyed" && fields.length === 2) {
         const targetId = Number(fields[1]);
         return Number.isSafeInteger(targetId) && targetId > 0
             ? { kind: "destroyed", targetId }
-            : null;
+            : undefined;
     }
     if (fields[0] === "selected" && fields.length === 3) {
-        const targetId = Number(fields[1]);
-        const generation = Number(fields[2]);
+        const targetId = Number(fields[1]),
+            generation = Number(fields[2]);
         // Zero is the agent saying it has no drawable to composite into, so it
-        // is a valid selection where it would be an invalid target id.
-        if (!Number.isSafeInteger(targetId) || targetId < 0) return null;
-        if (!Number.isSafeInteger(generation) || generation <= 0) return null;
-        return { kind: "selected", targetId, generation };
+        // Is a valid selection where it would be an invalid target id.
+        if (!Number.isSafeInteger(targetId) || targetId < 0) {
+            return undefined;
+        }
+        if (!Number.isSafeInteger(generation) || generation <= 0) {
+            return undefined;
+        }
+        return { generation, kind: "selected", targetId };
     }
-    if (fields[0] !== "created" || fields.length !== 4) return null;
-    const target = { id: Number(fields[1]), width: Number(fields[2]), height: Number(fields[3]) };
-    if (!Number.isSafeInteger(target.id) || target.id <= 0
-        || !Number.isSafeInteger(target.width) || target.width <= 0
-        || !Number.isSafeInteger(target.height) || target.height <= 0) return null;
+    if (fields[0] !== "created" || fields.length !== 4) {
+        return undefined;
+    }
+    const target = { height: Number(fields[3]), id: Number(fields[1]), width: Number(fields[2]) };
+    if (
+        !Number.isSafeInteger(target.id) ||
+        target.id <= 0 ||
+        !Number.isSafeInteger(target.width) ||
+        target.width <= 0 ||
+        !Number.isSafeInteger(target.height) ||
+        target.height <= 0
+    ) {
+        return undefined;
+    }
     return { kind: "created", target };
 }
 
@@ -256,16 +375,13 @@ export function parseTargetEvent(value: unknown): NativeTargetEvent | null {
 /// `selected` announcement changes which one is composited into. Treating
 /// creation as selection made Electron and the agent disagree, so frames were
 /// produced for one target while the agent composited another.
-export function nextTargetState(
-    state: TargetState,
-    event: NativeTargetEvent,
-): TargetState {
+export function nextTargetState(state: TargetState, event: NativeTargetEvent): TargetState {
     if (event.kind === "created") {
         const known = new Map(state.known);
         known.set(event.target.id, event.target);
         // A resize of the active target must be reflected immediately.
         const active = state.active?.id === event.target.id ? event.target : state.active;
-        return { known, active, generation: state.generation };
+        return { active, generation: state.generation, known };
     }
     if (event.kind === "destroyed") {
         if (!state.known.has(event.targetId) && state.active?.id !== event.targetId) {
@@ -273,21 +389,25 @@ export function nextTargetState(
         }
         const known = new Map(state.known);
         known.delete(event.targetId);
-        const active = state.active?.id === event.targetId ? null : state.active;
-        return { known, active, generation: state.generation };
+        const active = state.active?.id === event.targetId ? undefined : state.active;
+        return { active, generation: state.generation, known };
     }
     // Selections can be observed out of order; an older one must never undo a
-    // newer decision.
-    if (event.generation <= state.generation) return state;
-    const active = event.targetId === 0 ? null : state.known.get(event.targetId) ?? null;
-    return { known: state.known, active, generation: event.generation };
+    // Newer decision.
+    if (event.generation <= state.generation) {
+        return state;
+    }
+    const active = event.targetId === 0 ? undefined : (state.known.get(event.targetId) ?? undefined);
+    return { active, generation: event.generation, known: state.known };
 }
 
-function parseConsumed(value: unknown): number | null {
-    if (typeof value !== "string") return null;
-    const [, sequence] = value.split(":");
-    const parsed = Number(sequence);
-    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+function parseConsumed(value: unknown): number | undefined {
+    if (typeof value !== "string") {
+        return undefined;
+    }
+    const [, sequence] = value.split(":"),
+        parsed = Number(sequence);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 type OffscreenPreference = true | { useSharedTexture: true; sharedTexturePixelFormat: "argb" };
@@ -299,7 +419,7 @@ export function offscreenPreference(
     native: Pick<NativeOverlayHandle, "supportsDmabuf">,
 ): OffscreenPreference {
     return (native.supportsDmabuf?.() ?? true)
-        ? { useSharedTexture: true, sharedTexturePixelFormat: "argb" }
+        ? { sharedTexturePixelFormat: "argb", useSharedTexture: true }
         : true;
 }
 
@@ -308,14 +428,20 @@ export function offscreenPreference(
 export function bitmapFrame(
     targetId: number,
     image: { getSize(): { width: number; height: number }; toBitmap(): Buffer },
-): { descriptor: NativeBitmapDescriptor; bitmap: Buffer } | null {
+): { descriptor: NativeBitmapDescriptor; bitmap: Buffer } | undefined {
     const { width, height } = image.getSize();
-    if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height)) return null;
-    if (width <= 0 || height <= 0) return null;
-    const stride = width * 4;
-    const bitmap = image.toBitmap();
-    if (bitmap.length < stride * height) return null;
-    return { descriptor: { targetId, width, height, stride }, bitmap };
+    if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height)) {
+        return undefined;
+    }
+    if (width <= 0 || height <= 0) {
+        return undefined;
+    }
+    const stride = width * 4,
+        bitmap = image.toBitmap();
+    if (bitmap.length < stride * height) {
+        return undefined;
+    }
+    return { bitmap, descriptor: { height, stride, targetId, width } };
 }
 
 /// Tracks resources acquired while building an overlay process so a failure
@@ -326,7 +452,7 @@ export function bitmapFrame(
 /// that could clean anything up. Each step registers its own rollback and a
 /// failure unwinds them in reverse acquisition order.
 export class StartupTransaction {
-    private readonly rollbacks: Array<() => Promise<void> | void> = [];
+    private readonly rollbacks: (() => Promise<void> | void)[] = [];
 
     acquire(release: () => Promise<void> | void): void {
         this.rollbacks.push(release);
@@ -415,34 +541,38 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         visible: boolean,
     ): Promise<LinuxOverlayProcess> {
         // Electron is a runtime facade in Node tests and the real module in the packaged main process.
-        const { app, BrowserWindow } = createRequire(import.meta.url)("electron") as ElectronRuntime;
-        const startup = new StartupTransaction();
+        const { app, BrowserWindow } = createRequire(import.meta.url)(
+                "electron",
+            ) as ElectronRuntime,
+            startup = new StartupTransaction();
 
         try {
-            const createSurface = native.createSurface;
+            const { createSurface } = native;
             if (createSurface === undefined) {
                 throw new Error("Native overlay does not expose createSurface()");
             }
             startup.acquire(() => native.destroy());
 
             const window = new BrowserWindow({
-                show: false,
-                frame: false,
-                transparent: true,
                 backgroundColor: "#00000000",
+                frame: false,
+                show: false,
+                transparent: true,
                 webPreferences: {
-                    preload: path.join(app.getAppPath(), "out/preload/index.js"),
+                    additionalArguments: [`--vosulay-vosu-url=${options.vosuUrl.href}`],
+                    backgroundThrottling: false,
                     contextIsolation: true,
-                    sandbox: true,
                     nodeIntegration: false,
                     offscreen: offscreenPreference(native),
+                    preload: path.join(app.getAppPath(), "out/preload/index.js"),
+                    sandbox: true,
                     transparent: true,
-                    backgroundThrottling: false,
-                    additionalArguments: [`--vosulay-vosu-url=${options.vosuUrl.href}`],
                 },
             });
             startup.acquire(() => {
-                if (!window.isDestroyed()) window.destroy();
+                if (!window.isDestroyed()) {
+                    window.destroy();
+                }
             });
             window.setSize(FALLBACK_WIDTH, FALLBACK_HEIGHT, false);
             window.webContents.setFrameRate(options.fpsLimit);
@@ -451,20 +581,19 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
             window.webContents.on("will-navigate", (event) => event.preventDefault());
 
             // The window already exists here, which is exactly why this step
-            // used to leak it when the native surface could not be created.
-            const surface = await createSurface.call(native);
-
-            const process = new LinuxOverlayProcess(
-                pid,
-                native,
-                window,
-                surface,
-                editingTarget,
-                options,
-                configStore,
-                overlayRegistry,
-                visible,
-            );
+            // Used to leak it when the native surface could not be created.
+            const surface = await createSurface.call(native),
+                process = new LinuxOverlayProcess(
+                    pid,
+                    native,
+                    window,
+                    surface,
+                    editingTarget,
+                    options,
+                    configStore,
+                    overlayRegistry,
+                    visible,
+                );
             // Ownership has transferred; `destroy()` now releases everything.
             startup.commit();
             try {
@@ -484,7 +613,9 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
     }
 
     async destroy(): Promise<void> {
-        if (this.destroyed) return;
+        if (this.destroyed) {
+            return;
+        }
         this.destroyed = true;
         let failure: unknown;
         this.window.webContents.stopPainting();
@@ -502,43 +633,51 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         }
         try {
             // The native side owns GPU retirement. Do not release Chromium's
-            // textures merely because JS is tearing down: a submitted GL/Vulkan
-            // draw may still be reading them. Once native teardown completes,
-            // anything still present here is either locally discarded or no
-            // longer reachable by the target process.
+            // Textures merely because JS is tearing down: a submitted GL/Vulkan
+            // Draw may still be reading them. Once native teardown completes,
+            // Anything still present here is either locally discarded or no
+            // Longer reachable by the target process.
             await this.native.destroy();
         } catch (error) {
             failure ??= error;
         } finally {
             // A native session can end while a Vulkan swapchain image still
-            // retains the last submitted frame. Calling Chromium's release
-            // callback here would permit immediate producer reuse without a
+            // Retains the last submitted frame. Calling Chromium's release
+            // Callback here would permit immediate producer reuse without a
             // GPU-completion proof. Drop our JS bookkeeping and let destroying
-            // the offscreen window reclaim its renderer resources instead;
-            // locally discarded and completed frames were already released by
-            // their explicit `consumed` events.
+            // The offscreen window reclaim its renderer resources instead;
+            // Locally discarded and completed frames were already released by
+            // Their explicit `consumed` events.
             this.releases.clear();
-            if (!this.window.isDestroyed()) this.window.destroy();
+            if (!this.window.isDestroyed()) {
+                this.window.destroy();
+            }
             this.emitDestroyed();
         }
-        if (failure !== undefined) throw failure;
+        if (failure !== undefined) {
+            throw failure;
+        }
     }
 
     async setEditing(editing: boolean): Promise<void> {
         await (this.native.setEditing?.(editing) ?? this.native.captureInput?.(editing));
         this.editing = editing;
-        await this.bridge.send({ type: "editing", editing });
+        await this.bridge.send({ editing, type: "editing" });
     }
 
     async setVisible(visible: boolean): Promise<void> {
         this.visible = visible;
         await this.native.setVisible?.(visible);
-        if (!visible && this.targets.active !== null) await this.surface.clear?.(this.targets.active.id);
+        if (!visible && this.targets.active !== undefined) {
+            await this.surface.clear?.(this.targets.active.id);
+        }
         this.updatePainting();
     }
 
     async flushPendingSave(): Promise<void> {
-        if (!this.destroyed) await this.bridge.requestSaveFlush();
+        if (!this.destroyed) {
+            await this.bridge.requestSaveFlush();
+        }
     }
 
     async reload(): Promise<void> {
@@ -546,8 +685,10 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
     }
 
     private updatePainting(): void {
-        if (this.window.isDestroyed()) return;
-        const shouldPaint = !this.destroyed && this.visible && this.targets.active !== null;
+        if (this.window.isDestroyed()) {
+            return;
+        }
+        const shouldPaint = !this.destroyed && this.visible && this.targets.active !== undefined;
         if (shouldPaint && !this.window.webContents.isPainting()) {
             this.window.webContents.startPainting();
         } else if (!shouldPaint && this.window.webContents.isPainting()) {
@@ -557,22 +698,26 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
 
     private readonly handleTarget = (value: unknown): void => {
         const event = parseTargetEvent(value);
-        if (event === null || this.destroyed) return;
+        if (event === undefined || this.destroyed) {
+            return;
+        }
         const previous = this.targets.active;
         this.targets = nextTargetState(this.targets, event);
-        const target = this.targets.active;
-        const targetChanged = target?.id !== previous?.id;
-        const geometryChanged = target !== null && previous !== null
-            && target.id === previous.id
-            && (target.width !== previous.width || target.height !== previous.height);
+        const target = this.targets.active,
+            targetChanged = target?.id !== previous?.id,
+            geometryChanged =
+                target !== undefined &&
+                previous !== undefined &&
+                target.id === previous.id &&
+                (target.width !== previous.width || target.height !== previous.height);
         // Target selection/resize is not proof of GPU completion. Pending
-        // shared textures remain owned until the native agent explicitly emits
+        // Shared textures remain owned until the native agent explicitly emits
         // `consumed` (or reports a local discard before the frame was sent).
-        if (target !== null && (targetChanged || geometryChanged) && !this.window.isDestroyed()) {
+        if (target !== undefined && (targetChanged || geometryChanged) && !this.window.isDestroyed()) {
             this.window.setSize(target.width, target.height, false);
         }
         this.updatePainting();
-        if (targetChanged && target !== null && this.diagnostics) {
+        if (targetChanged && target !== undefined && this.diagnostics) {
             console.info(
                 `Native overlay target for PID ${this.pid}: ${target.id} ${target.width}x${target.height}`,
             );
@@ -581,7 +726,9 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
 
     private readonly handleConsumed = (value: unknown): void => {
         const sequence = parseConsumed(value);
-        if (sequence === null) return;
+        if (sequence === undefined) {
+            return;
+        }
         this.releases.get(sequence)?.();
         this.releases.delete(sequence);
         if (this.diagnostics && !this.firstFrameConsumed) {
@@ -592,16 +739,25 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
 
     private readonly handleInput = (value: unknown): void => {
         const input = parseInput(value);
-        if (input === null || input.targetId !== this.targets.active?.id || this.destroyed || !this.editing) {
+        if (
+            input === undefined ||
+            input.targetId !== this.targets.active?.id ||
+            this.destroyed ||
+            !this.editing
+        ) {
             return;
         }
-        if (input.kind === INPUT_MOUSE_MOVE
-            || input.kind === INPUT_MOUSE_DOWN
-            || input.kind === INPUT_MOUSE_UP) {
+        if (
+            input.kind === INPUT_MOUSE_MOVE ||
+            input.kind === INPUT_MOUSE_DOWN ||
+            input.kind === INPUT_MOUSE_UP
+        ) {
             this.pointer = { x: input.value, y: input.value2 };
         }
         const event = electronInput(input, this.pointer);
-        if (event === null) return;
+        if (event === undefined) {
+            return;
+        }
         try {
             this.window.webContents.sendInputEvent(event);
         } catch (error) {
@@ -612,7 +768,7 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
     private readonly handleInputEnd = (): void => {
         if (!this.destroyed && this.editing) {
             this.editing = false;
-            void this.bridge.send({ type: "editing", editing: false });
+            void this.bridge.send({ editing: false, type: "editing" });
         }
     };
 
@@ -627,18 +783,18 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         _dirtyRect: Rectangle,
         image: Electron.NativeImage,
     ): void => {
-        const texture = event.texture;
+        const { texture } = event;
         if (this.diagnostics && !this.firstPaintReported) {
             this.firstPaintReported = true;
             const size = image.getSize();
             console.info(
-                `Native overlay paint: transport=${texture === undefined ? "bitmap" : "shared-texture"}`
-                + ` size=${size.width}x${size.height} target=${this.targets.active !== null}`
-                + ` visible=${this.visible}`,
+                `Native overlay paint: transport=${texture === undefined ? "bitmap" : "shared-texture"}` +
+                    ` size=${size.width}x${size.height} target=${this.targets.active !== undefined}` +
+                    ` visible=${this.visible}`,
             );
         }
         const target = this.targets.active;
-        if (this.destroyed || !this.visible || target === null) {
+        if (this.destroyed || !this.visible || target === undefined) {
             texture?.release();
             return;
         }
@@ -656,7 +812,7 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
             texture.textureInfo,
             _dirtyRect,
         );
-        if (descriptor === null) {
+        if (descriptor === undefined) {
             texture.release();
             return;
         }
@@ -664,14 +820,14 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         if (this.diagnostics && !this.firstFrameForwarded) {
             const info = texture.textureInfo;
             console.info(
-                `Native overlay surface: format=${info.pixelFormat} widget=${info.widgetType}`
-                + ` coded=${info.codedSize.width}x${info.codedSize.height}`
-                + ` modifier=${descriptor.modifier} fourcc=${descriptor.fourcc}`
-                + ` planes=${descriptor.planes.length}`,
+                `Native overlay surface: format=${info.pixelFormat} widget=${info.widgetType}` +
+                    ` coded=${info.codedSize.width}x${info.codedSize.height}` +
+                    ` modifier=${descriptor.modifier} fourcc=${descriptor.fourcc}` +
+                    ` planes=${descriptor.planes.length}`,
             );
         }
         // Start from an already-resolved promise so a synchronous N-API throw
-        // takes the same cleanup path as an asynchronous rejection.
+        // Takes the same cleanup path as an asynchronous rejection.
         void Promise.resolve()
             .then(() => this.surface.updateDmabuf(descriptor))
             .then(() => {
@@ -693,13 +849,19 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
     /// agent uploads directly, so no channel swizzle happens per frame here.
     private forwardBitmap(target: NativeTarget, image: Electron.NativeImage): void {
         const update = this.surface.updateBitmap;
-        if (update === undefined) return;
-        if (this.bitmapInflight >= 2) return;
+        if (update === undefined) {
+            return;
+        }
+        if (this.bitmapInflight >= 2) {
+            return;
+        }
         const frame = bitmapFrame(target.id, image);
-        if (frame === null) return;
-        const { descriptor, bitmap } = frame;
-        const { width, height } = descriptor;
-        const sequence = ++this.sequence;
+        if (frame === undefined) {
+            return;
+        }
+        const { descriptor, bitmap } = frame,
+            { width, height } = descriptor,
+            sequence = ++this.sequence;
         this.bitmapInflight += 1;
         void Promise.resolve()
             .then(() => update.call(this.surface, descriptor, bitmap))
@@ -707,8 +869,8 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
                 if (this.diagnostics && !this.firstFrameForwarded) {
                     this.firstFrameForwarded = true;
                     console.info(
-                        `Forwarded native overlay bitmap frame ${sequence} (${width}x${height})`
-                        + ` for PID ${this.pid}`,
+                        `Forwarded native overlay bitmap frame ${sequence} (${width}x${height})` +
+                            ` for PID ${this.pid}`,
                     );
                 }
             })
@@ -721,7 +883,9 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
     }
 
     private emitDestroyed(): void {
-        if (this.destroyedEmitted) return;
+        if (this.destroyedEmitted) {
+            return;
+        }
         this.destroyedEmitted = true;
         this.events.emit("destroyed");
     }

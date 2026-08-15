@@ -835,24 +835,30 @@ unsafe extern "system" fn layer_create_device(
         };
         set_fallback_present(next_present);
 
-        let get_memory_fd_properties = requested_compositor.then(|| unsafe {
-            typed_function::<vk::PFN_vkGetMemoryFdPropertiesKHR>(next_get_device_proc_addr(
-                device,
-                c"vkGetMemoryFdPropertiesKHR".as_ptr(),
-            ))
-        }).flatten();
-        let get_image_memory_requirements2 = requested_compositor.then(|| unsafe {
-            typed_function::<vk::PFN_vkGetImageMemoryRequirements2>(next_get_device_proc_addr(
-                device,
-                c"vkGetImageMemoryRequirements2".as_ptr(),
-            ))
-            .or_else(|| {
-                typed_function::<vk::PFN_vkGetImageMemoryRequirements2>(next_get_device_proc_addr(
+        let get_memory_fd_properties = requested_compositor
+            .then(|| unsafe {
+                typed_function::<vk::PFN_vkGetMemoryFdPropertiesKHR>(next_get_device_proc_addr(
                     device,
-                    c"vkGetImageMemoryRequirements2KHR".as_ptr(),
+                    c"vkGetMemoryFdPropertiesKHR".as_ptr(),
                 ))
             })
-        }).flatten();
+            .flatten();
+        let get_image_memory_requirements2 = requested_compositor
+            .then(|| unsafe {
+                typed_function::<vk::PFN_vkGetImageMemoryRequirements2>(next_get_device_proc_addr(
+                    device,
+                    c"vkGetImageMemoryRequirements2".as_ptr(),
+                ))
+                .or_else(|| {
+                    typed_function::<vk::PFN_vkGetImageMemoryRequirements2>(
+                        next_get_device_proc_addr(
+                            device,
+                            c"vkGetImageMemoryRequirements2KHR".as_ptr(),
+                        ),
+                    )
+                })
+            })
+            .flatten();
         let get_image_format_properties2 = requested_compositor
             .then(|| {
                 instance.as_ref().and_then(|instance| unsafe {
@@ -873,12 +879,14 @@ unsafe extern "system" fn layer_create_device(
                 })
             })
             .flatten();
-        let get_swapchain_images = requested_compositor.then(|| unsafe {
-            typed_function::<vk::PFN_vkGetSwapchainImagesKHR>(next_get_device_proc_addr(
-                device,
-                c"vkGetSwapchainImagesKHR".as_ptr(),
-            ))
-        }).flatten();
+        let get_swapchain_images = requested_compositor
+            .then(|| unsafe {
+                typed_function::<vk::PFN_vkGetSwapchainImagesKHR>(next_get_device_proc_addr(
+                    device,
+                    c"vkGetSwapchainImagesKHR".as_ptr(),
+                ))
+            })
+            .flatten();
         let compositor_enabled = requested_compositor
             && get_memory_fd_properties.is_some()
             && get_image_memory_requirements2.is_some()
@@ -983,7 +991,9 @@ fn swapchain_is_compositable(create_info: &vk::SwapchainCreateInfoKHR<'_>) -> bo
         .image_usage
         .contains(vk::ImageUsageFlags::COLOR_ATTACHMENT)
         && create_info.image_array_layers == 1
-        && !create_info.flags.contains(vk::SwapchainCreateFlagsKHR::PROTECTED)
+        && !create_info
+            .flags
+            .contains(vk::SwapchainCreateFlagsKHR::PROTECTED)
 }
 
 unsafe extern "system" fn layer_create_swapchain(
@@ -1326,10 +1336,22 @@ mod tests {
     #[test]
     fn overlay_work_is_skipped_but_the_present_still_forwards() {
         assert!(!overlay_permitted(true, true, true, true), "latched off");
-        assert!(!overlay_permitted(false, false, true, true), "unknown queue");
-        assert!(!overlay_permitted(false, true, false, true), "null present info");
-        assert!(!overlay_permitted(false, true, true, false), "present-only queue");
-        assert!(overlay_permitted(false, true, true, true), "healthy graphics present");
+        assert!(
+            !overlay_permitted(false, false, true, true),
+            "unknown queue"
+        );
+        assert!(
+            !overlay_permitted(false, true, false, true),
+            "null present info"
+        );
+        assert!(
+            !overlay_permitted(false, true, true, false),
+            "present-only queue"
+        );
+        assert!(
+            overlay_permitted(false, true, true, true),
+            "healthy graphics present"
+        );
     }
 
     #[test]

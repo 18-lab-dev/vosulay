@@ -3,14 +3,16 @@ import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const nativeRoot = resolve(desktopRoot, "../native");
-const stageRoot = join(desktopRoot, "build/native");
-const publishRoot = join(nativeRoot, "target/vosulay-attach-publish");
+const desktopRoot = resolve(import.meta.dirname, ".."),
+    nativeRoot = resolve(desktopRoot, "../native"),
+    stageRoot = join(desktopRoot, "build/native"),
+    publishRoot = join(nativeRoot, "target/vosulay-attach-publish");
 
 function run(command, args, cwd) {
     const result = spawnSync(command, args, { cwd, stdio: "inherit" });
-    if (result.error) throw result.error;
+    if (result.error) {
+        throw result.error;
+    }
     if (result.status !== 0) {
         throw new Error(`${command} ${args.join(" ")} exited ${result.status}`);
     }
@@ -33,24 +35,31 @@ run(
     [
         "build",
         "--release",
-        "-p", "overlay-agent-gl",
-        "-p", "overlay-dotnet-bootstrap",
-        "-p", "overlay-vulkan-layer",
+        "-p",
+        "overlay-agent-gl",
+        "-p",
+        "overlay-dotnet-bootstrap",
+        "-p",
+        "overlay-vulkan-layer",
     ],
     nativeRoot,
 );
-rmSync(publishRoot, { recursive: true, force: true });
+rmSync(publishRoot, { force: true, recursive: true });
 run(
     "dotnet",
     [
         "publish",
         "dotnet/Vosulay.AttachProfiler/Vosulay.AttachProfiler.csproj",
-        "-c", "Release",
-        "-r", "linux-x64",
-        "--self-contained", "true",
+        "-c",
+        "Release",
+        "-r",
+        "linux-x64",
+        "--self-contained",
+        "true",
         "-p:PublishSingleFile=true",
         "-p:DebugType=None",
-        "-o", publishRoot,
+        "-o",
+        publishRoot,
     ],
     join(nativeRoot, "crates/overlay-dotnet-bootstrap"),
 );
@@ -62,12 +71,18 @@ const artifacts = [
     join(nativeRoot, "target/release/liboverlay_vulkan_layer.so"),
     join(nativeRoot, "VkLayer_VOSULAY_overlay.json"),
 ];
-for (const artifact of artifacts) requireFile(artifact);
+for (const artifact of artifacts) {
+    requireFile(artifact);
+}
 const attachFiles = readdirSync(publishRoot).map((name) => join(publishRoot, name));
-if (attachFiles.length === 0) throw new Error("profiler attach publish output is empty");
-for (const artifact of attachFiles) requireFile(artifact);
+if (attachFiles.length === 0) {
+    throw new Error("profiler attach publish output is empty");
+}
+for (const artifact of attachFiles) {
+    requireFile(artifact);
+}
 
-rmSync(stageRoot, { recursive: true, force: true });
+rmSync(stageRoot, { force: true, recursive: true });
 mkdirSync(join(stageRoot, "dotnet"), { recursive: true });
 for (const artifact of artifacts) {
     cpSync(artifact, join(stageRoot, basename(artifact)));
@@ -75,4 +90,6 @@ for (const artifact of artifacts) {
 for (const artifact of attachFiles) {
     cpSync(artifact, join(stageRoot, "dotnet", basename(artifact)));
 }
-console.log(`Staged ${artifacts.length + attachFiles.length} Linux native artifacts in ${stageRoot}`);
+console.log(
+    `Staged ${artifacts.length + attachFiles.length} Linux native artifacts in ${stageRoot}`,
+);

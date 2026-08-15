@@ -10,19 +10,19 @@ const SEGMENT_ESCAPES: Record<string, string> = {
 };
 
 // Mirrors the Rust url crate's path-segment encode set used by
-// src/api.rs counter_url: encodeURIComponent over-escapes characters the
+// Src/api.rs counter_url: encodeURIComponent over-escapes characters the
 // Rust side leaves bare, so revert those to keep persisted counter URLs
-// byte-identical across platforms.
+// Byte-identical across platforms.
 function encodePathSegment(segment: string): string {
-    return encodeURIComponent(segment).replace(
+    return encodeURIComponent(segment).replaceAll(
         /%2[46BC]|%3[ABD]|%40/gi,
         (escape) => SEGMENT_ESCAPES[escape.toUpperCase()] ?? escape,
     );
 }
 
 // Base URLs are normalized like the Rust side: query, fragment, and path are
-// replaced rather than rejected. Strict base validation belongs to option
-// parsing (see options.ts validateBaseUrl).
+// Replaced rather than rejected. Strict base validation belongs to option
+// Parsing (see options.ts validateBaseUrl).
 export function counterUrl(base: URL | string, counterId: string): URL {
     const url = new URL(base);
     url.search = "";

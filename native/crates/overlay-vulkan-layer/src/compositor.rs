@@ -434,51 +434,50 @@ impl Resources {
         )?;
         self.import_serial = self.import_serial.wrapping_add(1).max(1);
         let serial = self.import_serial;
-        let (surface_index, newly_imported) = if let Some(index) =
-            self.imports.iter().position(|surface| surface.key == key)
-        {
-            self.imports[index].last_used = serial;
-            (index, false)
-        } else {
-            let slot = if self.imports.len() < MAX_IMPORTED_SURFACES {
-                self.imports.len()
+        let (surface_index, newly_imported) =
+            if let Some(index) = self.imports.iter().position(|surface| surface.key == key) {
+                self.imports[index].last_used = serial;
+                (index, false)
             } else {
-                let Some((slot, _)) = self
-                    .imports
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, candidate)| {
-                        !self
-                            .image_imports
-                            .iter()
-                            .flatten()
-                            .any(|in_flight| *in_flight == candidate.key)
-                    })
-                    .min_by_key(|(_, candidate)| candidate.last_used)
-                else {
-                    return Ok(DrawOutcome::Busy);
+                let slot = if self.imports.len() < MAX_IMPORTED_SURFACES {
+                    self.imports.len()
+                } else {
+                    let Some((slot, _)) = self
+                        .imports
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, candidate)| {
+                            !self
+                                .image_imports
+                                .iter()
+                                .flatten()
+                                .any(|in_flight| *in_flight == candidate.key)
+                        })
+                        .min_by_key(|(_, candidate)| candidate.last_used)
+                    else {
+                        return Ok(DrawOutcome::Busy);
+                    };
+                    slot
                 };
-                slot
+                let imported = self.import_surface(
+                    raw,
+                    physical_device,
+                    descriptor,
+                    fds,
+                    get_memory_fd_properties,
+                    get_image_memory_requirements2,
+                    get_image_format_properties2,
+                    key,
+                    serial,
+                )?;
+                if slot == self.imports.len() {
+                    self.imports.push(imported);
+                } else {
+                    let retired = std::mem::replace(&mut self.imports[slot], imported);
+                    unsafe { destroy_imported_surface(raw, retired) };
+                }
+                (slot, true)
             };
-            let imported = self.import_surface(
-                raw,
-                physical_device,
-                descriptor,
-                fds,
-                get_memory_fd_properties,
-                get_image_memory_requirements2,
-                get_image_format_properties2,
-                key,
-                serial,
-            )?;
-            if slot == self.imports.len() {
-                self.imports.push(imported);
-            } else {
-                let retired = std::mem::replace(&mut self.imports[slot], imported);
-                unsafe { destroy_imported_surface(raw, retired) };
-            }
-            (slot, true)
-        };
         let descriptor_set = self.descriptor_sets[index];
         let command_buffer = self.command_buffers[index];
         let imported_image = self.imports[surface_index].image;
@@ -728,8 +727,8 @@ impl Resources {
         if dedicated_requirements.requires_dedicated_allocation != 0
             || dedicated_requirements.prefers_dedicated_allocation != 0
         {
-            import_info.p_next = (&mut dedicated_info as *mut vk::MemoryDedicatedAllocateInfo<'_>)
-                .cast();
+            import_info.p_next =
+                (&mut dedicated_info as *mut vk::MemoryDedicatedAllocateInfo<'_>).cast();
         }
         let allocation = vk::MemoryAllocateInfo::default()
             .push_next(&mut import_info)
@@ -829,11 +828,9 @@ fn ensure_import_supported(
         .push_next(&mut external_info)
         .push_next(&mut drm_info);
     let mut external_properties = vk::ExternalImageFormatProperties::default();
-    let mut properties =
-        vk::ImageFormatProperties2::default().push_next(&mut external_properties);
-    let result = unsafe {
-        get_image_format_properties2(physical_device, &format_info, &mut properties)
-    };
+    let mut properties = vk::ImageFormatProperties2::default().push_next(&mut external_properties);
+    let result =
+        unsafe { get_image_format_properties2(physical_device, &format_info, &mut properties) };
     if result != vk::Result::SUCCESS {
         return Err(result);
     }
