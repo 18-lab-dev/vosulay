@@ -1,9 +1,13 @@
 //! Minimal CoreCLR attach profiler that starts the native GL overlay agent.
+//!
+//! The profiler is only a bootstrap transport. Once the separately retained GL
+//! agent has copied the attach payload, the profiler detaches itself so a later
+//! DMA-BUF -> SHM fallback can use `AttachProfiler` again in the same process.
 
 use clr_profiler::{
     ClrProfiler, CorProfilerCallback, CorProfilerCallback2, CorProfilerCallback3,
     CorProfilerCallback4, CorProfilerCallback5, CorProfilerCallback6, CorProfilerCallback7,
-    CorProfilerCallback8, CorProfilerCallback9, ProfilerInfo,
+    CorProfilerCallback8, CorProfilerCallback9, CorProfilerInfo3, ProfilerInfo,
     ffi::{E_FAIL, HRESULT},
     register,
 };
@@ -14,6 +18,7 @@ pub const PROFILER_CLSID: Uuid = Uuid::from_bytes([
     0x60, 0xf0, 0xba, 0x7d, 0x3c, 0xe1, 0x4f, 0x69, 0x93, 0x26, 0x79, 0xa9, 0xe0, 0x21, 0xb4, 0xa8,
 ]);
 const MAX_PAYLOAD_LEN: usize = 4096;
+const DETACH_EXPECTED_COMPLETION_MS: u32 = 100;
 
 type AgentStart = unsafe extern "C" fn(*const u8, usize) -> i32;
 
@@ -82,8 +87,9 @@ fn agent_start(path: &[u8]) -> Result<AgentStart, HRESULT> {
     if library.is_null() {
         return Err(E_FAIL);
     }
-    // SAFETY: the GL agent exports this exact C ABI and the library is deliberately leaked
-    // for process lifetime so the function pointer stays valid.
+    // SAFETY: the GL agent exports this exact C ABI. This dlopen reference is
+    // deliberately retained for process lifetime so the agent remains loaded
+    // after CoreCLR detaches and unloads this bootstrap profiler.
     let symbol = unsafe { libc::dlsym(library, c"vosulay_agent_start_with_payload".as_ptr()) };
     if symbol.is_null() {
         return Err(E_FAIL);
@@ -92,11 +98,17 @@ fn agent_start(path: &[u8]) -> Result<AgentStart, HRESULT> {
 }
 
 #[derive(Clone)]
-struct VosulayAttachProfiler;
+struct VosulayAttachProfiler {
+    /// Retained only until `ProfilerAttachComplete`, when CoreCLR has made the
+    /// profiler active and `RequestProfilerDetach` is legal.
+    profiler_info: Option<ProfilerInfo>,
+}
 
 impl ClrProfiler for VosulayAttachProfiler {
     fn new() -> Self {
-        Self
+        Self {
+            profiler_info: None,
+        }
     }
 
     fn clsid(&self) -> &Uuid {
@@ -109,11 +121,11 @@ impl CorProfilerCallback2 for VosulayAttachProfiler {}
 impl CorProfilerCallback3 for VosulayAttachProfiler {
     fn initialize_for_attach(
         &mut self,
-        _profiler_info: ProfilerInfo,
+        profiler_info: ProfilerInfo,
         client_data: *const c_void,
         client_data_len: u32,
     ) -> Result<(), HRESULT> {
-        catch_unwind(|| {
+        let result = catch_unwind(|| {
             let payload = AttachPayload::parse(client_data, client_data_len)?;
             let start = agent_start(&payload.agent_path)?;
             // SAFETY: `payload` remains alive through the call; the agent copies it before return.
@@ -121,7 +133,22 @@ impl CorProfilerCallback3 for VosulayAttachProfiler {
                 unsafe { start(payload.agent_payload.as_ptr(), payload.agent_payload.len()) };
             if result < 0 { Err(E_FAIL) } else { Ok(()) }
         })
-        .unwrap_or(Err(E_FAIL))
+        .unwrap_or(Err(E_FAIL));
+
+        if result.is_ok() {
+            self.profiler_info = Some(profiler_info);
+        }
+        result
+    }
+
+    fn profiler_attach_complete(&mut self) -> Result<(), HRESULT> {
+        let Some(profiler_info) = self.profiler_info.take() else {
+            return Ok(());
+        };
+        // The native GL agent is now independently resident and owns its own
+        // control thread/hooks. Release CoreCLR's single active-profiler slot so
+        // OverlayManager can perform a fresh attach if DMA-BUF later downgrades.
+        profiler_info.request_profiler_detach(DETACH_EXPECTED_COMPLETION_MS)
     }
 }
 impl CorProfilerCallback4 for VosulayAttachProfiler {}
@@ -174,5 +201,12 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn bootstrap_starts_without_profiler_info_until_attach_completes() {
+        let profiler = VosulayAttachProfiler::new();
+        assert!(profiler.profiler_info.is_none());
+        assert_eq!(DETACH_EXPECTED_COMPLETION_MS, 100);
     }
 }
