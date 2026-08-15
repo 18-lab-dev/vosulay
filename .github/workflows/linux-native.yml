@@ -1,6 +1,18 @@
 name: Linux Native
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "native/**"
+      - "desktop/**"
+      - ".github/workflows/linux-native.yml"
+  pull_request:
+    paths:
+      - "native/**"
+      - "desktop/**"
+      - ".github/workflows/linux-native.yml"
   workflow_dispatch:
 
 concurrency:
@@ -61,14 +73,20 @@ jobs:
         working-directory: native
         run: npm install --no-audit --no-fund
 
+      # `native/package.json` -> scripts.build
       - name: Build addon
         working-directory: native
         run: npm run build
 
+      # `native/crates/overlay-agent-core/src/bin/overlay-fake-agent.rs` backs
+      # the integration test's agent side.
       - name: Build fake agent
         working-directory: native
         run: cargo build --release -p overlay-agent-core --bin overlay-fake-agent
 
+      # `native/test/overlay-node.integration.test.mjs` resolves both through
+      # `createRequire`/`spawn`, so they must be absolute; `native/package.json`
+      # -> scripts.test runs it.
       - name: Integration test
         working-directory: native
         env:
@@ -89,6 +107,9 @@ jobs:
         with:
           workspaces: native
 
+      # `native/test/run-gl-harnesses.sh` compiles the harnesses with
+      # -lX11 -lGL -lEGL -lGLESv2, and needs a software GL stack plus an X
+      # server to run them headlessly.
       - name: Install GL toolchain
         run: |
           sudo apt-get update
@@ -102,6 +123,12 @@ jobs:
           cargo build --release -p overlay-agent-gl
           cargo build --release -p overlay-host --example shm-checkerboard
 
+      # Both harnesses need a real drawable, so they run under Xvfb against
+      # Mesa's software rasteriser. They still enforce the assertion that
+      # matters most here — every saved GL state value must match after the
+      # overlay draw — and the agent must prove it composited a frame. Only the
+      # front-buffer pixel readback is waived, because it is not dependable on
+      # a virtual X server.
       - name: Run GL harnesses
         working-directory: native
         env:
@@ -133,6 +160,14 @@ jobs:
         working-directory: native
         run: cargo build --release -p overlay-vulkan-layer
 
+      # Confirms the packaged manifest still resolves against a real loader.
+      # `native/VkLayer_VOSULAY_overlay.json` is what `stage:native` ships and
+      # what `validate_vulkan_layer_directory` in
+      # `native/crates/overlay-node/src/lib.rs` requires at launch.
+      #
+      # The lavapipe ICD filename is not stable across Mesa packages, so it is
+      # discovered rather than hardcoded; failing loudly here beats silently
+      # validating against whatever driver the runner happens to expose.
       - name: Locate the lavapipe ICD
         id: icd
         run: |
@@ -153,6 +188,9 @@ jobs:
           VK_LAYER_PATH="$PWD" vulkaninfo --summary | tee /tmp/vulkaninfo.txt
           grep -q VK_LAYER_VOSULAY_overlay /tmp/vulkaninfo.txt
 
+      # The layer's own draw path needs a presenting swapchain, which lavapipe
+      # cannot provide headlessly here. Its unit tests still run under the
+      # validation environment so the fail-open and format logic is covered.
       - name: Layer unit tests under validation
         working-directory: native
         env:
@@ -175,6 +213,9 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
+      # `desktop/scripts/stage-native.mjs` publishes
+      # `native/crates/overlay-dotnet-bootstrap/dotnet/Vosulay.AttachProfiler`
+      # self-contained for linux-x64.
       - name: Set up .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
@@ -193,10 +234,14 @@ jobs:
         working-directory: desktop
         run: npm ci --force
 
+      # `desktop/package.json` -> scripts["stage:native"]
       - name: Stage native artifacts
         working-directory: desktop
         run: npm run stage:native
 
+      # `verify:package` inspects `dist/linux-unpacked`, so the electron-builder
+      # output has to exist first; `dist:linux` produces it and then runs the
+      # verification itself.
       - name: Build and verify the Linux package
         working-directory: desktop
         run: npm run dist:linux
