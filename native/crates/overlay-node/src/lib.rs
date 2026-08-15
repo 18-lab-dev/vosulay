@@ -535,8 +535,19 @@ impl OverlaySurface {
 }
 
 fn parse_u64(value: &str, field: &str) -> Result<u64> {
-    let value = value.strip_prefix("0x").unwrap_or(value);
-    u64::from_str_radix(value, 16).map_err(|_| fail(format!("invalid {field}")))
+    if let Some(hex) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        return u64::from_str_radix(hex, 16).map_err(|_| fail(format!("invalid {field}")));
+    }
+    // Electron serializes nativePixmap.modifier as a decimal string.
+    // Keep an unprefixed-hex fallback for older callers that used the
+    // previous convention, but never reinterpret a valid decimal.
+    value
+        .parse::<u64>()
+        .or_else(|_| u64::from_str_radix(value, 16))
+        .map_err(|_| fail(format!("invalid {field}")))
 }
 
 fn emit_event(shared: &Shared, name: &str, payload: String) {
@@ -851,10 +862,11 @@ impl Task for AttachTask {
         if let Some(attach) = &self.attach {
             attach.run(self.pid, &socket_name, &cookie, deadline)?;
         }
-        // Stable/Wine GL zero-copy is opt-in until the direct memory-object
-        // path has been validated against the caller's Chromium native-pixmap
-        // layout. The default remains the correctness-first SHM transport.
-        let expose_dmabuf = std::env::var_os("VOSULAY_GL_DMABUF").is_some();
+        // The agent probes the actual presenting context before advertising
+        // DMA-BUF and disconnects/re-attaches on a real import failure, so GL
+        // zero-copy is the default. Keep an explicit escape hatch for driver
+        // debugging or known-bad systems.
+        let expose_dmabuf = std::env::var_os("VOSULAY_GL_SHM_ONLY").is_none();
         connect_handle(
             host,
             socket_name,
@@ -1114,8 +1126,8 @@ pub fn launch_vulkan(options: VulkanLaunchOptions) -> AsyncTask<VulkanLaunchTask
 mod launch_tests {
     use super::{
         CommandQueue, Completion, DRM_FORMAT_ARGB8888, DmabufDescriptor, EventState,
-        SessionCommand, Shared, enqueue, prepend_layer_name, prepend_preload, prepend_search_path,
-        remaining,
+        SessionCommand, Shared, enqueue, parse_u64, prepend_layer_name, prepend_preload,
+        prepend_search_path, remaining,
     };
     use std::{
         collections::{HashMap, VecDeque},
@@ -1166,6 +1178,19 @@ mod launch_tests {
     fn unrepresentable_preload_paths_are_rejected() {
         assert!(prepend_preload(Path::new("/app dir/agent.so"), None).is_err());
         assert!(prepend_preload(Path::new("/app:dir/agent.so"), None).is_err());
+    }
+
+    #[test]
+    fn electron_modifiers_parse_as_decimal_with_explicit_hex_support() {
+        assert_eq!(
+            parse_u64("72057594037927935", "modifier").unwrap(),
+            0x00ff_ffff_ffff_ffff,
+        );
+        assert_eq!(
+            parse_u64("0x100000000000002", "modifier").unwrap(),
+            0x100000000000002
+        );
+        assert_eq!(parse_u64("deadbeef", "modifier").unwrap(), 0xdead_beef);
     }
 
     fn test_shared() -> Arc<Shared> {

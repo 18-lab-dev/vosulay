@@ -2694,16 +2694,18 @@ fn import_memory_object_surface(
     let [plane] = descriptor.planes.as_slice() else {
         return Err(());
     };
-    let tight_stride = descriptor.width.checked_mul(4).ok_or(())?;
-    // EXT_memory_object_fd has no DRM modifier or row-pitch parameter. Direct
-    // import is therefore valid only for a tightly packed linear allocation;
-    // other Chromium pixmaps need the GBM staging/blit path before this can be
-    // enabled by default.
-    if descriptor.modifier != 0
-        || plane.offset != 0
-        || plane.stride != tight_stride
-        || plane.size < u64::from(tight_stride).saturating_mul(u64::from(descriptor.height))
-    {
+    // Match the proven MangoHud/idk-overlay GLX path: the PRIME fd is
+    // imported as opaque external memory and the driver retains the
+    // allocation's native layout. The GL API has no modifier argument,
+    // so rejecting a perfectly valid tiled Chromium pixmap merely because
+    // its DRM modifier is non-zero prevents the path from ever being tried.
+    // Import only the byte range the texture can address; using the full
+    // padded allocation size is known to fail on some Mesa drivers.
+    let row_bytes = u64::from(plane.stride)
+        .checked_mul(u64::from(descriptor.height))
+        .ok_or(())?;
+    let import_size = plane.offset.checked_add(row_bytes).ok_or(())?;
+    if import_size == 0 || import_size > plane.size {
         return Err(());
     }
     let duplicate = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
@@ -2722,7 +2724,7 @@ fn import_memory_object_surface(
         // The GL call takes ownership of the duplicated descriptor.
         (memory_fns.import_fd)(
             memory,
-            plane.size,
+            import_size,
             GL_HANDLE_TYPE_OPAQUE_FD_EXT,
             owned.into_raw_fd(),
         );
@@ -2746,7 +2748,7 @@ fn import_memory_object_surface(
             descriptor.width as c_int,
             descriptor.height as c_int,
             memory,
-            0,
+            plane.offset,
         );
         if (g.get_error)() != 0 || !bound_texture_is_sampleable(g) {
             (g.delete_textures)(1, &texture);
@@ -2760,6 +2762,13 @@ fn import_memory_object_surface(
             delete: memory_fns.delete,
         },
         texture,
+    })
+}
+
+fn current_context_uses_egl() -> bool {
+    load_egl_dmabuf().is_some_and(|egl| {
+        // SAFETY: queried while the present hook owns the current context.
+        !unsafe { (egl.get_current_display)() }.is_null()
     })
 }
 
@@ -3134,9 +3143,19 @@ impl ContextResources {
         }
 
         let imported = if !g.is_gles {
-            load_gl_memory_object()
-                .and_then(|memory| import_memory_object_surface(&g, memory, descriptor, fd).ok())
-                .or_else(|| import_egl_surface(&g, descriptor, fds).ok())
+            let memory_object = load_gl_memory_object()
+                .and_then(|memory| import_memory_object_surface(&g, memory, descriptor, fd).ok());
+            if memory_object.is_some() {
+                memory_object
+            } else if current_context_uses_egl() {
+                // EGL-created desktop contexts may use EGLImage as a real
+                // fallback. A GLX context must never do so: Wine's GLX path
+                // can accept the bind yet sample black. Failed GLX opaque-fd
+                // import therefore triggers the session's SHM re-attach.
+                import_egl_surface(&g, descriptor, fds).ok()
+            } else {
+                None
+            }
         } else {
             import_egl_surface(&g, descriptor, fds).ok()
         };
