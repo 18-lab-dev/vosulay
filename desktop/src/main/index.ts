@@ -38,6 +38,10 @@ if (process.platform === 'win32') {
     // native pixmap backing and emits no paint texture.
     app.commandLine.appendSwitch('use-angle', 'vulkan');
     app.commandLine.appendSwitch('enable-features', 'Vulkan');
+    // Chromium still gates WebGPU behind an unsafe opt-in on some Linux GPU
+    // configurations. Overlay iframes already delegate the `webgpu` feature;
+    // this enables the browser-process side used by GPU-backed counters.
+    app.commandLine.appendSwitch('enable-unsafe-webgpu');
 }
 app.commandLine.appendSwitch('high-dpi-support', '1');
 app.commandLine.appendSwitch('force-device-scale-factor', '1');
