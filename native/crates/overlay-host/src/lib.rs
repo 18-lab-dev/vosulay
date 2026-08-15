@@ -1,8 +1,9 @@
 //! Host-side authenticated overlay session.
 use overlay_protocol::{
-    BoolValue, CAP_DMABUF, CAP_SHM, CAP_SHM_BGRA, CAP_TRANSPORT_MASK, COOKIE_LEN, DmabufDescriptor,
-    Endpoint, FrameConsumed, Hello, InputEvent, MAJOR_VERSION, MessageKind, Packet, ProtocolError,
-    SelectedTarget, Seqpacket, Target, TextureDescriptor,
+    BoolValue, CAP_DMABUF, CAP_FRAME_REQUEST, CAP_SHM, CAP_SHM_BGRA, CAP_TRANSPORT_MASK,
+    COOKIE_LEN, DmabufDescriptor, Endpoint, FrameConsumed, FrameRequest, Hello, InputEvent,
+    MAJOR_VERSION, MessageKind, Packet, ProtocolError, SelectedTarget, Seqpacket, Target,
+    TextureDescriptor,
 };
 use std::{
     collections::HashSet,
@@ -53,7 +54,7 @@ impl HostConfig {
             expected_uid: unsafe { libc::geteuid() },
             capabilities: 0,
             required_transports: CAP_TRANSPORT_MASK,
-            supported_capabilities: CAP_SHM | CAP_DMABUF | CAP_SHM_BGRA,
+            supported_capabilities: CAP_SHM | CAP_DMABUF | CAP_SHM_BGRA | CAP_FRAME_REQUEST,
         }
     }
 
@@ -64,7 +65,7 @@ impl HostConfig {
             expected_uid: unsafe { libc::geteuid() },
             capabilities: 0,
             required_transports: CAP_TRANSPORT_MASK,
-            supported_capabilities: CAP_SHM | CAP_DMABUF | CAP_SHM_BGRA,
+            supported_capabilities: CAP_SHM | CAP_DMABUF | CAP_SHM_BGRA | CAP_FRAME_REQUEST,
         }
     }
 }
@@ -238,6 +239,9 @@ pub enum HostEvent {
     /// authority for target selection; the host must not infer one from
     /// creation order.
     TargetSelected(SelectedTarget),
+    /// The target presented and is ready for one newer offscreen frame. This is
+    /// demand only, not a release acknowledgement, and may be coalesced.
+    FrameRequested(FrameRequest),
     Frame(HostFrame),
     Consumed(FrameConsumed),
     Cleared(u64),
@@ -267,7 +271,8 @@ impl HostSession {
     pub fn peer_pid(&self) -> u32 {
         self.peer_pid
     }
-    /// Frame transports both sides agreed on for this session.
+    /// Frame transports and optional demand-pacing capabilities both sides
+    /// agreed on for this session.
     pub fn capabilities(&self) -> u64 {
         self.capabilities
     }
@@ -450,6 +455,18 @@ impl HostSession {
                 }
                 Ok(HostEvent::TargetSelected(selection))
             }
+            MessageKind::FrameRequest => {
+                if self.capabilities & CAP_FRAME_REQUEST == 0 {
+                    return Err(ProtocolError::InvalidPayload.into());
+                }
+                let request = FrameRequest::decode(&p.payload)?;
+                if p.header.request_id != request.sequence
+                    || !self.targets.contains(&request.target_id)
+                {
+                    return Err(ProtocolError::InvalidPayload.into());
+                }
+                Ok(HostEvent::FrameRequested(request))
+            }
             MessageKind::Dmabuf => {
                 let descriptor = DmabufDescriptor::decode(&p.payload)?;
                 if p.fds.len() != descriptor.planes.len() {
@@ -506,6 +523,7 @@ impl Drop for HostSession {
 mod tests {
     use super::*;
     use std::thread;
+
     #[test]
     fn successful_handshake_and_target_lifecycle() {
         let pid = unsafe { libc::getpid() } as u32;
@@ -550,6 +568,7 @@ mod tests {
         assert!(!s.is_closed());
         t.join().unwrap();
     }
+
     #[test]
     fn process_group_handshake_accepts_the_authenticated_member() {
         let pid = unsafe { libc::getpid() }.cast_unsigned();
@@ -577,6 +596,7 @@ mod tests {
         assert_eq!(session.peer_pid(), pid);
         client.join().unwrap();
     }
+
     #[test]
     fn granted_capabilities_are_the_intersection_with_the_target() {
         let pid = unsafe { libc::getpid() }.cast_unsigned();
@@ -608,11 +628,81 @@ mod tests {
     }
 
     #[test]
+    fn frame_request_is_negotiated_and_requires_a_registered_target() {
+        let pid = unsafe { libc::getpid() }.cast_unsigned();
+        let host = Host::new(pid).unwrap();
+        let ep = host.endpoint().clone();
+        let cookie = host.cookie();
+        let client = thread::spawn(move || {
+            let connection = ep.connect().unwrap();
+            let hello = Hello {
+                cookie,
+                pid,
+                uid: unsafe { libc::geteuid() },
+                capabilities: CAP_SHM | CAP_FRAME_REQUEST,
+            };
+            connection
+                .send(
+                    &Packet::new(MessageKind::Hello, 1, hello.encode().to_vec(), Vec::new())
+                        .unwrap(),
+                )
+                .unwrap();
+            let welcome = connection.recv().unwrap();
+            assert_ne!(
+                u64::from_le_bytes(welcome.payload.as_slice().try_into().unwrap())
+                    & CAP_FRAME_REQUEST,
+                0,
+            );
+            connection
+                .send(
+                    &Packet::new(
+                        MessageKind::TargetCreate,
+                        0,
+                        Target {
+                            target_id: 7,
+                            width: 640,
+                            height: 480,
+                        }
+                        .encode()
+                        .to_vec(),
+                        Vec::new(),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+            let request = FrameRequest {
+                target_id: 7,
+                sequence: 3,
+            };
+            connection
+                .send(
+                    &Packet::new(
+                        MessageKind::FrameRequest,
+                        request.sequence,
+                        request.encode().unwrap().to_vec(),
+                        Vec::new(),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+        });
+        let mut session = host.accept().unwrap();
+        assert!(matches!(
+            session.recv().unwrap(),
+            HostEvent::TargetCreated(Target { target_id: 7, .. })
+        ));
+        assert!(matches!(
+            session.recv().unwrap(),
+            HostEvent::FrameRequested(FrameRequest {
+                target_id: 7,
+                sequence: 3
+            })
+        ));
+        client.join().unwrap();
+    }
+
+    #[test]
     fn a_dmabuf_only_target_negotiates_a_zero_copy_session() {
-        // The Vulkan layer can only consume imported buffers. Requiring shared
-        // memory from every agent used to force it to advertise a transport it
-        // cannot read, so the host selected SHM and the layer discarded every
-        // frame it was sent.
         let pid = unsafe { libc::getpid() }.cast_unsigned();
         let host = Host::new(pid).unwrap();
         let ep = host.endpoint().clone();
@@ -652,8 +742,8 @@ mod tests {
                 cookie,
                 pid,
                 uid: unsafe { libc::geteuid() },
-                // Colour ordering alone carries no pixels.
-                capabilities: CAP_SHM_BGRA,
+                // Colour ordering and demand pacing carry no pixels.
+                capabilities: CAP_SHM_BGRA | CAP_FRAME_REQUEST,
             };
             connection
                 .send(
@@ -661,13 +751,12 @@ mod tests {
                         .unwrap(),
                 )
                 .unwrap();
-            // Stay connected so the rejection cannot be mistaken for a peer
-            // that simply hung up before the welcome was written.
             let _ = connection.recv();
         });
         assert!(host.accept().is_err());
         client.join().unwrap();
     }
+
     #[test]
     fn bad_cookie_is_rejected() {
         let pid = unsafe { libc::getpid() } as u32;
@@ -697,6 +786,7 @@ mod tests {
         ));
         t.join().unwrap();
     }
+
     #[test]
     fn wrong_pid_is_rejected() {
         let pid = unsafe { libc::getpid() } as u32;
@@ -713,6 +803,7 @@ mod tests {
         ));
         t.join().unwrap();
     }
+
     #[test]
     fn failed_target_send_closes_session_without_publishing_target() {
         let pid = unsafe { libc::getpid() } as u32;
