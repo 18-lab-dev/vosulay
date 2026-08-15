@@ -60,6 +60,11 @@ interface NativeInputEvent {
     value2: number;
 }
 
+interface PointerPosition {
+    x: number;
+    y: number;
+}
+
 const INPUT_KEY_DOWN = 1;
 const INPUT_KEY_UP = 2;
 const INPUT_TEXT = 3;
@@ -76,6 +81,13 @@ function modifierNames(flags: number): Electron.InputEvent["modifiers"] {
     if ((flags & 0x0100) !== 0 || (flags & 0x0200) !== 0) modifiers.push("alt");
     if ((flags & 0x0400) !== 0 || (flags & 0x0800) !== 0) modifiers.push("meta");
     return modifiers.length === 0 ? undefined : modifiers;
+}
+
+function cdpModifiers(flags: number): number {
+    return (flags & 0x0c00 ? 4 : 0)
+        | (flags & 0x0003 ? 8 : 0)
+        | (flags & 0x00c0 ? 2 : 0)
+        | (flags & 0x0300 ? 1 : 0);
 }
 
 export function parseInput(value: unknown): NativeInputEvent | null {
@@ -111,6 +123,7 @@ function keyCode(scancode: number, logical: number): string | null {
 
 export function electronInput(
     input: NativeInputEvent,
+    pointer: PointerPosition = { x: 0, y: 0 },
 ): Electron.MouseInputEvent | Electron.MouseWheelInputEvent | Electron.KeyboardInputEvent | null {
     if (input.kind === INPUT_MOUSE_MOVE) {
         return { type: "mouseMove", x: input.value, y: input.value2 };
@@ -123,14 +136,16 @@ export function electronInput(
             x: input.value,
             y: input.value2,
             button,
-            clickCount: Math.max(1, input.flags),
+            // Mouse-button flags contain only SDL's click count. They are not
+            // keyboard modifier bits and must never be interpreted as such.
+            clickCount: Math.max(1, input.flags & 0xff),
         };
     }
     if (input.kind === INPUT_MOUSE_WHEEL) {
         return {
             type: "mouseWheel",
-            x: 0,
-            y: 0,
+            x: pointer.x,
+            y: pointer.y,
             deltaX: input.value,
             deltaY: input.value2,
         };
@@ -157,17 +172,20 @@ export function electronInput(
     }
     return null;
 }
-export function cdpInput(input: NativeInputEvent): {
+
+/// Retained as a pure translator for tests and diagnostics. Runtime delivery
+/// uses `webContents.sendInputEvent`, avoiding the DevTools protocol attachment
+/// and its per-event command allocation.
+export function cdpInput(
+    input: NativeInputEvent,
+    pointer: PointerPosition = { x: 0, y: 0 },
+): {
     method: string;
     params: Record<string, unknown>;
 } | null {
-    const modifiers = (input.flags & 0x0c00 ? 4 : 0)
-        | (input.flags & 0x0003 ? 8 : 0)
-        | (input.flags & 0x00c0 ? 2 : 0)
-        | (input.flags & 0x0300 ? 1 : 0);
     if (input.kind === INPUT_MOUSE_MOVE) {
         return { method: "Input.dispatchMouseEvent", params: {
-            type: "mouseMoved", x: input.value, y: input.value2, modifiers,
+            type: "mouseMoved", x: input.value, y: input.value2, modifiers: 0,
         } };
     }
     if (input.kind === INPUT_MOUSE_DOWN || input.kind === INPUT_MOUSE_UP) {
@@ -176,13 +194,13 @@ export function cdpInput(input: NativeInputEvent): {
         return { method: "Input.dispatchMouseEvent", params: {
             type: input.kind === INPUT_MOUSE_DOWN ? "mousePressed" : "mouseReleased",
             x: input.value, y: input.value2, button,
-            clickCount: Math.max(1, input.flags & 0xff), modifiers,
+            clickCount: Math.max(1, input.flags & 0xff), modifiers: 0,
         } };
     }
     if (input.kind === INPUT_MOUSE_WHEEL) {
         return { method: "Input.dispatchMouseEvent", params: {
-            type: "mouseWheel", x: 0, y: 0,
-            deltaX: input.value, deltaY: input.value2, modifiers,
+            type: "mouseWheel", x: pointer.x, y: pointer.y,
+            deltaX: input.value, deltaY: input.value2, modifiers: 0,
         } };
     }
     if (input.kind === INPUT_TEXT) {
@@ -195,13 +213,12 @@ export function cdpInput(input: NativeInputEvent): {
         if (key === null) return null;
         return { method: "Input.dispatchKeyEvent", params: {
             type: input.kind === INPUT_KEY_DOWN ? "keyDown" : "keyUp",
-            key, code: key, modifiers,
+            key, code: key, modifiers: cdpModifiers(input.flags),
             autoRepeat: (input.flags & INPUT_FLAG_REPEAT) !== 0,
         } };
     }
     return null;
 }
-
 
 interface ElectronRuntime {
     app: { getAppPath(): string };
@@ -349,8 +366,8 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
     /// faster than the agent can consume a full-frame SHM upload, and an
     /// unbounded queue copies ~14 MiB per paint into sealed memfds.
     private bitmapInflight = 0;
-    private debuggerAttached = false;
     private editing = false;
+    private pointer: PointerPosition = { x: 0, y: 0 };
     private readonly diagnostics = process.env.VOSULAY_NATIVE_DIAGNOSTICS === "1";
     private firstFrameForwarded = false;
     private firstFrameConsumed = false;
@@ -386,9 +403,6 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         window.webContents.on("paint", this.handlePaint);
         window.on("closed", () => void this.destroy());
         this.bridge.start();
-        window.webContents.debugger.on("detach", () => {
-            this.debuggerAttached = false;
-        });
     }
 
     static async create(
@@ -456,9 +470,8 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
             try {
                 await window.loadURL(MANAGER_URL);
                 window.webContents.navigationHistory.clear();
-                window.webContents.debugger.attach("1.3");
-                process.debuggerAttached = true;
                 await native.setVisible?.(visible);
+                process.updatePainting();
                 return process;
             } catch (error) {
                 await process.destroy();
@@ -474,6 +487,7 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         if (this.destroyed) return;
         this.destroyed = true;
         let failure: unknown;
+        this.window.webContents.stopPainting();
         this.window.webContents.off("paint", this.handlePaint);
         this.bridge.dispose();
         this.native.off?.("target", this.handleTarget);
@@ -481,9 +495,6 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         this.native.off?.("disconnect", this.handleDisconnect);
         this.native.off?.("input", this.handleInput);
         this.native.off?.("end", this.handleInputEnd);
-        if (this.debuggerAttached && this.window.webContents.debugger.isAttached()) {
-            this.window.webContents.debugger.detach();
-        }
         try {
             await this.surface.clear?.(this.targets.active?.id ?? 0);
         } catch (error) {
@@ -523,6 +534,7 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         this.visible = visible;
         await this.native.setVisible?.(visible);
         if (!visible && this.targets.active !== null) await this.surface.clear?.(this.targets.active.id);
+        this.updatePainting();
     }
 
     async flushPendingSave(): Promise<void> {
@@ -531,6 +543,16 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
 
     async reload(): Promise<void> {
         this.window.webContents.reloadIgnoringCache();
+    }
+
+    private updatePainting(): void {
+        if (this.window.isDestroyed()) return;
+        const shouldPaint = !this.destroyed && this.visible && this.targets.active !== null;
+        if (shouldPaint && !this.window.webContents.isPainting()) {
+            this.window.webContents.startPainting();
+        } else if (!shouldPaint && this.window.webContents.isPainting()) {
+            this.window.webContents.stopPainting();
+        }
     }
 
     private readonly handleTarget = (value: unknown): void => {
@@ -549,6 +571,7 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         if (target !== null && (targetChanged || geometryChanged) && !this.window.isDestroyed()) {
             this.window.setSize(target.width, target.height, false);
         }
+        this.updatePainting();
         if (targetChanged && target !== null && this.diagnostics) {
             console.info(
                 `Native overlay target for PID ${this.pid}: ${target.id} ${target.width}x${target.height}`,
@@ -572,13 +595,18 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         if (input === null || input.targetId !== this.targets.active?.id || this.destroyed || !this.editing) {
             return;
         }
-        const command = cdpInput(input);
-        if (command === null || !this.debuggerAttached) return;
-        void this.window.webContents.debugger
-            .sendCommand(command.method, command.params)
-            .catch((error: unknown) => {
-                console.error(`Failed to deliver captured input for PID ${this.pid}`, error);
-            });
+        if (input.kind === INPUT_MOUSE_MOVE
+            || input.kind === INPUT_MOUSE_DOWN
+            || input.kind === INPUT_MOUSE_UP) {
+            this.pointer = { x: input.value, y: input.value2 };
+        }
+        const event = electronInput(input, this.pointer);
+        if (event === null) return;
+        try {
+            this.window.webContents.sendInputEvent(event);
+        } catch (error) {
+            console.error(`Failed to deliver captured input for PID ${this.pid}`, error);
+        }
     };
 
     private readonly handleInputEnd = (): void => {
