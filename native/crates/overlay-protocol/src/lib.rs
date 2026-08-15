@@ -3,6 +3,7 @@
 //! ever exposed on the socket.
 
 use std::{
+    cell::RefCell,
     io, mem,
     os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd},
     ptr,
@@ -45,6 +46,15 @@ pub const CAP_TRANSPORT_MASK: u64 = CAP_SHM | CAP_DMABUF;
 pub const TEXTURE_FORMAT_STRAIGHT_RGBA8: u32 = 0;
 pub const TEXTURE_FORMAT_PREMULTIPLIED_RGBA8: u32 = 1;
 pub const TEXTURE_FORMAT_PREMULTIPLIED_BGRA8: u32 = 2;
+
+thread_local! {
+    /// One receive slab per control thread. Nonblocking control loops call
+    /// `recv()` hundreds of times per second while idle; allocating and
+    /// zero-filling 64 KiB on every `WouldBlock` iteration dominated allocator
+    /// and memory traffic. `recvmsg` overwrites exactly the returned prefix.
+    static RECV_BUFFER: RefCell<Box<[u8]>> =
+        RefCell::new(vec![0u8; MAX_PACKET].into_boxed_slice());
+}
 
 #[derive(Debug, Error)]
 pub enum ProtocolError {
@@ -892,8 +902,8 @@ impl Seqpacket {
         }
         Ok((c.uid, c.pid as u32))
     }
-    /// Send one packet with a finite deadline.  A peer that stops reading
-    /// cannot pin a caller in `sendmsg`.
+    /// Send one packet with a finite deadline. A peer that stops reading cannot
+    /// pin a caller in `sendmsg`.
     pub fn send(&self, p: &Packet) -> Result<(), ProtocolError> {
         const SEND_DEADLINE: Duration = Duration::from_secs(2);
         self.send_with_deadline(p, SEND_DEADLINE)
@@ -980,10 +990,14 @@ impl Seqpacket {
         }
     }
     pub fn recv(&self) -> Result<Packet, ProtocolError> {
-        let mut data = vec![0u8; MAX_PACKET];
+        RECV_BUFFER.with(|buffer| self.recv_with_buffer(&mut buffer.borrow_mut()))
+    }
+
+    fn recv_with_buffer(&self, data: &mut [u8]) -> Result<Packet, ProtocolError> {
+        debug_assert!(data.len() >= MAX_PACKET);
         let mut iov = libc::iovec {
-            iov_base: data.as_mut_ptr() as *mut _,
-            iov_len: data.len(),
+            iov_base: data.as_mut_ptr().cast(),
+            iov_len: MAX_PACKET,
         };
         let mut cbuf = ControlBuffer::zeroed();
         let mut msg: libc::msghdr = unsafe { mem::zeroed() };
@@ -1007,9 +1021,8 @@ impl Seqpacket {
         if n < 0 {
             return Err(io::Error::last_os_error().into());
         }
-        // Always take ownership before checking truncation/count.  Every
-        // descriptor visible in ancillary storage is then closed by `Packet`
-        // on every rejection path, including malformed cmsgs.
+        // Always take ownership before checking truncation/count. Every
+        // descriptor visible in ancillary storage is then closed on rejection.
         let mut fds = Vec::new();
         let mut ancillary_error = None;
         let mut c = unsafe { libc::CMSG_FIRSTHDR(&msg) };
@@ -1043,17 +1056,13 @@ impl Seqpacket {
         if let Some(e) = ancillary_error {
             return Err(e);
         }
-        if msg.msg_flags & libc::MSG_TRUNC != 0 {
-            return Err(ProtocolError::Truncated);
-        }
-        if msg.msg_flags & libc::MSG_CTRUNC != 0 {
+        if msg.msg_flags & libc::MSG_TRUNC != 0 || msg.msg_flags & libc::MSG_CTRUNC != 0 {
             return Err(ProtocolError::Truncated);
         }
         if fds.len() > MAX_FDS {
             return Err(ProtocolError::TooManyFds);
         }
-        data.truncate(n as usize);
-        Packet::decode(&data, fds)
+        Packet::decode(&data[..n as usize], fds)
     }
 }
 
@@ -1309,5 +1318,10 @@ mod tests {
     fn transport_mask_covers_exactly_the_frame_carrying_capabilities() {
         assert_eq!(CAP_TRANSPORT_MASK, CAP_SHM | CAP_DMABUF);
         assert_eq!(CAP_TRANSPORT_MASK & (CAP_SHM_BGRA | CAP_FRAME_REQUEST), 0);
+    }
+
+    #[test]
+    fn reusable_receive_slab_matches_the_wire_limit() {
+        RECV_BUFFER.with(|buffer| assert_eq!(buffer.borrow().len(), MAX_PACKET));
     }
 }
