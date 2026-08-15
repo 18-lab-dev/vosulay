@@ -90,9 +90,12 @@ struct InstanceDispatch {
 struct DeviceDispatch {
     next_get_device_proc_addr: vk::PFN_vkGetDeviceProcAddr,
     raw: Device,
+    physical_device: vk::PhysicalDevice,
     queues: Vec<u64>,
     compositor_enabled: bool,
     get_memory_fd_properties: Option<compositor::GetMemoryFdProperties>,
+    get_image_memory_requirements2: Option<compositor::GetImageMemoryRequirements2>,
+    get_image_format_properties2: Option<compositor::GetPhysicalDeviceImageFormatProperties2>,
     get_swapchain_images: Option<vk::PFN_vkGetSwapchainImagesKHR>,
 }
 impl Clone for DeviceDispatch {
@@ -100,9 +103,12 @@ impl Clone for DeviceDispatch {
         Self {
             next_get_device_proc_addr: self.next_get_device_proc_addr,
             raw: self.raw.clone(),
+            physical_device: self.physical_device,
             queues: self.queues.clone(),
             compositor_enabled: self.compositor_enabled,
             get_memory_fd_properties: self.get_memory_fd_properties,
+            get_image_memory_requirements2: self.get_image_memory_requirements2,
+            get_image_format_properties2: self.get_image_format_properties2,
             get_swapchain_images: self.get_swapchain_images,
         }
     }
@@ -120,6 +126,7 @@ struct DispatchState {
 struct QueueDispatch {
     device: u64,
     family: u32,
+    graphics: bool,
     /// Resolved once at queue registration. The present hook must be able to
     /// forward the application's call even when every other piece of overlay
     /// state is missing or poisoned, so it cannot depend on a later lookup
@@ -150,16 +157,23 @@ struct SwapchainRecord {
 struct SharedFrame {
     frame: Frame,
     acknowledgements: Arc<CompletionQueue>,
+    completion_failed: Arc<AtomicBool>,
 }
 impl Drop for SharedFrame {
     fn drop(&mut self) {
         // Runs on whichever thread last released the frame, including the
         // game's presentation thread, so publication must not block.
-        if let FrameDescriptor::Dmabuf(descriptor) = &self.frame.descriptor {
-            self.acknowledgements.push(FrameConsumed {
+        if let FrameDescriptor::Dmabuf(descriptor) = &self.frame.descriptor
+            && !self.acknowledgements.push(FrameConsumed {
                 target_id: descriptor.target_id,
                 sequence: descriptor.sequence,
-            });
+            })
+        {
+            // Losing the exact release notification would strand the Electron
+            // texture forever. Terminate the native session instead; the host
+            // recreates the OSR renderer after disconnect and no buffer is
+            // acknowledged before its GPU lifetime is known complete.
+            self.completion_failed.store(true, Ordering::Release);
         }
     }
 }
@@ -171,11 +185,8 @@ enum TargetCommand {
 
 struct Session {
     latest: Mutex<Option<Arc<SharedFrame>>>,
-    /// Frame releases are published from presentation lifetimes and drained by
-    /// the control thread. It must be lock-free: the control thread is inside a
-    /// socket send with a multi-second writability deadline for most of its
-    /// life, and a present must never wait behind host backpressure.
     acknowledgements: Arc<CompletionQueue>,
+    completion_failed: Arc<AtomicBool>,
     targets: Mutex<VecDeque<TargetCommand>>,
     /// Most recently presented registered swapchain. The present hook only
     /// writes this atomic; protocol I/O stays on the control thread.
@@ -216,12 +227,9 @@ fn fallback_present() -> Option<vk::PFN_vkQueuePresentKHR> {
     if raw == 0 {
         return None;
     }
-    // Stored from a `vk::PFN_vkQueuePresentKHR` in `set_fallback_present` and
-    // never from any other value.
     Some(unsafe { std::mem::transmute::<usize, vk::PFN_vkQueuePresentKHR>(raw) })
 }
 
-/// Latest frame published by the control thread, if any.
 fn session_frame() -> Option<Arc<SharedFrame>> {
     let latest = session().latest.lock();
     match latest {
@@ -232,9 +240,11 @@ fn session_frame() -> Option<Arc<SharedFrame>> {
 fn session() -> &'static Arc<Session> {
     SESSION.get_or_init(|| {
         let acknowledgements = Arc::new(CompletionQueue::new());
+        let completion_failed = Arc::new(AtomicBool::new(false));
         let session = Arc::new(Session {
             latest: Mutex::new(None),
             acknowledgements,
+            completion_failed,
             targets: Mutex::new(VecDeque::new()),
             selected_target: AtomicU64::new(0),
             connected: AtomicBool::new(false),
@@ -259,9 +269,6 @@ fn session_configuration() -> Option<(Endpoint, [u8; COOKIE_LEN])> {
 }
 
 fn run_session(session: Arc<Session>, endpoint: Endpoint, cookie: [u8; COOKIE_LEN]) {
-    // This layer has no SHM upload path: `SwapchainState::draw()` can only
-    // consume an imported DMA-BUF. Advertising shared memory would let the host
-    // negotiate a transport whose every frame the compositor then discards.
     let mut config = AgentConfig::dmabuf_only();
     if let Ok(pid) = std::env::var("VOSULAY_AGENT_HOST_PID").and_then(|value| {
         value
@@ -280,6 +287,9 @@ fn run_session(session: Arc<Session>, endpoint: Endpoint, cookie: [u8; COOKIE_LE
     let mut announced_target = 0u64;
     let mut selection_generation = 0u64;
     loop {
+        if session.completion_failed.load(Ordering::Acquire) {
+            break;
+        }
         while let Some(consumed) = session.acknowledgements.pop() {
             if agent.send_consumed(consumed).is_err() {
                 session.connected.store(false, Ordering::Release);
@@ -298,9 +308,6 @@ fn run_session(session: Arc<Session>, endpoint: Endpoint, cookie: [u8; COOKIE_LE
                 }
             }
         }
-        // Target registration is drained first, so a selection can never name
-        // a swapchain the host has not observed yet. The present thread only
-        // updates the atomic above; this is the sole socket writer.
         let selected = session.selected_target.load(Ordering::Acquire);
         if selected != announced_target {
             selection_generation = selection_generation.wrapping_add(1).max(1);
@@ -325,6 +332,7 @@ fn run_session(session: Arc<Session>, endpoint: Endpoint, cookie: [u8; COOKIE_LE
                     *latest = Some(Arc::new(SharedFrame {
                         frame,
                         acknowledgements: session.acknowledgements.clone(),
+                        completion_failed: session.completion_failed.clone(),
                     }));
                 }
             }
@@ -721,7 +729,7 @@ unsafe extern "system" fn layer_create_device(
             vk::EXT_QUEUE_FAMILY_FOREIGN_NAME,
         ];
         let mut extension_names = Vec::new();
-        let mut compositor_enabled = false;
+        let mut requested_compositor = false;
         let original_extensions = original_create_info.and_then(|original| {
             if original.enabled_extension_count == 0 {
                 Some(&[][..])
@@ -755,14 +763,14 @@ unsafe extern "system" fn layer_create_device(
                     extension_names.push(required.as_ptr());
                 }
             }
-            compositor_enabled = true;
+            requested_compositor = true;
         }
         let mut augmented_create_info = original_create_info.copied().unwrap_or_default();
-        if compositor_enabled {
+        if requested_compositor {
             augmented_create_info.enabled_extension_count = extension_names.len() as u32;
             augmented_create_info.pp_enabled_extension_names = extension_names.as_ptr();
         }
-        let forwarded_create_info = if compositor_enabled {
+        let forwarded_create_info = if requested_compositor {
             &raw const augmented_create_info
         } else {
             create_info
@@ -780,6 +788,9 @@ unsafe extern "system" fn layer_create_device(
                 c"vkGetDeviceQueue".as_ptr(),
             ))
         };
+        let queue_family_properties = instance.as_ref().map_or_else(Vec::new, |instance| unsafe {
+            instance.get_physical_device_queue_family_properties(physical_device)
+        });
         let mut queues = Vec::new();
         if let (Some(get_queue), Some(create_info)) = (get_queue, unsafe { create_info.as_ref() }) {
             let queue_infos = if create_info.queue_create_info_count == 0
@@ -795,6 +806,11 @@ unsafe extern "system" fn layer_create_device(
                 }
             };
             for queue_info in queue_infos {
+                let graphics = queue_family_properties
+                    .get(queue_info.queue_family_index as usize)
+                    .is_some_and(|properties| {
+                        properties.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+                    });
                 for queue_index in 0..queue_info.queue_count {
                     let mut queue = vk::Queue::null();
                     unsafe {
@@ -806,13 +822,11 @@ unsafe extern "system" fn layer_create_device(
                         )
                     };
                     if queue != vk::Queue::null() {
-                        queues.push((queue.as_raw(), queue_info.queue_family_index));
+                        queues.push((queue.as_raw(), queue_info.queue_family_index, graphics));
                     }
                 }
             }
         }
-        // Resolve the downstream present once, while the device link is known
-        // good, so the hot hook never needs a fallible lookup to forward.
         let next_present = unsafe {
             typed_function::<vk::PFN_vkQueuePresentKHR>((next_get_device_proc_addr)(
                 device,
@@ -820,14 +834,65 @@ unsafe extern "system" fn layer_create_device(
             ))
         };
         set_fallback_present(next_present);
+
+        let get_memory_fd_properties = requested_compositor.then(|| unsafe {
+            typed_function::<vk::PFN_vkGetMemoryFdPropertiesKHR>(next_get_device_proc_addr(
+                device,
+                c"vkGetMemoryFdPropertiesKHR".as_ptr(),
+            ))
+        }).flatten();
+        let get_image_memory_requirements2 = requested_compositor.then(|| unsafe {
+            typed_function::<vk::PFN_vkGetImageMemoryRequirements2>(next_get_device_proc_addr(
+                device,
+                c"vkGetImageMemoryRequirements2".as_ptr(),
+            ))
+            .or_else(|| {
+                typed_function::<vk::PFN_vkGetImageMemoryRequirements2>(next_get_device_proc_addr(
+                    device,
+                    c"vkGetImageMemoryRequirements2KHR".as_ptr(),
+                ))
+            })
+        }).flatten();
+        let get_image_format_properties2 = requested_compositor
+            .then(|| {
+                instance.as_ref().and_then(|instance| unsafe {
+                    typed_function::<vk::PFN_vkGetPhysicalDeviceImageFormatProperties2>(
+                        next_get_instance_proc_addr(
+                            instance.handle(),
+                            c"vkGetPhysicalDeviceImageFormatProperties2".as_ptr(),
+                        ),
+                    )
+                    .or_else(|| {
+                        typed_function::<vk::PFN_vkGetPhysicalDeviceImageFormatProperties2>(
+                            next_get_instance_proc_addr(
+                                instance.handle(),
+                                c"vkGetPhysicalDeviceImageFormatProperties2KHR".as_ptr(),
+                            ),
+                        )
+                    })
+                })
+            })
+            .flatten();
+        let get_swapchain_images = requested_compositor.then(|| unsafe {
+            typed_function::<vk::PFN_vkGetSwapchainImagesKHR>(next_get_device_proc_addr(
+                device,
+                c"vkGetSwapchainImagesKHR".as_ptr(),
+            ))
+        }).flatten();
+        let compositor_enabled = requested_compositor
+            && get_memory_fd_properties.is_some()
+            && get_image_memory_requirements2.is_some()
+            && get_image_format_properties2.is_some()
+            && get_swapchain_images.is_some();
         {
             let mut state = dispatch_state();
-            for (queue, family) in &queues {
+            for (queue, family, graphics) in &queues {
                 state.queues.insert(
                     *queue,
                     QueueDispatch {
                         device: device.as_raw(),
                         family: *family,
+                        graphics: *graphics,
                         next_present,
                     },
                 );
@@ -845,32 +910,13 @@ unsafe extern "system" fn layer_create_device(
                             device,
                         )
                     },
-                    queues: queues.iter().map(|(queue, _)| *queue).collect(),
+                    physical_device,
+                    queues: queues.iter().map(|(queue, _, _)| *queue).collect(),
                     compositor_enabled,
-                    get_memory_fd_properties: if compositor_enabled {
-                        unsafe {
-                            typed_function::<vk::PFN_vkGetMemoryFdPropertiesKHR>(
-                                next_get_device_proc_addr(
-                                    device,
-                                    c"vkGetMemoryFdPropertiesKHR".as_ptr(),
-                                ),
-                            )
-                        }
-                    } else {
-                        None
-                    },
-                    get_swapchain_images: if compositor_enabled {
-                        unsafe {
-                            typed_function::<vk::PFN_vkGetSwapchainImagesKHR>(
-                                next_get_device_proc_addr(
-                                    device,
-                                    c"vkGetSwapchainImagesKHR".as_ptr(),
-                                ),
-                            )
-                        }
-                    } else {
-                        None
-                    },
+                    get_memory_fd_properties,
+                    get_image_memory_requirements2,
+                    get_image_format_properties2,
+                    get_swapchain_images,
                 },
             );
         }
@@ -932,6 +978,14 @@ unsafe extern "system" fn layer_destroy_device(
     });
 }
 
+fn swapchain_is_compositable(create_info: &vk::SwapchainCreateInfoKHR<'_>) -> bool {
+    create_info
+        .image_usage
+        .contains(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+        && create_info.image_array_layers == 1
+        && !create_info.flags.contains(vk::SwapchainCreateFlagsKHR::PROTECTED)
+}
+
 unsafe extern "system" fn layer_create_swapchain(
     device: vk::Device,
     create_info: *const vk::SwapchainCreateInfoKHR<'_>,
@@ -962,6 +1016,7 @@ unsafe extern "system" fn layer_create_swapchain(
                 .and_then(|state| state.devices.get(&device.as_raw()).cloned());
             if let Some(device_dispatch) = device_dispatch
                 && device_dispatch.compositor_enabled
+                && swapchain_is_compositable(create_info)
                 && let Some(get_images) = device_dispatch.get_swapchain_images
             {
                 let mut count = 0;
@@ -1042,12 +1097,9 @@ unsafe extern "system" fn layer_destroy_swapchain(
     });
 }
 
-/// Observe the first registered swapchain in a present without performing any
-/// protocol I/O on the application's present thread. Electron only forwards
-/// frames after receiving SelectedTarget, so Vulkan must publish this before a
-/// frame can ever reach `compose_overlay`.
 unsafe fn observe_presented_target(original: &vk::PresentInfoKHR<'_>) {
     if original.swapchain_count == 0 || original.p_swapchains.is_null() {
+        session().selected_target.store(0, Ordering::Release);
         return;
     }
     let swapchains = unsafe {
@@ -1062,24 +1114,58 @@ unsafe fn observe_presented_target(original: &vk::PresentInfoKHR<'_>) {
                 .and_then(|record| record.lock().ok().map(|record| record.target_id))
         })
     };
-    if let Some(target_id) = selected {
-        session()
-            .selected_target
-            .store(target_id, Ordering::Release);
+    session()
+        .selected_target
+        .store(selected.unwrap_or(0), Ordering::Release);
+}
+
+/// Poll every registered swapchain in this present even when no overlay frame
+/// is available. This is what makes hide/clear/show release producer buffers
+/// rather than waiting for a later overlay draw that Electron cannot submit
+/// while its two release callbacks remain outstanding.
+unsafe fn retire_presented_frames(original: &vk::PresentInfoKHR<'_>) {
+    if original.swapchain_count == 0 || original.p_swapchains.is_null() {
+        return;
+    }
+    let swapchains = unsafe {
+        std::slice::from_raw_parts(original.p_swapchains, original.swapchain_count as usize)
+    };
+    let records = {
+        let state = dispatch_state();
+        swapchains
+            .iter()
+            .filter_map(|swapchain| state.swapchains.get(&swapchain.as_raw()).cloned())
+            .collect::<Vec<_>>()
+    };
+    for record in records {
+        let device = match record.lock() {
+            Ok(record) => record.state.device,
+            Err(poisoned) => poisoned.into_inner().state.device,
+        };
+        let raw = dispatch_state()
+            .devices
+            .get(&device.as_raw())
+            .map(|device| device.raw.clone());
+        let Some(raw) = raw else {
+            continue;
+        };
+        let mut record = match record.lock() {
+            Ok(record) => record,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let _ = unsafe { record.state.retire_completed(&raw) };
     }
 }
 
-/// Decides whether the layer may touch this present at all. Split out so the
-/// fail-open contract is testable without a Vulkan device: overlay work is
-/// permitted only when the layer is not latched off and the queue resolved to
-/// a downstream present it can forward to afterwards.
-fn overlay_permitted(disabled: bool, queue_known: bool, has_downstream: bool) -> bool {
-    !disabled && queue_known && has_downstream
+fn overlay_permitted(
+    disabled: bool,
+    queue_known: bool,
+    has_downstream: bool,
+    graphics_queue: bool,
+) -> bool {
+    !disabled && queue_known && has_downstream && graphics_queue
 }
 
-/// Best-effort overlay composition. Returns the semaphore the application's
-/// present must additionally wait on, or `None` when nothing was drawn. Every
-/// failure path here is silent by design: the caller presents regardless.
 unsafe fn compose_overlay(
     queue: vk::Queue,
     queue_dispatch: QueueDispatch,
@@ -1128,12 +1214,11 @@ unsafe fn compose_overlay(
         (device_dispatch, records)
     };
     let get_memory_fd_properties = device_dispatch.get_memory_fd_properties?;
+    let get_image_memory_requirements2 = device_dispatch.get_image_memory_requirements2?;
+    let get_image_format_properties2 = device_dispatch.get_image_format_properties2?;
     for (image_index, record) in records {
         let mut record = match record.lock() {
             Ok(record) => record,
-            // A panic in a previous composition left this swapchain's
-            // bookkeeping behind. Recover the data rather than treating it as
-            // a device failure; it is only overlay state.
             Err(poisoned) => poisoned.into_inner(),
         };
         if record.target_id != frame_target {
@@ -1142,11 +1227,14 @@ unsafe fn compose_overlay(
         if let Ok(compositor::DrawOutcome::Submitted(semaphore)) = unsafe {
             record.state.draw(
                 &device_dispatch.raw,
+                device_dispatch.physical_device,
                 queue,
                 queue_dispatch.family,
                 image_index,
                 waits,
                 get_memory_fd_properties,
+                get_image_memory_requirements2,
+                get_image_format_properties2,
                 frame.clone(),
             )
         } {
@@ -1161,31 +1249,25 @@ unsafe extern "system" fn layer_queue_present(
     queue: vk::Queue,
     present_info: *const vk::PresentInfoKHR<'_>,
 ) -> vk::Result {
-    // Resolving the downstream present never depends on overlay bookkeeping
-    // succeeding: the pointer was captured at device creation and the dispatch
-    // mutex recovers from poisoning. An overlay defect must be invisible to the
-    // application, never a manufactured VK_ERROR_DEVICE_LOST.
     let queue_dispatch = dispatch_state().queues.get(&queue.as_raw()).copied();
     let next = queue_dispatch.and_then(|dispatch| dispatch.next_present);
     let Some(next) = next.or_else(fallback_present) else {
-        // The layer never observed a device create, so no present could ever
-        // have been chained through it.
         disable_overlay("no downstream vkQueuePresentKHR is reachable");
         return vk::Result::ERROR_INITIALIZATION_FAILED;
     };
 
     let original = unsafe { present_info.as_ref() };
     if let Some(original) = original {
-        // Best effort only; selection publication itself happens later on the
-        // control thread. A failure here must not alter the game's present.
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
-            observe_presented_target(original)
+            observe_presented_target(original);
+            retire_presented_frames(original);
         }));
     }
     let permitted = overlay_permitted(
         overlay_disabled(),
         queue_dispatch.is_some(),
         original.is_some(),
+        queue_dispatch.is_some_and(|dispatch| dispatch.graphics),
     );
     let overlay_wait = if permitted {
         let queue_dispatch = queue_dispatch.expect("permitted implies a resolved queue");
@@ -1243,33 +1325,43 @@ mod tests {
 
     #[test]
     fn overlay_work_is_skipped_but_the_present_still_forwards() {
-        // Every degraded combination must refuse overlay work. The caller
-        // forwards the application's present unconditionally afterwards, so
-        // refusing here is invisible to the game rather than a device loss.
-        assert!(!overlay_permitted(true, true, true), "latched off");
-        assert!(!overlay_permitted(false, false, true), "unknown queue");
-        assert!(!overlay_permitted(false, true, false), "null present info");
-        assert!(overlay_permitted(false, true, true), "healthy present");
+        assert!(!overlay_permitted(true, true, true, true), "latched off");
+        assert!(!overlay_permitted(false, false, true, true), "unknown queue");
+        assert!(!overlay_permitted(false, true, false, true), "null present info");
+        assert!(!overlay_permitted(false, true, true, false), "present-only queue");
+        assert!(overlay_permitted(false, true, true, true), "healthy graphics present");
+    }
+
+    #[test]
+    fn swapchain_requires_color_attachment_usage_and_one_unprotected_layer() {
+        let valid = vk::SwapchainCreateInfoKHR::default()
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .image_array_layers(1);
+        assert!(swapchain_is_compositable(&valid));
+        assert!(!swapchain_is_compositable(
+            &valid.image_usage(vk::ImageUsageFlags::TRANSFER_DST)
+        ));
+        assert!(!swapchain_is_compositable(&valid.image_array_layers(2)));
+        assert!(!swapchain_is_compositable(
+            &valid.flags(vk::SwapchainCreateFlagsKHR::PROTECTED)
+        ));
     }
 
     #[test]
     fn poisoning_the_dispatch_mutex_latches_the_overlay_off_and_still_reads_state() {
         OVERLAY_DISABLED.store(false, Ordering::Release);
         let mutex = dispatch();
-        // Simulate a panic that happened while the dispatch guard was held.
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _guard = mutex.lock().unwrap();
             panic!("overlay bookkeeping panicked");
         }));
         assert!(mutex.is_poisoned());
 
-        // Recovery must still yield usable state rather than propagating a
-        // failure into the present hook.
         let state = dispatch_state();
         assert!(state.queues.is_empty());
         drop(state);
         assert!(overlay_disabled());
-        assert!(!overlay_permitted(overlay_disabled(), true, true));
+        assert!(!overlay_permitted(overlay_disabled(), true, true, true));
 
         mutex.clear_poison();
         OVERLAY_DISABLED.store(false, Ordering::Release);
@@ -1277,8 +1369,6 @@ mod tests {
 
     #[test]
     fn a_missing_fallback_present_is_reported_without_inventing_device_loss() {
-        // Nothing was ever registered in this unit-test process, so the
-        // fallback is absent; the hook's early return must not be DEVICE_LOST.
         assert!(fallback_present().is_none() || FALLBACK_PRESENT.load(Ordering::Acquire) != 0);
         assert_ne!(
             vk::Result::ERROR_INITIALIZATION_FAILED,
