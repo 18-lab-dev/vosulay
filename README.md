@@ -40,30 +40,30 @@ Display-mode input passes to the game. The Linux GL agent captures SDL input onl
 
 ## Build and package
 
-Node.js 22 or newer is required. Build and test the shared Electron host from `desktop/`:
+Node.js 22 or newer and Bun 1.3.14 are required. Bun is the package manager and script launcher; Node remains available for Electron and Node-API tooling. Build and test the shared Electron host from `desktop/`:
 
 ```sh
 cd desktop
-npm ci
-npm run typecheck
-npm test
-npm run build
+bun install
+bun run typecheck
+bun run test
+bun run build
 ```
 
 Build Windows setup and portable artifacts on Windows:
 
 ```powershell
 cd desktop
-npm ci
-npm run dist:win
+bun install
+bun run dist:win
 ```
 
 Build the Linux x64 AppImage on Linux with Rust 1.96.1, Cargo, and the .NET 8 SDK installed:
 
 ```sh
 cd desktop
-npm ci
-npm run dist:linux
+bun install
+bun run dist:linux
 ```
 
 `dist:linux` builds the napi-rs addon, GL agent, profiler bootstrap and self-contained attach tool, Vulkan layer and manifest; stages them outside ASAR; builds Electron; packages the AppImage; and verifies the required resources. Artifacts are written to `desktop/dist/`.
@@ -75,9 +75,9 @@ cd native
 cargo fmt --check
 cargo test --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-npm ci
-npm run build
-npm test
+bun install
+bun run build
+bun run test
 ```
 
 See [Build and run](openwiki/operations/build-and-run.md) for launch modes and prerequisites, and [Testing guidance](openwiki/testing/guidance.md) for the complete verification matrix.
