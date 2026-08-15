@@ -65,6 +65,7 @@ export interface NativeBitmapDescriptor {
     width: number;
     height: number;
     stride: number;
+    format?: "BGRA" | "RGBA";
 }
 
 export interface NativeOverlaySurface {
@@ -77,6 +78,7 @@ export interface NativeOverlaySurface {
 export interface NativeOverlayHandle {
     readonly pid?: number;
     supportsDmabuf?(): boolean;
+    supportsBgraShm?(): boolean;
     readonly window?: ManagedOverlayProcess["window"];
     readonly events?: {
         on?(event: string, listener: (...args: unknown[]) => void): unknown;
