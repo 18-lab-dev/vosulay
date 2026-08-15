@@ -56,6 +56,24 @@ jobs:
           )
           PY
           python .github/scripts/pr2_followup.py
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("native/crates/overlay-agent-gl/src/lib.rs")
+          text = path.read_text()
+          obsolete = '''fn reject_dmabuf_code(reason: &'static str, code: u32) -> bool {
+              if !DMABUF_REJECT_REPORTED.swap(true, Ordering::Relaxed) {
+                  agent_diagnostic(&format!("DMA-BUF import rejected: {reason} (0x{code:04x})"));
+              }
+              withdraw_dmabuf_support();
+              false
+          }
+
+          '''
+          if obsolete not in text:
+              raise SystemExit("obsolete reject_dmabuf_code helper was not found")
+          path.write_text(text.replace(obsolete, "", 1))
+          PY
           rm .github/scripts/pr2_followup.py
 
       - name: Format Rust changes
