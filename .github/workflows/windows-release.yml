@@ -1,9 +1,9 @@
 name: Windows Release
 
+# Automatic tag releases are intentionally disabled to preserve GitHub Actions
+# minutes. Run this workflow explicitly after creating the intended tag.
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
