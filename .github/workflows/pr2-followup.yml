@@ -58,6 +58,7 @@ jobs:
           python .github/scripts/pr2_followup.py
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path("native/crates/overlay-agent-gl/src/lib.rs")
           text = path.read_text()
@@ -72,7 +73,25 @@ jobs:
           '''
           if obsolete not in text:
               raise SystemExit("obsolete reject_dmabuf_code helper was not found")
-          path.write_text(text.replace(obsolete, "", 1))
+          text = text.replace(obsolete, "", 1)
+
+          # The lifetime patch replaces Frame::fenced/mark_fenced/acknowledge
+          # with retired/presenter/fence accounting. Drop the three legacy
+          # unit tests that instantiate the old representation; the patch adds
+          # tests for the new final-use retirement state machine instead.
+          legacy = re.compile(
+              r"\n    fn dmabuf_frame\([\s\S]*?\n    #\[test\]\n    fn a_target_that_stops_presenting",
+              re.MULTILINE,
+          )
+          text, replaced = legacy.subn(
+              "\n    #[test]\n    fn a_target_that_stops_presenting",
+              text,
+              count=1,
+          )
+          if replaced != 1:
+              raise SystemExit("legacy fenced-frame tests were not found")
+
+          path.write_text(text)
           PY
           rm .github/scripts/pr2_followup.py
 
