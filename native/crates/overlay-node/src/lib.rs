@@ -424,7 +424,16 @@ impl OverlaySurface {
         &self,
         descriptor: SurfaceDescriptor,
     ) -> Result<AsyncTask<SessionTask>> {
-        let descriptor = TextureDescriptor {
+        let raw = RawFd::try_from(
+            descriptor
+                .fd
+                .ok_or_else(|| fail("descriptor requires fd"))?,
+        )
+        .map_err(fail)?;
+        if raw < 0 {
+            return Err(fail("descriptor fd is negative"));
+        }
+        let native_descriptor = TextureDescriptor {
             target_id: u64::try_from(descriptor.target_id).map_err(fail)?,
             width: u32::try_from(descriptor.width).map_err(fail)?,
             height: u32::try_from(descriptor.height).map_err(fail)?,
@@ -433,15 +442,7 @@ impl OverlaySurface {
             size: u64::try_from(descriptor.size).map_err(fail)?,
             format: u32::try_from(descriptor.format.unwrap_or(0)).map_err(fail)?,
         };
-        descriptor.validate().map_err(fail)?;
-        let raw = RawFd::try_from(
-            descriptor_fd(&descriptor, None)
-                .ok_or_else(|| fail("descriptor requires fd"))?,
-        )
-        .map_err(fail)?;
-        if raw < 0 {
-            return Err(fail("descriptor fd is negative"));
-        }
+        native_descriptor.validate().map_err(fail)?;
         let duplicate = unsafe { libc::fcntl(raw, libc::F_DUPFD_CLOEXEC, 0) };
         if duplicate < 0 {
             return Err(fail(std::io::Error::last_os_error()));
@@ -449,7 +450,10 @@ impl OverlaySurface {
         let fd = unsafe { OwnedFd::from_raw_fd(duplicate) };
         Ok(queue(
             &self.shared,
-            SessionCommand::SurfaceFd { descriptor, fd },
+            SessionCommand::SurfaceFd {
+                descriptor: native_descriptor,
+                fd,
+            },
         ))
     }
 
@@ -544,12 +548,6 @@ impl OverlaySurface {
             SessionCommand::Clear(u64::try_from(target_id).map_err(fail)?),
         ))
     }
-}
-
-// Kept separate so descriptor conversion above cannot accidentally consume the
-// JS object's fd before all numeric fields have been validated.
-fn descriptor_fd(_descriptor: &TextureDescriptor, fd: Option<i64>) -> Option<i64> {
-    fd
 }
 
 fn swizzle_bgra_to_rgba(
