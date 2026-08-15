@@ -262,12 +262,15 @@ export function installCustomProtocols(options: RuntimeOptions, registry: LocalO
     protocol.handle("vosulay", (request) => {
         const url = new URL(request.url);
         if (request.method !== "GET" || url.href !== "vosulay://manager/index.html") return new Response("Not Found", { status: 404 });
-        return new Response(buildManagerDocument(options.fpsLimit), {
-            headers: {
-                "content-type": "text/html; charset=utf-8",
-                "permissions-policy": "webgpu=(self)",
+        return new Response(
+            buildManagerDocument(options.fpsLimit, options.vosuUrl.origin),
+            {
+                headers: {
+                    "content-type": "text/html; charset=utf-8",
+                    "permissions-policy": "webgpu=*",
+                },
             },
-        });
+        );
     });
     protocol.handle("vosulay-overlay", (request) => registry.response(request));
 }
