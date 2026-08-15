@@ -51,9 +51,26 @@ jobs:
           import lzma
 
           encoded = Path(".github/scripts/pr2_followup.py.xz.b64").read_text()
-          Path(".github/scripts/pr2_followup.py").write_bytes(
-              lzma.decompress(base64.b64decode(encoded))
-          )
+          script = Path(".github/scripts/pr2_followup.py")
+          script.write_bytes(lzma.decompress(base64.b64decode(encoded)))
+          text = script.read_text()
+          old = '''def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{label}: expected exactly one match, found {count}")
+              return text.replace(old, new, 1)
+          '''
+          new = '''def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count == 1:
+                  return text.replace(old, new, 1)
+              if count == 0 and new and text.count(new) == 1:
+                  return text
+              raise RuntimeError(f"{label}: expected one old or applied replacement, found {count}")
+          '''
+          if old not in text:
+              raise SystemExit("replace_once helper was not found")
+          script.write_text(text.replace(old, new, 1))
           PY
           python .github/scripts/pr2_followup.py
           python - <<'PY'
