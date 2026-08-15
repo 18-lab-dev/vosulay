@@ -2,7 +2,6 @@ export interface Placement {
     counter_id: string;
     url?: string;
     name?: string;
-    allow_webgpu?: boolean;
     top: number;
     left: number;
     width: number;
