@@ -18,6 +18,7 @@ import { resolveStoragePaths } from './storage-path';
 import {
     LocalOverlayRegistry,
     installCustomProtocols,
+    loadLocalOverlayCapabilityKey,
     registerCustomSchemes
 } from './local-overlays';
 import { createOverlayProvider } from './provider-factory';
@@ -46,6 +47,9 @@ const storagePaths = resolveStoragePaths(
     process.env.PORTABLE_EXECUTABLE_DIR
 );
 mkdirSync(storagePaths.dataDirectory, { recursive: true });
+const localOverlayCapabilityKey = loadLocalOverlayCapabilityKey(
+    storagePaths.dataDirectory
+);
 app.setPath('userData', storagePaths.dataDirectory);
 const startupConfig = loadConfigSync(storagePaths.configPath);
 app.commandLine.appendSwitch(
@@ -85,7 +89,7 @@ async function start(options: RuntimeOptions): Promise<void> {
     Menu.setApplicationMenu(null);
     app.on('window-all-closed', () => {});
     const configStore = new ConfigStore(storagePaths.configPath);
-    const overlayRegistry = new LocalOverlayRegistry();
+    const overlayRegistry = new LocalOverlayRegistry(localOverlayCapabilityKey);
     const provider: OverlayProvider = await createOverlayProvider(
         process.platform,
         options,
