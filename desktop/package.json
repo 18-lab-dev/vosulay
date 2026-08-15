@@ -5,7 +5,7 @@
     "desktopName": "vosulay.desktop",
     "private": true,
     "license": "MIT",
-    "packageManager": "bun@1.2.21",
+    "packageManager": "bun@1.3.14",
     "main": "./out/main/index.js",
     "scripts": {
         "build": "electron-vite build",
