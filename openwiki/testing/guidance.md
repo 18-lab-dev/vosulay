@@ -22,9 +22,9 @@ Use the smallest layer that proves the changed contract, but do not treat protoc
 
 ```sh
 cd desktop
-npm run typecheck
-npm test
-npm run build
+bun run typecheck
+bun run test
+bun run build
 ```
 
 Current test ownership:
@@ -46,8 +46,8 @@ cd native
 cargo fmt --check
 cargo test --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-npm ci
-npm run build
+bun install
+bun run build
 ```
 
 The Rust tests are colocated with implementation. Important protected behavior includes:
@@ -69,13 +69,13 @@ Build the real addon and fake agent, then provide both paths:
 ```sh
 cd native
 cargo build -p overlay-agent-core --bin overlay-fake-agent
-npm run build
+bun run build
 VOSULAY_NATIVE_ADDON="$PWD/crates/overlay-node/overlay-node.linux-x64-gnu.node" \
 VOSULAY_FAKE_AGENT="$PWD/target/debug/overlay-fake-agent" \
-npm test
+bun run test
 ```
 
-This exercises a real JavaScript `attach()` call, generated endpoint/cookie transfer through a test attach tool, authenticated host/agent connection, N-API event delivery, visibility/editing commands, and destroy/disconnect. Do not skip it when changing exported addon methods, host handshake state, or event names.
+This exercises a real JavaScript `attach()` call, generated endpoint/cookie transfer through a test attach tool, authenticated host/agent connection, N-API event delivery, visibility/editing commands, and destroy/disconnect. The package script still invokes Node's built-in test runner; Bun owns installation and dispatch. Do not skip it when changing exported addon methods, host handshake state, or event names.
 
 ## Protocol/security matrix
 
@@ -93,17 +93,17 @@ Linux:
 
 ```sh
 cd desktop
-npm run dist:linux
+bun run dist:linux
 ```
 
 Windows x64:
 
 ```powershell
 cd desktop
-npm run dist:win
+bun run dist:win
 ```
 
-The final command in each script runs `verify:package`. It checks non-empty distributables, package identity, manager assets/preload, required same-platform native resources, and forbidden opposite-platform resources. Linux additionally checks that the profiler attach tool is executable. A successful `npm run build` alone does not prove package completeness.
+The final command in each script runs `verify:package`. It checks non-empty distributables, package identity, manager assets/preload, required same-platform native resources, and forbidden opposite-platform resources. Linux additionally checks that the profiler attach tool is executable. A successful `bun run build` alone does not prove package completeness.
 
 ## Live native lazer matrix
 
@@ -198,4 +198,4 @@ Not a release-gate protocol re-run (menu workload, shorter windows, different cl
 
 ## Documentation and generated files
 
-OpenWiki is maintained manually and locally. After source changes, update only affected pages or run `openwiki code --update --print`, inspect the diff, and never add scheduled or manually dispatched OpenWiki GitHub Actions. Generated N-API declarations should be rebuilt through `npm run build`, not hand-edited as the source of truth.
+OpenWiki is maintained manually and locally. After source changes, update only affected pages or run `openwiki code --update --print`, inspect the diff, and never add scheduled or manually dispatched OpenWiki GitHub Actions. Generated N-API declarations should be rebuilt through `bun run build`, not hand-edited as the source of truth.
