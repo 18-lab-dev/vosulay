@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Authenticated Linux overlay host N-API addon",
+  "packageManager": "bun@1.3.14",
   "main": "./overlay-node.linux-x64-gnu.node",
   "types": "./index.d.ts",
   "files": ["*.node", "index.d.ts"],
