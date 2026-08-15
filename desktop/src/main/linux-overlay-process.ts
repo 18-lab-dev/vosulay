@@ -499,7 +499,13 @@ export class LinuxOverlayProcess implements ManagedOverlayProcess {
         } catch (error) {
             failure ??= error;
         } finally {
-            for (const release of this.releases.values()) release();
+            // A native session can end while a Vulkan swapchain image still
+            // retains the last submitted frame. Calling Chromium's release
+            // callback here would permit immediate producer reuse without a
+            // GPU-completion proof. Drop our JS bookkeeping and let destroying
+            // the offscreen window reclaim its renderer resources instead;
+            // locally discarded and completed frames were already released by
+            // their explicit `consumed` events.
             this.releases.clear();
             if (!this.window.isDestroyed()) this.window.destroy();
             this.emitDestroyed();

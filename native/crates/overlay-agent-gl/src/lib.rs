@@ -25,7 +25,8 @@ use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{CStr, c_char, c_int, c_uint, c_ulong, c_void};
 use std::mem::{align_of, size_of};
-use std::os::fd::{AsRawFd, OwnedFd};
+use std::ops::Deref;
+use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd};
 use std::ptr::{null, null_mut};
 use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU64, Ordering};
@@ -41,6 +42,10 @@ const FORMAT_STRAIGHT_RGBA8: u32 = TEXTURE_FORMAT_STRAIGHT_RGBA8;
 const FORMAT_PREMULTIPLIED_RGBA8: u32 = TEXTURE_FORMAT_PREMULTIPLIED_RGBA8;
 const FORMAT_PREMULTIPLIED_BGRA8: u32 = TEXTURE_FORMAT_PREMULTIPLIED_BGRA8;
 const GL_RGBA8: u32 = 0x8058;
+const GL_RED: c_int = 0x1903;
+const GL_GREEN: c_int = 0x1904;
+const GL_BLUE: c_int = 0x1905;
+const GL_ALPHA: c_int = 0x1906;
 const GL_RGBA: u32 = 0x1908;
 const GL_BGRA: u32 = 0x80E1;
 const GL_UNSIGNED_BYTE: u32 = 0x1401;
@@ -48,6 +53,11 @@ const GL_TEXTURE0: u32 = 0x84C0;
 const GL_TEXTURE_2D: u32 = 0x0DE1;
 const GL_TEXTURE_WRAP_S: u32 = 0x2802;
 const GL_TEXTURE_WRAP_T: u32 = 0x2803;
+const GL_TEXTURE_SWIZZLE_R: u32 = 0x8E42;
+const GL_TEXTURE_SWIZZLE_G: u32 = 0x8E43;
+const GL_TEXTURE_SWIZZLE_B: u32 = 0x8E44;
+const GL_TEXTURE_SWIZZLE_A: u32 = 0x8E45;
+const GL_HANDLE_TYPE_OPAQUE_FD_EXT: u32 = 0x9586;
 const GL_CLAMP_TO_EDGE: c_int = 0x812F;
 const GL_BLEND: u32 = 0x0BE2;
 const GL_CULL_FACE: u32 = 0x0B44;
@@ -147,134 +157,115 @@ static PROCESS_START: LazyLock<Instant> = LazyLock::new(Instant::now);
 
 const GL_SYNC_GPU_COMMANDS_COMPLETE: u32 = 0x9117;
 const GL_ALREADY_SIGNALED: u32 = 0x911A;
+const GL_TIMEOUT_EXPIRED: u32 = 0x911B;
 const GL_CONDITION_SATISFIED: u32 = 0x911C;
 const GL_WAIT_FAILED: u32 = 0x911D;
-const GL_SYNC_FLUSH_COMMANDS_BIT: u32 = 0x0000_0001;
 
-/// Frames whose overlay draw has been submitted but not yet proven complete.
-/// Deliberately small: it only has to cover the driver's frame queue depth, and
-/// a bound keeps a stalled GPU from pinning host buffers indefinitely.
-const MAX_PENDING_FENCES: usize = 4;
-
-/// Upper bound on the only wait the present path can ever perform, and only
-/// when the fence queue is already full. One frame at 30 Hz.
-const FENCE_RETIRE_TIMEOUT_NANOS: u64 = 33_000_000;
-
-/// One submitted overlay draw and the frame it sampled. The frame is released
-/// to the host only once the GPU signals, never when the Rust value dies.
+/// One last-use marker for a frame in this GL context. Repeated draws of the
+/// same mailbox frame replace this marker: the newest fence is ordered after
+/// every earlier use in the context and therefore subsumes them.
 struct PendingFence {
     sync: *mut c_void,
     frame: Arc<Frame>,
 }
 
-/// Tracks in-flight overlay draws for one GL context.
-#[derive(Default)]
+/// Tracks final GPU use per frame for one GL context. The renderer allows only
+/// two outstanding shared textures, so this vector stays small without a
+/// blocking overflow path in the game's present hook.
 struct FenceTracker {
     pending: Vec<PendingFence>,
 }
 
+impl Default for FenceTracker {
+    fn default() -> Self {
+        Self {
+            pending: Vec::with_capacity(8),
+        }
+    }
+}
+
 impl FenceTracker {
-    /// True when this context can prove GPU completion. Without sync objects
-    /// the caller must keep the old CPU-lifetime behaviour.
     fn supported(gl: &GlFns) -> bool {
         gl.fence_sync.is_some() && gl.client_wait_sync.is_some() && gl.delete_sync.is_some()
     }
 
-    /// Release every frame whose draw has completed. Never blocks: a zero
-    /// timeout only reports status.
+    /// Release every final-use marker the GPU has completed. A wait failure is
+    /// not completion proof; the exceptional recovery path finishes the
+    /// context before releasing anything and permanently withdraws DMA-BUF.
     fn poll(&mut self, gl: &GlFns) {
         let (Some(client_wait), Some(delete)) = (gl.client_wait_sync, gl.delete_sync) else {
             return;
         };
+        let mut wait_failed = false;
         self.pending.retain(|entry| {
-            // SAFETY: the sync object was created on this context, which the
-            // caller holds current.
+            // SAFETY: the sync object was created by this current context.
             let status = unsafe { client_wait(entry.sync, 0, 0) };
-            let complete = matches!(
-                status,
-                GL_ALREADY_SIGNALED | GL_CONDITION_SATISFIED | GL_WAIT_FAILED
-            );
-            if complete {
-                // SAFETY: the sync object is no longer referenced.
-                unsafe { delete(entry.sync) };
-                entry.frame.acknowledge();
+            match status {
+                GL_ALREADY_SIGNALED | GL_CONDITION_SATISFIED => {
+                    unsafe { delete(entry.sync) };
+                    entry.frame.fence_completed();
+                    false
+                }
+                GL_TIMEOUT_EXPIRED => true,
+                GL_WAIT_FAILED => {
+                    wait_failed = true;
+                    true
+                }
+                _ => {
+                    wait_failed = true;
+                    true
+                }
             }
-            !complete
         });
+        if wait_failed {
+            // Rare fail-safe only. Normal presents never wait; once the driver
+            // cannot query a sync object, glFinish is the only valid completion
+            // proof before releasing the producer's buffers.
+            unsafe { (gl.finish)() };
+            for entry in self.pending.drain(..) {
+                unsafe { delete(entry.sync) };
+                entry.frame.fence_completed();
+            }
+            withdraw_dmabuf_support();
+        }
     }
 
-    /// Fence the draw that just sampled `frame` and take over its release.
-    /// Returns false when fencing was not possible, leaving the caller's
-    /// original release behaviour intact.
+    /// Record the draw's latest use of `frame`. Replacing an older marker for
+    /// the same frame is safe because commands in one GL context are ordered.
     fn track(&mut self, gl: &GlFns, frame: &Arc<Frame>) -> bool {
-        let (Some(fence_sync), Some(client_wait), Some(delete)) =
-            (gl.fence_sync, gl.client_wait_sync, gl.delete_sync)
-        else {
+        let (Some(fence_sync), Some(delete)) = (gl.fence_sync, gl.delete_sync) else {
             return false;
         };
-        if self.pending.len() >= MAX_PENDING_FENCES {
-            // The queue is full only if the GPU is far behind. Retire the
-            // oldest with a bounded wait rather than growing without limit or
-            // leaking the host's buffer.
-            let oldest = self.pending.remove(0);
-            // SAFETY: flushing here guarantees the fence is reachable, so the
-            // bounded wait cannot deadlock against an unsubmitted command.
-            unsafe {
-                client_wait(
-                    oldest.sync,
-                    GL_SYNC_FLUSH_COMMANDS_BIT,
-                    FENCE_RETIRE_TIMEOUT_NANOS,
-                );
-                delete(oldest.sync);
-            }
-            oldest.frame.acknowledge();
-        }
-        // SAFETY: a sync object can be created whenever a context is current.
         let sync = unsafe { fence_sync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0) };
         if sync.is_null() {
             return false;
         }
-        // The fence must be reachable by the GPU before it can ever signal.
-        // SAFETY: the caller holds the context current.
         unsafe { (gl.flush)() };
-        frame.mark_fenced();
+        if let Some(existing) = self
+            .pending
+            .iter_mut()
+            .find(|entry| Arc::ptr_eq(&entry.frame, frame))
+        {
+            unsafe { delete(existing.sync) };
+            existing.sync = sync;
+            return true;
+        }
+        frame.fence_started();
         self.pending.push(PendingFence {
             sync,
             frame: Arc::clone(frame),
         });
         true
     }
-
-    /// Context teardown: the frames must still be released or the host leaks
-    /// them. A current context lets us wait for real completion first.
-    fn drain(&mut self, gl: Option<&GlFns>) {
-        let functions = gl.and_then(|gl| gl.client_wait_sync.zip(gl.delete_sync));
-        for entry in self.pending.drain(..) {
-            if let Some((client_wait, delete)) = functions {
-                // SAFETY: the sync object belongs to the context being torn
-                // down, which the caller holds current.
-                unsafe {
-                    client_wait(
-                        entry.sync,
-                        GL_SYNC_FLUSH_COMMANDS_BIT,
-                        FENCE_RETIRE_TIMEOUT_NANOS,
-                    );
-                    delete(entry.sync);
-                }
-            }
-            // Without a context the sync object cannot be queried or deleted;
-            // the context owning it is gone, so releasing the frame is the only
-            // way to avoid pinning the host's buffer forever.
-            entry.frame.acknowledge();
-        }
-    }
 }
 
 impl Drop for FenceTracker {
     fn drop(&mut self) {
-        // Thread exit does not guarantee a current context, so this cannot
-        // touch GL. Frames are released rather than leaked.
-        self.drain(None);
+        // Thread exit does not guarantee a current context. Without completion
+        // proof these frames are deliberately not acknowledged; context
+        // destruction releases the GL objects while the duplicated DMA-BUF FDs
+        // keep the allocation alive.
+        self.pending.clear();
     }
 }
 
@@ -403,10 +394,10 @@ struct Frame {
     image: FrameImage,
     serial: u64,
     acknowledgements: Arc<CompletionQueue>,
-    /// Set once the overlay draw that sampled this frame has been fenced.
-    /// Until then the frame must not be acknowledged, because the host would
-    /// recycle the shared buffer while the GPU is still reading it.
-    fenced: AtomicBool,
+    retired: AtomicBool,
+    presenters: AtomicU32,
+    pending_fences: AtomicU32,
+    acknowledged: AtomicBool,
 }
 impl Frame {
     fn target_id(&self) -> u64 {
@@ -424,29 +415,73 @@ impl Frame {
             sequence: descriptor.sequence,
         })
     }
-    /// Publish the release. Lock-free by construction: this can run on the
-    /// presentation thread, and the control thread holds no lock the caller
-    /// could block behind.
-    fn acknowledge(&self) {
-        if let Some(consumed) = self.consumed() {
-            self.acknowledgements.push(consumed);
+    fn begin_present(&self) {
+        self.presenters.fetch_add(1, Ordering::AcqRel);
+    }
+    fn end_present(&self) {
+        let previous = self.presenters.fetch_sub(1, Ordering::AcqRel);
+        debug_assert!(previous > 0);
+        if previous == 1 {
+            self.try_acknowledge();
         }
     }
-    /// Ownership passed to the fence tracker, which acknowledges once the GPU
-    /// signals. Dropping such a frame must not acknowledge a second time.
-    fn mark_fenced(&self) {
-        self.fenced.store(true, Ordering::Release);
+    fn fence_started(&self) {
+        self.pending_fences.fetch_add(1, Ordering::AcqRel);
+    }
+    fn fence_completed(&self) {
+        let previous = self.pending_fences.fetch_sub(1, Ordering::AcqRel);
+        debug_assert!(previous > 0);
+        if previous == 1 {
+            self.try_acknowledge();
+        }
+    }
+    fn retire(&self) {
+        self.retired.store(true, Ordering::Release);
+        self.try_acknowledge();
+    }
+    fn try_acknowledge(&self) {
+        if !self.retired.load(Ordering::Acquire)
+            || self.presenters.load(Ordering::Acquire) != 0
+            || self.pending_fences.load(Ordering::Acquire) != 0
+        {
+            return;
+        }
+        if self
+            .acknowledged
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return;
+        }
+        if let Some(consumed) = self.consumed()
+            && !self.acknowledgements.push(consumed)
+        {
+            agent_diagnostic("completion ring overflow; closing the session safely");
+            withdraw_dmabuf_support();
+        }
     }
 }
-impl Drop for Frame {
+
+struct FrameLease {
+    frame: Arc<Frame>,
+}
+impl FrameLease {
+    fn as_arc(&self) -> &Arc<Frame> {
+        &self.frame
+    }
+}
+impl Deref for FrameLease {
+    type Target = Frame;
+    fn deref(&self) -> &Self::Target {
+        &self.frame
+    }
+}
+impl Drop for FrameLease {
     fn drop(&mut self) {
-        // A frame whose draw was fenced is acknowledged by the fence tracker
-        // when the GPU actually finishes, not when this Rust value dies.
-        if !self.fenced.load(Ordering::Acquire) {
-            self.acknowledge();
-        }
+        self.frame.end_present();
     }
 }
+
 struct Mailbox {
     latest: Mutex<Option<Arc<Frame>>>,
     serial: AtomicU64,
@@ -463,30 +498,48 @@ impl Mailbox {
         }
     }
     fn push(&self, frame: Frame) {
-        if let Ok(mut latest) = self.latest.lock() {
-            *latest = Some(Arc::new(frame));
+        let retired = if let Ok(mut latest) = self.latest.lock() {
+            let retired = latest.replace(Arc::new(frame));
             self.visible.store(true, Ordering::Release);
+            retired
+        } else {
+            None
+        };
+        if let Some(frame) = retired {
+            frame.retire();
         }
     }
     fn clear(&self) {
         self.visible.store(false, Ordering::Release);
-        if let Ok(mut latest) = self.latest.lock() {
-            *latest = None;
+        let retired = self.latest.lock().ok().and_then(|mut latest| latest.take());
+        if let Some(frame) = retired {
+            frame.retire();
         }
     }
-    fn begin_present(&self) -> Option<Arc<Frame>> {
+    fn begin_present(&self) -> Option<FrameLease> {
         if !self.visible.load(Ordering::Acquire) {
             return None;
         }
-        self.latest.lock().ok()?.as_ref().cloned()
+        let latest = self.latest.lock().ok()?;
+        let frame = latest.as_ref()?.clone();
+        // Increment while holding the mailbox lock. Replacement cannot retire
+        // and acknowledge the frame between cloning it and registering this
+        // in-progress present.
+        frame.begin_present();
+        Some(FrameLease { frame })
     }
-    fn discard(&self, frame: &Arc<Frame>) {
-        if let Ok(mut latest) = self.latest.lock()
+    fn discard(&self, frame: &FrameLease) {
+        let retired = if let Ok(mut latest) = self.latest.lock()
             && latest
                 .as_ref()
-                .is_some_and(|candidate| Arc::ptr_eq(candidate, frame))
+                .is_some_and(|candidate| Arc::ptr_eq(candidate, frame.as_arc()))
         {
-            *latest = None;
+            latest.take()
+        } else {
+            None
+        };
+        if let Some(frame) = retired {
+            frame.retire();
         }
     }
 }
@@ -608,6 +661,7 @@ fn runtime() -> Arc<Runtime> {
 }
 static PRELOAD_ARMED: AtomicBool = AtomicBool::new(false);
 static PRELOAD_CLAIMED: AtomicBool = AtomicBool::new(false);
+static HOOKS_INSTALLED: AtomicBool = AtomicBool::new(false);
 /// A preloaded agent must not claim the host session before the process
 /// actually presents. `LD_PRELOAD` propagates to every child of a launched
 /// target (`wineserver`, `winedevice.exe`, `services.exe`), the host accepts a
@@ -662,30 +716,32 @@ fn dmabuf_withdrawn() -> bool {
     DMABUF_WITHDRAWN.load(Ordering::Acquire)
 }
 
-/// A current EGL context is not evidence that DMA-BUF import works. The real
-/// path additionally needs the import extension, the EGL/GL entry points, and
-/// a display it can import against. GLX contexts (Wine's `winex11.drv`) accept
-/// an EGLImage bind without error yet sample nothing, so they must not
-/// advertise the capability.
+/// DMA-BUF is advertised only when this current context can both import a
+/// texture and prove its final GPU use. Wine stable/GLX prefers the
+/// GL_EXT_memory_object_fd path used by idk-overlay; EGLImage remains the EGL
+/// and GLES fallback.
 fn dmabuf_import_supported() -> bool {
-    if dmabuf_withdrawn() {
+    if dmabuf_withdrawn() || !gl_sync_supported() {
         return false;
     }
-    // Every entry point the import path calls must resolve, not just a
-    // context pointer being non-null.
+    if !gl_is_gles() && load_gl_memory_object().is_some() {
+        return true;
+    }
     let Some(egl) = load_egl_dmabuf() else {
         return false;
     };
     let display = import_display(egl);
-    if display.is_null() {
-        return false;
-    }
-    if !egl_display_imports_dmabuf(egl, display) {
-        return false;
-    }
-    // The bind entry point lives in the GL context, so a GLX context without
-    // the OES entry point is excluded here rather than at first frame.
-    !extension_symbol(b"glEGLImageTargetTexture2DOES\0").is_null()
+    !display.is_null() && egl_display_imports_dmabuf(egl, display)
+}
+
+fn gl_sync_supported() -> bool {
+    [
+        b"glFenceSync\0".as_slice(),
+        b"glClientWaitSync\0".as_slice(),
+        b"glDeleteSync\0".as_slice(),
+    ]
+    .into_iter()
+    .all(|name| !extension_symbol(name).is_null())
 }
 
 /// `EGL_EXT_image_dma_buf_import` must be present on the display we would
@@ -925,7 +981,10 @@ fn run_control(rt: Arc<Runtime>, payload: Option<&[u8]>) -> Result<(), ()> {
                         image,
                         serial,
                         acknowledgements: rt.acknowledgements.clone(),
-                        fenced: AtomicBool::new(false),
+                        retired: AtomicBool::new(false),
+                        presenters: AtomicU32::new(0),
+                        pending_fences: AtomicU32::new(0),
+                        acknowledged: AtomicBool::new(false),
                     });
                 }
             }
@@ -981,22 +1040,14 @@ fn run_control(rt: Arc<Runtime>, payload: Option<&[u8]>) -> Result<(), ()> {
     }
 }
 fn start_control(rt: Arc<Runtime>, payload: Option<&[u8]>) -> Result<(), ()> {
-    // A DMA-BUF import can only be proven once real frames arrive, and the
-    // host picks the transport at handshake time. One reconnect is therefore
-    // the downgrade path: the second attempt advertises shared memory only.
-    let mut downgraded = false;
-    loop {
-        let result = run_control(rt.clone(), payload);
-        rt.capture.store(false, Ordering::Release);
-        rt.mailbox.clear();
-        rt.mailbox.connected.store(false, Ordering::Release);
-        if result.is_err() && !downgraded && dmabuf_withdrawn() {
-            downgraded = true;
-            agent_diagnostic("reconnecting without DMA-BUF after a failed import");
-            continue;
-        }
-        return result;
-    }
+    // The host listener is one-shot. A real import rejection ends this session;
+    // the desktop manager then performs a fresh profiler attach, whose new
+    // payload starts this already-hooked runtime with DMA-BUF withdrawn.
+    let result = run_control(rt.clone(), payload);
+    rt.capture.store(false, Ordering::Release);
+    rt.mailbox.clear();
+    rt.mailbox.connected.store(false, Ordering::Release);
+    result
 }
 
 fn rounded_i32(value: f32) -> i32 {
@@ -1555,14 +1606,6 @@ fn reject_dmabuf(reason: &'static str) -> bool {
     false
 }
 
-fn reject_dmabuf_code(reason: &'static str, code: u32) -> bool {
-    if !DMABUF_REJECT_REPORTED.swap(true, Ordering::Relaxed) {
-        agent_diagnostic(&format!("DMA-BUF import rejected: {reason} (0x{code:04x})"));
-    }
-    withdraw_dmabuf_support();
-    false
-}
-
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn SDL_GL_SwapWindow(window: *mut SDL_Window) -> bool {
     let original = sdl_gl_swap_original();
@@ -1678,6 +1721,7 @@ fn start_agent(payload: *const u8, len: usize, install_hooks: bool) -> c_int {
         if rt.started.swap(true, Ordering::AcqRel) {
             return Ok(());
         }
+        rt.failed.store(false, Ordering::Release);
         let bytes = if !payload.is_null() && len != 0 {
             // SAFETY: the C caller promises `payload` points to `len` readable
             // bytes for the duration of this call.
@@ -1685,14 +1729,22 @@ fn start_agent(payload: *const u8, len: usize, install_hooks: bool) -> c_int {
         } else {
             None
         };
-        if install_hooks && install_late_hooks().is_err() {
-            rt.started.store(false, Ordering::Release);
-            return Err(());
+        if install_hooks && !HOOKS_INSTALLED.load(Ordering::Acquire) {
+            if install_late_hooks().is_err() {
+                rt.started.store(false, Ordering::Release);
+                return Err(());
+            }
+            HOOKS_INSTALLED.store(true, Ordering::Release);
+        } else if !install_hooks {
+            // LD_PRELOAD interposition is already installed by the loader.
+            HOOKS_INSTALLED.store(true, Ordering::Release);
         }
         thread::Builder::new()
             .name("vosulay-agent-gl-control".into())
             .spawn(move || {
-                if let Err(error) = start_control(rt.clone(), bytes.as_deref()) {
+                let result = start_control(rt.clone(), bytes.as_deref());
+                rt.started.store(false, Ordering::Release);
+                if let Err(error) = result {
                     eprintln!("vosulay GL agent control channel closed: {error:?}");
                     rt.failed.store(true, Ordering::Release);
                     rt.mailbox.connected.store(false, Ordering::Release);
@@ -2146,6 +2198,13 @@ fn dump_presented_frame(gl: &GlFns, width: u32, height: u32, phase: &str) {
 }
 
 fn present(rt: &Runtime, target_id: u64, surface: (u32, u32)) {
+    CONTEXT.with(|cell| {
+        if let Some(resources) = cell.borrow_mut().as_mut()
+            && let Some(gl) = resources.gl
+        {
+            resources.fences.poll(&gl);
+        }
+    });
     if rt.failed.load(Ordering::Acquire) {
         return;
     }
@@ -2176,9 +2235,6 @@ fn present(rt: &Runtime, target_id: u64, surface: (u32, u32)) {
                 return;
             }
             if let Some(gl) = resources.gl {
-                // Release anything the GPU finished since the last present.
-                // Nonblocking, so a busy GPU costs nothing here.
-                resources.fences.poll(&gl);
                 let _guard = GlStateGuard::capture(&gl);
                 match &frame.image {
                     FrameImage::Shm { descriptor, image } => {
@@ -2212,7 +2268,7 @@ fn present(rt: &Runtime, target_id: u64, surface: (u32, u32)) {
                                 if FenceTracker::supported(&gl) {
                                     "enabled"
                                 } else {
-                                    "unavailable, releasing on cpu lifetime"
+                                    "unavailable"
                                 }
                             );
                         }
@@ -2221,11 +2277,14 @@ fn present(rt: &Runtime, target_id: u64, surface: (u32, u32)) {
                             DUMP_WRITTEN.store(true, Ordering::Release);
                         }
                         if drawn {
-                            // The draw is only submitted, not complete. Hand
-                            // the frame to the fence tracker so the host is
-                            // told it may recycle the buffer once the GPU has
-                            // actually finished sampling it.
-                            resources.fences.track(&gl, &frame);
+                            // Repeated presents update one last-use fence for
+                            // this frame in this context. Failure means no safe
+                            // completion proof exists, so withdraw DMA-BUF and
+                            // retire the frame without acknowledging early.
+                            if !resources.fences.track(&gl, frame.as_arc()) {
+                                reject_dmabuf("GL sync objects unavailable");
+                                rt.mailbox.discard(&frame);
+                            }
                         } else {
                             rt.mailbox.discard(&frame);
                         }
@@ -2302,6 +2361,7 @@ type EglCreateImage =
     unsafe extern "C" fn(EglDisplay, EglContext, c_uint, EglClientBuffer, *const c_int) -> EglImage;
 type EglDestroyImage = unsafe extern "C" fn(EglDisplay, EglImage) -> c_uint;
 type GlEglImageTargetTexture = unsafe extern "C" fn(u32, *const c_void);
+type GlEglImageTargetStorage = unsafe extern "C" fn(u32, *const c_void, *const c_int);
 #[derive(Clone, Copy)]
 struct EglDmabufFns {
     get_current_display: unsafe extern "C" fn() -> EglDisplay,
@@ -2309,9 +2369,23 @@ struct EglDmabufFns {
     initialize: unsafe extern "C" fn(EglDisplay, *mut c_int, *mut c_int) -> c_uint,
     create_image: EglCreateImage,
     destroy_image: EglDestroyImage,
-    image_target_texture: GlEglImageTargetTexture,
+    image_target_texture: Option<GlEglImageTargetTexture>,
+    image_target_storage: Option<GlEglImageTargetStorage>,
 }
 static EGL_DMABUF: OnceLock<Option<EglDmabufFns>> = OnceLock::new();
+
+type GlCreateMemoryObjects = unsafe extern "C" fn(c_int, *mut u32);
+type GlDeleteMemoryObjects = unsafe extern "C" fn(c_int, *const u32);
+type GlImportMemoryFd = unsafe extern "C" fn(u32, u64, u32, c_int);
+type GlTexStorageMem2D = unsafe extern "C" fn(u32, c_int, u32, c_int, c_int, u32, u64);
+#[derive(Clone, Copy)]
+struct GlMemoryObjectFns {
+    create: GlCreateMemoryObjects,
+    delete: GlDeleteMemoryObjects,
+    import_fd: GlImportMemoryFd,
+    tex_storage: GlTexStorageMem2D,
+}
+static GL_MEMORY_OBJECT: OnceLock<Option<GlMemoryObjectFns>> = OnceLock::new();
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct DmabufSurfaceKey {
     target_id: u64,
@@ -2416,11 +2490,22 @@ impl<T> SurfacePool<T> {
     }
 }
 
+enum DmabufBacking {
+    Egl {
+        image: EglImage,
+        display: EglDisplay,
+        destroy_image: EglDestroyImage,
+        _fd: OwnedFd,
+    },
+    MemoryObject {
+        memory: u32,
+        delete: GlDeleteMemoryObjects,
+    },
+}
+
 struct DmabufSurface {
-    image: EglImage,
+    backing: DmabufBacking,
     texture: u32,
-    display: EglDisplay,
-    _fds: [OwnedFd; 1],
 }
 
 fn fd_identity(fd: &OwnedFd) -> Result<(u64, u64, u64), ()> {
@@ -2447,23 +2532,35 @@ impl DmabufAttributes {
     }
 }
 
-fn destroy_surface(g: &GlFns, egl: EglDmabufFns, surface: DmabufSurface) {
+fn destroy_surface(g: &GlFns, surface: DmabufSurface) {
     // SAFETY: callers hold the context current and have finished prior draws.
     unsafe {
-        (egl.destroy_image)(surface.display, surface.image);
         (g.delete_textures)(1, &surface.texture);
+        match surface.backing {
+            DmabufBacking::Egl {
+                image,
+                display,
+                destroy_image,
+                ..
+            } => {
+                destroy_image(display, image);
+            }
+            DmabufBacking::MemoryObject { memory, delete } => {
+                delete(1, &memory);
+            }
+        }
     }
 }
 
-fn reclaim_retired(g: &GlFns, egl: EglDmabufFns, retired: &mut Vec<DmabufSurface>) {
+fn reclaim_retired(g: &GlFns, retired: &mut Vec<DmabufSurface>) {
     if retired.is_empty() {
         return;
     }
-    // Retired images may still be referenced by queued GPU work. Finish
-    // before releasing them; the queue is preallocated and bounded.
+    // Pool eviction is rare and bounded. Finish here rather than destroying an
+    // imported object that an earlier draw may still reference.
     unsafe { (g.finish)() };
     for surface in retired.drain(..) {
-        destroy_surface(g, egl, surface);
+        destroy_surface(g, surface);
     }
 }
 
@@ -2474,17 +2571,17 @@ fn load_egl_dmabuf() -> Option<EglDmabufFns> {
         let initialize = extension_symbol(b"eglInitialize\0");
         let create = extension_symbol(b"eglCreateImageKHR\0");
         let destroy = extension_symbol(b"eglDestroyImageKHR\0");
-        let image_target = extension_symbol(b"glEGLImageTargetTexture2DOES\0");
+        let texture = extension_symbol(b"glEGLImageTargetTexture2DOES\0");
+        let storage = extension_symbol(b"glEGLImageTargetTexStorageEXT\0");
         if current.is_null()
             || get_display.is_null()
             || initialize.is_null()
             || create.is_null()
             || destroy.is_null()
-            || image_target.is_null()
+            || (texture.is_null() && storage.is_null())
         {
             return None;
         }
-        // SAFETY: symbol names define these exact EGL/GL extension ABIs.
         Some(unsafe {
             EglDmabufFns {
                 get_current_display: std::mem::transmute::<
@@ -2501,9 +2598,33 @@ fn load_egl_dmabuf() -> Option<EglDmabufFns> {
                 >(initialize),
                 create_image: std::mem::transmute::<*mut c_void, EglCreateImage>(create),
                 destroy_image: std::mem::transmute::<*mut c_void, EglDestroyImage>(destroy),
-                image_target_texture: std::mem::transmute::<*mut c_void, GlEglImageTargetTexture>(
-                    image_target,
-                ),
+                image_target_texture: (!texture.is_null())
+                    .then(|| std::mem::transmute::<*mut c_void, GlEglImageTargetTexture>(texture)),
+                image_target_storage: (!storage.is_null())
+                    .then(|| std::mem::transmute::<*mut c_void, GlEglImageTargetStorage>(storage)),
+            }
+        })
+    })
+}
+
+fn load_gl_memory_object() -> Option<GlMemoryObjectFns> {
+    *GL_MEMORY_OBJECT.get_or_init(|| {
+        let create = extension_symbol(b"glCreateMemoryObjectsEXT\0");
+        let delete = extension_symbol(b"glDeleteMemoryObjectsEXT\0");
+        let import_fd = extension_symbol(b"glImportMemoryFdEXT\0");
+        let tex_storage = extension_symbol(b"glTexStorageMem2DEXT\0");
+        if [create, delete, import_fd, tex_storage]
+            .into_iter()
+            .any(|pointer| pointer.is_null())
+        {
+            return None;
+        }
+        Some(unsafe {
+            GlMemoryObjectFns {
+                create: std::mem::transmute::<*mut c_void, GlCreateMemoryObjects>(create),
+                delete: std::mem::transmute::<*mut c_void, GlDeleteMemoryObjects>(delete),
+                import_fd: std::mem::transmute::<*mut c_void, GlImportMemoryFd>(import_fd),
+                tex_storage: std::mem::transmute::<*mut c_void, GlTexStorageMem2D>(tex_storage),
             }
         })
     })
@@ -2538,6 +2659,170 @@ fn import_display(egl: EglDmabufFns) -> EglDisplay {
 }
 unsafe impl Send for GlFns {}
 unsafe impl Sync for GlFns {}
+
+fn configure_imported_texture(g: &GlFns, fourcc: u32) {
+    unsafe {
+        (g.tex_param)(GL_TEXTURE_2D, 0x2801, 0x2601);
+        (g.tex_param)(GL_TEXTURE_2D, 0x2800, 0x2601);
+        (g.tex_param)(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        (g.tex_param)(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        if fourcc == overlay_protocol::DRM_FORMAT_ARGB8888 {
+            (g.tex_param)(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_BLUE);
+            (g.tex_param)(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_GREEN);
+            (g.tex_param)(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
+            (g.tex_param)(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_ALPHA);
+        }
+    }
+}
+
+fn bound_texture_is_sampleable(g: &GlFns) -> bool {
+    let mut width = 0;
+    let mut height = 0;
+    unsafe {
+        (g.tex_level_i)(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &mut width);
+        (g.tex_level_i)(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &mut height);
+    }
+    width > 0 && height > 0
+}
+
+fn import_memory_object_surface(
+    g: &GlFns,
+    memory_fns: GlMemoryObjectFns,
+    descriptor: &DmabufDescriptor,
+    fd: &OwnedFd,
+) -> Result<DmabufSurface, ()> {
+    let [plane] = descriptor.planes.as_slice() else {
+        return Err(());
+    };
+    let tight_stride = descriptor.width.checked_mul(4).ok_or(())?;
+    // EXT_memory_object_fd has no DRM modifier or row-pitch parameter. Direct
+    // import is therefore valid only for a tightly packed linear allocation;
+    // other Chromium pixmaps need the GBM staging/blit path before this can be
+    // enabled by default.
+    if descriptor.modifier != 0
+        || plane.offset != 0
+        || plane.stride != tight_stride
+        || plane.size < u64::from(tight_stride).saturating_mul(u64::from(descriptor.height))
+    {
+        return Err(());
+    }
+    let duplicate = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
+    if duplicate < 0 {
+        return Err(());
+    }
+    let owned = unsafe { OwnedFd::from_raw_fd(duplicate) };
+    let mut memory = 0;
+    let mut texture = 0;
+    unsafe {
+        (memory_fns.create)(1, &mut memory);
+        if memory == 0 {
+            return Err(());
+        }
+        while (g.get_error)() != 0 {}
+        // The GL call takes ownership of the duplicated descriptor.
+        (memory_fns.import_fd)(
+            memory,
+            plane.size,
+            GL_HANDLE_TYPE_OPAQUE_FD_EXT,
+            owned.into_raw_fd(),
+        );
+        if (g.get_error)() != 0 {
+            (memory_fns.delete)(1, &memory);
+            return Err(());
+        }
+        (g.gen_texture)(1, &mut texture);
+        if texture == 0 {
+            (memory_fns.delete)(1, &memory);
+            return Err(());
+        }
+        (g.active)(GL_TEXTURE0);
+        (g.bind_tex)(GL_TEXTURE_2D, texture);
+        configure_imported_texture(g, descriptor.fourcc);
+        while (g.get_error)() != 0 {}
+        (memory_fns.tex_storage)(
+            GL_TEXTURE_2D,
+            1,
+            GL_RGBA8,
+            descriptor.width as c_int,
+            descriptor.height as c_int,
+            memory,
+            0,
+        );
+        if (g.get_error)() != 0 || !bound_texture_is_sampleable(g) {
+            (g.delete_textures)(1, &texture);
+            (memory_fns.delete)(1, &memory);
+            return Err(());
+        }
+    }
+    Ok(DmabufSurface {
+        backing: DmabufBacking::MemoryObject {
+            memory,
+            delete: memory_fns.delete,
+        },
+        texture,
+    })
+}
+
+fn import_egl_surface(
+    g: &GlFns,
+    descriptor: &DmabufDescriptor,
+    fds: &[OwnedFd],
+) -> Result<DmabufSurface, ()> {
+    let egl = load_egl_dmabuf().ok_or(())?;
+    let attributes = dmabuf_attributes(descriptor, fds)?;
+    let fd = fds.first().ok_or(())?;
+    let retained_fd = fd.try_clone().map_err(|_| ())?;
+    unsafe {
+        let display = import_display(egl);
+        if display.is_null() || !egl_display_imports_dmabuf(egl, display) {
+            return Err(());
+        }
+        let image = (egl.create_image)(
+            display,
+            null_mut(),
+            EGL_LINUX_DMA_BUF_EXT,
+            null_mut(),
+            attributes.as_ptr(),
+        );
+        if image.is_null() {
+            return Err(());
+        }
+        let mut texture = 0;
+        (g.gen_texture)(1, &mut texture);
+        if texture == 0 {
+            (egl.destroy_image)(display, image);
+            return Err(());
+        }
+        (g.active)(GL_TEXTURE0);
+        (g.bind_tex)(GL_TEXTURE_2D, texture);
+        configure_imported_texture(g, descriptor.fourcc);
+        while (g.get_error)() != 0 {}
+        if let Some(storage) = egl.image_target_storage {
+            storage(GL_TEXTURE_2D, image.cast_const(), null());
+        } else if let Some(texture_target) = egl.image_target_texture {
+            texture_target(GL_TEXTURE_2D, image.cast_const());
+        } else {
+            (g.delete_textures)(1, &texture);
+            (egl.destroy_image)(display, image);
+            return Err(());
+        }
+        if (g.get_error)() != 0 || !bound_texture_is_sampleable(g) {
+            (g.delete_textures)(1, &texture);
+            (egl.destroy_image)(display, image);
+            return Err(());
+        }
+        Ok(DmabufSurface {
+            backing: DmabufBacking::Egl {
+                image,
+                display,
+                destroy_image: egl.destroy_image,
+                _fd: retained_fd,
+            },
+            texture,
+        })
+    }
+}
+
 fn load_gl() -> Result<GlFns, ()> {
     const REQUIRED: [&[u8]; 46] = [
         b"glGetTexLevelParameteriv\0",
@@ -2828,13 +3113,7 @@ impl ContextResources {
         let Some(g) = self.gl else {
             return reject_dmabuf("no GL entry points");
         };
-        let Some(egl) = load_egl_dmabuf() else {
-            return reject_dmabuf("EGL DMA-BUF entry points unavailable");
-        };
-        reclaim_retired(&g, egl, &mut self.retired);
-        let Ok(attributes) = dmabuf_attributes(descriptor, fds) else {
-            return reject_dmabuf("descriptor rejected by attribute validation");
-        };
+        reclaim_retired(&g, &mut self.retired);
         let Some(fd) = fds.first() else {
             return reject_dmabuf("missing plane descriptor");
         };
@@ -2846,93 +3125,30 @@ impl ContextResources {
         };
         if let Some(surface) = self.dmabuf_pool.get_mut(key, serial) {
             let texture = surface.texture;
-            // SAFETY: the context is current and this pooled image belongs to it.
             unsafe {
                 (g.active)(GL_TEXTURE0);
                 (g.bind_tex)(GL_TEXTURE_2D, texture);
-                self.draw_bound_texture(
-                    g,
-                    texture,
-                    descriptor.fourcc == overlay_protocol::DRM_FORMAT_ARGB8888,
-                    target_width,
-                    target_height,
-                );
+                self.draw_bound_texture(g, texture, true, target_width, target_height);
             }
             return true;
         }
-        let Ok(retained_fd) = fd.try_clone() else {
-            return reject_dmabuf("plane descriptor could not be retained");
+
+        let imported = if !g.is_gles {
+            load_gl_memory_object()
+                .and_then(|memory| import_memory_object_surface(&g, memory, descriptor, fd).ok())
+                .or_else(|| import_egl_surface(&g, descriptor, fds).ok())
+        } else {
+            import_egl_surface(&g, descriptor, fds).ok()
         };
-        // SAFETY: descriptors and FDs have been validated and attributes
-        // remain live for the duration of image creation.
-        let (display, image, texture) = unsafe {
-            let display = import_display(egl);
-            if display.is_null() {
-                return reject_dmabuf("no usable EGL display for import");
-            }
-            let image = (egl.create_image)(
-                display,
-                null_mut(),
-                EGL_LINUX_DMA_BUF_EXT,
-                null_mut(),
-                attributes.as_ptr(),
-            );
-            if image.is_null() {
-                return reject_dmabuf("eglCreateImageKHR failed");
-            }
-            let mut texture = 0;
-            (g.gen_texture)(1, &mut texture);
-            if texture == 0 {
-                (egl.destroy_image)(display, image);
-                return reject_dmabuf("texture allocation failed");
-            }
-            (g.active)(GL_TEXTURE0);
-            (g.bind_tex)(GL_TEXTURE_2D, texture);
-            (g.tex_param)(GL_TEXTURE_2D, 0x2801, 0x2601);
-            (g.tex_param)(GL_TEXTURE_2D, 0x2800, 0x2601);
-            (g.tex_param)(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            (g.tex_param)(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            while (g.get_error)() != 0 {}
-            (egl.image_target_texture)(GL_TEXTURE_2D, image.cast_const());
-            let bind_error = (g.get_error)();
-            if bind_error != 0 {
-                (g.delete_textures)(1, &texture);
-                (egl.destroy_image)(display, image);
-                return reject_dmabuf_code("EGLImage could not be bound to a texture", bind_error);
-            }
-            // Some drivers accept the bind without error yet leave the texture
-            // empty (notably EGLImage import into a GLX context). Sampling that
-            // texture yields opaque black, which would erase the game's frame,
-            // so the import must be treated as unusable instead.
-            let mut bound_width = 0;
-            let mut bound_height = 0;
-            (g.tex_level_i)(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &mut bound_width);
-            (g.tex_level_i)(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &mut bound_height);
-            if bound_width <= 0 || bound_height <= 0 {
-                (g.delete_textures)(1, &texture);
-                (egl.destroy_image)(display, image);
-                return reject_dmabuf("EGLImage produced no sampleable texture");
-            }
-            (display, image, texture)
+        let Some(surface) = imported else {
+            return reject_dmabuf("no compatible memory-object or EGLImage import for this layout");
         };
-        let surface = DmabufSurface {
-            image,
-            texture,
-            display,
-            _fds: [retained_fd],
-        };
+        let texture = surface.texture;
         if let Some(evicted) = self.dmabuf_pool.insert(key, surface, serial) {
             self.retired.push(evicted);
         }
-        // SAFETY: the caller holds the complete state guard for this hook.
         unsafe {
-            self.draw_bound_texture(
-                g,
-                texture,
-                descriptor.fourcc == overlay_protocol::DRM_FORMAT_ARGB8888,
-                target_width,
-                target_height,
-            );
+            self.draw_bound_texture(g, texture, true, target_width, target_height);
         }
         true
     }
@@ -3177,7 +3393,7 @@ fn dmabuf_attributes(
     fds: &[OwnedFd],
 ) -> Result<DmabufAttributes, ()> {
     descriptor.validate().map_err(|_| ())?;
-    if fds.len() != descriptor.planes.len() {
+    if descriptor.planes.len() != 1 || fds.len() != 1 {
         return Err(());
     }
     let width = c_int::try_from(descriptor.width).map_err(|_| ())?;
@@ -3631,72 +3847,6 @@ mod tests {
             planes: Vec::new(),
         };
         assert!(dmabuf_attributes(&descriptor, &[]).is_err());
-    }
-
-    fn dmabuf_frame(
-        target_id: u64,
-        sequence: u64,
-        acknowledgements: &Arc<CompletionQueue>,
-    ) -> Arc<Frame> {
-        Arc::new(Frame {
-            image: FrameImage::Dmabuf {
-                descriptor: DmabufDescriptor {
-                    target_id,
-                    sequence,
-                    width: 8,
-                    height: 8,
-                    fourcc: overlay_protocol::DRM_FORMAT_ARGB8888,
-                    modifier: 0,
-                    planes: Vec::new(),
-                },
-                fds: Vec::new(),
-            },
-            serial: sequence,
-            acknowledgements: Arc::clone(acknowledgements),
-            fenced: AtomicBool::new(false),
-        })
-    }
-
-    #[test]
-    fn an_unfenced_frame_is_released_when_it_is_dropped() {
-        let queue = Arc::new(CompletionQueue::new());
-        drop(dmabuf_frame(3, 9, &queue));
-        assert_eq!(
-            queue.pop(),
-            Some(FrameConsumed {
-                target_id: 3,
-                sequence: 9
-            })
-        );
-    }
-
-    #[test]
-    fn a_fenced_frame_is_not_released_by_its_rust_lifetime() {
-        // The bug this guards: dropping the frame acknowledged immediately,
-        // letting the host recycle a buffer the GPU was still sampling.
-        let queue = Arc::new(CompletionQueue::new());
-        let frame = dmabuf_frame(3, 10, &queue);
-        frame.mark_fenced();
-        drop(frame);
-        assert_eq!(queue.pop(), None);
-    }
-
-    #[test]
-    fn a_fenced_frame_is_released_exactly_once_when_the_fence_signals() {
-        let queue = Arc::new(CompletionQueue::new());
-        let frame = dmabuf_frame(4, 11, &queue);
-        frame.mark_fenced();
-        // What the tracker does when `glClientWaitSync` reports completion.
-        frame.acknowledge();
-        drop(frame);
-        assert_eq!(
-            queue.pop(),
-            Some(FrameConsumed {
-                target_id: 4,
-                sequence: 11
-            })
-        );
-        assert_eq!(queue.pop(), None);
     }
 
     #[test]

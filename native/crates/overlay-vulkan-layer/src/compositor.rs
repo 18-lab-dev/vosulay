@@ -12,6 +12,7 @@ pub(crate) enum DrawOutcome {
 }
 
 pub(crate) type GetMemoryFdProperties = vk::PFN_vkGetMemoryFdPropertiesKHR;
+const MAX_IMPORTED_SURFACES: usize = 4;
 
 pub(crate) struct SwapchainState {
     pub(crate) device: vk::Device,
@@ -110,13 +111,27 @@ impl SwapchainState {
 struct DmabufIdentity {
     device: u64,
     inode: u64,
+    size: u64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct DmabufKey {
+    identity: DmabufIdentity,
+    width: u32,
+    height: u32,
+    fourcc: u32,
+    modifier: u64,
+    offset: u64,
+    stride: u32,
+    plane_size: u64,
 }
 
 struct ImportedSurface {
     image: vk::Image,
     memory: vk::DeviceMemory,
     view: vk::ImageView,
-    identity: DmabufIdentity,
+    key: DmabufKey,
+    last_used: u64,
 }
 
 struct Resources {
@@ -138,11 +153,12 @@ struct Resources {
     command_buffers: Vec<vk::CommandBuffer>,
     finished: Vec<vk::Semaphore>,
     fences: Vec<vk::Fence>,
-    imported: Option<ImportedSurface>,
-    /// Imports replaced while another image may still reference them. They are
-    /// freed once every fence is idle, which keeps composition of the current
-    /// image independent of that cleanup.
-    retiring: Vec<ImportedSurface>,
+    /// Bounded producer-buffer cache. Each in-flight swapchain image records
+    /// which key it samples, so an idle LRU entry can be evicted without ever
+    /// destroying an import still referenced by GPU work.
+    imports: Vec<ImportedSurface>,
+    image_imports: Vec<Option<DmabufKey>>,
+    import_serial: u64,
 }
 
 impl Resources {
@@ -350,8 +366,9 @@ impl Resources {
             command_buffers,
             finished,
             fences,
-            imported: None,
-            retiring: Vec::new(),
+            imports: Vec::with_capacity(MAX_IMPORTED_SURFACES),
+            image_imports: vec![None; image_count as usize],
+            import_serial: 0,
         })
     }
 
@@ -379,32 +396,58 @@ impl Resources {
         if !unsafe { raw.get_fence_status(fence)? } {
             return Ok(DrawOutcome::Busy);
         }
-        unsafe { self.retire_unused_imports(raw)? };
-        let identity = dmabuf_identity(fds.first().ok_or(vk::Result::ERROR_FORMAT_NOT_SUPPORTED)?)?;
-        let needs_import = self
-            .imported
-            .as_ref()
-            .is_none_or(|surface| surface.identity != identity);
-        if needs_import {
-            // Another image may still be sampling the outgoing import, so it is
-            // queued for teardown instead of being destroyed underneath it.
-            if let Some(surface) = self.imported.take() {
-                self.retiring.push(surface);
+        // This image's prior use is now complete, so its import is eligible for
+        // LRU eviction even when another image remains in flight.
+        self.image_imports[index] = None;
+        let key = dmabuf_key(
+            descriptor,
+            fds.first().ok_or(vk::Result::ERROR_FORMAT_NOT_SUPPORTED)?,
+        )?;
+        self.import_serial = self.import_serial.wrapping_add(1).max(1);
+        let serial = self.import_serial;
+        let (surface_index, newly_imported) = if let Some(index) =
+            self.imports.iter().position(|surface| surface.key == key)
+        {
+            self.imports[index].last_used = serial;
+            (index, false)
+        } else {
+            let slot = if self.imports.len() < MAX_IMPORTED_SURFACES {
+                self.imports.len()
+            } else {
+                let Some((slot, _)) = self
+                    .imports
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, candidate)| {
+                        !self
+                            .image_imports
+                            .iter()
+                            .flatten()
+                            .any(|in_flight| *in_flight == candidate.key)
+                    })
+                    .min_by_key(|(_, candidate)| candidate.last_used)
+                else {
+                    return Ok(DrawOutcome::Busy);
+                };
+                slot
+            };
+            let imported =
+                self.import_surface(raw, descriptor, fds, get_memory_fd_properties, key, serial)?;
+            if slot == self.imports.len() {
+                self.imports.push(imported);
+            } else {
+                let retired = std::mem::replace(&mut self.imports[slot], imported);
+                unsafe { destroy_imported_surface(raw, retired) };
             }
-            self.imported = Some(self.import_surface(
-                raw,
-                descriptor,
-                fds,
-                get_memory_fd_properties,
-                identity,
-            )?);
-        }
+            (slot, true)
+        };
         let descriptor_set = self.descriptor_sets[index];
         let command_buffer = self.command_buffers[index];
-        let imported = self.imported.as_ref().expect("surface imported");
+        let imported_image = self.imports[surface_index].image;
+        let imported_view = self.imports[surface_index].view;
         let image_info = vk::DescriptorImageInfo::default()
             .sampler(self.sampler)
-            .image_view(imported.view)
+            .image_view(imported_view)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
         let write = vk::WriteDescriptorSet::default()
             .dst_set(descriptor_set)
@@ -423,10 +466,9 @@ impl Resources {
         unsafe {
             raw.begin_command_buffer(command_buffer, &begin)?;
         }
-        let imported = self.imported.as_ref().expect("surface imported");
         let acquire = vk::ImageMemoryBarrier::default()
             .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .old_layout(if needs_import {
+            .old_layout(if newly_imported {
                 vk::ImageLayout::UNDEFINED
             } else {
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
@@ -434,7 +476,7 @@ impl Resources {
             .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .src_queue_family_index(vk::QUEUE_FAMILY_FOREIGN_EXT)
             .dst_queue_family_index(self.queue_family)
-            .image(imported.image)
+            .image(imported_image)
             .subresource_range(
                 vk::ImageSubresourceRange::default()
                     .aspect_mask(vk::ImageAspectFlags::COLOR)
@@ -521,14 +563,13 @@ impl Resources {
             );
             raw.cmd_draw(command_buffer, 3, 1, 0, 0);
             raw.cmd_end_render_pass(command_buffer);
-            let imported = self.imported.as_ref().expect("surface imported");
             let release = vk::ImageMemoryBarrier::default()
                 .src_access_mask(vk::AccessFlags::SHADER_READ)
                 .old_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                 .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                 .src_queue_family_index(self.queue_family)
                 .dst_queue_family_index(vk::QUEUE_FAMILY_FOREIGN_EXT)
-                .image(imported.image)
+                .image(imported_image)
                 .subresource_range(
                     vk::ImageSubresourceRange::default()
                         .aspect_mask(vk::ImageAspectFlags::COLOR)
@@ -556,29 +597,8 @@ impl Resources {
         unsafe {
             raw.queue_submit(queue, &[submit], fence)?;
         }
+        self.image_imports[index] = Some(key);
         Ok(DrawOutcome::Submitted(finished))
-    }
-
-    /// Free imports that were replaced while other images were still in
-    /// flight. Composition never waits on this: it only runs once every fence
-    /// is idle, and otherwise leaves the surfaces queued for a later present.
-    unsafe fn retire_unused_imports(&mut self, raw: &Device) -> Result<(), vk::Result> {
-        if self.retiring.is_empty() {
-            return Ok(());
-        }
-        for fence in &self.fences {
-            if !unsafe { raw.get_fence_status(*fence)? } {
-                return Ok(());
-            }
-        }
-        for surface in self.retiring.drain(..) {
-            unsafe {
-                raw.destroy_image_view(surface.view, None);
-                raw.destroy_image(surface.image, None);
-                raw.free_memory(surface.memory, None);
-            }
-        }
-        Ok(())
     }
 
     fn import_surface(
@@ -587,7 +607,8 @@ impl Resources {
         descriptor: &overlay_protocol::DmabufDescriptor,
         fds: &[OwnedFd],
         get_memory_fd_properties: GetMemoryFdProperties,
-        identity: DmabufIdentity,
+        key: DmabufKey,
+        last_used: u64,
     ) -> Result<ImportedSurface, vk::Result> {
         if descriptor.planes.len() != 1 || fds.len() != 1 {
             return Err(vk::Result::ERROR_FORMAT_NOT_SUPPORTED);
@@ -694,19 +715,16 @@ impl Resources {
             image,
             memory,
             view,
-            identity,
+            key,
+            last_used,
         })
     }
 
     unsafe fn destroy(self, raw: &Device) {
         let _ = unsafe { raw.device_wait_idle() };
-        // The device is idle, so every deferred import is now unreferenced.
-        for surface in self.imported.into_iter().chain(self.retiring) {
-            unsafe {
-                raw.destroy_image_view(surface.view, None);
-                raw.destroy_image(surface.image, None);
-                raw.free_memory(surface.memory, None);
-            }
+        // The device is idle, so every cached import is now unreferenced.
+        for surface in self.imports {
+            unsafe { destroy_imported_surface(raw, surface) };
         }
         for framebuffer in self.framebuffers {
             unsafe { raw.destroy_framebuffer(framebuffer, None) };
@@ -756,15 +774,45 @@ fn fourcc_format(fourcc: u32) -> Option<vk::Format> {
     }
 }
 
+unsafe fn destroy_imported_surface(raw: &Device, surface: ImportedSurface) {
+    unsafe {
+        raw.destroy_image_view(surface.view, None);
+        raw.destroy_image(surface.image, None);
+        raw.free_memory(surface.memory, None);
+    }
+}
+
 fn dmabuf_identity(fd: &OwnedFd) -> Result<DmabufIdentity, vk::Result> {
     let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
     if unsafe { libc::fstat(fd.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
         return Err(vk::Result::ERROR_INVALID_EXTERNAL_HANDLE);
     }
     let stat = unsafe { stat.assume_init() };
+    let size =
+        u64::try_from(stat.st_size).map_err(|_| vk::Result::ERROR_INVALID_EXTERNAL_HANDLE)?;
     Ok(DmabufIdentity {
         device: stat.st_dev,
         inode: stat.st_ino,
+        size,
+    })
+}
+
+fn dmabuf_key(
+    descriptor: &overlay_protocol::DmabufDescriptor,
+    fd: &OwnedFd,
+) -> Result<DmabufKey, vk::Result> {
+    let [plane] = descriptor.planes.as_slice() else {
+        return Err(vk::Result::ERROR_FORMAT_NOT_SUPPORTED);
+    };
+    Ok(DmabufKey {
+        identity: dmabuf_identity(fd)?,
+        width: descriptor.width,
+        height: descriptor.height,
+        fourcc: descriptor.fourcc,
+        modifier: descriptor.modifier,
+        offset: plane.offset,
+        stride: plane.stride,
+        plane_size: plane.size,
     })
 }
 #[cfg(test)]

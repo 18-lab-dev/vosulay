@@ -851,10 +851,17 @@ impl Task for AttachTask {
         if let Some(attach) = &self.attach {
             attach.run(self.pid, &socket_name, &cookie, deadline)?;
         }
-        // The GL backend's current DMA-BUF fence/reconnect path cannot yet
-        // prove last GPU use across repeated presents. Keep the negotiated
-        // session but expose SHM to Electron until that contract is replaced.
-        connect_handle(host, socket_name, cookie, remaining(deadline)?, false)
+        // Stable/Wine GL zero-copy is opt-in until the direct memory-object
+        // path has been validated against the caller's Chromium native-pixmap
+        // layout. The default remains the correctness-first SHM transport.
+        let expose_dmabuf = std::env::var_os("VOSULAY_GL_DMABUF").is_some();
+        connect_handle(
+            host,
+            socket_name,
+            cookie,
+            remaining(deadline)?,
+            expose_dmabuf,
+        )
     }
 
     fn resolve(&mut self, _env: Env, handle: Self::Output) -> Result<Self::JsValue> {
