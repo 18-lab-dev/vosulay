@@ -24,6 +24,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path("native/crates/overlay-agent-gl/src/lib.rs")
           text = path.read_text()
@@ -98,25 +99,29 @@ jobs:
               raise SystemExit("EGL return anchor missing")
           text = text.replace(old, new, 1)
 
-          old = '''                            if !resources.fences.track(&gl, frame.as_arc()) {
-                                      reject_dmabuf("GL sync objects unavailable");
-                                      rt.mailbox.discard(&frame);
-                                  }
-          '''
-          new = '''                            if !resources.fences.track(&gl, frame.as_arc()) {
-                                      // The draw was already submitted. If the driver refuses
-                                      // to create its retirement fence, a one-off finish is the
-                                      // only safe proof that Chromium may reclaim this buffer.
-                                      // This is an exceptional downgrade path, never normal hot-path
-                                      // synchronization.
-                                      unsafe { (gl.finish)() };
-                                      reject_dmabuf("GL sync object creation failed");
-                                      rt.mailbox.discard(&frame);
-                                  }
-          '''
-          if old not in text:
+          pattern = re.compile(
+              r'(?m)^(?P<i>[ \t]+)if !resources\.fences\.track\(&gl, frame\.as_arc\(\)\) \{\n'
+              r'(?P=i)    reject_dmabuf\("GL sync objects unavailable"\);\n'
+              r'(?P=i)    rt\.mailbox\.discard\(&frame\);\n'
+              r'(?P=i)\}'
+          )
+          match = pattern.search(text)
+          if match is None:
               raise SystemExit("fence failure anchor missing")
-          text = text.replace(old, new, 1)
+          i = match.group('i')
+          replacement = (
+              f'{i}if !resources.fences.track(&gl, frame.as_arc()) {{\n'
+              f'{i}    // The draw was already submitted. If the driver refuses\n'
+              f'{i}    // to create its retirement fence, a one-off finish is the\n'
+              f'{i}    // only safe proof that Chromium may reclaim this buffer.\n'
+              f'{i}    // This is an exceptional downgrade path, never normal hot-path\n'
+              f'{i}    // synchronization.\n'
+              f'{i}    unsafe {{ (gl.finish)() }};\n'
+              f'{i}    reject_dmabuf("GL sync object creation failed");\n'
+              f'{i}    rt.mailbox.discard(&frame);\n'
+              f'{i}}}'
+          )
+          text = pattern.sub(replacement, text, count=1)
 
           path.write_text(text)
           PY
