@@ -5,15 +5,16 @@
     "desktopName": "vosulay.desktop",
     "private": true,
     "license": "MIT",
+    "packageManager": "bun@1.2.21",
     "main": "./out/main/index.js",
     "scripts": {
         "build": "electron-vite build",
         "test": "tsx --test test/**/*.test.ts",
         "typecheck": "tsc --noEmit -p tsconfig.node.json",
         "verify:package": "node scripts/verify-package.mjs",
-        "dist:win": "npm run build && electron-builder --win --publish never && npm run verify:package -- win",
+        "dist:win": "bun run build && electron-builder --win --publish never && bun run verify:package -- win",
         "stage:native": "node scripts/stage-native.mjs",
-        "dist:linux": "npm run stage:native && npm run build && electron-builder --linux --publish never && npm run verify:package -- linux"
+        "dist:linux": "bun run stage:native && bun run build && electron-builder --linux --publish never && bun run verify:package -- linux"
     },
     "dependencies": {
         "cheerio": "^1.1.2",
