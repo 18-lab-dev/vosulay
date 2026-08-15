@@ -1,6 +1,6 @@
 # Stable / Wine GLX DMA-BUF validation
 
-Use this after building the current PR branch to validate the zero-copy path on osu!stable/Wine.
+Use this after building the current PR branch to validate the zero-copy path on osu!stable/Wine. Record the GPU and driver version, Wine build, DXVK version, desktop session (X11 or XWayland), and the output of `glxinfo -B` alongside the test result so import failures can be reproduced.
 
 ## Expected zero-copy path
 
