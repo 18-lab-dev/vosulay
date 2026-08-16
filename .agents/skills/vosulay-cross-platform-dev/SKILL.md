@@ -9,16 +9,16 @@ Repo: `~/gh/vosu-ecosystem/vosulay` (submodule of the vosu-ecosystem umbrella). 
 
 ## Rust (Linux) build/test
 
-`build.rs` hard-rejects stock Qt WebEngine (needs Dawn WebGPU). Use the Dawn-enabled prefix (find with `fd Qt6WebEngineCore.pc / -d 6` if moved; last seen `/tmp/vosulay-qt-webgpu`, buildable via `extra/build-webgpu-qt.sh <prefix>`):
+`build.rs` self-bootstraps: if pkg-config doesn't resolve a Dawn WebGPU-enabled Qt WebEngine, it builds one automatically into `$XDG_CACHE_HOME/vosulay/qt-webgpu` (`~/.cache/vosulay/qt-webgpu` by default) via `extra/build-webgpu-qt.sh`, then uses it for the rest of the build. Plain `cargo build`/`cargo test`/`cargo install --path .` work with **zero manual env vars** as long as `git`, `cmake`, `ninja`, `pkg-config`, `gperf`, and Python's `html5lib` are installed:
 
 ```sh
-P=/tmp/vosulay-qt-webgpu
-export PKG_CONFIG_PATH="$P/lib/pkgconfig" CMAKE_PREFIX_PATH="$P" LD_LIBRARY_PATH="$P/lib"
-export QTWEBENGINEPROCESS_PATH="$P/libexec/QtWebEngineProcess" \
-       QTWEBENGINE_RESOURCES_PATH="$P/resources" \
-       QTWEBENGINE_LOCALES_PATH="$P/translations/qtwebengine_locales"
-cargo test && cargo fmt --check && cargo clippy --all-targets -- -D warnings
+cargo test && cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings
 ```
+
+That auto-build is a full Qt WebEngine/Chromium source compile: ~30 minutes on a 32-thread workstation, **once per cache location** (`~/.cache/vosulay/qt-webgpu` does NOT get wiped on reboot — only `/tmp` does). If it's missing, the very first `cargo build`/`test` after checkout or a reboot triggers it automatically; run that first build via `hub` (`op:"start"`, `persist:true`) in the background and keep working on non-Rust parts (Windows/TS, shared `assets/manager.js` frontend, docs) while it compiles — do not block the whole task on it. `cargo:warning=` lines from build.rs announce when the auto-build starts/finishes; they show up live even without `-vv`.
+
+Point `VOSULAY_WEBGPU_QT_PREFIX=<prefix>` at an already-built prefix (e.g. a leftover one under `/tmp`, or one built by hand with `extra/build-webgpu-qt.sh <prefix>`) to skip the auto-build and reuse it instantly — this also works for a prefix outside the default cache dir. Set `VOSULAY_SKIP_AUTO_WEBGPU_BUILD=1` to disable the auto-build entirely and get the old fail-fast behavior (useful to confirm a specific pre-provisioned Qt is actually being picked up, or in CI that wants to control the Dawn Qt build itself). Manually exporting `PKG_CONFIG_PATH`/`CMAKE_PREFIX_PATH`/`LD_LIBRARY_PATH`/`QTWEBENGINE*` still works exactly as before and takes priority over the auto-detected prefix.
+
 
 ## Windows host on a Linux workstation
 

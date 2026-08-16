@@ -29,23 +29,42 @@ The Linux build requires Qt 6.11.1 development packages and a Dawn-enabled Qt
 WebEngine. Stock Qt WebEngine builds disable Dawn, so `build.rs` rejects them
 instead of silently exposing `navigator.gpu` without a working adapter.
 
-Install the normal Qt WebEngine build dependencies, `gperf`, and Python's
-`html5lib`, then build the pinned WebEngine variant into a separate prefix:
+```sh
+cargo build --release --locked
+./target/release/vosulay
+```
+
+That's it — no manual Qt WebEngine setup is required. If `build.rs` can't find
+a Dawn-enabled Qt WebEngine on `PKG_CONFIG_PATH`, it builds one automatically
+into `$XDG_CACHE_HOME/vosulay/qt-webgpu` (`~/.cache/vosulay/qt-webgpu` by
+default) using `extra/build-webgpu-qt.sh`, then picks it up for the rest of
+the build. This only happens once per machine: it's a full Qt
+WebEngine/Chromium source compile and takes roughly 20-40+ minutes depending
+on hardware, but every subsequent `cargo build`/`cargo install` reuses the
+cached result in seconds. The normal Qt WebEngine build dependencies, `git`,
+`cmake`, `ninja`, `pkg-config`, `gperf`, and Python's `html5lib` must be
+installed for that first build to succeed.
+
+`build.rs` records the validated library, subprocess, resource, and locale
+paths in the executable via an rpath, so a `cargo install --path .` binary
+runs without any extra environment variables. Non-empty runtime
+`QTWEBENGINE*` variables still override the recorded defaults.
+
+To use a specific prefix instead of the default cache location (for example a
+prefix built ahead of time, shared across machines, or pinned in CI), set
+`VOSULAY_WEBGPU_QT_PREFIX` to that directory before building:
 
 ```sh
 extra/build-webgpu-qt.sh "$HOME/.local/opt/vosulay-qt-webgpu"
+export VOSULAY_WEBGPU_QT_PREFIX="$HOME/.local/opt/vosulay-qt-webgpu"
+cargo build --release --locked
 ```
 
-Apply the six environment exports printed by the helper while running Cargo.
-They select the custom WebEngine at build time. `build.rs` records the validated
-library, subprocess, resource, and locale paths in the executable, so a
-`cargo install --path .` binary runs without those exports. Non-empty runtime
-`QTWEBENGINE*` variables still override the recorded defaults.
-
-```sh
-cargo build --release
-./target/release/vosulay
-```
+Setting `VOSULAY_SKIP_AUTO_WEBGPU_BUILD=1` disables the automatic build
+entirely; `build.rs` then fails fast with instructions instead of compiling
+Qt WebEngine, which is useful for CI or packaging environments that want to
+provision a Dawn-enabled Qt WebEngine themselves and fail loudly if it's
+missing rather than spend 20-40 minutes building one.
 
 For Linux command-line options, monitor selection, frame limiting, attachment mode, and IPC controls, see [Build and run](openwiki/operations/build-and-run.md).
 
@@ -75,10 +94,21 @@ The Windows host accepts `--vosu-url`/`-t`, `--fps-limit`/`-f`, repeatable `--pi
 
 ## Remote profile pages
 
-vosulay listens on `0.0.0.0:5050` and serves the active profile at
+vosulay listens on `0.0.0.0:5050` by default and serves the active profile at
 `http://<vosulay-host>:5050/overlay`. Use `?profile=1` to select a profile by
 its 1-based position. Clients must use the machine's loopback or LAN address,
 not the `0.0.0.0` bind address.
+
+The listener address and port are configurable in **Settings → Remote overlay
+server → Listener address** and **Listener port**. Set the address to a
+specific interface IP to restrict which network the server binds on, or leave
+it at `0.0.0.0` to listen on every interface. Listener changes take effect
+after restarting vosulay.
+
+The full remote access URL, including the shared credential, is shown in
+**Settings → Remote overlay server → Remote access credential/URL**; click
+**Regenerate** to rotate the credential and invalidate previously shared
+URLs.
 
 Remote access is controlled by **Settings → Remote overlay server → Allowed
 client IPs**. Loopback is always allowed; remote entries can be exact IP

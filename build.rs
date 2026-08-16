@@ -15,6 +15,9 @@ const QT_MODULES: &[&str] = &[
     "Qt6DBus",
 ];
 
+const AUTO_WEBGPU_PREFIX_ENV: &str = "VOSULAY_WEBGPU_QT_PREFIX";
+const SKIP_AUTO_WEBGPU_BUILD_ENV: &str = "VOSULAY_SKIP_AUTO_WEBGPU_BUILD";
+
 const QTWEBENGINE_RUNTIME_ENVIRONMENT: &[&str] = &[
     "QTWEBENGINEPROCESS_PATH",
     "QTWEBENGINE_RESOURCES_PATH",
@@ -58,6 +61,10 @@ fn main() {
     println!("cargo:rerun-if-env-changed=QT_MOC");
     println!("cargo:rerun-if-env-changed=QT_RCC");
     println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
+    println!("cargo:rerun-if-env-changed={AUTO_WEBGPU_PREFIX_ENV}");
+    println!("cargo:rerun-if-env-changed={SKIP_AUTO_WEBGPU_BUILD_ENV}");
+    println!("cargo:rerun-if-changed=extra/build-webgpu-qt.sh");
+    println!("cargo:rerun-if-changed=extra/qtwebengine-6.11-webgpu.patch");
     for variable in QTWEBENGINE_RUNTIME_ENVIRONMENT {
         println!("cargo:rerun-if-env-changed={variable}");
     }
@@ -65,15 +72,11 @@ fn main() {
         println!("cargo:rerun-if-env-changed={variable}");
     }
 
-    let webengine_core = pkg_config::Config::new()
-        .atleast_version("6.8")
-        .cargo_metadata(false)
-        .probe("Qt6WebEngineCore")
-        .unwrap_or_else(|error| {
-            panic!(
-                "Qt 6.8 or newer with the Qt6WebEngineCore development package is required: {error}"
-            )
-        });
+    ensure_dawn_webengine_available();
+
+    let webengine_core = probe_webengine_core().unwrap_or_else(|error| {
+        panic!("Qt 6.8 or newer with the Qt6WebEngineCore development package is required: {error}")
+    });
     let webengine = verify_webengine_dawn(&webengine_core);
 
     let mut qt_include_paths = Vec::new();
@@ -187,9 +190,16 @@ fn main() {
     );
 }
 
-fn verify_webengine_dawn(webengine_core: &pkg_config::Library) -> QtWebEngineMetadata {
+fn probe_webengine_core() -> Result<pkg_config::Library, pkg_config::Error> {
+    pkg_config::Config::new()
+        .atleast_version("6.8")
+        .cargo_metadata(false)
+        .probe("Qt6WebEngineCore")
+}
+
+fn find_webengine_config_header(webengine_core: &pkg_config::Library) -> Option<PathBuf> {
     const HEADER: &str = "qtwebenginecore-config.h";
-    let config_header = webengine_core
+    webengine_core
         .include_paths
         .iter()
         .flat_map(|include_path| {
@@ -199,23 +209,127 @@ fn verify_webengine_dawn(webengine_core: &pkg_config::Library) -> QtWebEngineMet
             ]
         })
         .find(|candidate| candidate.is_file())
+}
+
+fn config_header_has_dawn(config_header: &Path) -> bool {
+    fs::read_to_string(config_header)
+        .map(|config| {
+            config
+                .lines()
+                .any(|line| line.trim() == "#define QT_FEATURE_webengine_dawn 1")
+        })
+        .unwrap_or(false)
+}
+
+/// True when the currently configured `PKG_CONFIG_PATH` already resolves a
+/// Qt WebEngine build with Dawn WebGPU support compiled in.
+fn webengine_probe_has_dawn() -> bool {
+    probe_webengine_core().is_ok_and(|webengine_core| {
+        find_webengine_config_header(&webengine_core)
+            .is_some_and(|header| config_header_has_dawn(&header))
+    })
+}
+
+/// Directory `extra/build-webgpu-qt.sh` installs an auto-built Dawn-enabled
+/// Qt WebEngine into, unless overridden by `VOSULAY_WEBGPU_QT_PREFIX`.
+fn auto_webgpu_prefix() -> PathBuf {
+    if let Some(value) = env::var_os(AUTO_WEBGPU_PREFIX_ENV) {
+        return PathBuf::from(value);
+    }
+    let cache_dir = env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
         .unwrap_or_else(|| {
             panic!(
-                "Qt WebEngine's public config header was not found; build and select the Dawn-enabled Qt with extra/build-webgpu-qt.sh"
+                "could not determine a cache directory for the auto-built Qt WebEngine; \
+                 set XDG_CACHE_HOME, HOME, or {AUTO_WEBGPU_PREFIX_ENV}"
             )
         });
-    let config = fs::read_to_string(&config_header).unwrap_or_else(|error| {
+    cache_dir.join("vosulay").join("qt-webgpu")
+}
+
+/// Prepends `prefix/lib/pkgconfig` to `PKG_CONFIG_PATH` for the remainder of
+/// this build script invocation, so a previously auto-built (or externally
+/// pre-built) Dawn Qt WebEngine at `prefix` is discoverable by pkg-config.
+fn prepend_pkg_config_path(prefix: &Path) {
+    let mut paths = vec![prefix.join("lib").join("pkgconfig")];
+    if let Some(existing) = env::var_os("PKG_CONFIG_PATH") {
+        paths.extend(env::split_paths(&existing));
+    }
+    let joined =
+        env::join_paths(paths).expect("failed to join PKG_CONFIG_PATH entries into one value");
+    // SAFETY: build scripts run single-threaded before any subprocess is spawned that
+    // would read this variable concurrently with this write.
+    unsafe {
+        env::set_var("PKG_CONFIG_PATH", joined);
+    }
+}
+
+fn run_webgpu_build_script(prefix: &Path) {
+    let manifest_dir =
+        env::var_os("CARGO_MANIFEST_DIR").expect("Cargo did not set CARGO_MANIFEST_DIR");
+    let script = PathBuf::from(manifest_dir)
+        .join("extra")
+        .join("build-webgpu-qt.sh");
+    let status = Command::new("sh")
+        .arg(&script)
+        .arg(prefix)
+        .status()
+        .unwrap_or_else(|error| panic!("failed to execute {}: {error}", script.display()));
+    if !status.success() {
         panic!(
-            "failed to read {}: {error}",
-            config_header.to_string_lossy()
+            "{} failed with {status}; see the build output above for the underlying error, \
+             or set {SKIP_AUTO_WEBGPU_BUILD_ENV}=1 and build/select a Dawn-enabled Qt WebEngine \
+             yourself with extra/build-webgpu-qt.sh",
+            script.display()
+        );
+    }
+}
+
+/// Ensures a Dawn WebGPU-enabled Qt WebEngine is discoverable via pkg-config
+/// before the rest of `main` probes for it. Order of preference:
+/// 1. Whatever `PKG_CONFIG_PATH`/system pkg-config already resolves.
+/// 2. A Dawn Qt WebEngine previously auto-built into the cache prefix.
+/// 3. A freshly auto-built Dawn Qt WebEngine, unless explicitly skipped via
+///    `VOSULAY_SKIP_AUTO_WEBGPU_BUILD`, in which case the later authoritative
+///    check in `verify_webengine_dawn` panics with manual build instructions.
+fn ensure_dawn_webengine_available() {
+    if webengine_probe_has_dawn() {
+        return;
+    }
+
+    let prefix = auto_webgpu_prefix();
+    prepend_pkg_config_path(&prefix);
+    if webengine_probe_has_dawn() {
+        return;
+    }
+
+    if env::var_os(SKIP_AUTO_WEBGPU_BUILD_ENV).is_some() {
+        return;
+    }
+
+    println!(
+        "cargo:warning=vosulay: no Dawn WebGPU-enabled Qt WebEngine was found; building one \
+         automatically into {} (first build only). This compiles Qt WebEngine/Chromium from \
+         source and can take 20-40+ minutes depending on hardware. Set \
+         {SKIP_AUTO_WEBGPU_BUILD_ENV}=1 to skip this and build/select a Dawn-enabled Qt \
+         WebEngine yourself with extra/build-webgpu-qt.sh instead.",
+        prefix.display()
+    );
+    run_webgpu_build_script(&prefix);
+    println!("cargo:warning=vosulay: Dawn WebGPU-enabled Qt WebEngine build finished.");
+}
+
+fn verify_webengine_dawn(webengine_core: &pkg_config::Library) -> QtWebEngineMetadata {
+    let config_header = find_webengine_config_header(webengine_core).unwrap_or_else(|| {
+        panic!(
+            "Qt WebEngine's public config header was not found; build and select the Dawn-enabled Qt with extra/build-webgpu-qt.sh"
         )
     });
-    if !config
-        .lines()
-        .any(|line| line.trim() == "#define QT_FEATURE_webengine_dawn 1")
-    {
+    if !config_header_has_dawn(&config_header) {
         panic!(
-            "Qt WebEngine was built without Dawn WebGPU support; build and select it with extra/build-webgpu-qt.sh"
+            "Qt WebEngine was built without Dawn WebGPU support; build and select it with extra/build-webgpu-qt.sh \
+             (or unset {SKIP_AUTO_WEBGPU_BUILD_ENV} to let the build do this automatically)"
         );
     }
 

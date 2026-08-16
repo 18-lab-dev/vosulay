@@ -16,11 +16,22 @@ For non-system installations, the build script recognizes CMake/Qt/LayerShellQt 
 
 If Cargo fails before Rust tests run, inspect the native dependency diagnostic from `build.rs` first. The generated MOC and CMake probe outputs live under Cargo `OUT_DIR`, not in the repository.
 
-The Dawn-enabled WebEngine selected at build time is also the runtime
+`build.rs` also requires a Dawn WebGPU-enabled Qt WebEngine (stock distro
+builds disable Dawn). If pkg-config doesn't already resolve one, `build.rs`
+builds it automatically via [`extra/build-webgpu-qt.sh`](../../extra/build-webgpu-qt.sh)
+into `$XDG_CACHE_HOME/vosulay/qt-webgpu` (`~/.cache/vosulay/qt-webgpu` by
+default) the first time, then prepends that prefix to `PKG_CONFIG_PATH` for
+the rest of the build; subsequent builds reuse the cached prefix without
+recompiling. `VOSULAY_WEBGPU_QT_PREFIX` overrides the cache location (for a
+pre-built or shared prefix); `VOSULAY_SKIP_AUTO_WEBGPU_BUILD=1` disables the
+automatic build so a missing Dawn Qt WebEngine fails fast with manual
+instructions instead of starting a ~20-40 minute Chromium compile — useful
+for CI or packaging environments that provision Qt WebEngine themselves. The
+Dawn-enabled WebEngine selected at build time is also the runtime
 dependency. `build.rs` records its library directory as the executable
 RUNPATH and embeds its subprocess, resource, and locale paths as defaults.
 Consequently, binaries produced by `cargo install --path .` do not depend on
-the build shell retaining the helper's environment exports. Non-empty runtime
+the build shell retaining any environment exports. Non-empty runtime
 `QTWEBENGINE*` values remain explicit overrides.
 
 ## Launch modes and controls
@@ -45,7 +56,7 @@ On Wayland, LayerShellQt is used for overlay-layer placement; on X11, input tran
 
 ## Remote profile server operations
 
-Both platform hosts serve credential-protected, view-only profile pages on `0.0.0.0:5050`; see the [remote integration boundary](../integrations/vosu-and-overlays.md) for routes and authorization. Copy the complete **Remote access URL** from manager settings rather than sharing `/overlay` directly. Configure **Allowed client IPs** before exposing the service beyond loopback, and remember that rendered counter frames may need the same client network allowed by vosu. Regenerating or replacing the credential in `config.json` revokes prior URLs. A bind failure is non-fatal to application startup: the host logs that remote hosting is unavailable and continues without the server.
+Both platform hosts serve credential-protected, view-only profile pages on `AppSettings.remote_listen_host:remote_listen_port` (default `0.0.0.0:5050`, configurable in manager settings and applied on the next restart); see the [remote integration boundary](../integrations/vosu-and-overlays.md) for routes and authorization. Copy the complete **Remote access URL** from manager settings rather than sharing `/overlay` directly. Configure **Allowed client IPs** before exposing the service beyond loopback, and remember that rendered counter frames may need the same client network allowed by vosu. Regenerating the credential via the settings dialog's Regenerate control, or replacing it directly in `config.json`, revokes prior URLs. A bind failure is non-fatal to application startup: the host logs that remote hosting is unavailable and continues without the server.
 
 ## Packaging and documentation maintenance
 
