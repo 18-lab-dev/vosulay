@@ -7,6 +7,10 @@
     "main": "./out/main/index.js",
     "scripts": {
         "build": "electron-vite build",
+        "format": "oxfmt .",
+        "format:check": "oxfmt --check .",
+        "lint": "oxlint",
+        "lint:fix": "oxlint --fix",
         "test": "tsx --test test/**/*.test.ts",
         "typecheck": "tsc --noEmit -p tsconfig.node.json",
         "verify:package": "node scripts/verify-package.mjs",

@@ -1,3 +1,10 @@
+import { ConfigStore, loadConfigSync, sharedArrayBufferBlinkSwitch } from "./config";
+import {
+    LocalOverlayRegistry,
+    installCustomProtocols,
+    loadLocalOverlayCapabilityKey,
+    registerCustomSchemes,
+} from "./local-overlays";
 import {
     Menu,
     type MenuItemConstructorOptions,
@@ -7,24 +14,32 @@ import {
     nativeImage,
     session,
 } from "electron";
-import { mkdirSync } from "node:fs";
-
-import { ConfigStore, loadConfigSync, sharedArrayBufferBlinkSwitch } from "./config";
-import { resolveStoragePaths } from "./storage-path";
-import {
-    LocalOverlayRegistry,
-    installCustomProtocols,
-    loadLocalOverlayCapabilityKey,
-    registerCustomSchemes,
-} from "./local-overlays";
-import { createOverlayProvider } from "./provider-factory";
-import type { OverlayProvider } from "./overlay-provider";
+import { type ParsedInvocation, type RuntimeOptions, parseInvocation } from "./options";
+import { type OverlayProvider } from "./overlay-provider";
 import { RemoteOverlayServer } from "./remote-server";
-import { parseInvocation } from "./options";
-import type { ParsedInvocation, RuntimeOptions } from "./options";
+import { createOverlayProvider } from "./provider-factory";
+import { mkdirSync } from "node:fs";
+import { resolveStoragePaths } from "./storage-path";
 
-const EDIT_ACCELERATOR = "Control+Shift+Space",
-    VISIBILITY_ACCELERATOR = "Control+Alt+Shift+H";
+const APP_EXIT_FAILURE = 1;
+const APP_EXIT_SUCCESS = 0;
+const TRAY_ALPHA_CHANNEL = 3;
+const TRAY_BLUE_CHANNEL = 2;
+const TRAY_BUFFER_SIZE_BYTES = 4;
+const TRAY_GREEN_CHANNEL = 1;
+const TRAY_ICON_SIZE = 16;
+const TRAY_LOOP_LIMIT = TRAY_ICON_SIZE - 1;
+const TRAY_LOOP_PADDING = 1;
+const TRAY_OPAQUE_ALPHA = 255;
+const TRAY_OUTER_RED = 233;
+const TRAY_RED_CHANNEL = 0;
+const TRAY_RING_GREEN = 116;
+const TRAY_RING_BLUE = 165;
+const TRAY_RING_WIDTH = 4;
+
+const EDIT_ACCELERATOR = "Control+Shift+Space";
+const VISIBILITY_ACCELERATOR = "Control+Alt+Shift+H";
+
 if (process.platform === "win32") {
     app.commandLine.appendSwitch("force_high_performance_gpu");
     app.commandLine.appendSwitch("disable-direct-composition");
@@ -57,29 +72,30 @@ app.commandLine.appendSwitch(
 
 registerCustomSchemes();
 
-let invocation;
-try {
-    invocation = parseInvocation(
-        process.argv.slice(1),
-        process.defaultApp ? app.getAppPath() : undefined,
-    );
-} catch (error) {
-    console.error("Invalid vosulay options", error);
-    app.exit(1);
-}
+const invocation: ParsedInvocation | undefined = (() => {
+    try {
+        return parseInvocation(
+            process.argv.slice(1),
+            process.defaultApp ? app.getAppPath() : undefined,
+        );
+    } catch (error) {
+        console.error("Invalid vosulay options", error);
+        app.exit(APP_EXIT_FAILURE);
+    }
+})();
 
 if (invocation !== undefined) {
     const hasSingleInstanceLock = app.requestSingleInstanceLock();
     if (!hasSingleInstanceLock) {
         app.quit();
     } else if (invocation.command === undefined) {
-        void start(invocation.options).catch((error: unknown) => {
-            console.error("Failed to start vosulay", error);
-            app.exit(1);
+        void start(invocation.options).catch((cause: unknown) => {
+            console.error("Failed to start vosulay", cause);
+            app.exit(APP_EXIT_FAILURE);
         });
     } else {
         console.error("vosulay is not running");
-        app.exit(1);
+        app.exit(APP_EXIT_FAILURE);
     }
 }
 
@@ -88,35 +104,39 @@ async function start(options: RuntimeOptions): Promise<void> {
     // eslint-disable-next-line unicorn/no-null
     Menu.setApplicationMenu(null);
     app.on("window-all-closed", () => {});
-    const configStore = new ConfigStore(storagePaths.configPath),
-        overlayRegistry = new LocalOverlayRegistry(localOverlayCapabilityKey),
-        provider: OverlayProvider = await createOverlayProvider(
-            process.platform,
-            options,
-            configStore,
-            overlayRegistry,
-        );
-    let editShortcutRegistered = false,
-        remoteServer: RemoteOverlayServer | undefined = undefined,
-        shuttingDown = false,
-        tray: Tray | undefined = undefined,
-        unsubscribeRemoteConfig: (() => void) | undefined = undefined,
-        visibilityShortcutRegistered = false;
+    const configStore = new ConfigStore(storagePaths.configPath);
+    const overlayRegistry = new LocalOverlayRegistry(localOverlayCapabilityKey);
+    const provider: OverlayProvider = await createOverlayProvider(
+        process.platform,
+        options,
+        configStore,
+        overlayRegistry,
+    );
+    let editShortcutRegistered = false;
+    let remoteServer: RemoteOverlayServer | undefined = undefined;
+    let shuttingDown = false;
+    let tray: Tray | undefined = undefined;
+    let unsubscribeRemoteConfig: (() => void) | undefined = undefined;
+    let visibilityShortcutRegistered = false;
 
     app.on("second-instance", (_event, commandLine) => {
-        let command;
+        let parseFailed = false;
+        let command: ParsedInvocation["command"] = "toggle-overlay";
         try {
-            command = parseInvocation(
+            ({ command } = parseInvocation(
                 commandLine.slice(1),
                 process.defaultApp ? app.getAppPath() : undefined,
-            ).command;
+            ));
         } catch (error) {
+            parseFailed = true;
             console.error("Invalid vosulay second-instance options", error);
+        }
+        if (parseFailed) {
             return;
         }
         if (command === "toggle-overlay") {
-            void provider.toggleVisibility().catch((error: unknown) => {
-                console.error("Failed to toggle overlay visibility", error);
+            void provider.toggleVisibility().catch((cause: unknown) => {
+                console.error("Failed to toggle overlay visibility", cause);
             });
         } else {
             void provider.reloadAll();
@@ -168,17 +188,18 @@ async function start(options: RuntimeOptions): Promise<void> {
             tray = undefined;
             if (failures.length > 0) {
                 console.error("Failed to shut down vosulay cleanly", ...failures);
-                app.exit(1);
+                app.exit(APP_EXIT_FAILURE);
                 return;
             }
-            app.exit(0);
+            app.exit(APP_EXIT_SUCCESS);
         })();
     });
 
     await app.whenReady();
 
-    await Promise.resolve(installCustomProtocols(options, overlayRegistry));
-    const initialConfig = (await configStore.load()).config;
+    installCustomProtocols(options, overlayRegistry);
+    const loadedConfig = await configStore.load();
+    const initialConfig = loadedConfig.config;
     remoteServer = new RemoteOverlayServer({
         initialConfig,
         registry: overlayRegistry,
@@ -196,53 +217,55 @@ async function start(options: RuntimeOptions): Promise<void> {
         callback(false),
     );
     session.defaultSession.setPermissionCheckHandler(() => false);
-
-    const trayIcon = nativeImage.createFromBuffer(createTrayPixels(), { height: 16, width: 16 });
+    const trayIcon = nativeImage.createFromBuffer(createTrayPixels(), {
+        height: TRAY_ICON_SIZE,
+        width: TRAY_ICON_SIZE,
+    });
     tray = new Tray(trayIcon);
     tray.setToolTip("vosulay");
 
     const toggleEditing = (): void => {
-            void provider.toggleEditing().catch((error: unknown) => {
-                console.error("Failed to toggle overlay edit mode", error);
-            });
+        void provider.toggleEditing().catch((cause: unknown) => {
+            console.error("Failed to toggle overlay edit mode", cause);
+        });
+    };
+    const toggleVisibility = (): void => {
+        void provider.toggleVisibility().catch((cause: unknown) => {
+            console.error("Failed to toggle overlay visibility", cause);
+        });
+    };
+    const editItem: MenuItemConstructorOptions = {
+        checked: false,
+        click: toggleEditing,
+        label: "Edit overlays",
+        type: "checkbox",
+    };
+    const trayMenu = Menu.buildFromTemplate([
+        {
+            ...editItem,
+            id: "edit-overlays",
         },
-        toggleVisibility = (): void => {
-            void provider.toggleVisibility().catch((error: unknown) => {
-                console.error("Failed to toggle overlay visibility", error);
-            });
+        {
+            click: toggleVisibility,
+            id: "toggle-visibility",
+            label: "Hide overlays",
         },
-        editItem: MenuItemConstructorOptions = {
-            checked: false,
-            click: toggleEditing,
-            label: "Edit overlays",
-            type: "checkbox",
+        {
+            click: () => {
+                void provider.reloadAll();
+            },
+            label: "Reload overlays",
         },
-        trayMenu = Menu.buildFromTemplate([
-            {
-                ...editItem,
-                id: "edit-overlays",
-            },
-            {
-                click: toggleVisibility,
-                id: "toggle-visibility",
-                label: "Hide overlays",
-            },
-            {
-                click: () => {
-                    void provider.reloadAll();
-                },
-                label: "Reload overlays",
-            },
-            { type: "separator" },
-            {
-                click: () => app.quit(),
-                label: "Exit",
-            },
-        ]);
+        { type: "separator" },
+        {
+            click: () => app.quit(),
+            label: "Exit",
+        },
+    ]);
     tray.setContextMenu(trayMenu);
 
-    const editMenuItem = trayMenu.getMenuItemById("edit-overlays") ?? undefined,
-        visibilityMenuItem = trayMenu.getMenuItemById("toggle-visibility") ?? undefined;
+    const editMenuItem = trayMenu.getMenuItemById("edit-overlays") ?? undefined;
+    const visibilityMenuItem = trayMenu.getMenuItemById("toggle-visibility") ?? undefined;
     provider.events.on("editingChanged", (editing) => {
         if (editMenuItem !== undefined) {
             editMenuItem.checked = editing;
@@ -271,15 +294,19 @@ async function start(options: RuntimeOptions): Promise<void> {
 }
 
 function createTrayPixels(): Buffer {
-    const pixels = Buffer.alloc(16 * 16 * 4);
-    for (let y = 1; y < 15; y += 1) {
-        for (let x = 1; x < 15; x += 1) {
-            const offset = (y * 16 + x) * 4,
-                ring = x < 4 || x > 11 || y < 4 || y > 11;
-            pixels[offset] = ring ? 233 : 255;
-            pixels[offset + 1] = ring ? 116 : 255;
-            pixels[offset + 2] = ring ? 165 : 255;
-            pixels[offset + 3] = 255;
+    const pixels = Buffer.alloc(TRAY_ICON_SIZE * TRAY_ICON_SIZE * TRAY_BUFFER_SIZE_BYTES);
+    for (let y = TRAY_LOOP_PADDING; y < TRAY_LOOP_LIMIT; y += 1) {
+        for (let x = TRAY_LOOP_PADDING; x < TRAY_LOOP_LIMIT; x += 1) {
+            const offset = (y * TRAY_ICON_SIZE + x) * TRAY_BUFFER_SIZE_BYTES;
+            const ring =
+                x < TRAY_RING_WIDTH ||
+                x >= TRAY_ICON_SIZE - TRAY_RING_WIDTH ||
+                y < TRAY_RING_WIDTH ||
+                y >= TRAY_ICON_SIZE - TRAY_RING_WIDTH;
+            pixels[offset + TRAY_RED_CHANNEL] = ring ? TRAY_OUTER_RED : TRAY_OPAQUE_ALPHA;
+            pixels[offset + TRAY_GREEN_CHANNEL] = ring ? TRAY_RING_GREEN : TRAY_OPAQUE_ALPHA;
+            pixels[offset + TRAY_BLUE_CHANNEL] = ring ? TRAY_RING_BLUE : TRAY_OPAQUE_ALPHA;
+            pixels[offset + TRAY_ALPHA_CHANNEL] = TRAY_OPAQUE_ALPHA;
         }
     }
     return pixels;

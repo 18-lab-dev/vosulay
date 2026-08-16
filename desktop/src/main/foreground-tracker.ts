@@ -1,5 +1,7 @@
 import { createRequire } from "node:module";
 
+const READBACK_INTERVAL_MS = 100;
+
 export interface ActiveWindowInfo {
     pid: number;
 }
@@ -45,11 +47,14 @@ export class WindowsForegroundTracker implements ForegroundTracker {
     private watchId: number | undefined = undefined;
     private cancelReadback: (() => void) | undefined = undefined;
     private lastPid: number | undefined = undefined;
-
     constructor(dependencies: ForegroundTrackerDependencies = {}) {
         this.loadActiveWindow =
             dependencies.loadActiveWindow ??
             (() => {
+                /* SAFETY: The active-window package exports a module object with
+                 * an `ActiveWindow` property containing the tracker API this
+                 * code consumes.
+                 */
                 const module = createRequire(import.meta.url)(
                     "@paymoapp/active-window",
                 ) as ActiveWindowModule;
@@ -58,11 +63,10 @@ export class WindowsForegroundTracker implements ForegroundTracker {
         this.scheduleReadback =
             dependencies.scheduleReadback ??
             ((poll) => {
-                const timer = setInterval(poll, 100);
+                const timer = setInterval(poll, READBACK_INTERVAL_MS);
                 return () => clearInterval(timer);
             });
     }
-
     start(onChanged: (pid: number | undefined) => void): number | undefined {
         if (this.watchId !== undefined || this.cancelReadback !== undefined) {
             throw new Error("Foreground tracker is already running");
@@ -71,9 +75,9 @@ export class WindowsForegroundTracker implements ForegroundTracker {
         this.activeWindow = this.loadActiveWindow();
         this.activeWindow.initialize();
 
-        let pendingPid: number | undefined,
-            seeding = true;
-        const publish = (pid: number | undefined): void => {
+        let pendingPid: number | undefined = undefined;
+        let seeding = true;
+        const publish = (pid?: number): void => {
             if (pid !== this.lastPid) {
                 this.lastPid = pid;
                 onChanged(pid);
@@ -88,7 +92,7 @@ export class WindowsForegroundTracker implements ForegroundTracker {
             }
         });
 
-        let currentPid: number | undefined;
+        let currentPid: number | undefined = undefined;
         try {
             currentPid = validPid(this.activeWindow.getActiveWindow());
         } catch {
@@ -112,8 +116,8 @@ export class WindowsForegroundTracker implements ForegroundTracker {
     }
 
     stop(): void {
-        const { activeWindow } = this,
-            { watchId } = this;
+        const { activeWindow } = this;
+        const { watchId } = this;
         this.activeWindow = undefined;
         this.watchId = undefined;
         this.lastPid = undefined;

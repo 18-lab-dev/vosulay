@@ -1,12 +1,14 @@
+import { basename, join, resolve } from "node:path";
 import { cpSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 
-const desktopRoot = resolve(import.meta.dirname, ".."),
-    nativeRoot = resolve(desktopRoot, "../native"),
-    stageRoot = join(desktopRoot, "build/native"),
-    publishRoot = join(nativeRoot, "target/vosulay-attach-publish");
+const X64_LINUX_PLATFORM = "linux";
+const X64_ARCH = "x64";
+
+const desktopRoot = resolve(import.meta.dirname, "..");
+const nativeRoot = resolve(desktopRoot, "../native");
+const stageRoot = join(desktopRoot, "build/native");
+const publishRoot = join(nativeRoot, "target/vosulay-attach-publish");
 
 function run(command, args, cwd) {
     const result = spawnSync(command, args, { cwd, stdio: "inherit" });
@@ -25,7 +27,7 @@ function requireFile(path) {
     }
 }
 
-if (process.platform !== "linux" || process.arch !== "x64") {
+if (process.platform !== X64_LINUX_PLATFORM || process.arch !== X64_ARCH) {
     throw new Error("Linux native staging currently supports linux-x64 only");
 }
 

@@ -1,9 +1,16 @@
-import { load } from "cheerio";
-import type { InstalledCounter } from "./types";
 import { counterSearchUrl, counterUrl } from "./urls";
+import { type InstalledCounter } from "./types";
+import { load } from "cheerio";
+const DEFAULT_COUNTER_HEIGHT = 300;
+const DEFAULT_COUNTER_WIDTH = 500;
+const MIN_COUNTER_DIMENSION = 10;
+const NUMBER_ATTRIBUTE_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/u;
+const PIXEL_ATTRIBUTE_SUFFIX = "px";
+const PIXEL_ATTRIBUTE_SUFFIX_LENGTH = PIXEL_ATTRIBUTE_SUFFIX.length;
 
-export const MAX_COUNTER_PAGE_BYTES = 2 * 1024 * 1024;
+export const MAX_COUNTER_PAGE_BYTES = 2_097_152;
 export const COUNTER_FETCH_TIMEOUT_MS = 10_000;
+
 interface AttributeElement {
     attr: (name: string) => string | undefined;
 }
@@ -19,27 +26,18 @@ export async function readLimitedResponse(
     if (!response.body) {
         return "";
     }
-    const reader = response.body.getReader(),
-        decoder = new TextDecoder("utf-8", { fatal: true });
-    let source = "",
-        total = 0;
-    try {
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-                break;
-            }
-            total += value.byteLength;
-            if (total > limit) {
-                throw new Error(`counter search response exceeds the ${limit} byte limit`);
-            }
-            source += decoder.decode(value, { stream: true });
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    let source = "";
+    let total = 0;
+    for await (const value of response.body) {
+        total += value.byteLength;
+        if (total > limit) {
+            throw new Error(`counter search response exceeds the ${limit} byte limit`);
         }
-        source += decoder.decode();
-        return source;
-    } finally {
-        reader.releaseLock();
+        source += decoder.decode(value, { stream: true });
     }
+    source += decoder.decode();
+    return source;
 }
 
 function requiredAttribute(element: AttributeElement, name: string, counter: string): string {
@@ -57,46 +55,65 @@ function numericAttribute(element: AttributeElement, name: string): number | und
     if (source === undefined) {
         return undefined;
     }
-    const value = source.endsWith("px") ? source.slice(0, -2) : source;
-    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) {
+    const value = source.endsWith(PIXEL_ATTRIBUTE_SUFFIX)
+        ? source.slice(0, -PIXEL_ATTRIBUTE_SUFFIX_LENGTH)
+        : source;
+    if (!NUMBER_ATTRIBUTE_PATTERN.test(value)) {
         return undefined;
     }
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : undefined;
 }
+function normalizedCounterDimensions(width: number | undefined, height: number | undefined) {
+    const validResolution =
+        width !== undefined &&
+        height !== undefined &&
+        width > MIN_COUNTER_DIMENSION &&
+        height > MIN_COUNTER_DIMENSION;
+    if (validResolution) {
+        return {
+            height,
+            width,
+        };
+    }
+    return {
+        height: DEFAULT_COUNTER_HEIGHT,
+        width: DEFAULT_COUNTER_WIDTH,
+    };
+}
 
 export function parseInstalledCounters(base: URL | string, source: string): InstalledCounter[] {
-    const $ = load(source),
-        results = $("article.counter-card[data-overlay-id], .result-item"),
-        empty = $(".empty-state, .no-results");
+    const document = load(source);
+    const results = document("article.counter-card[data-overlay-id], .result-item");
+    const empty = document(".empty-state, .no-results");
     let recognized = false;
     const counters: InstalledCounter[] = [];
     results.each((_index, node) => {
-        const result = $(node),
-            modernId = result.attr("data-overlay-id");
+        const result = document(node);
+        const modernId = result.attr("data-overlay-id");
         if (modernId !== undefined) {
             recognized = true;
             const id = requiredAttribute(result, "data-overlay-id", "counter card");
             if (!id) {
                 throw new Error("counter card has an empty data-overlay-id");
             }
-            const name = requiredAttribute(result, "data-counter-name", id),
-                author = requiredAttribute(result, "data-counter-author", id),
-                version = requiredAttribute(result, "data-counter-version", id),
-                preview = result.find(".counter-card__preview iframe").first(),
-                width = numericAttribute(preview, "width"),
-                height = numericAttribute(preview, "height"),
-                validResolution =
-                    width !== undefined && height !== undefined && width > 10 && height > 10;
+            const name = requiredAttribute(result, "data-counter-name", id);
+            const author = requiredAttribute(result, "data-counter-author", id);
+            const version = requiredAttribute(result, "data-counter-version", id);
+            const preview = result.find(".counter-card__preview iframe").first();
+            const { width, height } = normalizedCounterDimensions(
+                numericAttribute(preview, "width"),
+                numericAttribute(preview, "height"),
+            );
             counters.push({
                 author,
                 has_settings: result.find('[data-action="counter-settings"]').length > 0,
-                height: validResolution ? height : 300,
+                height,
                 id,
                 name,
                 url: counterUrl(base, id).toString(),
                 version,
-                width: validResolution ? width : 500,
+                width,
             });
             return;
         }
@@ -106,32 +123,32 @@ export function parseInstalledCounters(base: URL | string, source: string): Inst
             return;
         }
         recognized = true;
-        const name = requiredAttribute(actions, "n", "legacy counter"),
-            author = requiredAttribute(actions, "a", name),
-            version = requiredAttribute(actions, "v", name),
-            idElement = result
-                .find(
-                    ".settings-builder-button[n], .settings-button[n], .open-button[n], .delete-button[n]",
-                )
-                .first(),
-            id = idElement.attr("n");
+        const name = requiredAttribute(actions, "n", "legacy counter");
+        const author = requiredAttribute(actions, "a", name);
+        const version = requiredAttribute(actions, "v", name);
+        const idElement = result
+            .find(
+                ".settings-builder-button[n], .settings-button[n], .open-button[n], .delete-button[n]",
+            )
+            .first();
+        const id = idElement.attr("n");
         if (!id) {
             throw new Error(`${JSON.stringify(name)} is missing a legacy folder name`);
         }
-        const preview = result.find(".ri-gallery iframe").first(),
-            width = numericAttribute(preview, "width"),
-            height = numericAttribute(preview, "height"),
-            validResolution =
-                width !== undefined && height !== undefined && width > 10 && height > 10;
+        const preview = result.find(".ri-gallery iframe").first();
+        const { width, height } = normalizedCounterDimensions(
+            numericAttribute(preview, "width"),
+            numericAttribute(preview, "height"),
+        );
         counters.push({
             author,
             has_settings: actions.find(".settings-button").length > 0,
-            height: validResolution ? height : 300,
+            height,
             id,
             name,
             url: counterUrl(base, id).toString(),
             version,
-            width: validResolution ? width : 500,
+            width,
         });
     });
     if (!recognized && empty.length === 0) {
@@ -147,12 +164,12 @@ export async function fetchInstalledCounters(
     fetcher: typeof fetch = globalThis.fetch,
     timeoutMs = COUNTER_FETCH_TIMEOUT_MS,
 ): Promise<InstalledCounter[]> {
-    const endpoint = counterSearchUrl(base),
-        controller = new AbortController(),
-        timeout = setTimeout(
-            () => controller.abort(new Error("counter search timed out")),
-            timeoutMs,
-        );
+    const endpoint = counterSearchUrl(base);
+    const controller = new AbortController();
+    const timeout = setTimeout(
+        () => controller.abort(new Error("counter search timed out")),
+        timeoutMs,
+    );
     try {
         const response = await fetcher(endpoint, { signal: controller.signal });
         if (!response.ok) {

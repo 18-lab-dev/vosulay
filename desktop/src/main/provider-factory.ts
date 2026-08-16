@@ -1,9 +1,9 @@
 import type { ConfigStore } from "./config";
-import type { LocalOverlayRegistry } from "./local-overlays";
-import type { RuntimeOptions } from "./options";
-import type { OverlayProvider } from "./overlay-provider";
-import type { OverlayManagerDependencies } from "./overlay-manager";
 import type { LinuxOverlayProviderDependencies } from "./linux-overlay-provider";
+import type { LocalOverlayRegistry } from "./local-overlays";
+import type { OverlayManagerDependencies } from "./overlay-manager";
+import type { OverlayProvider } from "./overlay-provider";
+import type { RuntimeOptions } from "./options";
 
 type SupportedPlatform = "win32" | "linux";
 

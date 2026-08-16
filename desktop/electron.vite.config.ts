@@ -5,10 +5,10 @@ export default defineConfig({
     main: {
         build: {
             rollupOptions: {
-                input: resolve(__dirname, "src/main/index.ts"),
                 // The Linux addon is loaded from extraResources at runtime; keep
                 // Its package name external when developing outside a packaged app.
                 external: ["@vosu/overlay-node"],
+                input: resolve(__dirname, "src/main/index.ts"),
             },
         },
         plugins: [externalizeDepsPlugin()],

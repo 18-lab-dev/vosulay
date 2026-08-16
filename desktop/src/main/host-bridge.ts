@@ -1,62 +1,107 @@
-import { createRequire } from "node:module";
+import { ConfigConflictError, type ConfigStore } from "./config";
+import type { EditingTarget, MessageEnvelope, WebContentsLike } from "./types";
+import {
+    type JsonObject,
+    type JsonValue,
+    isJsonArray,
+    isJsonNumber,
+    isJsonObject,
+    isJsonString,
+    parseJsonText,
+} from "./json";
+import { availableUrl, settingsUrl } from "./urls";
 import { basename, dirname, extname, join } from "node:path";
 import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { ConfigConflictError, type ConfigStore } from "./config";
-import { fetchInstalledCounters } from "./counters";
 import type { LocalOverlayRegistry } from "./local-overlays";
 import type { RuntimeOptions } from "./options";
-import type { EditingTarget, MessageEnvelope, WebContentsLike } from "./types";
-import { availableUrl, settingsUrl } from "./urls";
+import { createRequire } from "node:module";
+import { fetchInstalledCounters } from "./counters";
 
-const require = createRequire(import.meta.url),
-    IPC_CHANNEL = "vosulay:message",
-    MAX_PROFILE_BYTES = 1024 * 1024;
+const require = createRequire(import.meta.url);
+const IPC_CHANNEL = "vosulay:message";
+const BYTES_PER_KIB = 1024;
+const MAX_PROFILE_BYTES = BYTES_PER_KIB * BYTES_PER_KIB;
+const PROFILE_JSON_INDENT = 2;
+const PROFILE_FILE_MODE = 0o600;
+const SAVE_FLUSH_TIMEOUT_MS = 5000;
+const LAST_CONTROL_CODE_POINT = 0x1f;
+const RESERVED_NAME_CHARACTERS = new Set(["<", ">", ":", '"', "/", "\\", "|", "?", "*"]);
 
 interface IpcEventLike {
     sender: { id: number };
 }
 
+type IpcMessageListener = (event: IpcEventLike, payload: JsonValue) => void;
+
 interface IpcMainLike {
-    on(channel: string, listener: (event: IpcEventLike, payload: unknown) => void): void;
-    removeListener(
-        channel: string,
-        listener: (event: IpcEventLike, payload: unknown) => void,
-    ): void;
+    on: (channel: string, listener: IpcMessageListener) => void;
+    removeListener: (channel: string, listener: IpcMessageListener) => void;
+}
+
+/** The subset of Electron's dialog options this host passes through. */
+interface FileDialogOptions {
+    title: string;
+    defaultPath?: string;
+    properties?: readonly string[];
+    filters: readonly { name: string; extensions: readonly string[] }[];
 }
 
 interface ElectronServices {
     ipcMain: IpcMainLike;
     dialog: {
-        showOpenDialog(options: unknown): Promise<{ canceled: boolean; filePaths: string[] }>;
-        showSaveDialog(options: unknown): Promise<{ canceled: boolean; filePath?: string }>;
+        showOpenDialog: (
+            options: FileDialogOptions,
+        ) => Promise<{ canceled: boolean; filePaths: string[] }>;
+        showSaveDialog: (
+            options: FileDialogOptions,
+        ) => Promise<{ canceled: boolean; filePath?: string }>;
     };
-    shell: { openExternal(url: string): Promise<void> };
-    app: { quit(): void };
+    shell: { openExternal: (url: string) => Promise<void> };
+    app: { quit: () => void };
 }
 
 function electron(): ElectronServices {
+    /* SAFETY: Electron's main-process module always exposes these services; the host only runs inside Electron. */
     return require("electron") as ElectronServices;
 }
 
-function objectMessage(value: unknown): Record<string, unknown> {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
+function objectMessage(value: JsonValue | undefined): JsonObject {
+    if (!isJsonObject(value)) {
         throw new Error("Invalid vosulay manager message");
     }
-    return value as Record<string, unknown>;
+    return value;
 }
 
-export function localOverlayUrls(profileOrConfig: unknown): string[] {
-    const object = objectMessage(profileOrConfig),
-        profiles = Array.isArray(object.profiles) ? object.profiles : [object],
-        urls: string[] = [];
+/*
+ * Strips the characters no common filesystem accepts in a name, matching the
+ * exact set the exported profile filename has always rejected: the reserved
+ * punctuation plus the C0 control range. It is written as a scan rather than a
+ * regex because a `u`-flagged pattern cannot spell a control range literally,
+ * and `\p{Cc}` would also swallow the C1 controls this never touched.
+ */
+function sanitizeProfileName(name: string): string {
+    return [...name]
+        .map((character) => {
+            const code = character.codePointAt(0) ?? 0;
+            return RESERVED_NAME_CHARACTERS.has(character) || code <= LAST_CONTROL_CODE_POINT
+                ? "_"
+                : character;
+        })
+        .join("");
+}
+
+export function localOverlayUrls(profileOrConfig: JsonValue | undefined): string[] {
+    const object = objectMessage(profileOrConfig);
+    const profiles = isJsonArray(object.profiles) ? object.profiles : [object];
+    const urls: string[] = [];
     for (const profileValue of profiles) {
         const profile = objectMessage(profileValue);
-        if (!Array.isArray(profile.overlays)) {
+        if (!isJsonArray(profile.overlays)) {
             throw new TypeError("Imported profile must contain a valid overlays array");
         }
         for (const overlayValue of profile.overlays) {
             const overlay = objectMessage(overlayValue);
-            if (typeof overlay.url !== "string") {
+            if (!isJsonString(overlay.url)) {
                 continue;
             }
             const value = overlay.url.trim();
@@ -89,7 +134,7 @@ export class HostBridge {
             timeout: NodeJS.Timeout;
         }
     >();
-    private readonly listener = (event: IpcEventLike, payload: unknown): void => {
+    private readonly listener: IpcMessageListener = (event, payload): void => {
         if (this.webContents.id !== undefined && event.sender.id !== this.webContents.id) {
             return;
         }
@@ -98,21 +143,34 @@ export class HostBridge {
         }
         if (this.messageType(payload) === "save-config") {
             const operation = this.saveTail.then(() => this.dispatch(payload));
-            this.saveTail = operation.catch((error: unknown) => this.reportError(error));
+            this.saveTail = operation.catch((cause: unknown) => this.reportError(cause));
             return;
         }
         const operation = this.dispatchTail.then(() => this.dispatch(payload));
-        this.dispatchTail = operation.catch((error: unknown) => this.reportError(error));
+        this.dispatchTail = operation.catch((cause: unknown) => this.reportError(cause));
     };
+    private readonly webContents: WebContentsLike;
+    private readonly editingTarget: EditingTarget;
+    private readonly options: RuntimeOptions;
+    private readonly configStore: ConfigStore;
+    private readonly overlayRegistry: LocalOverlayRegistry;
+    private readonly ipcMain: IpcMainLike;
 
     constructor(
-        private readonly webContents: WebContentsLike,
-        private readonly editingTarget: EditingTarget,
-        private readonly options: RuntimeOptions,
-        private readonly configStore: ConfigStore,
-        private readonly overlayRegistry: LocalOverlayRegistry,
-        private readonly ipcMain: IpcMainLike = electron().ipcMain,
-    ) {}
+        webContents: WebContentsLike,
+        editingTarget: EditingTarget,
+        options: RuntimeOptions,
+        configStore: ConfigStore,
+        overlayRegistry: LocalOverlayRegistry,
+        ipcMain: IpcMainLike = electron().ipcMain,
+    ) {
+        this.webContents = webContents;
+        this.editingTarget = editingTarget;
+        this.options = options;
+        this.configStore = configStore;
+        this.overlayRegistry = overlayRegistry;
+        this.ipcMain = ipcMain;
+    }
 
     start(): void {
         if (this.started) {
@@ -133,13 +191,19 @@ export class HostBridge {
         this.started = true;
     }
 
-    async send(envelope: MessageEnvelope): Promise<void> {
+    send(envelope: MessageEnvelope): Promise<void> {
         if (this.webContents.isDestroyed?.()) {
-            return;
+            return Promise.resolve();
         }
-        this.webContents.send(IPC_CHANNEL, envelope);
+        try {
+            this.webContents.send(IPC_CHANNEL, envelope);
+        } catch (cause: unknown) {
+            return Promise.reject(cause instanceof Error ? cause : new Error(String(cause)));
+        }
+        return Promise.resolve();
     }
-    requestSaveFlush(timeoutMs = 5000): Promise<void> {
+
+    requestSaveFlush(timeoutMs = SAVE_FLUSH_TIMEOUT_MS): Promise<void> {
         if (this.webContents.isDestroyed?.()) {
             return Promise.reject(new Error("Cannot flush a destroyed vosulay manager"));
         }
@@ -151,14 +215,14 @@ export class HostBridge {
             }, timeoutMs);
             this.flushWaiters.set(requestId, { reject, resolve, timeout });
             void this.send({ request_id: requestId, type: "flush-save" }).catch(
-                (error: unknown) => {
+                (cause: unknown) => {
                     const waiter = this.flushWaiters.get(requestId);
                     if (!waiter) {
                         return;
                     }
                     clearTimeout(waiter.timeout);
                     this.flushWaiters.delete(requestId);
-                    waiter.reject(error instanceof Error ? error : new Error(String(error)));
+                    waiter.reject(cause instanceof Error ? cause : new Error(String(cause)));
                 },
             );
         });
@@ -180,24 +244,31 @@ export class HostBridge {
         this.started = false;
     }
 
-    private async dispatch(payload: unknown): Promise<void> {
-        const decoded = typeof payload === "string" ? (JSON.parse(payload) as unknown) : payload,
-            request = objectMessage(decoded);
-        if (typeof request.type !== "string") {
+    /** Decode one manager message, whether it arrived as JSON text or as a structured payload. */
+    private decodeRequest(payload: JsonValue): JsonObject {
+        return objectMessage(isJsonString(payload) ? parseJsonText(payload) : payload);
+    }
+
+    private async dispatch(payload: JsonValue): Promise<void> {
+        const request = this.decodeRequest(payload);
+        if (!isJsonString(request.type)) {
             throw new TypeError("Invalid vosulay manager message");
         }
         switch (request.type) {
             case "ready": {
                 await this.initialize();
-                return;
+                break;
             }
             case "save-config": {
-                if (typeof request.save_id !== "string" || !request.save_id) {
+                const saveId = request.save_id;
+                const baseRevision = request.base_revision;
+                if (!isJsonString(saveId) || !saveId) {
                     throw new Error("Invalid vosulay save ID");
                 }
                 if (
-                    !Number.isSafeInteger(request.base_revision) ||
-                    (request.base_revision as number) < 0
+                    !isJsonNumber(baseRevision) ||
+                    !Number.isSafeInteger(baseRevision) ||
+                    baseRevision < 0
                 ) {
                     throw new Error("Invalid vosulay configuration revision");
                 }
@@ -209,13 +280,13 @@ export class HostBridge {
                         );
                     }
                     const saved = await this.configStore.save(request.config, {
-                        expectedRevision: request.base_revision as number,
+                        expectedRevision: baseRevision,
                         source: this.source,
                     });
                     this.revision = saved.revision;
                     await this.send({
                         revision: saved.revision,
-                        save_id: request.save_id,
+                        save_id: saveId,
                         type: "saved",
                     });
                 } catch (error) {
@@ -225,57 +296,58 @@ export class HostBridge {
                         config: loaded.config,
                         message: error instanceof Error ? error.message : String(error),
                         revision: loaded.revision,
-                        save_id: request.save_id,
+                        save_id: saveId,
                         type: "save-error",
                     });
                 }
-                return;
+                break;
             }
             case "refresh-counters": {
                 await this.refreshCounters();
-                return;
+                break;
             }
             case "set-editing": {
                 await this.editingTarget.setEditing(Boolean(request.editing));
                 await this.send({ editing: this.editingTarget.editing, type: "editing" });
-                return;
+                break;
             }
             case "editing-applied": {
-                return;
+                break;
             }
             case "choose-overlay-file": {
                 await this.chooseOverlayFile();
-                return;
+                break;
             }
             case "import-profile": {
                 await this.importProfile();
-                return;
+                break;
             }
             case "export-profile": {
                 await this.exportProfile(request.profile);
-                return;
+                break;
             }
             case "authorize-profile-import": {
                 await this.authorizeProfile(request.profile);
-                return;
+                break;
             }
             case "open-settings": {
-                if (typeof request.counter_id !== "string") {
-                    throw new TypeError("Counter identifier is required");
+                const counterId = request.counter_id;
+                if (!isJsonString(counterId)) {
+                    throw new TypeError("Counter identifier required");
                 }
                 await electron().shell.openExternal(
-                    settingsUrl(this.options.vosuUrl, request.counter_id).toString(),
+                    settingsUrl(this.options.vosuUrl, counterId).toString(),
                 );
-                return;
+                break;
             }
             case "open-available": {
                 await electron().shell.openExternal(availableUrl(this.options.vosuUrl).toString());
-                return;
+                break;
             }
             case "quit": {
                 await this.configStore.flush();
                 electron().app.quit();
-                return;
+                break;
             }
             default: {
                 throw new Error("Unknown vosulay manager message");
@@ -299,44 +371,31 @@ export class HostBridge {
         await this.refreshCounters();
     }
 
-    private messageType(payload: unknown): string | undefined {
-        try {
-            const decoded =
-                typeof payload === "string" ? (JSON.parse(payload) as unknown) : payload;
-            if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
-                return undefined;
-            }
-            const { type } = decoded as Record<string, unknown>;
-            return typeof type === "string" ? type : undefined;
-        } catch {
+    private messageType(payload: JsonValue): string | undefined {
+        const decoded = isJsonString(payload) ? parseJsonText(payload) : payload;
+        if (!isJsonObject(decoded)) {
             return undefined;
         }
+        const { type } = decoded;
+        return isJsonString(type) ? type : undefined;
     }
 
-    private trySettleFlush(payload: unknown): boolean {
-        let decoded: unknown;
-        try {
-            decoded = typeof payload === "string" ? (JSON.parse(payload) as unknown) : payload;
-        } catch {
+    private trySettleFlush(payload: JsonValue): boolean {
+        const decoded = isJsonString(payload) ? parseJsonText(payload) : payload;
+        if (!isJsonObject(decoded)) {
             return false;
         }
-        if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
-            return false;
-        }
-        const request = decoded as Record<string, unknown>;
+        const request = decoded;
         if (request.type !== "flush-complete" && request.type !== "flush-failed") {
             return false;
         }
 
         try {
+            const { message } = request;
             this.settleFlush(
                 request.request_id,
                 request.type === "flush-failed"
-                    ? new Error(
-                          typeof request.message === "string"
-                              ? request.message
-                              : "vosulay manager could not save",
-                      )
+                    ? new Error(isJsonString(message) ? message : "vosulay manager could not save")
                     : undefined,
             );
         } catch (error) {
@@ -345,8 +404,8 @@ export class HostBridge {
         return true;
     }
 
-    private settleFlush(requestId: unknown, error: Error | undefined): void {
-        if (typeof requestId !== "string") {
+    private settleFlush(requestId: JsonValue | undefined, error: Error | undefined): void {
+        if (!isJsonString(requestId)) {
             throw new TypeError("Invalid vosulay flush request ID");
         }
         const waiter = this.flushWaiters.get(requestId);
@@ -362,10 +421,10 @@ export class HostBridge {
         }
     }
 
-    private async reportError(error: unknown): Promise<void> {
+    private async reportError(cause: unknown): Promise<void> {
         try {
             await this.send({
-                message: error instanceof Error ? error.message : String(error),
+                message: cause instanceof Error ? cause.message : String(cause),
                 type: "error",
             });
         } catch (sendError) {
@@ -384,14 +443,15 @@ export class HostBridge {
             properties: ["openFile"],
             title: "Choose HTML overlay",
         });
-        if (result.canceled || !result.filePaths[0]) {
+        const [path] = result.filePaths;
+        if (result.canceled || path === undefined || path === "") {
             return;
         }
-        const path = result.filePaths[0];
-        if (
-            ![".html", ".htm"].includes(extname(path).toLowerCase()) ||
-            !(await stat(path)).isFile()
-        ) {
+        if (![".html", ".htm"].includes(extname(path).toLowerCase())) {
+            throw new Error("Selected overlay is not a readable HTML file");
+        }
+        const info = await stat(path);
+        if (!info.isFile()) {
             throw new Error("Selected overlay is not a readable HTML file");
         }
         const url = await this.overlayRegistry.createUrl(path);
@@ -404,45 +464,43 @@ export class HostBridge {
             properties: ["openFile"],
             title: "Import profile",
         });
-        if (result.canceled || !result.filePaths[0]) {
+        const [path] = result.filePaths;
+        if (result.canceled || path === undefined || path === "") {
             return;
         }
-        const path = result.filePaths[0],
-            info = await stat(path);
+        const info = await stat(path);
         if (!info.isFile() || extname(path).toLowerCase() !== ".json") {
             throw new Error("Selected profile is not a readable JSON file");
         }
         if (info.size > MAX_PROFILE_BYTES) {
             throw new Error("Selected profile is too large (maximum 1 MiB)");
         }
-        const profile = JSON.parse(await readFile(path, "utf8")) as unknown,
-            object = objectMessage(profile);
+        const profile = parseJsonText(await readFile(path, "utf8"));
+        const object = objectMessage(profile);
         localOverlayUrls(object);
         await this.send({ profile: object, type: "profile-import" });
     }
 
-    private async authorizeProfile(profile: unknown): Promise<void> {
-        const object = objectMessage(profile),
-            urls = localOverlayUrls(object);
+    private async authorizeProfile(profile: JsonValue | undefined): Promise<void> {
+        const object = objectMessage(profile);
+        const urls = localOverlayUrls(object);
         if (!this.overlayRegistry.authorizeUrls(urls)) {
             throw new Error("Imported profile contains local overlay that could not be authorized");
         }
         await this.send({ profile: object, type: "profile-import-authorized" });
     }
 
-    private async exportProfile(profile: unknown): Promise<void> {
+    private async exportProfile(profile: JsonValue | undefined): Promise<void> {
         const object = objectMessage(profile);
         localOverlayUrls(object);
-        const name =
-                typeof object.name === "string" && object.name.trim()
-                    ? object.name.trim()
-                    : "profile",
-            safeName = name.replaceAll(/[<>:"/\\|?*\u0000-\u001F]/g, "_"),
-            result = await electron().dialog.showSaveDialog({
-                defaultPath: `${safeName}.json`,
-                filters: [{ extensions: ["json"], name: "JSON profile files" }],
-                title: "Export profile",
-            });
+        const { name: rawName } = object;
+        const name = isJsonString(rawName) && rawName.trim() ? rawName.trim() : "profile";
+        const safeName = sanitizeProfileName(name);
+        const result = await electron().dialog.showSaveDialog({
+            defaultPath: `${safeName}.json`,
+            filters: [{ extensions: ["json"], name: "JSON profile files" }],
+            title: "Export profile",
+        });
         if (result.canceled || !result.filePath) {
             return;
         }
@@ -451,11 +509,15 @@ export class HostBridge {
         }
         const temporary = join(dirname(result.filePath), `.${process.pid}-${Date.now()}.tmp`);
         try {
-            await writeFile(temporary, `${JSON.stringify(object, undefined, 2)}\n`, {
-                encoding: "utf8",
-                flag: "wx",
-                mode: 0o600,
-            });
+            await writeFile(
+                temporary,
+                `${JSON.stringify(object, undefined, PROFILE_JSON_INDENT)}\n`,
+                {
+                    encoding: "utf8",
+                    flag: "wx",
+                    mode: PROFILE_FILE_MODE,
+                },
+            );
             await rename(temporary, result.filePath);
         } catch (error) {
             await rm(temporary, { force: true });

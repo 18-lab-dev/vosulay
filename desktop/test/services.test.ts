@@ -1,35 +1,89 @@
-import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import test from "node:test";
+import type { AppConfig, MessageEnvelope } from "../src/main/types";
 import { ConfigStore, normalizeConfig } from "../src/main/config";
+import { HostBridge, localOverlayUrls } from "../src/main/host-bridge";
+import { type JsonObject, type JsonValue, isJsonObject, isJsonString } from "../src/main/json";
 import {
     MAX_COUNTER_PAGE_BYTES,
     fetchInstalledCounters,
     parseInstalledCounters,
 } from "../src/main/counters";
-import { HostBridge, localOverlayUrls } from "../src/main/host-bridge";
-import { withFatalDeadline } from "../src/main/fatal-deadline";
 import { NativeEditShortcutState, editShortcutCommand } from "../src/main/edit-shortcut";
-import { LocalOverlayRegistry } from "../src/main/local-overlays";
-import { chooseOverlayTarget } from "../src/main/overlay-target";
-import { buildManagerDocumentFromSources } from "../src/main/manager-document";
-import { parseInvocation, parseOptions } from "../src/main/options";
-import { resolveStoragePaths } from "../src/main/storage-path";
 import { availableUrl, counterUrl, settingsUrl } from "../src/main/urls";
-import type { AppSettings, MessageEnvelope } from "../src/main/types";
-
+import { join, resolve as resolvePath } from "node:path";
+import { mkdir, mkdtemp, readFile, realpath, symlink, writeFile } from "node:fs/promises";
+import { parseInvocation, parseOptions } from "../src/main/options";
+import { LocalOverlayRegistry } from "../src/main/local-overlays";
+import assert from "node:assert/strict";
+import { buildManagerDocumentFromSources } from "../src/main/manager-document";
+import { chooseOverlayTarget } from "../src/main/overlay-target";
+import { randomBytes } from "node:crypto";
+import { resolveStoragePaths } from "../src/main/storage-path";
+import test from "node:test";
+import { tmpdir } from "node:os";
+import { withFatalDeadline } from "../src/main/fatal-deadline";
+const noop = (): void => {};
 const TEST_REMOTE_ACCESS_TOKEN = "0123456789abcdef".repeat(4);
 
-function redactedRemoteAccessToken(settings: AppSettings): AppSettings {
+interface ConfigStoreLike {
+    save: (
+        value: JsonValue | undefined,
+        options?: { expectedRevision?: number; source?: symbol },
+    ) => Promise<{ config: AppConfig; revision: number; source?: symbol }>;
+    subscribe: (
+        listener: (change: {
+            config: AppConfig;
+            revision: number;
+            source: symbol | undefined;
+        }) => void,
+    ) => () => void;
+}
+
+interface LocalOverlayRegistryLike {
+    authorizeUrls: (values: readonly (URL | string)[]) => boolean;
+}
+
+interface DeferredVoid {
+    promise: Promise<void>;
+    resolve: () => void;
+}
+
+function createDeferredVoid(): DeferredVoid {
+    let resolve: () => void = noop;
+    const promise = new Promise<void>((ready) => {
+        resolve = ready;
+    });
+    return { promise, resolve };
+}
+
+function assertJsonObject(value: JsonValue | undefined): asserts value is JsonObject {
+    assert.ok(isJsonObject(value));
+}
+
+function assertJsonString(value: JsonValue | undefined): asserts value is string {
+    assert.ok(isJsonString(value));
+}
+
+function isFlushSaveEnvelope(
+    message: MessageEnvelope,
+): message is MessageEnvelope & { type: "flush-save"; request_id: string } {
+    return message.type === "flush-save" && isJsonString(message.request_id);
+}
+
+function makeNativeKey(code: number, state: "Pressed" | "Released") {
+    return {
+        key: { code },
+        kind: "Key",
+        state,
+    };
+}
+
+function redactedRemoteAccessToken(settings: JsonObject): JsonObject {
     return { ...settings, remote_access_token: "[credential]" };
 }
 
 test("config path resolver selects installed and portable storage", () => {
-    const appDataDirectory = resolve("appdata"),
-        portableExecutableDirectory = resolve("portable");
+    const appDataDirectory = resolvePath("appdata");
+    const portableExecutableDirectory = resolvePath("portable");
     assert.deepEqual(resolveStoragePaths(appDataDirectory), {
         configPath: join(appDataDirectory, "vosulay", "config.json"),
         dataDirectory: join(appDataDirectory, "vosulay"),
@@ -40,11 +94,11 @@ test("config path resolver selects installed and portable storage", () => {
     });
     assert.throws(
         () => resolveStoragePaths("/appdata", ""),
-        /portable executable directory must not be empty/,
+        /portable executable directory must not be empty/u,
     );
     assert.throws(
         () => resolveStoragePaths("/appdata", "portable"),
-        /portable executable directory must be absolute/,
+        /portable executable directory must be absolute/u,
     );
 });
 
@@ -91,9 +145,9 @@ test("Vulkan launch parsing separates vosulay and game arguments", () => {
     });
     assert.throws(
         () => parseOptions(["--launch-vulkan", "game", "--launch-vulkan", "other"]),
-        /exactly one executable/,
+        /exactly one executable/u,
     );
-    assert.throws(() => parseOptions(["--", "game"]), /only valid after --launch-vulkan/);
+    assert.throws(() => parseOptions(["--", "game"]), /only valid after --launch-vulkan/u);
 });
 
 test("visibility IPC invocation accepts both command aliases", () => {
@@ -117,23 +171,23 @@ test("invocation ignores Electron-injected Linux runtime switches", () => {
 
 test("overlay target selection ignores helpers and favors the largest client", () => {
     const helper = {
-            height: 1,
-            hwnd: 10,
-            luid: { high: 0, low: 1 },
-            width: 1,
-        },
-        main = {
-            height: 720,
-            hwnd: 20,
-            luid: { high: 0, low: 2 },
-            width: 1280,
-        },
-        secondary = {
-            height: 480,
-            hwnd: 30,
-            luid: { high: 0, low: 3 },
-            width: 640,
-        };
+        height: 1,
+        hwnd: 10,
+        luid: { high: 0, low: 1 },
+        width: 1,
+    };
+    const main = {
+        height: 720,
+        hwnd: 20,
+        luid: { high: 0, low: 2 },
+        width: 1280,
+    };
+    const secondary = {
+        height: 480,
+        hwnd: 30,
+        luid: { high: 0, low: 3 },
+        width: 640,
+    };
 
     assert.equal(chooseOverlayTarget([helper, secondary, main]), main);
     assert.equal(chooseOverlayTarget([main, secondary, helper]), main);
@@ -158,23 +212,23 @@ test("edit shortcuts map exact non-repeat Ctrl keydowns", () => {
 test("edit shortcuts reject keyUp, repeats, modifier drift, and wrong keys", () => {
     for (const key of ["i", "r"]) {
         const input = {
-                alt: false,
-                control: true,
-                isAutoRepeat: false,
-                key,
-                meta: false,
-                shift: false,
-                type: "keyDown",
-            },
-            rejectedInputs = [
-                { ...input, type: "keyUp" },
-                { ...input, isAutoRepeat: true },
-                { ...input, control: false },
-                { ...input, alt: true },
-                { ...input, meta: true },
-                { ...input, shift: true },
-                { ...input, key: "x" },
-            ];
+            alt: false,
+            control: true,
+            isAutoRepeat: false,
+            key,
+            meta: false,
+            shift: false,
+            type: "keyDown",
+        };
+        const rejectedInputs = [
+            { ...input, type: "keyUp" },
+            { ...input, isAutoRepeat: true },
+            { ...input, control: false },
+            { ...input, alt: true },
+            { ...input, meta: true },
+            { ...input, shift: true },
+            { ...input, key: "x" },
+        ];
 
         for (const rejected of rejectedInputs) {
             assert.equal(editShortcutCommand(rejected), undefined);
@@ -183,41 +237,31 @@ test("edit shortcuts reject keyUp, repeats, modifier drift, and wrong keys", () 
 });
 
 test("native edit shortcuts follow Ctrl state and suppress held repeats", () => {
-    const shortcuts = new NativeEditShortcutState(),
-        key = (code: number, state: "Pressed" | "Released") => ({
-            key: { code },
-            kind: "Key",
-            state,
-        });
+    const shortcuts = new NativeEditShortcutState();
 
-    assert.equal(shortcuts.handle(key(0x11, "Pressed")), undefined);
-    assert.equal(shortcuts.handle(key(0x49, "Pressed")), "toggle-interaction");
-    assert.equal(shortcuts.handle(key(0x49, "Pressed")), undefined);
-    assert.equal(shortcuts.handle(key(0x49, "Released")), undefined);
-    assert.equal(shortcuts.handle(key(0x52, "Pressed")), "refresh-selected-overlay");
+    assert.equal(shortcuts.handle(makeNativeKey(0x11, "Pressed")), undefined);
+    assert.equal(shortcuts.handle(makeNativeKey(0x49, "Pressed")), "toggle-interaction");
+    assert.equal(shortcuts.handle(makeNativeKey(0x49, "Pressed")), undefined);
+    assert.equal(shortcuts.handle(makeNativeKey(0x49, "Released")), undefined);
+    assert.equal(shortcuts.handle(makeNativeKey(0x52, "Pressed")), "refresh-selected-overlay");
 });
 
 test("native edit shortcuts reject extra modifiers and reset cleanly", () => {
-    const shortcuts = new NativeEditShortcutState(),
-        key = (code: number, state: "Pressed" | "Released") => ({
-            key: { code },
-            kind: "Key",
-            state,
-        });
+    const shortcuts = new NativeEditShortcutState();
 
     assert.equal(shortcuts.handle({ kind: "Char" }), undefined);
-    assert.equal(shortcuts.handle(key(0xA2, "Pressed")), undefined);
-    assert.equal(shortcuts.handle(key(0x10, "Pressed")), undefined);
-    assert.equal(shortcuts.handle(key(0x49, "Pressed")), undefined);
-    assert.equal(shortcuts.handle(key(0x49, "Released")), undefined);
-    assert.equal(shortcuts.handle(key(0x10, "Released")), undefined);
-    assert.equal(shortcuts.handle(key(0x49, "Pressed")), "toggle-interaction");
-    assert.equal(shortcuts.handle(key(0x49, "Released")), undefined);
-    assert.equal(shortcuts.handle(key(0x5D, "Pressed")), undefined);
-    assert.equal(shortcuts.handle(key(0x52, "Pressed")), undefined);
+    assert.equal(shortcuts.handle(makeNativeKey(0xa2, "Pressed")), undefined);
+    assert.equal(shortcuts.handle(makeNativeKey(0x10, "Pressed")), undefined);
+    assert.equal(shortcuts.handle(makeNativeKey(0x49, "Pressed")), undefined);
+    assert.equal(shortcuts.handle(makeNativeKey(0x49, "Released")), undefined);
+    assert.equal(shortcuts.handle(makeNativeKey(0x10, "Released")), undefined);
+    assert.equal(shortcuts.handle(makeNativeKey(0x49, "Pressed")), "toggle-interaction");
+    assert.equal(shortcuts.handle(makeNativeKey(0x49, "Released")), undefined);
+    assert.equal(shortcuts.handle(makeNativeKey(0x5d, "Pressed")), undefined);
+    assert.equal(shortcuts.handle(makeNativeKey(0x52, "Pressed")), undefined);
 
     shortcuts.clear();
-    assert.equal(shortcuts.handle(key(0x52, "Pressed")), undefined);
+    assert.equal(shortcuts.handle(makeNativeKey(0x52, "Pressed")), undefined);
 });
 
 test("fatal deadline terminates a hung native request", async () => {
@@ -234,76 +278,75 @@ test("fatal deadline terminates a hung native request", async () => {
                 throw new Error(message);
             },
         ),
-        /fatal input deadline/,
+        /fatal input deadline/u,
     );
     assert.equal(operationStarted, true);
 });
 
 test("pending saves and flush acknowledgments bypass blocked editing dispatch", async () => {
-    type Listener = (event: { sender: { id: number } }, payload: unknown) => void;
-    let listener: Listener | undefined;
+    type Listener = (event: { sender: { id: number } }, payload: MessageEnvelope) => void;
+    const listeners: Listener[] = [];
     const ipcMain = {
-            on: (_channel: string, value: Listener): void => {
-                listener = value;
-            },
-            removeListener: (_channel: string, value: Listener): void => {
-                if (listener === value) {
-                    listener = undefined;
+        on: (_channel: string, value: Listener): void => {
+            listeners.push(value);
+        },
+        removeListener: (_channel: string, value: Listener): void => {
+            const index = listeners.indexOf(value);
+            if (index !== -1) {
+                listeners.splice(index, 1);
+            }
+        },
+    };
+    const sent: MessageEnvelope[] = [];
+    let editingFinished = false;
+    const editingStarted = createDeferredVoid();
+    const editingGate = createDeferredVoid();
+    const saved = createDeferredVoid();
+    const config = normalizeConfig({});
+    const configStore: ConfigStoreLike = {
+        save: () => Promise.resolve({ config, revision: 1 }),
+        subscribe: () => () => {},
+    };
+    const overlayRegistry: LocalOverlayRegistryLike = {
+        authorizeUrls: () => true,
+    };
+    const bridge = new HostBridge(
+        {
+            id: 7,
+            isDestroyed: () => false,
+            send: (_channel, envelope): void => {
+                sent.push(envelope);
+                if (envelope.type === "saved") {
+                    saved.resolve();
                 }
             },
         },
-        sent: MessageEnvelope[] = [];
-    let editingFinished = false,
-        markEditingStarted!: () => void,
-        markSaved!: () => void,
-        releaseEditing!: () => void;
-    const editingStarted = new Promise<void>((resolve) => {
-            markEditingStarted = resolve;
-        }),
-        editingGate = new Promise<void>((resolve) => {
-            releaseEditing = resolve;
-        }),
-        saved = new Promise<void>((resolve) => {
-            markSaved = resolve;
-        }),
-        config = normalizeConfig({}),
-        bridge = new HostBridge(
-            {
-                id: 7,
-                isDestroyed: () => false,
-                send: (_channel, envelope): void => {
-                    sent.push(envelope);
-                    if (envelope.type === "saved") {
-                        markSaved();
-                    }
-                },
-            },
-            {
-                editing: true,
-                setEditing: async () => {
-                    markEditingStarted();
-                    await editingGate;
+        {
+            editing: true,
+            setEditing: () => {
+                editingStarted.resolve();
+                return editingGate.promise.then(() => {
                     editingFinished = true;
-                },
-                toggleEditing: async () => {},
+                });
             },
-            parseOptions([]),
-            {
-                save: async () => ({ config, revision: 1 }),
-                subscribe: () => () => {},
-            } as unknown as ConfigStore,
-            { authorizeUrls: () => true } as unknown as LocalOverlayRegistry,
-            ipcMain,
-        );
+            toggleEditing: () => Promise.resolve(),
+        },
+        parseOptions([]),
+        configStore,
+        overlayRegistry,
+        ipcMain,
+    );
 
     bridge.start();
+    assert.equal(listeners.length, 1);
+    const [listener] = listeners;
     assert.ok(listener);
     listener({ sender: { id: 7 } }, { editing: false, type: "set-editing" });
-    await editingStarted;
+    await editingStarted.promise;
 
-    const flush = bridge.requestSaveFlush(100),
-        request = sent.find((message) => message.type === "flush-save");
-    assert.equal(typeof request?.request_id, "string");
+    const flush = bridge.requestSaveFlush(100);
+    const request = sent.find((message) => isFlushSaveEnvelope(message));
+    assert.ok(request !== undefined);
     listener(
         { sender: { id: 7 } },
         {
@@ -313,21 +356,17 @@ test("pending saves and flush acknowledgments bypass blocked editing dispatch", 
             type: "save-config",
         },
     );
-    await saved;
+    await saved.promise;
     assert.equal(editingFinished, false);
 
-    listener(
-        { sender: { id: 7 } },
-        {
-            request_id: request?.request_id,
-            type: "flush-complete",
-        },
-    );
+    listener({ sender: { id: 7 } }, { request_id: request.request_id, type: "flush-complete" });
     await flush;
     assert.equal(editingFinished, false);
 
-    releaseEditing();
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    editingGate.resolve();
+    await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+    });
     assert.equal(editingFinished, true);
     bridge.dispose();
 });
@@ -373,47 +412,57 @@ test("malformed config is normalized and saves serialize atomically", async () =
         z_index: 999,
     });
 
-    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-")),
-        path = join(directory, "nested", "config.json"),
-        store = new ConfigStore(path);
+    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-"));
+    const path = join(directory, "nested", "config.json");
+    const store = new ConfigStore(path);
     await Promise.all([
         store.save({ active_profile: "one", profiles: [{ id: "one", name: "One", overlays: [] }] }),
         store.save({ active_profile: "two", profiles: [{ id: "two", name: "Two", overlays: [] }] }),
     ]);
-    const persistedDefaults = JSON.parse(await readFile(path, "utf8")) as {
-        active_profile: string;
-        settings: AppSettings;
-    };
-    assert.equal(persistedDefaults.active_profile, "two");
-    assert.match(persistedDefaults.settings.remote_access_token, /^[0-9a-f]{64}$/);
+    const persistedDefaults = JSON.parse(await readFile(path, "utf8"));
+    assertJsonObject(persistedDefaults);
+    const persistedDefaultsActiveProfile = persistedDefaults.active_profile;
+    assertJsonString(persistedDefaultsActiveProfile);
+    const persistedDefaultsSettings = persistedDefaults.settings;
+    assertJsonObject(persistedDefaultsSettings);
+    const persistedDefaultsSettingsToken = persistedDefaultsSettings.remote_access_token;
+    assertJsonString(persistedDefaultsSettingsToken);
+
+    assert.equal(persistedDefaultsActiveProfile, "two");
+    assert.match(persistedDefaultsSettingsToken, /^[0-9a-f]{64}$/u);
     assert.deepEqual(
-        redactedRemoteAccessToken(persistedDefaults.settings),
+        redactedRemoteAccessToken(persistedDefaultsSettings),
         redactedRemoteAccessToken(normalizeConfig({}).settings),
     );
     await writeFile(path, "{bad", "utf8");
     const loaded = await store.load();
     assert.equal(loaded.config.active_profile, "default");
-    assert.match(loaded.error ?? "", /Could not load configuration/);
+    assert.match(loaded.error ?? "", /Could not load configuration/u);
 });
 
 test("config store persists a stable remote access credential on first load", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-credential-")),
-        path = join(directory, "config.json"),
-        store = new ConfigStore(path),
-        first = await store.load(),
-        second = await store.load(),
-        persisted = JSON.parse(await readFile(path, "utf8")) as { settings: AppSettings };
+    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-credential-"));
+    const path = join(directory, "config.json");
+    const store = new ConfigStore(path);
+    const first = await store.load();
+    const second = await store.load();
+    const persisted = JSON.parse(await readFile(path, "utf8"));
+    assertJsonObject(persisted);
+    const persistedSettings = persisted.settings;
+    assertJsonObject(persistedSettings);
+    assertJsonString(persistedSettings.remote_access_token);
+    assertJsonString(first.config.settings.remote_access_token);
 
-    assert.match(first.config.settings.remote_access_token, /^[0-9a-f]{64}$/);
+    assert.equal(persistedSettings.remote_access_token, first.config.settings.remote_access_token);
     assert.equal(
         second.config.settings.remote_access_token,
         first.config.settings.remote_access_token,
     );
-    assert.equal(persisted.settings.remote_access_token, first.config.settings.remote_access_token);
+    assert.equal(persistedSettings.remote_access_token, first.config.settings.remote_access_token);
 });
 test("config settings default and normalize manager hotkeys", () => {
     const defaults = normalizeConfig({}).settings;
-    assert.match(defaults.remote_access_token, /^[0-9a-f]{64}$/);
+    assert.match(defaults.remote_access_token, /^[0-9a-f]{64}$/u);
     assert.deepEqual(redactedRemoteAccessToken(defaults), {
         allow_unrestricted_shared_array_buffer: false,
         allowed_ips: "127.0.0.1,localhost,absolute",
@@ -514,43 +563,47 @@ test("config normalization rejects reserved shortcuts per action", () => {
 });
 
 test("config store persists manager settings without changing profiles", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-settings-")),
-        path = join(directory, "config.json"),
-        store = new ConfigStore(path),
-        saved = await store.save({
-            active_profile: "custom",
-            profiles: [{ id: "custom", name: "Custom", overlays: [] }],
-            settings: {
-                allow_unrestricted_shared_array_buffer: true,
-                always_keep_overlays_in_view: true,
-                hotkeys: {
-                    copy_overlay: "Meta+Y",
-                    paste_overlay: "Ctrl+Alt+Space",
-                    profile_0: "Alt+Shift+K",
-                },
-                right_click_overlay_settings_menu: true,
+    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-settings-"));
+    const path = join(directory, "config.json");
+    const store = new ConfigStore(path);
+    const saved = await store.save({
+        active_profile: "custom",
+        profiles: [{ id: "custom", name: "Custom", overlays: [] }],
+        settings: {
+            allow_unrestricted_shared_array_buffer: true,
+            always_keep_overlays_in_view: true,
+            hotkeys: {
+                copy_overlay: "Meta+Y",
+                paste_overlay: "Ctrl+Alt+Space",
+                profile_0: "Alt+Shift+K",
             },
-        }),
-        persisted = JSON.parse(await readFile(path, "utf8")) as unknown;
+            right_click_overlay_settings_menu: true,
+        },
+    });
+    const persisted = JSON.parse(await readFile(path, "utf8"));
+    assertJsonObject(persisted);
+    const persistedSettings = persisted.settings;
+    assertJsonObject(persistedSettings);
+
     assert.deepEqual(persisted, saved.config);
     assert.equal(Object.hasOwn(saved.config.settings, "right_click_overlay_settings_menu"), false);
-    assert.ok(persisted && typeof persisted === "object" && "settings" in persisted);
-    assert.ok(persisted.settings && typeof persisted.settings === "object");
-    assert.equal(Object.hasOwn(persisted.settings, "right_click_overlay_settings_menu"), false);
+    assert.equal(Object.hasOwn(persistedSettings, "right_click_overlay_settings_menu"), false);
     assert.equal(saved.config.active_profile, "custom");
     assert.deepEqual(saved.config.profiles, [{ id: "custom", name: "Custom", overlays: [] }]);
-    assert.deepEqual((await store.load()).config, saved.config);
+
+    const loaded = await store.load();
+    assert.deepEqual(loaded.config, saved.config);
 });
 
 test("malformed config keeps one fallback credential until repaired", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-malformed-")),
-        path = join(directory, "config.json");
+    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-malformed-"));
+    const path = join(directory, "config.json");
     await writeFile(path, "{not json", "utf8");
-    const store = new ConfigStore(path),
-        first = await store.load(),
-        second = await store.load();
+    const store = new ConfigStore(path);
+    const first = await store.load();
+    const second = await store.load();
 
-    assert.match(first.error ?? "", /Could not load configuration/);
+    assert.match(first.error ?? "", /Could not load configuration/u);
     assert.equal(
         second.config.settings.remote_access_token,
         first.config.settings.remote_access_token,
@@ -558,55 +611,56 @@ test("malformed config keeps one fallback credential until repaired", async () =
 });
 
 test("config subscriptions carry revisions and reject stale saves", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-revisions-")),
-        path = join(directory, "config.json"),
-        store = new ConfigStore(path),
-        firstSource = Symbol("first"),
-        secondSource = Symbol("second"),
-        changes: { revision: number; source: symbol | undefined; activeProfile: string }[] = [],
-        unsubscribe = store.subscribe((change) => {
-            changes.push({
-                activeProfile: change.config.active_profile,
-                revision: change.revision,
-                source: change.source,
-            });
-        }),
-        first = await store.save(
-            { active_profile: "one", profiles: [{ id: "one", name: "One", overlays: [] }] },
-            { expectedRevision: 0, source: firstSource },
-        );
+    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-revisions-"));
+    const path = join(directory, "config.json");
+    const store = new ConfigStore(path);
+    const firstSource = Symbol("first");
+    const secondSource = Symbol("second");
+    const changes: { revision: number; source: symbol | undefined; activeProfile: string }[] = [];
+    const unsubscribe = store.subscribe((change) => {
+        changes.push({
+            activeProfile: change.config.active_profile,
+            revision: change.revision,
+            source: change.source,
+        });
+    });
+    const first = await store.save(
+        { active_profile: "one", profiles: [{ id: "one", name: "One", overlays: [] }] },
+        { expectedRevision: 0, source: firstSource },
+    );
     assert.equal(first.revision, 1);
     await assert.rejects(
         store.save(
             { active_profile: "stale", profiles: [{ id: "stale", name: "Stale", overlays: [] }] },
             { expectedRevision: 0, source: secondSource },
         ),
-        /changed since it was loaded/,
+        /changed since it was loaded/u,
     );
     const second = await store.save(
-            { active_profile: "two", profiles: [{ id: "two", name: "Two", overlays: [] }] },
-            { expectedRevision: 1, source: secondSource },
-        ),
-        pending = store.save(
-            { active_profile: "three", profiles: [{ id: "three", name: "Three", overlays: [] }] },
-            { expectedRevision: 2, source: firstSource },
-        );
+        { active_profile: "two", profiles: [{ id: "two", name: "Two", overlays: [] }] },
+        { expectedRevision: 1, source: secondSource },
+    );
+    const pending = store.save(
+        { active_profile: "three", profiles: [{ id: "three", name: "Three", overlays: [] }] },
+        { expectedRevision: 2, source: firstSource },
+    );
     await store.flush();
     unsubscribe();
 
     assert.equal(second.revision, 2);
-    assert.equal((await pending).revision, 3);
+    const pendingSave = await pending;
+    assert.equal(pendingSave.revision, 3);
     assert.deepEqual(changes, [
         { activeProfile: "one", revision: 1, source: firstSource },
         { activeProfile: "two", revision: 2, source: secondSource },
         { activeProfile: "three", revision: 3, source: firstSource },
     ]);
-    assert.equal(JSON.parse(await readFile(path, "utf8")).active_profile, "three");
+    const persistedProfile = JSON.parse(await readFile(path, "utf8")).active_profile;
+    assert.equal(persistedProfile, "three");
 });
-
 test("config flush reports the latest persistence failure", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-failure-")),
-        blockingFile = join(directory, "not-a-directory");
+    const directory = await mkdtemp(join(tmpdir(), "vosulay-config-failure-"));
+    const blockingFile = join(directory, "not-a-directory");
     await writeFile(blockingFile, "block", "utf8");
     const store = new ConfigStore(join(blockingFile, "config.json"));
     await assert.rejects(store.save({ profiles: [] }));
@@ -634,8 +688,8 @@ test("catalog parser decodes escaped metadata and preserves source order", () =>
                 <iframe src="/second/" width="800" height="600"></iframe>
               </div>
             </article>
-        `,
-        counters = parseInstalledCounters("http://127.0.0.1:24050/base?old=1#fragment", source);
+        `;
+    const counters = parseInstalledCounters("http://127.0.0.1:24050/base?old=1#fragment", source);
 
     assert.deepEqual(counters, [
         {
@@ -688,8 +742,8 @@ test("catalog parser accepts legacy Tosu counter markup", () => {
               </div>
               <div class="ri-gallery flexer"><img src="preview.png"></div>
             </div>
-        `,
-        counters = parseInstalledCounters("http://127.0.0.1:24050", source);
+        `;
+    const counters = parseInstalledCounters("http://127.0.0.1:24050", source);
 
     assert.deepEqual(counters, [
         {
@@ -741,8 +795,8 @@ test("catalog parser defaults flexible, non-numeric, and invalid resolutions", (
                 <iframe src="/too-small/" width="10px" height="300px"></iframe>
               </div>
             </article>
-        `,
-        counters = parseInstalledCounters("http://127.0.0.1:24050", source);
+        `;
+    const counters = parseInstalledCounters("http://127.0.0.1:24050", source);
 
     assert.deepEqual(
         counters.map(({ width, height }) => [width, height]),
@@ -767,7 +821,7 @@ test("catalog parser rejects a missing counter attribute", () => {
 
     assert.throws(
         () => parseInstalledCounters("http://127.0.0.1:24050", source),
-        /"missing-version" is missing the "data-counter-version" attribute/,
+        /"missing-version" is missing the "data-counter-version" attribute/u,
     );
 });
 
@@ -783,32 +837,38 @@ test("catalog parser accepts modern and legacy empty states", () => {
 test("catalog parser rejects unrecognized markup", () => {
     assert.throws(
         () => parseInstalledCounters("http://127.0.0.1:24050", "<main>Unexpected response</main>"),
-        /counter search markup was not recognized; expected modern Vosu or legacy Tosu results/,
+        /counter search markup was not recognized; expected modern Vosu or legacy Tosu results/u,
     );
 });
 
 test("catalog fetch validates type and enforces the streaming limit", async () => {
     const html = `<article class="counter-card" data-overlay-id="x"
-        data-counter-name="X" data-counter-author="A" data-counter-version="1"></article>`,
-        fetcher = async () =>
-            new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
-    assert.equal((await fetchInstalledCounters("http://host", fetcher as typeof fetch))[0].id, "x");
-    const oversized = async () =>
-        new Response(new Uint8Array(MAX_COUNTER_PAGE_BYTES + 1), {
-            headers: { "content-type": "application/xhtml+xml" },
-        });
-    await assert.rejects(
-        fetchInstalledCounters("http://host", oversized as typeof fetch),
-        /byte limit/,
+        data-counter-name="X" data-counter-author="A" data-counter-version="1"></article>`;
+    const counters = await fetchInstalledCounters("http://host", () =>
+        Promise.resolve(
+            new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } }),
+        ),
     );
-    const wrongType = async () =>
-        new Response("{}", { headers: { "content-type": "application/json" } });
+    assert.equal(counters[0].id, "x");
     await assert.rejects(
-        fetchInstalledCounters("http://host", wrongType as typeof fetch),
-        /non-HTML/,
+        fetchInstalledCounters("http://host", () =>
+            Promise.resolve(
+                new Response(new Uint8Array(MAX_COUNTER_PAGE_BYTES + 1), {
+                    headers: { "content-type": "application/xhtml+xml" },
+                }),
+            ),
+        ),
+        /byte limit/u,
+    );
+    await assert.rejects(
+        fetchInstalledCounters("http://host", () =>
+            Promise.resolve(
+                new Response("{}", { headers: { "content-type": "application/json" } }),
+            ),
+        ),
+        /non-HTML/u,
     );
 });
-
 test("URL helpers encode identifiers and replace base paths", () => {
     assert.equal(counterUrl("http://host/root/", "a/b &").href, "http://host/a%2Fb%20&/");
     assert.equal(
@@ -825,28 +885,28 @@ test("manager source embedding cannot terminate its bootstrap script", () => {
         "</script>\u2028",
         120,
     );
-    assert.match(document, /__VOSULAY_FPS_LIMIT__=120/);
+    assert.match(document, /__VOSULAY_FPS_LIMIT__=120/u);
     assert.ok(!document.includes("</style><script>x</script>"));
-    assert.equal(document.match(/<\/script>/g)?.length, 1);
+    assert.equal(document.match(/<\/script>/gu)?.length, 1);
     assert.ok(!document.includes("__VOSULAY_BOOTSTRAP__"));
 });
 
 test("local overlay authorization handles scheme case and cache-busted assets while rejecting escapes", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "vosulay-overlay-")),
-        root = join(directory, "root"),
-        other = join(directory, "other");
+    const directory = await mkdtemp(join(tmpdir(), "vosulay-overlay-"));
+    const root = join(directory, "root");
+    const other = join(directory, "other");
     await mkdir(root);
     await mkdir(other);
     await writeFile(join(root, "index.html"), "ok");
     await writeFile(join(root, "script.js"), "window.overlayLoaded = true;");
     await writeFile(join(other, "secret.html"), "secret");
     await symlink(join(other, "secret.html"), join(root, "escape.html"));
-    const canonicalRoot = await realpath(root),
-        capabilityKey = randomBytes(32),
-        registry = new LocalOverlayRegistry(capabilityKey),
-        url = await registry.createUrl(join(root, "index.html"));
+    const canonicalRoot = await realpath(root);
+    const capabilityKey = randomBytes(32);
+    const registry = new LocalOverlayRegistry(capabilityKey);
+    const url = await registry.createUrl(join(root, "index.html"));
     assert.equal(await registry.resolveAuthorizedFile(url), join(canonicalRoot, "index.html"));
-    const uppercaseUrl = url.replace(/^vosulay-overlay:/, "VOSULAY-OVERLAY:");
+    const uppercaseUrl = url.replace(/^vosulay-overlay:/u, "VOSULAY-OVERLAY:");
     assert.deepEqual(localOverlayUrls({ overlays: [{ url: uppercaseUrl }] }), [uppercaseUrl]);
     const importedRegistry = new LocalOverlayRegistry(capabilityKey);
     assert.equal(
@@ -864,8 +924,8 @@ test("local overlay authorization handles scheme case and cache-busted assets wh
     const response = await importedRegistry.response(new Request(assetUrl));
     assert.equal(response.status, 200);
     assert.equal(await response.text(), "window.overlayLoaded = true;");
-    const parsed = new URL(url),
-        rebound = new URL(url);
+    const parsed = new URL(url);
+    const rebound = new URL(url);
     rebound.pathname = `/${Buffer.from(other).toString("base64url")}/secret.html`;
     assert.equal(registry.authorizeUrl(rebound), false);
     const traversal = new URL(url);
@@ -873,5 +933,5 @@ test("local overlay authorization handles scheme case and cache-busted assets wh
     await assert.rejects(registry.resolveAuthorizedFile(traversal));
     const escaped = new URL(url);
     escaped.pathname = `${parsed.pathname.slice(0, parsed.pathname.lastIndexOf("/") + 1)}escape.html`;
-    await assert.rejects(registry.resolveAuthorizedFile(escaped), /escapes its root/);
+    await assert.rejects(registry.resolveAuthorizedFile(escaped), /escapes its root/u);
 });

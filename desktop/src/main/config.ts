@@ -1,35 +1,104 @@
-import { constants, readFileSync } from "node:fs";
-import { randomBytes } from "node:crypto";
-import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import type { AppConfig, AppSettings, HotkeySettings, Placement, Profile } from "./types";
+import {
+    type JsonObject,
+    type JsonValue,
+    isJsonArray,
+    isJsonNumber,
+    isJsonObject,
+    isJsonString,
+    parseJsonText,
+} from "./json";
+import { constants, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { tableValue } from "./tables";
 
-const CONFIG_VERSION = 1 as const,
-    DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute",
-    REMOTE_ACCESS_TOKEN_BYTES = 32,
-    DEFAULT_HOTKEYS: HotkeySettings = {
-        copy_overlay: "Ctrl+C",
-        paste_overlay: "Ctrl+V",
-        profile_0: "Ctrl+0",
-        profile_1: "Ctrl+1",
-        profile_2: "Ctrl+2",
-        profile_3: "Ctrl+3",
-        profile_4: "Ctrl+4",
-        profile_5: "Ctrl+5",
-        profile_6: "Ctrl+6",
-        profile_7: "Ctrl+7",
-        profile_8: "Ctrl+8",
-        profile_9: "Ctrl+9",
-    },
-    HOTKEY_KEYS = Object.keys(DEFAULT_HOTKEYS) as (keyof HotkeySettings)[],
-    RESERVED_HOTKEYS: Record<string, true> = {
-        "Ctrl+I": true,
-        "Ctrl+Minus": true,
-        "Ctrl+Plus": true,
-        "Ctrl+R": true,
-        "Ctrl+Shift+Plus": true,
-        "Ctrl+Shift+Space": true,
-    };
+const CONFIG_VERSION = 1 as const;
+const DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute";
+const REMOTE_ACCESS_TOKEN_BYTES = 32;
+const REMOTE_ACCESS_TOKEN_PATTERN = /^[0-9a-fA-F]{64}$/u;
+const SINGLE_KEY_PATTERN = /^[a-z0-9]$/iu;
+const FUNCTION_KEY_PATTERN = /^f(?:[1-9]|1[0-2])$/iu;
+const TRAILING_DOT_PATTERN = /\.$/u;
+const IPV6_BRACKET_PATTERN = /^\[|\]$/gu;
+const MIN_PLACEMENT_SIZE = 10;
+const DEFAULT_PLACEMENT_HEIGHT = 300;
+const DEFAULT_PLACEMENT_WIDTH = 500;
+const MIN_PLACEMENT_SCALE = 0.1;
+const MAX_PLACEMENT_ROTATION = 180;
+const MAX_PLACEMENT_Z_INDEX = 999;
+const CONFIG_JSON_INDENT = 2;
+const CONFIG_FILE_MODE = 0o600;
+const TEMPORARY_SUFFIX_RADIX = 16;
+const TEMPORARY_SUFFIX_START = 2;
+const OVERLAY_URL_PROTOCOLS = new Set(["http:", "https:", "vosulay-overlay:"]);
+const MODIFIER_ORDER = ["Ctrl", "Alt", "Shift", "Meta"];
+
+const DEFAULT_HOTKEYS: HotkeySettings = {
+    copy_overlay: "Ctrl+C",
+    paste_overlay: "Ctrl+V",
+    profile_0: "Ctrl+0",
+    profile_1: "Ctrl+1",
+    profile_2: "Ctrl+2",
+    profile_3: "Ctrl+3",
+    profile_4: "Ctrl+4",
+    profile_5: "Ctrl+5",
+    profile_6: "Ctrl+6",
+    profile_7: "Ctrl+7",
+    profile_8: "Ctrl+8",
+    profile_9: "Ctrl+9",
+};
+
+/* SAFETY: The keys of a `HotkeySettings` literal are exactly its own property names. */
+const HOTKEY_KEYS = Object.keys(DEFAULT_HOTKEYS) as (keyof HotkeySettings)[];
+
+/* Shortcuts the manager reserves for itself; a profile may not rebind them. */
+const RESERVED_HOTKEYS = {
+    "Ctrl+I": true,
+    "Ctrl+Minus": true,
+    "Ctrl+Plus": true,
+    "Ctrl+R": true,
+    "Ctrl+Shift+Plus": true,
+    "Ctrl+Shift+Space": true,
+} satisfies Record<string, true>;
+
+const MODIFIER_ALIASES = {
+    alt: "Alt",
+    cmd: "Meta",
+    command: "Meta",
+    control: "Ctrl",
+    ctrl: "Ctrl",
+    meta: "Meta",
+    option: "Alt",
+    shift: "Shift",
+    super: "Meta",
+    win: "Meta",
+    windows: "Meta",
+} satisfies Record<string, string>;
+
+const KEY_NAMES = {
+    arrowdown: "ArrowDown",
+    arrowleft: "ArrowLeft",
+    arrowright: "ArrowRight",
+    arrowup: "ArrowUp",
+    backspace: "Backspace",
+    del: "Delete",
+    delete: "Delete",
+    end: "End",
+    enter: "Enter",
+    esc: "Escape",
+    escape: "Escape",
+    home: "Home",
+    minus: "Minus",
+    pagedown: "PageDown",
+    pageup: "PageUp",
+    plus: "Plus",
+    return: "Enter",
+    space: "Space",
+    spacebar: "Space",
+    tab: "Tab",
+} satisfies Record<string, string>;
 
 export interface ConfigLoadResult {
     config: AppConfig;
@@ -57,6 +126,10 @@ export class ConfigConflictError extends Error {
     }
 }
 
+function isErrnoException(cause: unknown): cause is NodeJS.ErrnoException {
+    return cause instanceof Error && "code" in cause;
+}
+
 export function defaultConfig(): AppConfig {
     return {
         active_profile: "default",
@@ -73,44 +146,47 @@ export function defaultConfig(): AppConfig {
     };
 }
 
-function finite(value: unknown, fallback: number): number {
-    return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+function finite(value: JsonValue | undefined, fallback: number): number {
+    return isJsonNumber(value) ? value : fallback;
 }
 
-function normalizePlacement(value: unknown): Placement {
-    const source =
-            value && typeof value === "object" && !Array.isArray(value)
-                ? (value as Record<string, unknown>)
-                : {},
-        placement: Placement = {
-            counter_id: typeof source.counter_id === "string" ? source.counter_id : "",
-            height: Math.max(10, finite(source.height, 300)),
-            left: finite(source.left, 0),
-            opacity: Math.min(1, Math.max(0, finite(source.opacity, 1))),
-            rotation: Math.min(180, Math.max(-180, finite(source.rotation, 0))),
-            scale: Math.max(0.1, finite(source.scale, 1)),
-            top: finite(source.top, 0),
-            width: Math.max(10, finite(source.width, 500)),
-            z_index: Math.min(999, Math.max(0, Math.round(finite(source.z_index, 0)))),
-        };
-    if (typeof source.url === "string") {
+function normalizePlacement(value: JsonValue | undefined): Placement {
+    const source: JsonObject = isJsonObject(value) ? value : {};
+    const placement: Placement = {
+        counter_id: isJsonString(source.counter_id) ? source.counter_id : "",
+        height: Math.max(MIN_PLACEMENT_SIZE, finite(source.height, DEFAULT_PLACEMENT_HEIGHT)),
+        left: finite(source.left, 0),
+        opacity: Math.min(1, Math.max(0, finite(source.opacity, 1))),
+        rotation: Math.min(
+            MAX_PLACEMENT_ROTATION,
+            Math.max(-MAX_PLACEMENT_ROTATION, finite(source.rotation, 0)),
+        ),
+        scale: Math.max(MIN_PLACEMENT_SCALE, finite(source.scale, 1)),
+        top: finite(source.top, 0),
+        width: Math.max(MIN_PLACEMENT_SIZE, finite(source.width, DEFAULT_PLACEMENT_WIDTH)),
+        z_index: Math.min(
+            MAX_PLACEMENT_Z_INDEX,
+            Math.max(0, Math.round(finite(source.z_index, 0))),
+        ),
+    };
+    if (isJsonString(source.url)) {
         try {
             const url = new URL(source.url);
-            if (["http:", "https:", "vosulay-overlay:"].includes(url.protocol)) {
+            if (OVERLAY_URL_PROTOCOLS.has(url.protocol)) {
                 placement.url = url.toString();
             }
         } catch {
-            // Invalid optional sources are discarded during normalization.
+            /* Invalid optional sources are discarded during normalization. */
         }
     }
-    if (typeof source.name === "string" && source.name.trim()) {
+    if (isJsonString(source.name) && source.name.trim()) {
         placement.name = source.name.trim();
     }
     return placement;
 }
 
-function canonicalHotkey(value: unknown, fallback: string): string {
-    if (typeof value !== "string") {
+function canonicalHotkey(value: JsonValue | undefined, fallback: string): string {
+    if (!isJsonString(value)) {
         return fallback;
     }
     const rawParts = value
@@ -120,81 +196,44 @@ function canonicalHotkey(value: unknown, fallback: string): string {
     if (rawParts.length === 0) {
         return fallback;
     }
-    const aliases: Record<string, string> = {
-            alt: "Alt",
-            cmd: "Meta",
-            command: "Meta",
-            control: "Ctrl",
-            ctrl: "Ctrl",
-            meta: "Meta",
-            option: "Alt",
-            shift: "Shift",
-            super: "Meta",
-            win: "Meta",
-            windows: "Meta",
-        },
-        keyNames: Record<string, string> = {
-            arrowdown: "ArrowDown",
-            arrowleft: "ArrowLeft",
-            arrowright: "ArrowRight",
-            arrowup: "ArrowUp",
-            backspace: "Backspace",
-            del: "Delete",
-            delete: "Delete",
-            end: "End",
-            enter: "Enter",
-            esc: "Escape",
-            escape: "Escape",
-            home: "Home",
-            minus: "Minus",
-            pagedown: "PageDown",
-            pageup: "PageUp",
-            plus: "Plus",
-            return: "Enter",
-            space: "Space",
-            spacebar: "Space",
-            tab: "Tab",
-        },
-        modifiers = new Set<string>();
+    const modifiers = new Set<string>();
     let key = "";
     for (const part of rawParts) {
-        const modifier = aliases[part.toLowerCase()];
-        if (modifier) {
+        const lower = part.toLowerCase();
+        const modifier = tableValue(MODIFIER_ALIASES, lower);
+        if (modifier !== undefined) {
             modifiers.add(modifier);
         } else if (key) {
             return fallback;
         } else {
-            const lower = part.toLowerCase();
-            key =
-                keyNames[lower] ||
-                (/^[a-z0-9]$/i.test(part)
+            const named = tableValue(KEY_NAMES, lower);
+            const printable =
+                SINGLE_KEY_PATTERN.test(part) || FUNCTION_KEY_PATTERN.test(part)
                     ? part.toUpperCase()
-                    : (/^f(?:[1-9]|1[0-2])$/i.test(part)
-                      ? part.toUpperCase()
-                      : ""));
+                    : "";
+            key = named ?? printable;
         }
     }
     if (!key) {
         return fallback;
     }
-    const shortcut = ["Ctrl", "Alt", "Shift", "Meta"]
-        .filter((modifier) => modifiers.has(modifier))
-        .concat(key)
-        .join("+");
-    return RESERVED_HOTKEYS[shortcut] ? fallback : shortcut;
+    const shortcut = [...MODIFIER_ORDER.filter((modifier) => modifiers.has(modifier)), key].join(
+        "+",
+    );
+    return tableValue(RESERVED_HOTKEYS, shortcut) === true ? fallback : shortcut;
 }
 
-function remoteAccessToken(value: unknown): string {
-    return typeof value === "string" && /^[0-9a-fA-F]{64}$/.test(value.trim())
+function remoteAccessToken(value: JsonValue | undefined): string {
+    return isJsonString(value) && REMOTE_ACCESS_TOKEN_PATTERN.test(value.trim())
         ? value.trim().toLowerCase()
         : randomBytes(REMOTE_ACCESS_TOKEN_BYTES).toString("hex");
 }
 
-function remoteAccessHost(value: unknown): string {
-    if (typeof value !== "string") {
+function remoteAccessHost(value: JsonValue | undefined): string {
+    if (!isJsonString(value)) {
         return "";
     }
-    const candidate = value.trim().replace(/\.$/, "");
+    const candidate = value.trim().replace(TRAILING_DOT_PATTERN, "");
     if (!candidate) {
         return "";
     }
@@ -210,27 +249,23 @@ function remoteAccessHost(value: unknown): string {
         ) {
             return "";
         }
-        return url.hostname.replaceAll(/^\[|\]$/g, "").toLowerCase();
+        return url.hostname.replaceAll(IPV6_BRACKET_PATTERN, "").toLowerCase();
     } catch {
         return "";
     }
 }
 
-function normalizeSettings(value: unknown): AppSettings {
-    const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {},
-        inputHotkeys =
-            source.hotkeys && typeof source.hotkeys === "object"
-                ? (source.hotkeys as Record<string, unknown>)
-                : {},
-        hotkeys = { ...DEFAULT_HOTKEYS };
+function normalizeSettings(value: JsonValue | undefined): AppSettings {
+    const source: JsonObject = isJsonObject(value) ? value : {};
+    const inputHotkeys: JsonObject = isJsonObject(source.hotkeys) ? source.hotkeys : {};
+    const hotkeys = { ...DEFAULT_HOTKEYS };
     for (const key of HOTKEY_KEYS) {
         hotkeys[key] = canonicalHotkey(inputHotkeys[key], DEFAULT_HOTKEYS[key]);
     }
     return {
         allow_unrestricted_shared_array_buffer:
             source.allow_unrestricted_shared_array_buffer === true,
-        allowed_ips:
-            typeof source.allowed_ips === "string" ? source.allowed_ips : DEFAULT_ALLOWED_IPS,
+        allowed_ips: isJsonString(source.allowed_ips) ? source.allowed_ips : DEFAULT_ALLOWED_IPS,
         always_keep_overlays_in_view: source.always_keep_overlays_in_view === true,
         hotkeys,
         remote_access_host: remoteAccessHost(source.remote_access_host),
@@ -238,41 +273,35 @@ function normalizeSettings(value: unknown): AppSettings {
     };
 }
 
-export function normalizeConfig(value: unknown): AppConfig {
-    const source =
-            value && typeof value === "object" && !Array.isArray(value)
-                ? (value as Record<string, unknown>)
-                : {},
-        inputProfiles =
-            Array.isArray(source.profiles) && source.profiles.length > 0
-                ? source.profiles
-                : [{ id: "default", name: "Default", overlays: [] }],
-        usedIds = new Set<string>(),
-        profiles: Profile[] = inputProfiles.map((entry, index) => {
-            const profile =
-                entry && typeof entry === "object" && !Array.isArray(entry)
-                    ? (entry as Record<string, unknown>)
-                    : {};
-            let id = typeof profile.id === "string" ? profile.id : "";
-            if (!id || usedIds.has(id)) {
-                let suffix = index + 1;
-                do {
-                    id = `profile-${suffix}`;
-                    suffix += 1;
-                } while (usedIds.has(id));
-            }
-            usedIds.add(id);
-            const name =
-                    typeof profile.name === "string" && profile.name.trim()
-                        ? profile.name
-                        : `Profile ${index + 1}`,
-                overlays = Array.isArray(profile.overlays)
-                    ? profile.overlays.map(normalizePlacement)
-                    : [];
-            return { id, name, overlays };
-        }),
-        requested = typeof source.active_profile === "string" ? source.active_profile : "",
-        firstProfile = profiles[0]!;
+export function normalizeConfig(value: JsonValue | undefined): AppConfig {
+    const source: JsonObject = isJsonObject(value) ? value : {};
+    const inputProfiles: readonly JsonValue[] =
+        isJsonArray(source.profiles) && source.profiles.length > 0
+            ? source.profiles
+            : [{ id: "default", name: "Default", overlays: [] }];
+    const usedIds = new Set<string>();
+    const profiles: Profile[] = inputProfiles.map((entry, index) => {
+        const profile: JsonObject = isJsonObject(entry) ? entry : {};
+        let id = isJsonString(profile.id) ? profile.id : "";
+        if (!id || usedIds.has(id)) {
+            let suffix = index + 1;
+            do {
+                id = `profile-${suffix}`;
+                suffix += 1;
+            } while (usedIds.has(id));
+        }
+        usedIds.add(id);
+        const name =
+            isJsonString(profile.name) && profile.name.trim()
+                ? profile.name
+                : `Profile ${index + 1}`;
+        const overlays = isJsonArray(profile.overlays)
+            ? profile.overlays.map((overlay) => normalizePlacement(overlay))
+            : [];
+        return { id, name, overlays };
+    });
+    const requested = isJsonString(source.active_profile) ? source.active_profile : "";
+    const firstProfile = profiles[0]!;
     return {
         active_profile: profiles.some((profile) => profile.id === requested)
             ? requested
@@ -293,11 +322,11 @@ export function sharedArrayBufferBlinkSwitch(
 
 export function loadConfigSync(configPath: string): AppConfig {
     try {
-        const parsed = JSON.parse(readFileSync(configPath, "utf8")) as unknown;
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        const parsed = parseJsonText(readFileSync(configPath, "utf8"));
+        if (!isJsonObject(parsed)) {
             return defaultConfig();
         }
-        if (!("version" in parsed) || parsed.version !== CONFIG_VERSION) {
+        if (parsed.version !== CONFIG_VERSION) {
             return defaultConfig();
         }
         return normalizeConfig(parsed);
@@ -324,31 +353,35 @@ export class ConfigStore {
     load(): Promise<ConfigLoadResult> {
         const operation = this.saveTail.then(async () => {
             try {
-                const source = await readFile(this.path, "utf8"),
-                    parsed = JSON.parse(source) as unknown;
-                if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+                const source = await readFile(this.path, "utf8");
+                /*
+                 * `JSON.parse` is typed `any` but only yields JSON's own value
+                 * space, which is `JsonValue`. Malformed text throws here on
+                 * purpose: the catch below turns it into a load error.
+                 */
+                const parsed: JsonValue = JSON.parse(source);
+                if (!isJsonObject(parsed)) {
                     throw new Error("configuration must be an object");
                 }
-                if ((parsed as Record<string, unknown>).version !== CONFIG_VERSION) {
+                if (parsed.version !== CONFIG_VERSION) {
                     throw new Error(
-                        `unsupported config version ${String((parsed as Record<string, unknown>).version)}; expected ${CONFIG_VERSION}`,
+                        `unsupported config version ${String(parsed.version)}; expected ${CONFIG_VERSION}`,
                     );
                 }
-                const sourceToken = (
-                        (parsed as Record<string, unknown>).settings as
-                            | Record<string, unknown>
-                            | undefined
-                    )?.remote_access_token,
-                    config = normalizeConfig(parsed);
+                const { settings } = parsed;
+                const sourceToken = isJsonObject(settings)
+                    ? settings.remote_access_token
+                    : undefined;
+                const config = normalizeConfig(parsed);
                 if (
-                    typeof sourceToken !== "string" ||
-                    !/^[0-9a-fA-F]{64}$/.test(sourceToken.trim())
+                    !isJsonString(sourceToken) ||
+                    !REMOTE_ACCESS_TOKEN_PATTERN.test(sourceToken.trim())
                 ) {
                     await this.writeAtomically(config);
                 }
                 return { config, revision: this.currentRevision };
             } catch (error) {
-                if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                if (isErrnoException(error) && error.code === "ENOENT") {
                     const config = defaultConfig();
                     await this.writeAtomically(config);
                     this.fallbackConfig = undefined;
@@ -370,34 +403,34 @@ export class ConfigStore {
         return operation;
     }
 
-    save(value: unknown, options: ConfigSaveOptions = {}): Promise<ConfigChange> {
-        const config = normalizeConfig(value),
-            operation = this.saveTail.then(async () => {
-                if (
-                    options.expectedRevision !== undefined &&
-                    options.expectedRevision !== this.currentRevision
-                ) {
-                    throw new ConfigConflictError(options.expectedRevision, this.currentRevision);
+    save(value: JsonValue | undefined, options: ConfigSaveOptions = {}): Promise<ConfigChange> {
+        const config = normalizeConfig(value);
+        const operation = this.saveTail.then(async () => {
+            if (
+                options.expectedRevision !== undefined &&
+                options.expectedRevision !== this.currentRevision
+            ) {
+                throw new ConfigConflictError(options.expectedRevision, this.currentRevision);
+            }
+            await this.writeAtomically(config);
+            this.fallbackConfig = undefined;
+            const change = { config, revision: ++this.currentRevision, source: options.source };
+            for (const subscriber of this.subscribers) {
+                try {
+                    subscriber(change);
+                } catch {
+                    /* A consumer cannot roll back a configuration that was already committed. */
                 }
-                await this.writeAtomically(config);
-                this.fallbackConfig = undefined;
-                const change = { config, revision: ++this.currentRevision, source: options.source };
-                for (const subscriber of this.subscribers) {
-                    try {
-                        subscriber(change);
-                    } catch {
-                        // A consumer cannot roll back a configuration that was already committed.
-                    }
-                }
-                return change;
-            });
+            }
+            return change;
+        });
         this.saveTail = operation.then(
             () => {
                 this.saveError = undefined;
             },
-            (error: unknown) => {
-                if (!(error instanceof ConfigConflictError)) {
-                    this.saveError = error instanceof Error ? error : new Error(String(error));
+            (cause: unknown) => {
+                if (!(cause instanceof ConfigConflictError)) {
+                    this.saveError = cause instanceof Error ? cause : new Error(String(cause));
                 }
             },
         );
@@ -419,17 +452,18 @@ export class ConfigStore {
     private async writeAtomically(config: AppConfig): Promise<void> {
         const directory = dirname(this.path);
         await mkdir(directory, { recursive: true });
-        const temporary = join(
-                directory,
-                `.${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`,
-            ),
-            file = await open(
-                temporary,
-                constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
-                0o600,
-            );
+        const suffix = Math.random().toString(TEMPORARY_SUFFIX_RADIX).slice(TEMPORARY_SUFFIX_START);
+        const temporary = join(directory, `.${process.pid}-${Date.now()}-${suffix}.tmp`);
+        const file = await open(
+            temporary,
+            constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
+            CONFIG_FILE_MODE,
+        );
         try {
-            await file.writeFile(`${JSON.stringify(config, undefined, 2)}\n`, "utf8");
+            await file.writeFile(
+                `${JSON.stringify(config, undefined, CONFIG_JSON_INDENT)}\n`,
+                "utf8",
+            );
             await file.sync();
         } finally {
             await file.close();

@@ -1,18 +1,56 @@
-import assert from "node:assert/strict";
-import EventEmitter from "node:events";
-import test from "node:test";
-
+import { type ManagedOverlayProcess, OverlayManager } from "../src/main/overlay-manager";
 import type { ConfigStore } from "../src/main/config";
+import EventEmitter from "node:events";
 import type { ForegroundTracker } from "../src/main/foreground-tracker";
 import type { LocalOverlayRegistry } from "../src/main/local-overlays";
-import { type ManagedOverlayProcess, OverlayManager } from "../src/main/overlay-manager";
-import type { RuntimeOptions } from "../src/main/options";
+import { type RuntimeOptions } from "../src/main/options";
+import assert from "node:assert/strict";
+import test from "node:test";
+
+const options: RuntimeOptions = {
+    fpsLimit: 60,
+    pids: [],
+    processNames: ["osu!.exe", "osulazer.exe"],
+    vosuUrl: new URL("http://127.0.0.1:24050/"),
+};
+
+function createConfigStoreStub(): ConfigStore {
+    /* SAFETY: These tests only require constructor injection; no configuration read or write occurs on this stub. */
+    return {} as ConfigStore;
+}
+
+function createLocalOverlayRegistryStub(): LocalOverlayRegistry {
+    /* SAFETY: These tests only exercise overlay lifecycle behavior and do not call registry APIs. */
+    return {} as LocalOverlayRegistry;
+}
+
+function nextTick(): Promise<void> {
+    return new Promise((resolve) => {
+        void setImmediate(resolve);
+    });
+}
+
+function eventually(predicate: () => boolean): Promise<void> {
+    const waitForCondition = (remaining: number): Promise<void> => {
+        if (predicate()) {
+            return Promise.resolve();
+        }
+        if (remaining <= 0) {
+            assert.fail("condition was not reached");
+        }
+        return nextTick().then(() => waitForCondition(remaining - 1));
+    };
+    return waitForCondition(100);
+}
 
 class FakeForegroundTracker implements ForegroundTracker {
     private listener: ((pid: number | undefined) => void) | undefined = undefined;
+    private readonly initialPid: number | undefined;
     stopped = false;
 
-    constructor(private readonly initialPid: number | undefined) {}
+    constructor(initialPid: number | undefined) {
+        this.initialPid = initialPid;
+    }
 
     start(onChanged: (pid: number | undefined) => void): number | undefined {
         this.listener = onChanged;
@@ -32,6 +70,7 @@ class FakeForegroundTracker implements ForegroundTracker {
 class FakeOverlayProcess implements ManagedOverlayProcess {
     readonly events = new EventEmitter<{ destroyed: [] }>();
     readonly editingValues: boolean[] = [];
+    readonly pid: number;
     readonly visibilityValues: boolean[] = [];
     readonly window = {
         webContents: {
@@ -45,7 +84,9 @@ class FakeOverlayProcess implements ManagedOverlayProcess {
     destroyStarted = false;
     destroyGate: Promise<void> = Promise.resolve();
 
-    constructor(readonly pid: number) {}
+    constructor(pid: number) {
+        this.pid = pid;
+    }
 
     async destroy(): Promise<void> {
         this.destroyStarted = true;
@@ -56,62 +97,67 @@ class FakeOverlayProcess implements ManagedOverlayProcess {
         }
     }
 
-    async setEditing(editing: boolean): Promise<void> {
+    setEditing(editing: boolean): Promise<void> {
         this.editingValues.push(editing);
+        return Promise.resolve();
     }
 
-    async setVisible(visible: boolean): Promise<void> {
+    setVisible(visible: boolean): Promise<void> {
         this.visibilityValues.push(visible);
+        return Promise.resolve();
     }
 
-    async flushPendingSave(): Promise<void> {}
-    async reload(): Promise<void> {}
-}
+    flushPendingSave(): Promise<void> {
+        return Promise.resolve();
+    }
 
-const options: RuntimeOptions = {
-    fpsLimit: 60,
-    pids: [],
-    processNames: ["osu!.exe", "osulazer.exe"],
-    vosuUrl: new URL("http://127.0.0.1:24050/"),
+    reload(): Promise<void> {
+        return Promise.resolve();
+    }
+}
+const failUninitializedScan = (): void => {
+    assert.fail("scan callback was not registered");
 };
-
-async function eventually(predicate: () => boolean): Promise<void> {
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-        if (predicate()) {
-            return;
-        }
-        await new Promise<void>((resolve) => setImmediate(resolve));
-    }
-    assert.fail("condition was not reached");
-}
-
+const failCancelledScan = (): void => {
+    assert.fail("scan callback was already cancelled");
+};
+const failUninitializedRelease = (): void => {
+    assert.fail("release callback was not initialized");
+};
+const failUninitializedResolveStable = (_process: FakeOverlayProcess): void => {
+    assert.fail("resolution callback was not initialized");
+};
 function harness(initialPid: number | undefined, allowed = new Set([11, 22])) {
-    const tracker = new FakeForegroundTracker(initialPid),
-        initialized: FakeOverlayProcess[] = [];
-    let scheduledScan;
-    const initializedVisibility: boolean[] = [],
-        manager = new OverlayManager(options, {} as ConfigStore, {} as LocalOverlayRegistry, {
-            discoverPids: async () => new Set(allowed),
+    const tracker = new FakeForegroundTracker(initialPid);
+    const initialized: FakeOverlayProcess[] = [];
+    let scheduledScan: () => void = failUninitializedScan;
+    const initializedVisibility: boolean[] = [];
+    const manager = new OverlayManager(
+        options,
+        createConfigStoreStub(),
+        createLocalOverlayRegistryStub(),
+        {
+            discoverPids: () => Promise.resolve(new Set(allowed)),
             foregroundTracker: tracker,
-            initializeProcess: async (pid, _editingTarget, visible) => {
+            initializeProcess: (pid, _editingTarget, visible) => {
                 initializedVisibility.push(visible);
                 const process = new FakeOverlayProcess(pid);
                 initialized.push(process);
-                return process;
+                return Promise.resolve(process);
             },
             scheduleScan: (scan) => {
                 scheduledScan = scan;
                 return () => {
-                    scheduledScan = undefined;
+                    scheduledScan = failCancelledScan;
                 };
             },
-        });
+        },
+    );
     return {
         initialized,
         initializedVisibility,
         manager,
-        scan: (): void => {
-            assert.ok(scheduledScan);
+        scan: () => {
             scheduledScan();
         },
         tracker,
@@ -134,37 +180,42 @@ test("selects exactly the allowed foreground PID", async () => {
 test("attaches native process without a BrowserWindow", async () => {
     const tracker = new FakeForegroundTracker(11);
     let attached = false;
-    const manager = new OverlayManager(options, {} as ConfigStore, {} as LocalOverlayRegistry, {
-        discoverPids: async () => new Set([11]),
-        foregroundTracker: tracker,
-        initializeProcess: async (pid) => {
-            const process: ManagedOverlayProcess = {
-                destroy: async () => {},
-                events: new EventEmitter<{ destroyed: [] }>(),
-                flushPendingSave: async () => {},
-                pid,
-                reload: async () => {},
-                setEditing: async () => {},
-                setVisible: async () => {
-                    attached = true;
-                },
-            };
-            return process;
+    const manager = new OverlayManager(
+        options,
+        createConfigStoreStub(),
+        createLocalOverlayRegistryStub(),
+        {
+            discoverPids: () => Promise.resolve(new Set([11])),
+            foregroundTracker: tracker,
+            initializeProcess: (pid) => {
+                const process: ManagedOverlayProcess = {
+                    destroy: () => Promise.resolve(),
+                    events: new EventEmitter<{ destroyed: [] }>(),
+                    flushPendingSave: () => Promise.resolve(),
+                    pid,
+                    reload: () => Promise.resolve(),
+                    setEditing: () => Promise.resolve(),
+                    setVisible: () => {
+                        attached = true;
+                        return Promise.resolve();
+                    },
+                };
+                return Promise.resolve(process);
+            },
+            scheduleScan: () => () => {},
         },
-        scheduleScan: () => () => {},
-    });
+    );
 
     manager.start();
     await eventually(() => attached);
     await manager.stop();
 });
-
 test("destroys stable before attaching lazer", async () => {
     const state = harness(11);
     state.manager.start();
     await eventually(() => state.initialized.length === 1);
     const stable = state.initialized[0]!;
-    let releaseDestroy!: () => void;
+    let releaseDestroy: () => void = failUninitializedRelease;
     stable.destroyGate = new Promise<void>((resolve) => {
         releaseDestroy = resolve;
     });
@@ -185,9 +236,9 @@ test("keeps the last focused game attached until another game receives focus", a
     const stable = state.initialized[0]!;
 
     state.tracker.emit(999);
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await nextTick();
     state.scan();
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await nextTick();
     assert.equal(stable.destroyed, false);
     assert.equal(state.initialized.length, 1);
 
@@ -199,14 +250,18 @@ test("keeps the last focused game attached until another game receives focus", a
 });
 
 test("disposes a stale attach before selecting the latest foreground PID", async () => {
-    const tracker = new FakeForegroundTracker(11),
-        initialized: FakeOverlayProcess[] = [];
-    let resolveStable!: (process: FakeOverlayProcess) => void;
+    const tracker = new FakeForegroundTracker(11);
+    const initialized: FakeOverlayProcess[] = [];
+    let resolveStable: (process: FakeOverlayProcess) => void = failUninitializedResolveStable;
     const stableInitialization = new Promise<FakeOverlayProcess>((resolve) => {
-            resolveStable = resolve;
-        }),
-        manager = new OverlayManager(options, {} as ConfigStore, {} as LocalOverlayRegistry, {
-            discoverPids: async () => new Set([11, 22]),
+        resolveStable = resolve;
+    });
+    const manager = new OverlayManager(
+        options,
+        createConfigStoreStub(),
+        createLocalOverlayRegistryStub(),
+        {
+            discoverPids: () => Promise.resolve(new Set([11, 22])),
             foregroundTracker: tracker,
             initializeProcess: async (pid) => {
                 if (pid === 11) {
@@ -219,10 +274,11 @@ test("disposes a stale attach before selecting the latest foreground PID", async
                 return process;
             },
             scheduleScan: () => () => {},
-        });
+        },
+    );
 
     manager.start();
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await nextTick();
     const editingUpdate = manager.setEditing(true);
     tracker.emit(22);
     const stale = new FakeOverlayProcess(11);
@@ -239,33 +295,38 @@ test("disposes a stale attach before selecting the latest foreground PID", async
 
 test("retries a failed attach on the next process scan", async () => {
     const tracker = new FakeForegroundTracker(11);
-    let attached,
-        attempts = 0,
-        scan;
-    const manager = new OverlayManager(options, {} as ConfigStore, {} as LocalOverlayRegistry, {
-        discoverPids: async () => new Set([11]),
-        foregroundTracker: tracker,
-        initializeProcess: async (pid) => {
-            attempts += 1;
-            if (attempts === 1) {
-                throw new Error("attach failed");
-            }
-            attached = new FakeOverlayProcess(pid);
-            return attached;
+    const attached: FakeOverlayProcess[] = [];
+    let attempts = 0;
+    let scan: () => void = failUninitializedScan;
+    const manager = new OverlayManager(
+        options,
+        createConfigStoreStub(),
+        createLocalOverlayRegistryStub(),
+        {
+            discoverPids: () => Promise.resolve(new Set([11])),
+            foregroundTracker: tracker,
+            initializeProcess: (pid) => {
+                attempts += 1;
+                if (attempts === 1) {
+                    throw new Error("attach failed");
+                }
+                const process = new FakeOverlayProcess(pid);
+                attached.push(process);
+                return Promise.resolve(process);
+            },
+            scheduleScan: (callback) => {
+                scan = callback;
+                return () => {
+                    scan = failCancelledScan;
+                };
+            },
         },
-        scheduleScan: (callback) => {
-            scan = callback;
-            return () => {
-                scan = undefined;
-            };
-        },
-    });
+    );
 
     manager.start();
     await eventually(() => attempts === 1);
-    assert.ok(scan);
     scan();
-    await eventually(() => attached !== undefined);
+    await eventually(() => attached.length === 1);
     assert.equal(attempts, 2);
     await manager.stop();
 });
@@ -275,7 +336,9 @@ test("reattaches the last focused game when the active overlay reports destructi
     state.manager.start();
     await eventually(() => state.initialized.length === 1);
     state.tracker.emit(999);
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+        void setImmediate(resolve);
+    });
     state.initialized[0]!.events.emit("destroyed");
     await eventually(() => state.initialized.length === 2);
     assert.deepEqual(

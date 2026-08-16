@@ -38,6 +38,14 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
         run: bun install
 
+      # `desktop/.oxfmtrc.json` and `desktop/oxlint.config.ts` own formatting and
+      # linting for every JavaScript and TypeScript file under `desktop/`.
+      - name: Check formatting
+        run: bun run format:check
+
+      - name: Lint
+        run: bun run lint
+
       - name: Typecheck
         run: bun run typecheck
 

@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import test from "node:test";
-
 import {
     EMPTY_TARGET_STATE,
     StartupTransaction,
@@ -13,6 +10,8 @@ import {
     parseTargetEvent,
 } from "../src/main/linux-overlay-process";
 import { NativeSharedTexture } from "../src/main/linux-overlay-provider";
+import assert from "node:assert/strict";
+import test from "node:test";
 
 function textureInfo(
     pixelFormat: "rgba" | "bgra" | "rgbaf16" = "bgra",
@@ -20,6 +19,7 @@ function textureInfo(
 ): Electron.TextureInfo {
     return {
         codedSize: { height: 480, width: 640 },
+        /* SAFETY: The texture fixture intentionally mirrors Electron's shape and only exercises test plumbing. */
         colorSpace: {} as Electron.ColorSpace,
         contentRect: { height: 480, width: 640, x: 0, y: 0 },
         handle: {
@@ -197,7 +197,7 @@ test("a failed createSurface releases the window and the native handle", async (
     let windowDestroyed = false;
     const startup = new StartupTransaction();
 
-    let failure: unknown;
+    let failure: Error | undefined = new Error("expected startup failure");
     try {
         startup.acquire(() => {
             released.push("native");
@@ -210,6 +210,9 @@ test("a failed createSurface releases the window and the native handle", async (
         });
         await Promise.reject(new Error("no DRM device"));
     } catch (error) {
+        if (!(error instanceof Error)) {
+            throw error;
+        }
         failure = error;
         await startup.unwind();
     }
@@ -221,8 +224,8 @@ test("a failed createSurface releases the window and the native handle", async (
 });
 
 test("a committed startup transaction releases nothing", async () => {
-    const released: string[] = [],
-        startup = new StartupTransaction();
+    const released: string[] = [];
+    const startup = new StartupTransaction();
     startup.acquire(() => released.push("native"));
     startup.acquire(() => released.push("window"));
     startup.commit();
@@ -231,8 +234,8 @@ test("a committed startup transaction releases nothing", async () => {
 });
 
 test("a failing rollback does not prevent the others from running", async () => {
-    const released: string[] = [],
-        startup = new StartupTransaction();
+    const released: string[] = [];
+    const startup = new StartupTransaction();
     startup.acquire(() => released.push("native"));
     startup.acquire(() => {
         throw new Error("window teardown failed");

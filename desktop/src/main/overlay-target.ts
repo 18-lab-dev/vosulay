@@ -32,8 +32,8 @@ export function chooseOverlayTarget(targets: Iterable<OverlayTarget>): OverlayTa
             continue;
         }
 
-        const area = target.width * target.height,
-            bestArea = best.width * best.height;
+        const area = target.width * target.height;
+        const bestArea = best.width * best.height;
         if (
             area > bestArea ||
             (area === bestArea && target.width > best.width) ||

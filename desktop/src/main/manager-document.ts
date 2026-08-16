@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { readFileSync } from "node:fs";
 
 const BOOTSTRAP_MARKER = "__VOSULAY_BOOTSTRAP__";
+const MAX_MANAGER_FPS = 240;
 
 export function encodeJavaScriptString(source: string): string {
     return JSON.stringify(source)
@@ -25,8 +26,8 @@ export function buildManagerDocumentFromSources(
     fpsLimit: number,
     trustedCounterOrigin = "",
 ): string {
-    if (!Number.isInteger(fpsLimit) || fpsLimit <= 0 || fpsLimit > 240) {
-        throw new Error("manager FPS limit must be between 1 and 240");
+    if (!Number.isInteger(fpsLimit) || fpsLimit <= 0 || fpsLimit > MAX_MANAGER_FPS) {
+        throw new Error(`manager FPS limit must be between 1 and ${MAX_MANAGER_FPS}`);
     }
     const occurrences = template.split(BOOTSTRAP_MARKER).length - 1;
     if (occurrences !== 1) {
@@ -41,6 +42,9 @@ function loadManagerAsset(filename: string): string {
     try {
         return readFileSync(moduleAsset, "utf8");
     } catch (moduleError) {
+        /* SAFETY: Electron process metadata may include `resourcesPath`; this
+         * assertion preserves a fallback path that is only used in packaged
+         * builds. */
         const { resourcesPath } = process as NodeJS.Process & { resourcesPath?: string };
         if (resourcesPath) {
             try {

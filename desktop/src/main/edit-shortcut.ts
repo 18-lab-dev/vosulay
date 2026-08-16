@@ -43,20 +43,20 @@ export interface NativeEditShortcutInput {
     state?: string;
 }
 
-const VK_ALT = 0x12,
-    VK_APPS = 0x5D,
-    VK_CONTROL = 0x11,
-    VK_I = 0x49,
-    VK_LEFT_ALT = 0xA4,
-    VK_LEFT_CONTROL = 0xA2,
-    VK_LEFT_META = 0x5B,
-    VK_LEFT_SHIFT = 0xA0,
-    VK_R = 0x52,
-    VK_RIGHT_ALT = 0xA5,
-    VK_RIGHT_CONTROL = 0xA3,
-    VK_RIGHT_META = 0x5C,
-    VK_RIGHT_SHIFT = 0xA1,
-    VK_SHIFT = 0x10;
+const VK_ALT = 0x12;
+const VK_APPS = 0x5d;
+const VK_CONTROL = 0x11;
+const VK_I = 0x49;
+const VK_LEFT_ALT = 0xa4;
+const VK_LEFT_CONTROL = 0xa2;
+const VK_LEFT_META = 0x5b;
+const VK_LEFT_SHIFT = 0xa0;
+const VK_R = 0x52;
+const VK_RIGHT_ALT = 0xa5;
+const VK_RIGHT_CONTROL = 0xa3;
+const VK_RIGHT_META = 0x5c;
+const VK_RIGHT_SHIFT = 0xa1;
+const VK_SHIFT = 0x10;
 
 export class NativeEditShortcutState {
     private readonly pressedKeys = new Set<number>();

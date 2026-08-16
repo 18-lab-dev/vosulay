@@ -1,6 +1,5 @@
-import type EventEmitter from "node:events";
-
 import type { EditingTarget } from "./types";
+import type EventEmitter from "node:events";
 
 /**
  * Host-facing overlay lifecycle. Providers own platform-specific attachment,

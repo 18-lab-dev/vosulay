@@ -1,16 +1,22 @@
+import { type JsonValue, isJsonString } from "./json";
 import type { ManagedOverlayProcess } from "./overlay-manager";
 import type { NativeOverlayHandle } from "./linux-overlay-provider";
-
 interface PaintingWebContents {
-    isDestroyed?(): boolean;
-    isPainting(): boolean;
-    startPainting(): void;
-    stopPainting(): void;
-    invalidate(): void;
-    setFrameRate(frameRate: number): void;
-    on(event: "paint", listener: () => void): unknown;
-    off(event: "paint", listener: () => void): unknown;
+    isDestroyed?: () => boolean;
+    isPainting: () => boolean;
+    startPainting: () => void;
+    stopPainting: () => void;
+    invalidate: () => void;
+    setFrameRate: (frameRate: number) => void;
+    on: (event: "paint", listener: () => void) => void;
+    off: (event: "paint", listener: () => void) => void;
 }
+
+const FRAME_REQUEST_PART_COUNT = 2;
+const SELECTED_TARGET_PART_COUNT = 3;
+const DESTROYED_TARGET_PART_COUNT = 2;
+const FRAME_REQUEST_MIN_ID = 0;
+const FRAME_REQUEST_MIN_SEQUENCE = 0;
 
 interface PaceableProcess extends ManagedOverlayProcess {
     readonly window: {
@@ -22,40 +28,42 @@ export interface ParsedFrameRequest {
     targetId: number;
     sequence: number;
 }
-
-export function parseFrameRequest(value: unknown): ParsedFrameRequest | undefined {
-    if (typeof value !== "string") {
+export function parseFrameRequest(value: JsonValue | undefined): ParsedFrameRequest | undefined {
+    if (!isJsonString(value)) {
         return undefined;
     }
     const fields = value.split(":");
-    if (fields.length !== 2) {
+    if (fields.length !== FRAME_REQUEST_PART_COUNT) {
         return undefined;
     }
-    const targetId = Number(fields[0]),
-        sequence = Number(fields[1]);
+    const targetId = Number(fields[0]);
+    const sequence = Number(fields[1]);
     if (
         !Number.isSafeInteger(targetId) ||
-        targetId <= 0 ||
+        targetId <= FRAME_REQUEST_MIN_ID ||
         !Number.isSafeInteger(sequence) ||
-        sequence <= 0
+        sequence <= FRAME_REQUEST_MIN_SEQUENCE
     ) {
         return undefined;
     }
     return { sequence, targetId };
 }
-
-function selectedTarget(value: unknown): number | undefined {
-    if (typeof value !== "string") {
+function selectedTarget(value: JsonValue | undefined): number | undefined {
+    if (!isJsonString(value)) {
         return undefined;
     }
     const fields = value.split(":");
-    if (fields[0] === "selected" && fields.length === 3) {
+    if (fields[0] === "selected" && fields.length === SELECTED_TARGET_PART_COUNT) {
         const targetId = Number(fields[1]);
-        return Number.isSafeInteger(targetId) && targetId >= 0 ? targetId || undefined : undefined;
+        return Number.isSafeInteger(targetId) && targetId >= FRAME_REQUEST_MIN_ID
+            ? targetId || undefined
+            : undefined;
     }
-    if (fields[0] === "destroyed" && fields.length === 2) {
+    if (fields[0] === "destroyed" && fields.length === DESTROYED_TARGET_PART_COUNT) {
         const targetId = Number(fields[1]);
-        return Number.isSafeInteger(targetId) && targetId > 0 ? -targetId : undefined;
+        return Number.isSafeInteger(targetId) && targetId > FRAME_REQUEST_MIN_ID
+            ? -targetId
+            : undefined;
     }
     return undefined;
 }
@@ -75,68 +83,68 @@ export function enableNativeFramePacing(
     }
 
     const { webContents } = process.window;
-    let activeTarget: number | undefined = undefined,
-        deliveredSequence = 0,
-        destroyed = false,
-        pendingSequence = 0,
-        visible = true;
+    let activeTarget: number | undefined = undefined;
+    let deliveredSequence = 0;
+    let destroyed = false;
+    let pendingSequence = 0;
+    let visible = true;
 
     const stop = (): void => {
-            if (!webContents.isDestroyed?.() && webContents.isPainting()) {
-                webContents.stopPainting();
+        if (!webContents.isDestroyed?.() && webContents.isPainting()) {
+            webContents.stopPainting();
+        }
+    };
+    const requestPaint = (): void => {
+        if (destroyed || !visible || activeTarget === undefined || webContents.isDestroyed?.()) {
+            return;
+        }
+        if (!webContents.isPainting()) {
+            webContents.startPainting();
+        }
+        webContents.invalidate();
+    };
+    const onTarget = (payload: JsonValue | undefined): void => {
+        const selected = selectedTarget(payload);
+        if (selected === undefined) {
+            return;
+        }
+        if (selected < 0) {
+            if (activeTarget === -selected) {
+                activeTarget = undefined;
             }
-        },
-        requestPaint = (): void => {
-            if (destroyed || !visible || activeTarget === undefined || webContents.isDestroyed?.()) {
+        } else {
+            activeTarget = selected;
+        }
+        stop();
+    };
+    const onFrameRequest = (payload: JsonValue | undefined): void => {
+        const request = parseFrameRequest(payload);
+        if (request === undefined) {
+            return;
+        }
+        if (activeTarget !== undefined && request.targetId !== activeTarget) {
+            return;
+        }
+        activeTarget ??= request.targetId;
+        if (request.sequence <= pendingSequence) {
+            return;
+        }
+        pendingSequence = request.sequence;
+        requestPaint();
+    };
+    const onPaint = (): void => {
+        deliveredSequence = pendingSequence;
+        queueMicrotask(() => {
+            if (destroyed) {
                 return;
             }
-            if (!webContents.isPainting()) {
-                webContents.startPainting();
-            }
-            webContents.invalidate();
-        },
-        onTarget = (value: unknown): void => {
-            const selected = selectedTarget(value);
-            if (selected === undefined) {
-                return;
-            }
-            if (selected !== undefined && selected < 0) {
-                if (activeTarget === -selected) {
-                    activeTarget = undefined;
-                }
+            if (pendingSequence === deliveredSequence) {
+                stop();
             } else {
-                activeTarget = selected;
+                requestPaint();
             }
-            stop();
-        },
-        onFrameRequest = (value: unknown): void => {
-            const request = parseFrameRequest(value);
-            if (request === undefined) {
-                return;
-            }
-            if (activeTarget !== undefined && request.targetId !== activeTarget) {
-                return;
-            }
-            activeTarget ??= request.targetId;
-            if (request.sequence <= pendingSequence) {
-                return;
-            }
-            pendingSequence = request.sequence;
-            requestPaint();
-        },
-        onPaint = (): void => {
-            deliveredSequence = pendingSequence;
-            queueMicrotask(() => {
-                if (destroyed) {
-                    return;
-                }
-                if (pendingSequence === deliveredSequence) {
-                    stop();
-                } else {
-                    requestPaint();
-                }
-            });
-        };
+        });
+    };
 
     native.on("target", onTarget);
     native.on("frame-request", onFrameRequest);

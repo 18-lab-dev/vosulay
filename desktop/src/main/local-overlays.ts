@@ -1,3 +1,5 @@
+import { access, realpath, stat } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, parse, relative, sep } from "node:path";
 import {
     closeSync,
     constants,
@@ -8,29 +10,61 @@ import {
     statSync,
     writeSync,
 } from "node:fs";
-import { access, realpath, stat } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, parse, relative, sep } from "node:path";
-import { homedir } from "node:os";
-import { Readable } from "node:stream";
-import { createRequire } from "node:module";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import mime from "mime-types";
+import { Readable } from "node:stream";
 import type { RuntimeOptions } from "./options";
 import { buildManagerDocument } from "./manager-document";
+import { createRequire } from "node:module";
+import { homedir } from "node:os";
+import mime from "mime-types";
 
-const require = createRequire(import.meta.url),
-    CAPABILITY_KEY_BYTES = 32,
-    CAPABILITY_KEY_FILENAME = "local-overlay-capability.key",
-    ROOT_PATTERN = /^[A-Za-z0-9_-]+$/,
-    TOKEN_PATTERN = /^[0-9a-f]{32}$/;
+const require = createRequire(import.meta.url);
+const CAPABILITY_KEY_BYTES = 32;
+const CAPABILITY_KEY_TOKEN_BYTES = CAPABILITY_KEY_BYTES;
+const CAPABILITY_KEY_FILE_MODE = 0o600;
+const CAPABILITY_KEY_FILENAME = "local-overlay-capability.key";
+const MINIMUM_OVERLAY_PATH_SEGMENTS = 3;
+const OVERLAY_ROOT_SEGMENT_INDEX = 1;
+const OVERLAY_FILE_SEGMENT_INDEX = 2;
+const ROOT_PATTERN = /^[A-Za-z0-9_-]+$/u;
+const TOKEN_PATTERN = /^[0-9a-f]{32}$/u;
+const ENOENT_ERROR_CODE = "ENOENT";
+const EEXIST_ERROR_CODE = "EEXIST";
+
+interface SchemePrivileges {
+    secure: boolean;
+    standard: boolean;
+    stream?: boolean;
+    supportFetchAPI: boolean;
+}
+interface PrivilegedScheme {
+    privileges: SchemePrivileges;
+    scheme: string;
+}
 
 interface ElectronProtocol {
-    registerSchemesAsPrivileged: (schemes: unknown[]) => void;
+    registerSchemesAsPrivileged: (schemes: PrivilegedScheme[]) => void;
     handle: (scheme: string, handler: (request: Request) => Promise<Response> | Response) => void;
 }
 
 function electronProtocol(): ElectronProtocol {
-    return (require("electron") as { protocol: ElectronProtocol }).protocol;
+    return require("electron").protocol;
+}
+
+interface ParsedErrnoException {
+    code: string;
+}
+
+interface ErrorCodeCarrier {
+    code: unknown;
+}
+
+function hasErrorCode(cause: unknown): cause is ParsedErrnoException {
+    if (typeof cause !== "object" || cause === null || !("code" in cause)) {
+        return false;
+    }
+    /* SAFETY: `cause` is checked for a `code` property before narrowing. */
+    return typeof (cause as ErrorCodeCarrier).code === "string";
 }
 
 interface ParsedOverlayUrl {
@@ -61,18 +95,18 @@ export function loadLocalOverlayCapabilityKey(dataDirectory: string): Buffer {
         }
         return key;
     } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        if (!hasErrorCode(error) || error.code !== ENOENT_ERROR_CODE) {
             throw error;
         }
     }
 
     const key = randomBytes(CAPABILITY_KEY_BYTES);
-    let descriptor: number | undefined;
+    let descriptor = -1;
     try {
         descriptor = openSync(
             path,
             constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
-            0o600,
+            CAPABILITY_KEY_FILE_MODE,
         );
         let offset = 0;
         while (offset < key.length) {
@@ -80,12 +114,12 @@ export function loadLocalOverlayCapabilityKey(dataDirectory: string): Buffer {
         }
         return key;
     } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        if (hasErrorCode(error) && error.code === EEXIST_ERROR_CODE) {
             return loadLocalOverlayCapabilityKey(dataDirectory);
         }
         throw error;
     } finally {
-        if (descriptor !== undefined) {
+        if (descriptor !== -1) {
             closeSync(descriptor);
         }
     }
@@ -96,7 +130,7 @@ function rootToken(key: Buffer, root: string): string {
         .update("vosulay-local-overlay-root\0", "utf8")
         .update(root, "utf8")
         .digest("hex")
-        .slice(0, 32);
+        .slice(0, CAPABILITY_KEY_TOKEN_BYTES);
 }
 
 function tokenMatches(left: string, right: string): boolean {
@@ -135,6 +169,7 @@ function decodeRoot(segment: string): string {
 
 function parseOverlayUrl(value: URL | string): ParsedOverlayUrl {
     const url = value instanceof URL ? value : new URL(value);
+    const encoded = url.pathname.split("/");
     if (
         url.protocol.toLowerCase() !== "vosulay-overlay:" ||
         !TOKEN_PATTERN.test(url.hostname) ||
@@ -144,12 +179,16 @@ function parseOverlayUrl(value: URL | string): ParsedOverlayUrl {
     ) {
         throw new Error("invalid local overlay URL");
     }
-    const encoded = url.pathname.split("/");
-    if (encoded.length < 3 || encoded[0] !== "" || !encoded[1]) {
+    if (
+        encoded.length < MINIMUM_OVERLAY_PATH_SEGMENTS ||
+        encoded[0] !== "" ||
+        !encoded[OVERLAY_ROOT_SEGMENT_INDEX]
+    ) {
         throw new Error("invalid local overlay path");
     }
-    const segments = encoded.slice(2).map((segment) => {
-        let decoded: string;
+    const root = encoded[OVERLAY_ROOT_SEGMENT_INDEX];
+    const segments = encoded.slice(OVERLAY_FILE_SEGMENT_INDEX).map((segment) => {
+        let decoded = "";
         try {
             decoded = decodeURIComponent(segment);
         } catch {
@@ -167,7 +206,7 @@ function parseOverlayUrl(value: URL | string): ParsedOverlayUrl {
         }
         return decoded;
     });
-    return { root: decodeRoot(encoded[1]), segments, token: url.hostname };
+    return { root: decodeRoot(root), segments, token: url.hostname };
 }
 
 function confined(root: string, target: string): boolean {
@@ -187,18 +226,18 @@ export class LocalOverlayRegistry {
     }
 
     async createUrl(filePath: string): Promise<string> {
-        const file = await realpath(filePath),
-            info = await stat(file);
+        const file = await realpath(filePath);
+        const info = await stat(file);
         await access(file);
         if (!info.isFile()) {
             throw new Error("selected overlay is not a regular file");
         }
-        const root = await realpath(dirname(file)),
-            // Reuse decodeRoot's canonical and broad-root checks before minting.
-            encodedRoot = Buffer.from(root, "utf8").toString("base64url");
+        const root = await realpath(dirname(file));
+        // Reuse decodeRoot's canonical and broad-root checks before minting.
+        const encodedRoot = Buffer.from(root, "utf8").toString("base64url");
         decodeRoot(encodedRoot);
-        const token = rootToken(this.capabilityKey, root),
-            url = `vosulay-overlay://${token}/${encodedRoot}/${encodeURIComponent(basename(file))}`;
+        const token = rootToken(this.capabilityKey, root);
+        const url = `vosulay-overlay://${token}/${encodedRoot}/${encodeURIComponent(basename(file))}`;
         if (!this.authorizeUrl(url)) {
             throw new Error("selected overlay could not be authorized safely");
         }
@@ -275,11 +314,13 @@ export class LocalOverlayRegistry {
             return new Response("Method Not Allowed", { status: 405 });
         }
         try {
-            const path = await this.resolveAuthorizedFile(request.url),
-                contentType =
-                    mime.contentType(mime.lookup(path) || "application/octet-stream") ||
-                    "application/octet-stream",
-                body = Readable.toWeb(createReadStream(path)) as unknown as BodyInit;
+            const path = await this.resolveAuthorizedFile(request.url);
+            const contentType =
+                mime.contentType(mime.lookup(path) || "application/octet-stream") ||
+                "application/octet-stream";
+            /* SAFETY: Node read streams are transformed into a web body by `Readable.toWeb`
+             * for Electron fetch responses in this environment. */
+            const body = Readable.toWeb(createReadStream(path)) as BodyInit;
             return new Response(body, { headers: { "content-type": contentType }, status: 200 });
         } catch {
             return new Response("Not Found", { status: 404 });
@@ -287,30 +328,32 @@ export class LocalOverlayRegistry {
     }
 }
 
+const MANAGER_SCHEME_PRIVILEGES: PrivilegedScheme[] = [
+    {
+        privileges: {
+            secure: true,
+            standard: true,
+            supportFetchAPI: true,
+        },
+        scheme: "vosulay",
+    },
+    {
+        privileges: {
+            secure: true,
+            standard: true,
+            stream: true,
+            supportFetchAPI: true,
+        },
+        scheme: "vosulay-overlay",
+    },
+];
+
 let schemesRegistered = false;
 export function registerCustomSchemes(): void {
     if (schemesRegistered) {
         return;
     }
-    electronProtocol().registerSchemesAsPrivileged([
-        {
-            privileges: {
-                secure: true,
-                standard: true,
-                supportFetchAPI: true,
-            },
-            scheme: "vosulay",
-        },
-        {
-            privileges: {
-                secure: true,
-                standard: true,
-                stream: true,
-                supportFetchAPI: true,
-            },
-            scheme: "vosulay-overlay",
-        },
-    ]);
+    electronProtocol().registerSchemesAsPrivileged(MANAGER_SCHEME_PRIVILEGES);
     schemesRegistered = true;
 }
 

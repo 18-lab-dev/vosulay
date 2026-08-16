@@ -1,18 +1,20 @@
-import { createRequire } from "node:module";
-import path from "node:path";
-import EventEmitter from "node:events";
-import type { ConfigStore } from "./config";
-import { LinuxOverlayProcess } from "./linux-overlay-process";
 import {
     type ManagedOverlayProcess,
     OverlayManager,
     type OverlayManagerDependencies,
     discoverTargetPids,
 } from "./overlay-manager";
-import { type ForegroundTracker, NoopForegroundTracker } from "./foreground-tracker";
+import type { ConfigStore } from "./config";
+import type { EditingTarget } from "./types";
+import EventEmitter from "node:events";
+import { type ForegroundTracker } from "./foreground-tracker";
+import { LinuxOverlayProcess } from "./linux-overlay-process";
 import type { LocalOverlayRegistry } from "./local-overlays";
 import type { RuntimeOptions } from "./options";
-import type { EditingTarget } from "./types";
+import { createRequire } from "node:module";
+import path from "node:path";
+
+const MAX_PIXMAP_PLANES = 4;
 
 export interface NativeSharedTexturePlane {
     fd: number;
@@ -31,8 +33,8 @@ export interface NativeSharedTextureDescriptor {
     planes: NativeSharedTexturePlane[];
 }
 
-export class NativeSharedTexture {
-    static fromElectron(
+export const NativeSharedTexture = {
+    fromElectron(
         targetId: number,
         sequence: number,
         textureInfo: Electron.TextureInfo,
@@ -46,7 +48,7 @@ export class NativeSharedTexture {
             textureInfo.codedSize.width <= 0 ||
             textureInfo.codedSize.height <= 0 ||
             pixmap.planes.length === 0 ||
-            pixmap.planes.length > 4
+            pixmap.planes.length > MAX_PIXMAP_PLANES
         ) {
             return undefined;
         }
@@ -64,8 +66,8 @@ export class NativeSharedTexture {
             targetId,
             width: textureInfo.codedSize.width,
         };
-    }
-}
+    },
+};
 
 export interface NativeBitmapDescriptor {
     targetId: number;
@@ -75,46 +77,55 @@ export interface NativeBitmapDescriptor {
     format?: "BGRA" | "RGBA";
 }
 
+export type NativeEventListener = (payload: string) => void;
+
 export interface NativeOverlaySurface {
-    updateSharedTexture?(texture: unknown): Promise<void> | void;
-    updateDmabuf(texture: NativeSharedTextureDescriptor): Promise<void> | void;
-    updateBitmap?(descriptor: NativeBitmapDescriptor, bitmap: Buffer): Promise<void> | void;
-    clear?(targetId: number): Promise<void> | void;
+    updateSharedTexture?: (texture: NativeSharedTextureDescriptor) => Promise<void> | void;
+    updateDmabuf?: (texture: NativeSharedTextureDescriptor) => Promise<void> | void;
+    updateBitmap?: (descriptor: NativeBitmapDescriptor, bitmap: Buffer) => Promise<void> | void;
+    clear?: (targetId: number) => Promise<void> | void;
 }
 
 export interface NativeOverlayHandle {
     readonly pid?: number;
-    supportsDmabuf?(): boolean;
-    supportsBgraShm?(): boolean;
-    supportsFrameRequests?(): boolean;
+    supportsDmabuf?: () => boolean;
+    supportsBgraShm?: () => boolean;
+    supportsFrameRequests?: () => boolean;
     readonly window?: ManagedOverlayProcess["window"];
     readonly events?: {
-        on?(event: string, listener: (...args: unknown[]) => void): unknown;
-        off?(event: string, listener: (...args: unknown[]) => void): unknown;
+        on?: (event: string, listener: NativeEventListener) => void;
+        off?: (event: string, listener: NativeEventListener) => void;
     };
-    on?(event: string, listener: (...args: unknown[]) => void): unknown;
-    off?(event: string, listener: (...args: unknown[]) => void): unknown;
-    createSurface?(): Promise<NativeOverlaySurface> | NativeOverlaySurface;
-    destroy(): Promise<void> | void;
-    setVisible?(visible: boolean): Promise<void> | void;
-    setEditing?(editing: boolean): Promise<void> | void;
-    captureInput?(capture: boolean): Promise<void> | void;
-    flushPendingSave?(): Promise<void> | void;
-    reload?(): Promise<void> | void;
+    on?: (event: string, listener: NativeEventListener) => void;
+    off?: (event: string, listener: NativeEventListener) => void;
+    createSurface?: () => Promise<NativeOverlaySurface> | NativeOverlaySurface;
+    destroy: () => Promise<void> | void;
+    setVisible?: (visible: boolean) => Promise<void> | void;
+    setEditing?: (editing: boolean) => Promise<void> | void;
+    captureInput?: (capture: boolean) => Promise<void> | void;
+    flushPendingSave?: () => Promise<void> | void;
+    reload?: () => Promise<void> | void;
+}
+
+interface NativeOverlayAttachOptions {
+    vosuUrl: string;
+    agentLibraryPath?: string;
+    attachToolPath?: string;
+    profilerLibraryPath?: string;
 }
 
 export interface NativeOverlayAddon {
-    attach(
+    attach: (
         pid: number,
-        options?: Record<string, unknown>,
-    ): Promise<NativeOverlayHandle> | NativeOverlayHandle;
-    launchVulkan?(options: {
+        options?: NativeOverlayAttachOptions,
+    ) => Promise<NativeOverlayHandle> | NativeOverlayHandle;
+    launchVulkan?: (options: {
         executable: string;
         args: string[];
         layerDirectory: string;
         agentLibraryPath?: string;
         timeout?: number;
-    }): Promise<NativeOverlayHandle> | NativeOverlayHandle;
+    }) => Promise<NativeOverlayHandle> | NativeOverlayHandle;
 }
 
 export interface LinuxOverlayProviderDependencies extends OverlayManagerDependencies {
@@ -123,10 +134,23 @@ export interface LinuxOverlayProviderDependencies extends OverlayManagerDependen
     foregroundTracker?: ForegroundTracker;
 }
 
+interface NativeAddonCandidate {
+    attach?: unknown;
+}
+
+function isNativeModule(
+    value: NativeAddonCandidate | null | undefined,
+): value is NativeOverlayAddon {
+    return typeof value === "object" && value !== null && typeof value.attach === "function";
+}
+
 class LinuxPidTracker implements ForegroundTracker {
     private callback: ((pid: number | undefined) => void) | undefined = undefined;
+    private readonly initialPid: number | undefined;
 
-    constructor(private readonly initialPid: number | undefined) {}
+    constructor(initialPid: number | undefined) {
+        this.initialPid = initialPid;
+    }
 
     start(onChanged: (pid: number | undefined) => void): number | undefined {
         this.callback = onChanged;
@@ -188,19 +212,20 @@ export class LinuxCandidateTracker implements ForegroundTracker {
 
 class NativeOverlayProcess implements ManagedOverlayProcess {
     readonly events = new EventEmitter<{ destroyed: [] }>();
+    private readonly native: NativeOverlayHandle;
+    readonly pid: number;
     private destroyed = false;
     private destroyedEmitted = false;
 
-    constructor(
-        readonly pid: number,
-        private readonly native: NativeOverlayHandle,
-    ) {
+    constructor(pid: number, native: NativeOverlayHandle) {
+        this.pid = pid;
+        this.native = native;
         const onDestroyed = (): void => {
             this.emitDestroyed();
         };
-        native.events?.on?.("destroyed", onDestroyed);
-        native.events?.on?.("disconnect", onDestroyed);
-        native.on?.("disconnect", onDestroyed);
+        this.native.events?.on?.("destroyed", onDestroyed);
+        this.native.events?.on?.("disconnect", onDestroyed);
+        this.native.on?.("disconnect", onDestroyed);
     }
 
     async destroy(): Promise<void> {
@@ -241,6 +266,7 @@ class NativeOverlayProcess implements ManagedOverlayProcess {
         this.events.emit("destroyed");
     }
 }
+
 export function nativeResourceRoot(): string | undefined {
     if (process.env.VOSULAY_NATIVE_ROOT !== undefined) {
         return process.env.VOSULAY_NATIVE_ROOT;
@@ -250,7 +276,7 @@ export function nativeResourceRoot(): string | undefined {
         : undefined;
 }
 
-function nativeAttachOptions(options: RuntimeOptions): Record<string, unknown> {
+function nativeAttachOptions(options: RuntimeOptions): NativeOverlayAttachOptions {
     const root = nativeResourceRoot();
     if (root === undefined) {
         return { vosuUrl: options.vosuUrl.toString() };
@@ -264,22 +290,17 @@ function nativeAttachOptions(options: RuntimeOptions): Record<string, unknown> {
 }
 
 export function defaultNativeLoader(): NativeOverlayAddon {
-    const root = nativeResourceRoot(),
-        moduleName =
-            process.env.VOSULAY_NATIVE_ADDON ??
-            (root === undefined
-                ? "@vosu/overlay-node"
-                : path.join(root, "overlay-node.linux-x64-gnu.node")),
-        loaded: unknown = createRequire(import.meta.url)(moduleName);
-    if (
-        !loaded ||
-        typeof loaded !== "object" ||
-        !("attach" in loaded) ||
-        typeof loaded.attach !== "function"
-    ) {
+    const root = nativeResourceRoot();
+    const moduleName =
+        process.env.VOSULAY_NATIVE_ADDON ??
+        (root === undefined
+            ? "@vosu/overlay-node"
+            : path.join(root, "overlay-node.linux-x64-gnu.node"));
+    const loaded = createRequire(import.meta.url)(moduleName);
+    if (!isNativeModule(loaded)) {
         throw new Error(`Native overlay addon ${moduleName} does not expose attach(pid, options)`);
     }
-    return loaded as NativeOverlayAddon;
+    return loaded;
 }
 
 export async function createLinuxOverlayProvider(
@@ -304,22 +325,24 @@ export async function createLinuxOverlayProvider(
     if (addon.launchVulkan === undefined) {
         throw new Error("Native overlay addon does not expose launchVulkan(options)");
     }
-    // Exactly one backend per launch. Preloading the GL agent alongside the
-    // Vulkan layer pointed both at the same one-shot socket and cookie, so
-    // Whichever authenticated first claimed the session and the other backend
-    // Was left without an overlay.
+    /*
+     * Exactly one backend per launch. Preloading the GL agent alongside the
+     * Vulkan layer pointed both at the same one-shot socket and cookie, so
+     * whichever authenticated first claimed the session and the other backend
+     * was left without an overlay.
+     */
     const handle = await addon.launchVulkan({
         args: options.vulkanLaunch.args,
         executable: options.vulkanLaunch.executable,
         layerDirectory: root,
     });
-    if (!Number.isSafeInteger(handle.pid) || (handle.pid ?? 0) <= 0) {
+    const { pid } = handle;
+    if (pid === undefined || !Number.isSafeInteger(pid) || pid <= 0) {
         await handle.destroy();
         throw new Error("Native Vulkan launcher returned an invalid target PID");
     }
-    const pid = handle.pid!;
-    let available = true,
-        running = true;
+    let available = true;
+    let running = true;
     const markStopped = (): void => {
         running = false;
     };
@@ -327,22 +350,23 @@ export async function createLinuxOverlayProvider(
     handle.events?.on?.("disconnect", markStopped);
     handle.on?.("disconnect", markStopped);
     const launchedAddon: NativeOverlayAddon = {
-            attach(requestedPid) {
-                if (!available || requestedPid !== pid) {
-                    throw new Error("Launched Vulkan overlay handle is no longer available");
-                }
-                available = false;
-                return handle;
-            },
+        attach: (requestedPid: number) => {
+            if (!available || requestedPid !== pid) {
+                throw new Error("Launched Vulkan overlay handle is no longer available");
+            }
+            available = false;
+            return handle;
         },
-        { vulkanLaunch: _launch, ...launchedOptions } = options;
+    };
+    const { vulkanLaunch: _launch, ...launchedOptions } = options;
     return new LinuxOverlayProvider(
         { ...launchedOptions, pids: [pid] },
         configStore,
         overlayRegistry,
         {
             ...dependencies,
-            discoverPids: dependencies.discoverPids ?? (async () => new Set(running ? [pid] : [])),
+            discoverPids:
+                dependencies.discoverPids ?? (() => Promise.resolve(new Set(running ? [pid] : []))),
             foregroundTracker: dependencies.foregroundTracker ?? new LinuxPidTracker(pid),
             native: launchedAddon,
         },
@@ -357,14 +381,14 @@ export class LinuxOverlayProvider extends OverlayManager {
         overlayRegistry: LocalOverlayRegistry,
         dependencies: LinuxOverlayProviderDependencies = {},
     ) {
-        const { native } = dependencies,
-            loadNative = dependencies.loadNative ?? defaultNativeLoader,
-            initialPid = options.pids[0] ?? undefined,
-            // Without an explicit `--pid` the manager must still find the game by
-            // Process name. Replacing discovery with `options.pids` left the
-            // Allowed set permanently empty, so the provider never attached on the
-            // Default Linux startup path.
-            candidates = new LinuxCandidateTracker();
+        const { native } = dependencies;
+        const loadNative = dependencies.loadNative ?? defaultNativeLoader;
+        const [initialPid] = options.pids;
+        // Without an explicit `--pid` the manager must still find the game by
+        // Process name. Replacing discovery with `options.pids` left the
+        // Allowed set permanently empty, so the provider never attached on the
+        // Default Linux startup path.
+        const candidates = new LinuxCandidateTracker();
         super(options, configStore, overlayRegistry, {
             ...dependencies,
             discoverPids:
@@ -384,8 +408,8 @@ export class LinuxOverlayProvider extends OverlayManager {
                     editingTarget: EditingTarget,
                     visible: boolean,
                 ): Promise<ManagedOverlayProcess> => {
-                    const addon = native ?? loadNative(),
-                        handle = await addon.attach(pid, nativeAttachOptions(options));
+                    const addon = native ?? loadNative();
+                    const handle = await addon.attach(pid, nativeAttachOptions(options));
                     if (handle.createSurface === undefined) {
                         return new NativeOverlayProcess(pid, handle);
                     }

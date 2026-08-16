@@ -45,10 +45,14 @@ Node.js 22 or newer and Bun 1.3.14 are required. Bun is the package manager and 
 ```sh
 cd desktop
 bun install
+bun run format:check
+bun run lint
 bun run typecheck
 bun run test
 bun run build
 ```
+
+`format:check` runs oxfmt and `lint` runs oxlint; `bun run format` rewrites files and `bun run lint:fix` applies the autofixable subset. Formatting is configured in `desktop/.oxfmtrc.json` and linting in `desktop/oxlint.config.ts`, which denies every stable oxlint category and enables the vendored anti-slop plugin under `desktop/tools/oxlint/`.
 
 Build Windows setup and portable artifacts on Windows:
 

@@ -1,26 +1,28 @@
-import assert from "node:assert/strict";
-import test from "node:test";
-
-import type { ConfigStore } from "../src/main/config";
 import {
     LinuxCandidateTracker,
     LinuxOverlayProvider,
     createLinuxOverlayProvider,
     selectCandidatePid,
 } from "../src/main/linux-overlay-provider";
-import { createOverlayProvider } from "../src/main/provider-factory";
-import type { RuntimeOptions } from "../src/main/options";
+import type { ConfigStore } from "../src/main/config";
 import type { LocalOverlayRegistry } from "../src/main/local-overlays";
+import type { RuntimeOptions } from "../src/main/options";
 import { WindowsOverlayProvider } from "../src/main/windows-overlay-provider";
-
+import assert from "node:assert/strict";
+import { createOverlayProvider } from "../src/main/provider-factory";
+import test from "node:test";
 const options: RuntimeOptions = {
-        fpsLimit: 60,
-        pids: [],
-        processNames: ["osu!.exe"],
-        vosuUrl: new URL("http://127.0.0.1:24050/"),
-    },
-    configStore = {} as ConfigStore,
-    registry = {} as LocalOverlayRegistry;
+    fpsLimit: 60,
+    pids: [],
+    processNames: ["osu!.exe"],
+    vosuUrl: new URL("http://127.0.0.1:24050/"),
+};
+/* SAFETY: `ConfigStore` is consumed in these tests only for constructor injection and no
+ * methods are invoked. */
+const configStore = {} as ConfigStore;
+/* SAFETY: The provider factory only observes `LocalOverlayRegistry`'s interface shape in these tests
+ * and does not exercise registry APIs. */
+const registry = {} as LocalOverlayRegistry;
 
 function providerFor(platform: NodeJS.Platform) {
     return createOverlayProvider(platform, options, configStore, registry, {
@@ -42,17 +44,20 @@ test("selects Linux provider without loading Windows modules", async () => {
 });
 
 test("launches Vulkan target through packaged native addon before provider start", async () => {
-    const calls: unknown[] = [],
-        handle = {
-            destroy: async () => {},
-            on(event: string) {
-                assert.equal(event, "disconnect");
-            },
-            pid: 4242,
-            setEditing: async () => {},
-            setVisible: async () => {},
+    const calls: unknown[] = [];
+    const handle = {
+        destroy: () => Promise.resolve(),
+        off(event: string, _callback: (payload: string) => void) {
+            assert.equal(event, "disconnect");
         },
-        previousRoot = process.env.VOSULAY_NATIVE_ROOT;
+        on(event: string, _callback: (payload: string) => void) {
+            assert.equal(event, "disconnect");
+        },
+        pid: 4242,
+        setEditing: () => Promise.resolve(),
+        setVisible: () => Promise.resolve(),
+    };
+    const previousRoot = process.env.VOSULAY_NATIVE_ROOT;
     process.env.VOSULAY_NATIVE_ROOT = "/packaged/native";
     try {
         const provider = await createLinuxOverlayProvider(
@@ -70,9 +75,9 @@ test("launches Vulkan target through packaged native addon before provider start
                     attach: () => {
                         throw new Error("launch handle should be reused");
                     },
-                    launchVulkan: async (launchOptions) => {
+                    launchVulkan: (launchOptions) => {
                         calls.push(launchOptions);
-                        return handle;
+                        return Promise.resolve(handle);
                     },
                 },
                 scheduleScan: () => () => {},
@@ -108,7 +113,7 @@ test("selects Windows provider on win32", async () => {
 test("rejects unsupported host platforms", async () => {
     await assert.rejects(
         createOverlayProvider("darwin", options, configStore, registry),
-        /Unsupported vosulay host platform: darwin/,
+        /Unsupported vosulay host platform: darwin/u,
     );
 });
 
@@ -125,8 +130,8 @@ test("candidate selection is stable and deterministic without a compositor signa
 });
 
 test("the Linux tracker reports a discovered process as foreground", () => {
-    const tracker = new LinuxCandidateTracker(),
-        seen: (number | undefined)[] = [];
+    const tracker = new LinuxCandidateTracker();
+    const seen: (number | undefined)[] = [];
     assert.equal(
         tracker.start((pid) => seen.push(pid)),
         undefined,
