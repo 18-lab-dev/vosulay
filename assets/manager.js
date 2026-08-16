@@ -40,7 +40,11 @@
   const keepOverlaysInView = $("keep-overlays-in-view");
   const allowUnrestrictedSharedArrayBuffer = $("allow-unrestricted-shared-array-buffer");
   const allowedIps = $("allowed-ips");
+  const remoteListenHost = $("remote-listen-host");
+  const remoteListenPort = $("remote-listen-port");
   const remoteAccessUrl = $("remote-access-url");
+  const remoteAccessTokenField = $("remote-access-token");
+  const regenerateRemoteAccessToken = $("regenerate-remote-access-token");
   const remoteAccessHost = $("remote-access-host");
   const hotkeyList = $("hotkey-list");
   const settingsError = $("settings-error");
@@ -53,6 +57,8 @@
     "paste_overlay"
   ];
   const DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute";
+  const DEFAULT_REMOTE_LISTEN_HOST = "0.0.0.0";
+  const DEFAULT_REMOTE_LISTEN_PORT = 5050;
   const REMOTE_ACCESS_TOKEN_PATTERN = /^[0-9a-f]{64}$/;
   const DEFAULT_HOTKEYS = Object.freeze({
     profile_0: "Ctrl+0",
@@ -116,7 +122,7 @@
     window.__VOSULAY_POST_MESSAGE__ = (payload) => {
       const encoded = typeof payload === "string" ? payload : JSON.stringify(payload);
       document.documentElement.setAttribute("data-vosulay-bridge-message", encoded);
-      document.documentElement.dispatchEvent(new Event("vosulay-bridge-message"));
+      document.documentElement.dispatchEvent(new Event("vosulay-bridge-message", { bubbles: true }));
       document.documentElement.removeAttribute("data-vosulay-bridge-message");
     };
     window.ipc = { postMessage: (payload) => window.__VOSULAY_POST_MESSAGE__(payload) };
@@ -277,6 +283,11 @@
           ? sourceSettings.remote_access_token : "",
         remote_access_host: typeof sourceSettings.remote_access_host === "string"
           ? sourceSettings.remote_access_host : "",
+        remote_listen_host: typeof sourceSettings.remote_listen_host === "string"
+          ? sourceSettings.remote_listen_host : DEFAULT_REMOTE_LISTEN_HOST,
+        remote_listen_port: Number.isInteger(sourceSettings.remote_listen_port)
+          && sourceSettings.remote_listen_port >= 1 && sourceSettings.remote_listen_port <= 65535
+          ? sourceSettings.remote_listen_port : DEFAULT_REMOTE_LISTEN_PORT,
         hotkeys: normalizeHotkeys(sourceSettings.hotkeys)
       }
     };
@@ -592,7 +603,7 @@
       const frame = makeElement("iframe", "overlay-frame");
       frame.src = details.url;
       frame.title = details.name;
-      frame.setAttribute("allow", "autoplay; webgpu");
+      frame.setAttribute("allow", "autoplay");
       if (overlay.url) {
         frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
       }
@@ -1547,11 +1558,38 @@
     }
   }
 
+  function normalizedRemoteListenHost(value) {
+    const trimmed = String(value || "").trim();
+    const unbracketed = trimmed.startsWith("[") && trimmed.endsWith("]")
+      ? trimmed.slice(1, -1)
+      : trimmed;
+    if (!unbracketed) return DEFAULT_REMOTE_LISTEN_HOST;
+    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(unbracketed)
+      && unbracketed.split(".").every((part) => Number(part) <= 255 && String(Number(part)) === part)) {
+      return unbracketed;
+    }
+    if (unbracketed.includes(":") && /^[0-9a-fA-F:]+$/.test(unbracketed)) return unbracketed;
+    return DEFAULT_REMOTE_LISTEN_HOST;
+  }
+
+  function normalizedRemoteListenPort(value) {
+    const port = Number(value);
+    return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : DEFAULT_REMOTE_LISTEN_PORT;
+  }
+
+  function generateRemoteAccessToken() {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+
   function renderRemoteAccessUrl() {
     if (!state.settingsDraft) return;
+    remoteAccessTokenField.value = state.settingsDraft.remote_access_token;
     const configuredHost = normalizedRemoteAccessHost(state.settingsDraft.remote_access_host);
+    const port = normalizedRemoteListenPort(state.settingsDraft.remote_listen_port);
     remoteAccessUrl.value = state.settingsDraft.remote_access_token && configuredHost
-      ? `http://${configuredHost.includes(":") && !configuredHost.startsWith("[") ? `[${configuredHost}]` : configuredHost}:5050/access/${state.settingsDraft.remote_access_token}/overlay`
+      ? `http://${configuredHost.includes(":") && !configuredHost.startsWith("[") ? `[${configuredHost}]` : configuredHost}:${port}/access/${state.settingsDraft.remote_access_token}/overlay`
       : "Enter a valid remote host below";
   }
 
@@ -1560,6 +1598,8 @@
     keepOverlaysInView.checked = state.settingsDraft.always_keep_overlays_in_view;
     allowUnrestrictedSharedArrayBuffer.checked = state.settingsDraft.allow_unrestricted_shared_array_buffer;
     allowedIps.value = state.settingsDraft.allowed_ips;
+    remoteListenHost.value = state.settingsDraft.remote_listen_host;
+    remoteListenPort.value = state.settingsDraft.remote_listen_port;
     remoteAccessHost.value = state.settingsDraft.remote_access_host;
     renderRemoteAccessUrl();
     for (const button of hotkeyList.querySelectorAll(".hotkey-input")) {
@@ -1590,6 +1630,8 @@
       always_keep_overlays_in_view: settings.always_keep_overlays_in_view,
       allow_unrestricted_shared_array_buffer: settings.allow_unrestricted_shared_array_buffer,
       allowed_ips: settings.allowed_ips,
+      remote_listen_host: settings.remote_listen_host,
+      remote_listen_port: settings.remote_listen_port,
       remote_access_token: settings.remote_access_token,
       remote_access_host: settings.remote_access_host,
       hotkeys: { ...settings.hotkeys }
@@ -1647,6 +1689,16 @@
   allowedIps.addEventListener("input", () => {
     if (state.settingsDraft) state.settingsDraft.allowed_ips = allowedIps.value;
   });
+  remoteListenHost.addEventListener("input", () => {
+    if (!state.settingsDraft) return;
+    state.settingsDraft.remote_listen_host = remoteListenHost.value;
+    renderRemoteAccessUrl();
+  });
+  remoteListenPort.addEventListener("input", () => {
+    if (!state.settingsDraft) return;
+    state.settingsDraft.remote_listen_port = remoteListenPort.value;
+    renderRemoteAccessUrl();
+  });
   remoteAccessHost.addEventListener("input", () => {
     if (!state.settingsDraft) return;
     state.settingsDraft.remote_access_host = remoteAccessHost.value;
@@ -1654,6 +1706,13 @@
     showSettingsError(candidate && !normalizedRemoteAccessHost(candidate)
       ? "Remote host must be a hostname or IP address without a scheme, port, or path."
       : "");
+    renderRemoteAccessUrl();
+  });
+  regenerateRemoteAccessToken.addEventListener("click", () => {
+    if (!state.settingsDraft) return;
+    if (!window.confirm("Regenerate the remote access credential? Previously shared URLs will stop working.")) return;
+    state.settingsDraft.remote_access_token = generateRemoteAccessToken();
+    showSettingsError("");
     renderRemoteAccessUrl();
   });
   settingsResetHotkeys.addEventListener("click", () => {
@@ -1717,6 +1776,8 @@
       always_keep_overlays_in_view: state.settingsDraft.always_keep_overlays_in_view,
       allow_unrestricted_shared_array_buffer: state.settingsDraft.allow_unrestricted_shared_array_buffer,
       allowed_ips: state.settingsDraft.allowed_ips,
+      remote_listen_host: normalizedRemoteListenHost(state.settingsDraft.remote_listen_host),
+      remote_listen_port: normalizedRemoteListenPort(state.settingsDraft.remote_listen_port),
       remote_access_token: state.settingsDraft.remote_access_token,
       remote_access_host: normalizedHost,
       hotkeys: normalizeHotkeys(state.settingsDraft.hotkeys)

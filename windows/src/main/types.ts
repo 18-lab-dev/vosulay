@@ -37,6 +37,8 @@ export interface AppSettings {
     allowed_ips: string;
     remote_access_token: string;
     remote_access_host: string;
+    remote_listen_host: string;
+    remote_listen_port: number;
     always_keep_overlays_in_view: boolean;
     allow_unrestricted_shared_array_buffer: boolean;
     hotkeys: HotkeySettings;

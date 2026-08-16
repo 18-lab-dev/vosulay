@@ -10,10 +10,9 @@ use std::time::Duration;
 use anyhow::{Context, Result, anyhow, bail};
 use url::Url;
 
-use crate::config::{AppConfig, Placement, Profile};
+use crate::config::{AppConfig, AppSettings, Placement, Profile};
 
 pub const DEFAULT_VOSU_URL: &str = "http://127.0.0.1:24050";
-const ADDRESS: &str = "0.0.0.0:5050";
 const TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_REQUEST: usize = 16 * 1024;
 const MAX_CONNECTIONS: usize = 32;
@@ -26,8 +25,11 @@ pub struct RemoteServer {
 
 impl RemoteServer {
     pub fn start(base_url: Url) -> Result<Self> {
-        let listener = TcpListener::bind(ADDRESS)
-            .with_context(|| format!("failed to bind remote overlay server to {ADDRESS}"))?;
+        let config =
+            AppConfig::load().context("failed to load configuration for remote overlay server")?;
+        let address = listen_address(&config.settings);
+        let listener = TcpListener::bind(address)
+            .with_context(|| format!("failed to bind remote overlay server to {address}"))?;
         Self::start_with_listener(listener, base_url, Arc::new(AppConfig::load))
     }
 
@@ -56,6 +58,14 @@ impl Drop for RemoteServer {
             let _ = thread.join();
         }
     }
+}
+
+fn listen_address(settings: &AppSettings) -> SocketAddr {
+    let host = settings
+        .remote_listen_host
+        .parse()
+        .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+    SocketAddr::new(host, settings.remote_listen_port)
 }
 
 fn serve(listener: TcpListener, base_url: Url, loader: Arc<ConfigLoader>, stop: Arc<AtomicBool>) {
@@ -413,7 +423,6 @@ fn overlay_response(
         ("Referrer-Policy", "no-referrer".to_owned()),
         ("X-Content-Type-Options", "nosniff".to_owned()),
         ("Cross-Origin-Resource-Policy", "same-origin".to_owned()),
-        ("Permissions-Policy", "webgpu=*".to_owned()),
         ("Content-Security-Policy", "default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; style-src 'unsafe-inline'; frame-src 'self' http: https:; frame-ancestors *".to_owned()),
     ]);
     Ok(response)
@@ -559,7 +568,7 @@ fn render_profile(
             _ => "",
         };
         use std::fmt::Write as _;
-        write!(html, "<iframe src=\"{source}\" title=\"{frame_title}\" allow=\"autoplay; webgpu\" loading=\"eager\"{sandbox} referrerpolicy=\"no-referrer\" style=\"position:absolute;left:{}px;top:{}px;width:{}px;height:{}px;transform-origin:0 0;transform:scale({}) rotate({}deg);opacity:{};z-index:{}\"></iframe>", item.left, item.top, item.width, item.height, item.scale, item.rotation, item.opacity, item.z_index)
+        write!(html, "<iframe src=\"{source}\" title=\"{frame_title}\" allow=\"autoplay\" loading=\"eager\"{sandbox} referrerpolicy=\"no-referrer\" style=\"position:absolute;left:{}px;top:{}px;width:{}px;height:{}px;transform-origin:0 0;transform:scale({}) rotate({}deg);opacity:{};z-index:{}\"></iframe>", item.left, item.top, item.width, item.height, item.scale, item.rotation, item.opacity, item.z_index)
             .map_err(|_| HttpError::new(500, "Internal Server Error", "Could not render profile\n"))?;
     }
     html.push_str("</body></html>");
@@ -1074,6 +1083,40 @@ mod tests {
     fn base() -> Url {
         Url::parse(DEFAULT_VOSU_URL).expect("URL")
     }
+
+    #[test]
+    fn listen_address_uses_configured_host_and_port() {
+        let settings = AppSettings {
+            remote_listen_host: "127.0.0.1".to_owned(),
+            remote_listen_port: 8080,
+            ..AppSettings::default()
+        };
+        assert_eq!(
+            listen_address(&settings),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080)
+        );
+    }
+
+    #[test]
+    fn listen_address_falls_back_to_unspecified_for_unparseable_host() {
+        let settings = AppSettings {
+            remote_listen_host: "not-an-ip".to_owned(),
+            remote_listen_port: 5050,
+            ..AppSettings::default()
+        };
+        assert_eq!(
+            listen_address(&settings),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 5050)
+        );
+    }
+
+    #[test]
+    fn listen_address_defaults_match_previous_hardcoded_bind() {
+        assert_eq!(
+            listen_address(&AppSettings::default()),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 5050)
+        );
+    }
     #[test]
     fn peer_matching_covers_loopback_exact_wildcard_and_tokens() {
         assert!(peer_is_allowed(IpAddr::V4(Ipv4Addr::LOCALHOST), "absolute"));
@@ -1143,7 +1186,7 @@ mod tests {
         };
         let html = render_profile(&profile, &base(), &"a".repeat(64)).expect("render");
         assert!(html.contains("http://127.0.0.1:24050/a%2Fb/"));
-        assert!(html.contains("allow=\"autoplay; webgpu\""));
+        assert!(html.contains("allow=\"autoplay\""));
         assert!(html.contains("left:12.5px;top:-3px;width:640px;height:360px;transform-origin:0 0;transform:scale(1.25) rotate(-15deg);opacity:0.75;z-index:7"));
     }
 
@@ -1174,10 +1217,10 @@ mod tests {
 
         let html = render_profile(&profile, &base(), &credential).expect("render");
         assert!(html.contains(&format!(
-            "src=\"/access/{credential}/local/0123456789abcdef0123456789abcdef/index.html\" title=\"local\" allow=\"autoplay; webgpu\" loading=\"eager\" sandbox=\"allow-scripts\""
+            "src=\"/access/{credential}/local/0123456789abcdef0123456789abcdef/index.html\" title=\"local\" allow=\"autoplay\" loading=\"eager\" sandbox=\"allow-scripts\""
         )));
         assert!(html.contains(
-            "src=\"https://overlay.example/widget\" title=\"remote\" allow=\"autoplay; webgpu\" loading=\"eager\" sandbox=\"allow-scripts allow-same-origin\""
+            "src=\"https://overlay.example/widget\" title=\"remote\" allow=\"autoplay\" loading=\"eager\" sandbox=\"allow-scripts allow-same-origin\""
         ));
     }
     fn encoded(value: &[u8]) -> String {
@@ -1331,8 +1374,7 @@ mod tests {
         client.read_to_string(&mut response).expect("read");
         drop(server);
         assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
-        assert!(response.contains("Permissions-Policy: webgpu=*\r\n"));
-        assert!(response.contains("allow=\"autoplay; webgpu\""));
+        assert!(response.contains("allow=\"autoplay\""));
         assert!(response.contains("src=\"http://127.0.0.1:24050/counter/\""));
     }
     #[test]

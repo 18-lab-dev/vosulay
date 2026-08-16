@@ -140,10 +140,34 @@
               Serves a credential-protected, view-only copy of your overlays to other devices.
               Enter the LAN IP or hostname that those devices use to reach this computer.
             </p>
+            <label class="settings-field" for="remote-listen-host">
+              <span>
+                <strong>Listener address</strong>
+                <small>Network interface the server binds to. Use <code>0.0.0.0</code> to listen on every interface, or a specific interface IP to restrict access at the network level. Takes effect after restarting vosulay.</small>
+              </span>
+              <input id="remote-listen-host" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="0.0.0.0">
+            </label>
+            <label class="settings-field" for="remote-listen-port">
+              <span>
+                <strong>Listener port</strong>
+                <small>TCP port the remote overlay server listens on. Default <code>5050</code>. Takes effect after restarting vosulay.</small>
+              </span>
+              <input id="remote-listen-port" type="number" min="1" max="65535" step="1" inputmode="numeric" placeholder="5050">
+            </label>
+            <label class="settings-field" for="remote-access-token">
+              <span>
+                <strong>Remote access credential</strong>
+                <small>Shared secret required by the access URL below. Regenerating it invalidates previously shared URLs.</small>
+              </span>
+              <div class="settings-field-row">
+                <input id="remote-access-token" type="text" readonly spellcheck="false" autocomplete="off">
+                <button id="regenerate-remote-access-token" type="button" class="quiet-button">Regenerate</button>
+              </div>
+            </label>
             <label class="settings-field" for="remote-access-url">
               <span>
                 <strong>Remote access URL</strong>
-                <small>Keep this URL secret. Regenerating the configuration credential invalidates previously shared URLs.</small>
+                <small>Keep this URL secret. Only available once a remote host is set below.</small>
               </span>
               <input id="remote-access-url" type="text" readonly spellcheck="false" autocomplete="off">
             </label>

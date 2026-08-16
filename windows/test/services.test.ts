@@ -341,6 +341,8 @@ test("config settings default and normalize manager hotkeys", () => {
         allowed_ips: "127.0.0.1,localhost,absolute",
         remote_access_token: "[credential]",
         remote_access_host: "",
+        remote_listen_host: "0.0.0.0",
+        remote_listen_port: 5050,
         always_keep_overlays_in_view: false,
         allow_unrestricted_shared_array_buffer: false,
         hotkeys: {
@@ -361,6 +363,13 @@ test("config settings default and normalize manager hotkeys", () => {
 
     assert.equal(normalizeConfig({ settings: { remote_access_host: " Gaming-PC.Local. " } }).settings.remote_access_host, "gaming-pc.local");
     assert.equal(normalizeConfig({ settings: { remote_access_host: "https://attacker.example/path" } }).settings.remote_access_host, "");
+    assert.equal(normalizeConfig({ settings: { remote_listen_host: " 192.168.1.20 " } }).settings.remote_listen_host, "192.168.1.20");
+    assert.equal(normalizeConfig({ settings: { remote_listen_host: "[2001:db8::1]" } }).settings.remote_listen_host, "2001:db8::1");
+    assert.equal(normalizeConfig({ settings: { remote_listen_host: "not-an-ip" } }).settings.remote_listen_host, "0.0.0.0");
+    assert.equal(normalizeConfig({ settings: { remote_listen_port: 8443 } }).settings.remote_listen_port, 8443);
+    assert.equal(normalizeConfig({ settings: { remote_listen_port: 0 } }).settings.remote_listen_port, 5050);
+    assert.equal(normalizeConfig({ settings: { remote_listen_port: 70000 } }).settings.remote_listen_port, 5050);
+    assert.equal(normalizeConfig({ settings: { remote_listen_port: "5050" } }).settings.remote_listen_port, 5050);
 
     const normalized = normalizeConfig({
         settings: {
@@ -384,6 +393,8 @@ test("config settings default and normalize manager hotkeys", () => {
         allowed_ips: "10.20.*.* 2001:db8::4",
         remote_access_token: TEST_REMOTE_ACCESS_TOKEN,
         remote_access_host: "",
+        remote_listen_host: "0.0.0.0",
+        remote_listen_port: 5050,
         always_keep_overlays_in_view: true,
         allow_unrestricted_shared_array_buffer: true,
         hotkeys: {

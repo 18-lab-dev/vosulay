@@ -12,6 +12,8 @@ use tempfile::NamedTempFile;
 pub const CONFIG_VERSION: u32 = 1;
 pub const DEFAULT_ALLOWED_IPS: &str = "127.0.0.1,localhost,absolute";
 pub const REMOTE_ACCESS_TOKEN_BYTES: usize = 32;
+pub const DEFAULT_REMOTE_LISTEN_HOST: &str = "0.0.0.0";
+pub const DEFAULT_REMOTE_LISTEN_PORT: u16 = 5050;
 
 const DEFAULT_WIDTH: f64 = 500.0;
 const DEFAULT_HEIGHT: f64 = 300.0;
@@ -42,6 +44,8 @@ pub struct AppSettings {
     pub allowed_ips: String,
     pub remote_access_token: String,
     pub remote_access_host: String,
+    pub remote_listen_host: String,
+    pub remote_listen_port: u16,
     pub hotkeys: HotkeySettings,
 }
 
@@ -107,6 +111,8 @@ impl Default for AppSettings {
             allowed_ips: DEFAULT_ALLOWED_IPS.to_owned(),
             remote_access_token: String::new(),
             remote_access_host: String::new(),
+            remote_listen_host: DEFAULT_REMOTE_LISTEN_HOST.to_owned(),
+            remote_listen_port: DEFAULT_REMOTE_LISTEN_PORT,
             hotkeys: HotkeySettings::default(),
         }
     }
@@ -207,6 +213,8 @@ impl AppSettings {
         self.allowed_ips = self.allowed_ips.trim().to_owned();
         self.remote_access_token = normalized_remote_access_token(&self.remote_access_token);
         self.remote_access_host = normalized_remote_access_host(&self.remote_access_host);
+        self.remote_listen_host = normalized_remote_listen_host(&self.remote_listen_host);
+        self.remote_listen_port = normalized_remote_listen_port(self.remote_listen_port);
         self.hotkeys.normalize();
     }
 }
@@ -376,6 +384,27 @@ fn normalized_remote_access_host(value: &str) -> String {
     url::Host::parse(trimmed)
         .map(|host| host.to_string().to_ascii_lowercase())
         .unwrap_or_default()
+}
+
+fn normalized_remote_listen_host(value: &str) -> String {
+    let trimmed = value.trim();
+    let unbracketed = trimmed
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(trimmed);
+    if unbracketed.parse::<IpAddr>().is_ok() {
+        unbracketed.to_owned()
+    } else {
+        DEFAULT_REMOTE_LISTEN_HOST.to_owned()
+    }
+}
+
+fn normalized_remote_listen_port(value: u16) -> u16 {
+    if value == 0 {
+        DEFAULT_REMOTE_LISTEN_PORT
+    } else {
+        value
+    }
 }
 
 fn finite_or(value: f64, fallback: f64) -> f64 {
@@ -687,6 +716,57 @@ mod tests {
         config.settings.remote_access_host = "https://attacker.example/path".to_owned();
         config.normalize();
         assert!(config.settings.remote_access_host.is_empty());
+    }
+
+    #[test]
+    fn normalize_defaults_remote_listen_host_and_port() {
+        let mut config = AppConfig::default();
+        assert_eq!(config.settings.remote_listen_host, "0.0.0.0");
+        assert_eq!(config.settings.remote_listen_port, 5050);
+        config.normalize();
+        assert_eq!(config.settings.remote_listen_host, "0.0.0.0");
+        assert_eq!(config.settings.remote_listen_port, 5050);
+    }
+
+    #[test]
+    fn normalize_validates_remote_listen_host() {
+        let mut config = AppConfig::default();
+        config.settings.remote_listen_host = " 192.168.1.20 ".to_owned();
+        config.normalize();
+        assert_eq!(config.settings.remote_listen_host, "192.168.1.20");
+
+        config.settings.remote_listen_host = "[::1]".to_owned();
+        config.normalize();
+        assert_eq!(config.settings.remote_listen_host, "::1");
+
+        config.settings.remote_listen_host = "not-an-ip-address".to_owned();
+        config.normalize();
+        assert_eq!(config.settings.remote_listen_host, "0.0.0.0");
+    }
+
+    #[test]
+    fn normalize_rejects_zero_remote_listen_port() {
+        let mut config = AppConfig::default();
+        config.settings.remote_listen_port = 0;
+        config.normalize();
+        assert_eq!(config.settings.remote_listen_port, 5050);
+
+        config.settings.remote_listen_port = 8443;
+        config.normalize();
+        assert_eq!(config.settings.remote_listen_port, 8443);
+    }
+
+    #[test]
+    fn remote_listen_settings_survive_serde_roundtrip() {
+        let mut config = AppConfig::default();
+        config.settings.remote_listen_host = "10.0.0.5".to_owned();
+        config.settings.remote_listen_port = 9090;
+
+        let encoded = serde_json::to_vec(&config).expect("config should serialize");
+        let decoded = serde_json::from_slice::<AppConfig>(&encoded)
+            .expect("encoded config should deserialize");
+
+        assert_eq!(decoded.settings, config.settings);
     }
 
     #[test]

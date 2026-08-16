@@ -1,12 +1,15 @@
 import { constants, readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { isIP } from "node:net";
 import { dirname, join } from "node:path";
 import type { AppConfig, AppSettings, HotkeySettings, Placement, Profile } from "./types";
 
 const CONFIG_VERSION = 1 as const;
 const DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute";
 const REMOTE_ACCESS_TOKEN_BYTES = 32;
+const DEFAULT_REMOTE_LISTEN_HOST = "0.0.0.0";
+const DEFAULT_REMOTE_LISTEN_PORT = 5050;
 const DEFAULT_HOTKEYS: HotkeySettings = {
     profile_0: "Ctrl+0",
     profile_1: "Ctrl+1",
@@ -66,6 +69,8 @@ export function defaultConfig(): AppConfig {
             allowed_ips: DEFAULT_ALLOWED_IPS,
             remote_access_token: randomBytes(REMOTE_ACCESS_TOKEN_BYTES).toString("hex"),
             remote_access_host: "",
+            remote_listen_host: DEFAULT_REMOTE_LISTEN_HOST,
+            remote_listen_port: DEFAULT_REMOTE_LISTEN_PORT,
             always_keep_overlays_in_view: false,
             allow_unrestricted_shared_array_buffer: false,
             hotkeys: { ...DEFAULT_HOTKEYS },
@@ -157,6 +162,21 @@ function remoteAccessHost(value: unknown): string {
     }
 }
 
+function remoteListenHost(value: unknown): string {
+    if (typeof value !== "string") return DEFAULT_REMOTE_LISTEN_HOST;
+    const trimmed = value.trim();
+    const unbracketed = trimmed.startsWith("[") && trimmed.endsWith("]")
+        ? trimmed.slice(1, -1)
+        : trimmed;
+    return isIP(unbracketed) !== 0 ? unbracketed : DEFAULT_REMOTE_LISTEN_HOST;
+}
+
+function remoteListenPort(value: unknown): number {
+    return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65535
+        ? value
+        : DEFAULT_REMOTE_LISTEN_PORT;
+}
+
 function normalizeSettings(value: unknown): AppSettings {
     const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
     const inputHotkeys = source.hotkeys && typeof source.hotkeys === "object"
@@ -168,6 +188,8 @@ function normalizeSettings(value: unknown): AppSettings {
         allowed_ips: typeof source.allowed_ips === "string" ? source.allowed_ips : DEFAULT_ALLOWED_IPS,
         remote_access_token: remoteAccessToken(source.remote_access_token),
         remote_access_host: remoteAccessHost(source.remote_access_host),
+        remote_listen_host: remoteListenHost(source.remote_listen_host),
+        remote_listen_port: remoteListenPort(source.remote_listen_port),
         always_keep_overlays_in_view: source.always_keep_overlays_in_view === true,
         allow_unrestricted_shared_array_buffer: source.allow_unrestricted_shared_array_buffer === true,
         hotkeys,

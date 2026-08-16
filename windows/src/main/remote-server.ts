@@ -22,7 +22,6 @@ const ACCESS_TOKEN_PATTERN = /^[0-9a-f]{64}$/;
 const TOKEN_PATTERN = /^[0-9a-f]{32}$/;
 const ROOT_PATTERN = /^[A-Za-z0-9_-]+$/;
 const OVERLAY_CSP = "default-src 'none'; frame-src 'self' http: https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors *";
-const OVERLAY_PERMISSIONS_POLICY = "webgpu=*";
 
 export interface RemoteOverlayServerOptions {
     runtime: RuntimeOptions;
@@ -189,7 +188,7 @@ function renderPlacement(placement: Placement, vosuUrl: URL, credential: string)
         : resolved.kind === "remote"
             ? ` sandbox="allow-scripts allow-same-origin"`
             : "";
-    return `<iframe src="${htmlEscape(resolved.source)}" title="${htmlEscape(title)}" allow="autoplay; webgpu" loading="eager"${sandbox} referrerpolicy="no-referrer" style="${style}"></iframe>`;
+    return `<iframe src="${htmlEscape(resolved.source)}" title="${htmlEscape(title)}" allow="autoplay" loading="eager"${sandbox} referrerpolicy="no-referrer" style="${style}"></iframe>`;
 }
 
 export function renderProfileDocument(profile: Profile, runtime: RuntimeOptions, credential: string, requestHost?: string): string {
@@ -432,7 +431,6 @@ export class RemoteOverlayServer {
             "content-type": "text/html; charset=utf-8",
             "content-length": String(content.byteLength),
             "content-security-policy": OVERLAY_CSP,
-            "permissions-policy": OVERLAY_PERMISSIONS_POLICY,
             "referrer-policy": "no-referrer",
             "x-content-type-options": "nosniff",
             "cross-origin-resource-policy": "same-origin",

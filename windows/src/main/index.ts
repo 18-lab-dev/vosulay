@@ -167,6 +167,8 @@ async function start(options: RuntimeOptions): Promise<void> {
         runtime: options,
         registry: overlayRegistry,
         initialConfig,
+        host: initialConfig.settings.remote_listen_host,
+        port: initialConfig.settings.remote_listen_port,
     });
     unsubscribeRemoteConfig = configStore.subscribe((change) => {
         remoteServer?.updateConfig(change.config);
@@ -174,7 +176,10 @@ async function start(options: RuntimeOptions): Promise<void> {
     try {
         await remoteServer.start();
     } catch (error) {
-        console.error('Could not start remote overlay server on 0.0.0.0:5050', error);
+        console.error(
+            `Could not start remote overlay server on ${initialConfig.settings.remote_listen_host}:${initialConfig.settings.remote_listen_port}`,
+            error
+        );
     }
     session.defaultSession.setPermissionRequestHandler(
         (_webContents, _permission, callback) => callback(false)

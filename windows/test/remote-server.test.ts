@@ -112,7 +112,7 @@ test("remote server renders profiles and confines same-origin local resources", 
     assert.equal(active.headers.get("referrer-policy"), "no-referrer");
     assert.match(active.headers.get("content-security-policy") ?? "", /frame-src 'self' http: https:/);
     assert.match(active.headers.get("content-security-policy") ?? "", /frame-ancestors \*/);
-    assert.equal(active.headers.get("permissions-policy"), "webgpu=*");
+    assert.equal(active.headers.get("permissions-policy"), null);
     assert.equal(active.headers.get("x-content-type-options"), "nosniff");
     assert.equal(active.headers.get("x-frame-options"), null);
     assert.equal(active.headers.get("cross-origin-resource-policy"), "same-origin");
@@ -162,7 +162,7 @@ test("remote server renders profiles and confines same-origin local resources", 
     const webFrame = customFrames.find((frame) => frame.includes(`title="web"`)) ?? "";
     const localFrame = customFrames.find((frame) => frame.includes(`title="local"`)) ?? "";
     for (const frame of customFrames) {
-        assert.match(frame, /allow="autoplay; webgpu"/);
+        assert.match(frame, /allow="autoplay"/);
         assert.match(frame, /loading="eager"/);
     }
     assert.match(webFrame, /sandbox="allow-scripts allow-same-origin"/);
@@ -176,7 +176,7 @@ test("remote server renders profiles and confines same-origin local resources", 
     assert.match(renderedForLan, /position:absolute;left:-8px;top:12\.5px;width:640px;height:360px;transform-origin:0 0;transform:scale\(1\.25\) rotate\(-15deg\);opacity:0\.4;z-index:7/);
     const standardFrame = renderedForLan.match(/<iframe[^>]+>/)?.[0] ?? "";
     assert.match(standardFrame, /title="counter\/one"/);
-    assert.match(standardFrame, /allow="autoplay; webgpu"/);
+    assert.match(standardFrame, /allow="autoplay"/);
     assert.match(standardFrame, /loading="eager"/);
     assert.doesNotMatch(standardFrame, /sandbox=/);
 
@@ -251,6 +251,46 @@ test("remote server renders profiles and confines same-origin local resources", 
     });
     server.updateConfig(config);
     assert.equal((await fetch(`${localBase}/asset.css`)).status, 404);
+});
+
+test("remote server binds to a configured non-default host and port", async (context) => {
+    const config = normalizeConfig({
+        profiles: [{ id: "default", name: "Default", overlays: [] }],
+        settings: { remote_access_token: accessToken },
+    });
+    const anyInterfaceServer = new RemoteOverlayServer({
+        runtime,
+        registry: new LocalOverlayRegistry(),
+        initialConfig: config,
+        host: config.settings.remote_listen_host,
+        port: 0,
+    });
+    await anyInterfaceServer.start();
+    context.after(async () => anyInterfaceServer.stop());
+    const anyInterfaceAddress = anyInterfaceServer.address();
+    assert.notEqual(anyInterfaceAddress, null);
+    assert.equal(anyInterfaceAddress?.address, "0.0.0.0");
+
+    const loopbackOnlyConfig = normalizeConfig({
+        ...config,
+        settings: { ...config.settings, remote_listen_host: "127.0.0.1" },
+    });
+    const loopbackServer = new RemoteOverlayServer({
+        runtime,
+        registry: new LocalOverlayRegistry(),
+        initialConfig: loopbackOnlyConfig,
+        host: loopbackOnlyConfig.settings.remote_listen_host,
+        port: 0,
+    });
+    await loopbackServer.start();
+    context.after(async () => loopbackServer.stop());
+    const loopbackAddress = loopbackServer.address();
+    assert.notEqual(loopbackAddress, null);
+    if (loopbackAddress === null) throw new Error("remote server has no listening address");
+    assert.equal(loopbackAddress.address, "127.0.0.1");
+    assert.notEqual(loopbackAddress.port, anyInterfaceAddress?.port);
+    const response = await fetch(`http://127.0.0.1:${loopbackAddress.port}/access/${accessToken}/overlay`);
+    assert.equal(response.status, 200);
 });
 
 test("remote server bounds active handlers before local file work", async (context) => {

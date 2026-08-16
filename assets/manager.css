@@ -198,6 +198,9 @@ button:disabled { opacity: .42; cursor: default; }
   background: rgba(255,255,255,.055); color: var(--text); font: inherit; scrollbar-width: thin;
 }
 .settings-field textarea:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+.settings-field-row { display: flex; align-items: center; gap: 7px; }
+.settings-field-row input { flex: 1 1 auto; min-width: 0; }
+.settings-field-row button { flex: 0 0 auto; white-space: nowrap; }
 .hotkey-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .hotkey-row {
   min-width: 0; min-height: 39px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(105px, auto);
