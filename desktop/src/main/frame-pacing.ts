@@ -8,6 +8,7 @@ interface PaintingWebContents {
     startPainting: () => void;
     stopPainting: () => void;
     invalidate: () => void;
+    setFrameRate: (frameRate: number) => void;
     on: (event: "paint", listener: () => void) => void;
     off: (event: "paint", listener: () => void) => void;
 }
@@ -78,28 +79,27 @@ export function frameRequestDelayMs(lastRequestAtMs: number, nowMs: number, fpsL
 }
 
 /**
- * Convert Electron OSR from fixed-rate painting to coalesced game-present
- * demand when the native backend negotiated CAP_FRAME_REQUEST. The native
- * present hook only advances an atomic demand sequence; socket I/O remains on
- * its control thread. This listener applies the configured FPS ceiling before
- * Chromium is invalidated, so a 1000 Hz game cannot make a 240 FPS overlay
- * render 1000 times per second.
+ * Apply the configured FPS to Electron OSR for both fixed-rate fallback and
+ * demand pacing. When the native backend negotiated CAP_FRAME_REQUEST, stop
+ * continuous painting and admit coalesced game-present demand no faster than
+ * the same FPS ceiling. The native present hook only advances local demand;
+ * socket I/O remains on its control thread.
  */
 export function enableNativeFramePacing(
     process: PaceableProcess,
     native: NativeOverlayHandle,
     fpsLimit: number,
 ): void {
-    if (
-        !(native.supportsFrameRequests?.() ?? false) ||
-        native.on === undefined ||
-        !Number.isFinite(fpsLimit) ||
-        fpsLimit <= 0
-    ) {
+    if (!Number.isSafeInteger(fpsLimit) || fpsLimit <= 0) {
         return;
     }
 
     const { webContents } = process.window;
+    webContents.setFrameRate(fpsLimit);
+    if (!(native.supportsFrameRequests?.() ?? false) || native.on === undefined) {
+        return;
+    }
+
     let activeTarget: number | undefined = undefined;
     let deliveredSequence = 0;
     let destroyed = false;

@@ -14,6 +14,7 @@ class FakeWebContents extends EventEmitter {
     starts = 0;
     stops = 0;
     invalidates = 0;
+    readonly frameRates: number[] = [];
 
     isDestroyed(): boolean {
         return false;
@@ -31,6 +32,9 @@ class FakeWebContents extends EventEmitter {
     }
     invalidate(): void {
         this.invalidates += 1;
+    }
+    setFrameRate(frameRate: number): void {
+        this.frameRates.push(frameRate);
     }
 }
 
@@ -91,7 +95,7 @@ test("configured frame pacing delay enforces the requested ceiling", () => {
     assert.equal(frameRequestDelayMs(Number.NEGATIVE_INFINITY, 100, 250), 0);
 });
 
-test("negotiated pacing coalesces requests and stops after the delivered paint", async () => {
+test("negotiated pacing caps OSR and coalesces requests", async () => {
     const webContents = new FakeWebContents();
     const nativeBus = new FakeNative();
     const native: NativeOverlayHandle = {
@@ -107,6 +111,7 @@ test("negotiated pacing coalesces requests and stops after the delivered paint",
     const process = processFor(webContents);
     enableNativeFramePacing(process, native, 240);
 
+    assert.deepEqual(webContents.frameRates, [240]);
     assert.equal(webContents.painting, false, "continuous OSR is stopped immediately");
     nativeBus.emit("target", "selected:7:1");
     nativeBus.emit("frame-request", "7:1");
@@ -131,7 +136,7 @@ test("negotiated pacing coalesces requests and stops after the delivered paint",
     assert.equal(webContents.invalidates, 1, "destroy removes native listeners");
 });
 
-test("agents without demand capability retain fixed-rate painting", () => {
+test("agents without demand capability retain fixed-rate painting at the configured FPS", () => {
     const webContents = new FakeWebContents();
     const process = processFor(webContents);
     enableNativeFramePacing(
@@ -142,6 +147,7 @@ test("agents without demand capability retain fixed-rate painting", () => {
         },
         60,
     );
+    assert.deepEqual(webContents.frameRates, [60]);
     assert.equal(webContents.painting, true);
     assert.equal(webContents.stops, 0);
 });
