@@ -1,13 +1,13 @@
 import { type JsonValue, isJsonString } from "./json";
 import type { ManagedOverlayProcess } from "./overlay-manager";
 import type { NativeOverlayHandle } from "./linux-overlay-provider";
+
 interface PaintingWebContents {
     isDestroyed?: () => boolean;
     isPainting: () => boolean;
     startPainting: () => void;
     stopPainting: () => void;
     invalidate: () => void;
-    setFrameRate: (frameRate: number) => void;
     on: (event: "paint", listener: () => void) => void;
     off: (event: "paint", listener: () => void) => void;
 }
@@ -17,6 +17,8 @@ const SELECTED_TARGET_PART_COUNT = 3;
 const DESTROYED_TARGET_PART_COUNT = 2;
 const FRAME_REQUEST_MIN_ID = 0;
 const FRAME_REQUEST_MIN_SEQUENCE = 0;
+const MILLISECONDS_PER_SECOND = 1000;
+const FRAME_INTERVAL_TOLERANCE_MS = 0.25;
 
 interface PaceableProcess extends ManagedOverlayProcess {
     readonly window: {
@@ -28,6 +30,7 @@ export interface ParsedFrameRequest {
     targetId: number;
     sequence: number;
 }
+
 export function parseFrameRequest(value: JsonValue | undefined): ParsedFrameRequest | undefined {
     if (!isJsonString(value)) {
         return undefined;
@@ -48,6 +51,7 @@ export function parseFrameRequest(value: JsonValue | undefined): ParsedFrameRequ
     }
     return { sequence, targetId };
 }
+
 function selectedTarget(value: JsonValue | undefined): number | undefined {
     if (!isJsonString(value)) {
         return undefined;
@@ -68,17 +72,30 @@ function selectedTarget(value: JsonValue | undefined): number | undefined {
     return undefined;
 }
 
+export function frameRequestDelayMs(lastRequestAtMs: number, nowMs: number, fpsLimit: number): number {
+    const intervalMs = MILLISECONDS_PER_SECOND / fpsLimit;
+    return Math.max(0, lastRequestAtMs + intervalMs - nowMs);
+}
+
 /**
  * Convert Electron OSR from fixed-rate painting to coalesced game-present
- * demand when the native backend negotiated CAP_FRAME_REQUEST. No socket I/O
- * or JS callback runs on the game presentation thread: the native control
- * actor forwards only the newest demand sequence to this listener.
+ * demand when the native backend negotiated CAP_FRAME_REQUEST. The native
+ * present hook only advances an atomic demand sequence; socket I/O remains on
+ * its control thread. This listener applies the configured FPS ceiling before
+ * Chromium is invalidated, so a 1000 Hz game cannot make a 240 FPS overlay
+ * render 1000 times per second.
  */
 export function enableNativeFramePacing(
     process: PaceableProcess,
     native: NativeOverlayHandle,
+    fpsLimit: number,
 ): void {
-    if (!(native.supportsFrameRequests?.() ?? false) || native.on === undefined) {
+    if (
+        !(native.supportsFrameRequests?.() ?? false) ||
+        native.on === undefined ||
+        !Number.isFinite(fpsLimit) ||
+        fpsLimit <= 0
+    ) {
         return;
     }
 
@@ -86,6 +103,9 @@ export function enableNativeFramePacing(
     let activeTarget: number | undefined = undefined;
     let deliveredSequence = 0;
     let destroyed = false;
+    let lastPaintRequestAtMs = Number.NEGATIVE_INFINITY;
+    let paceTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+    let paintInFlight = false;
     let pendingSequence = 0;
     let visible = true;
 
@@ -94,10 +114,43 @@ export function enableNativeFramePacing(
             webContents.stopPainting();
         }
     };
-    const requestPaint = (): void => {
-        if (destroyed || !visible || activeTarget === undefined || webContents.isDestroyed?.()) {
+    const cancelPaceTimer = (): void => {
+        if (paceTimer === undefined) {
             return;
         }
+        clearTimeout(paceTimer);
+        paceTimer = undefined;
+    };
+    const resetDemand = (): void => {
+        cancelPaceTimer();
+        paintInFlight = false;
+        pendingSequence = 0;
+        deliveredSequence = 0;
+        lastPaintRequestAtMs = Number.NEGATIVE_INFINITY;
+    };
+    const requestPaint = (): void => {
+        if (
+            destroyed ||
+            !visible ||
+            activeTarget === undefined ||
+            webContents.isDestroyed?.() ||
+            paintInFlight ||
+            paceTimer !== undefined ||
+            pendingSequence <= deliveredSequence
+        ) {
+            return;
+        }
+        const nowMs = performance.now();
+        const delayMs = frameRequestDelayMs(lastPaintRequestAtMs, nowMs, fpsLimit);
+        if (delayMs > FRAME_INTERVAL_TOLERANCE_MS) {
+            paceTimer = setTimeout(() => {
+                paceTimer = undefined;
+                requestPaint();
+            }, delayMs);
+            return;
+        }
+        paintInFlight = true;
+        lastPaintRequestAtMs = nowMs;
         if (!webContents.isPainting()) {
             webContents.startPainting();
         }
@@ -111,9 +164,11 @@ export function enableNativeFramePacing(
         if (selected < 0) {
             if (activeTarget === -selected) {
                 activeTarget = undefined;
+                resetDemand();
             }
-        } else {
+        } else if (activeTarget !== selected) {
             activeTarget = selected;
+            resetDemand();
         }
         stop();
     };
@@ -133,16 +188,17 @@ export function enableNativeFramePacing(
         requestPaint();
     };
     const onPaint = (): void => {
+        if (!paintInFlight) {
+            return;
+        }
+        paintInFlight = false;
         deliveredSequence = pendingSequence;
         queueMicrotask(() => {
             if (destroyed) {
                 return;
             }
-            if (pendingSequence === deliveredSequence) {
-                stop();
-            } else {
-                requestPaint();
-            }
+            stop();
+            requestPaint();
         });
     };
 
@@ -156,14 +212,16 @@ export function enableNativeFramePacing(
         await originalVisible(nextVisible);
         visible = nextVisible;
         if (!visible) {
-            stop();
+            resetDemand();
         }
+        stop();
     };
 
     const originalDestroy = process.destroy.bind(process);
     process.destroy = async (): Promise<void> => {
         if (!destroyed) {
             destroyed = true;
+            cancelPaceTimer();
             native.off?.("target", onTarget);
             native.off?.("frame-request", onFrameRequest);
             webContents.off("paint", onPaint);

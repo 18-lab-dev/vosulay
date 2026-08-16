@@ -1,4 +1,8 @@
-import { enableNativeFramePacing, parseFrameRequest } from "../src/main/frame-pacing";
+import {
+    enableNativeFramePacing,
+    frameRequestDelayMs,
+    parseFrameRequest,
+} from "../src/main/frame-pacing";
 import EventEmitter from "node:events";
 import type { ManagedOverlayProcess } from "../src/main/overlay-manager";
 import type { NativeOverlayHandle } from "../src/main/linux-overlay-provider";
@@ -81,6 +85,12 @@ test("frame request parsing rejects malformed or non-monotonic primitives", () =
     }
 });
 
+test("configured frame pacing delay enforces the requested ceiling", () => {
+    assert.equal(frameRequestDelayMs(100, 101, 250), 3);
+    assert.equal(frameRequestDelayMs(100, 104, 250), 0);
+    assert.equal(frameRequestDelayMs(Number.NEGATIVE_INFINITY, 100, 250), 0);
+});
+
 test("negotiated pacing coalesces requests and stops after the delivered paint", async () => {
     const webContents = new FakeWebContents();
     const nativeBus = new FakeNative();
@@ -95,7 +105,7 @@ test("negotiated pacing coalesces requests and stops after the delivered paint",
         supportsFrameRequests: () => nativeBus.supportsFrameRequests(),
     };
     const process = processFor(webContents);
-    enableNativeFramePacing(process, native);
+    enableNativeFramePacing(process, native, 240);
 
     assert.equal(webContents.painting, false, "continuous OSR is stopped immediately");
     nativeBus.emit("target", "selected:7:1");
@@ -103,31 +113,35 @@ test("negotiated pacing coalesces requests and stops after the delivered paint",
     nativeBus.emit("frame-request", "7:2");
     nativeBus.emit("frame-request", "7:2");
     assert.equal(webContents.starts, 1);
-    assert.equal(webContents.invalidates, 2, "newer demand invalidates; duplicates do not");
+    assert.equal(webContents.invalidates, 1, "newer demand coalesces into the in-flight paint");
 
     webContents.emit("paint");
     await Promise.resolve();
     assert.equal(webContents.painting, false);
 
     nativeBus.emit("frame-request", "8:3");
-    assert.equal(webContents.invalidates, 2, "requests for a non-selected target are ignored");
+    assert.equal(webContents.invalidates, 1, "requests for a non-selected target are ignored");
 
     await process.setVisible(false);
     nativeBus.emit("frame-request", "7:4");
-    assert.equal(webContents.invalidates, 2, "hidden overlays do not paint");
+    assert.equal(webContents.invalidates, 1, "hidden overlays do not paint");
 
     await process.destroy();
     nativeBus.emit("frame-request", "7:5");
-    assert.equal(webContents.invalidates, 2, "destroy removes native listeners");
+    assert.equal(webContents.invalidates, 1, "destroy removes native listeners");
 });
 
 test("agents without demand capability retain fixed-rate painting", () => {
     const webContents = new FakeWebContents();
     const process = processFor(webContents);
-    enableNativeFramePacing(process, {
-        destroy: () => Promise.resolve(),
-        supportsFrameRequests: () => false,
-    });
+    enableNativeFramePacing(
+        process,
+        {
+            destroy: () => Promise.resolve(),
+            supportsFrameRequests: () => false,
+        },
+        60,
+    );
     assert.equal(webContents.painting, true);
     assert.equal(webContents.stops, 0);
 });

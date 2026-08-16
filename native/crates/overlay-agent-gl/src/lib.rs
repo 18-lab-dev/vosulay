@@ -9,11 +9,12 @@ use overlay_agent_core::{
     Agent, AgentConfig, AgentError, AgentEvent, CompletionQueue, FrameDescriptor,
 };
 use overlay_protocol::{
-    CAP_DMABUF, CAP_SHM, CAP_SHM_BGRA, DmabufDescriptor, Endpoint, FrameConsumed,
-    INPUT_FLAG_REPEAT, INPUT_KEY_DOWN, INPUT_KEY_UP, INPUT_MOUSE_DOWN, INPUT_MOUSE_MOVE,
-    INPUT_MOUSE_UP, INPUT_MOUSE_WHEEL, INPUT_TEXT, InputEvent, SelectedTarget,
-    TEXTURE_FORMAT_PREMULTIPLIED_BGRA8, TEXTURE_FORMAT_PREMULTIPLIED_RGBA8,
-    TEXTURE_FORMAT_STRAIGHT_RGBA8, Target, TextureDescriptor,
+    CAP_DMABUF, CAP_FRAME_REQUEST, CAP_SHM, CAP_SHM_BGRA, DmabufDescriptor, Endpoint,
+    FrameConsumed, FrameRequest, INPUT_FLAG_REPEAT, INPUT_KEY_DOWN, INPUT_KEY_UP,
+    INPUT_MOUSE_DOWN, INPUT_MOUSE_MOVE, INPUT_MOUSE_UP, INPUT_MOUSE_WHEEL, INPUT_TEXT,
+    InputEvent, SelectedTarget, TEXTURE_FORMAT_PREMULTIPLIED_BGRA8,
+    TEXTURE_FORMAT_PREMULTIPLIED_RGBA8, TEXTURE_FORMAT_STRAIGHT_RGBA8, Target,
+    TextureDescriptor,
 };
 use plthook::{HookGuard, Module, Replacement};
 use sdl3_sys::events::{
@@ -644,6 +645,19 @@ impl Runtime {
     fn announced_target(&self) -> u64 {
         self.selected_target.load(Ordering::Acquire)
     }
+    /// Current presentation activity for an announced target. The present hook
+    /// only increments this atomic through `update_target`; the control thread
+    /// converts changes into coalescible FrameRequest messages.
+    fn target_activity(&self, target_id: u64) -> u64 {
+        self.targets
+            .iter()
+            .find(|slot| {
+                slot.live.load(Ordering::Acquire)
+                    && slot.id.load(Ordering::Relaxed) == target_id
+            })
+            .map(|slot| slot.activity.load(Ordering::Relaxed))
+            .unwrap_or(0)
+    }
     fn queue_input(&self, event: InputEvent) -> bool {
         let Ok(mut input) = self.input.lock() else {
             return false;
@@ -923,7 +937,9 @@ fn run_control(rt: Arc<Runtime>, payload: Option<&[u8]>) -> Result<(), ()> {
     let mut config = AgentConfig::current();
     let probed = await_transport_capabilities();
     if probed != 0 {
-        config.advertised_capabilities = probed;
+        // The graphics-context probe only describes frame transports. Keep the
+        // orthogonal demand-pacing capability advertised as well.
+        config.advertised_capabilities = probed | CAP_FRAME_REQUEST;
     }
     // The GL backend can always upload a CPU buffer, so shared memory stays the
     // required transport and DMA-BUF is only ever an advertised upgrade.
@@ -939,6 +955,8 @@ fn run_control(rt: Arc<Runtime>, payload: Option<&[u8]>) -> Result<(), ()> {
     rt.mailbox.connected.store(true, Ordering::Release);
     let mut advertised = HashMap::new();
     let mut announced_target = 0u64;
+    let mut announced_activity = 0u64;
+    let mut frame_request_sequence = 0u64;
     loop {
         // A withdrawn transport cannot be renegotiated inside a live session;
         // ending it is what lets `start_control` reconnect on shared memory.
@@ -1024,6 +1042,7 @@ fn run_control(rt: Arc<Runtime>, payload: Option<&[u8]>) -> Result<(), ()> {
         let selected = rt.choose_target().map(|target| target.0).unwrap_or(0);
         if selected != announced_target {
             announced_target = selected;
+            announced_activity = 0;
             let generation = rt.selection_generation.fetch_add(1, Ordering::AcqRel) + 1;
             rt.selected_target.store(selected, Ordering::Release);
             agent
@@ -1035,6 +1054,23 @@ fn run_control(rt: Arc<Runtime>, payload: Option<&[u8]>) -> Result<(), ()> {
             agent_diagnostic(&format!(
                 "selected target {selected} (generation {generation})"
             ));
+        }
+        // The presentation hooks only update `activity`; protocol traffic stays
+        // here on the control thread. Multiple game presents inside one control
+        // iteration collapse into one newest-wins demand message.
+        let activity = rt.target_activity(announced_target);
+        if announced_target != 0
+            && rt.mailbox.visible.load(Ordering::Acquire)
+            && activity != announced_activity
+        {
+            announced_activity = activity;
+            frame_request_sequence = frame_request_sequence.wrapping_add(1).max(1);
+            agent
+                .send_frame_request(FrameRequest {
+                    target_id: announced_target,
+                    sequence: frame_request_sequence,
+                })
+                .map_err(|_| ())?;
         }
         thread::sleep(Duration::from_millis(2));
     }
@@ -2214,6 +2250,9 @@ fn present(rt: &Runtime, target_id: u64, surface: (u32, u32)) {
         probe_transport_capabilities();
     }
     let (width, height) = surface;
+    // This is the only pacing work added to the presentation path: existing
+    // target bookkeeping advances the activity atomic. The control thread
+    // observes it later and performs all protocol I/O.
     rt.update_target(target_id, width, height);
     let Some(frame) = rt.mailbox.begin_present() else {
         return;
@@ -3728,6 +3767,21 @@ mod tests {
         r.update_target(1, 10, 10);
         r.update_target(2, 20, 20);
         assert_eq!(r.choose_target().map(|x| x.0), Some(2));
+    }
+    #[test]
+    fn target_activity_advances_with_presents() {
+        let runtime = Runtime::new();
+        assert_eq!(runtime.target_activity(7), 0);
+        runtime.update_target(7, 1280, 720);
+        assert_eq!(runtime.target_activity(7), 1);
+        runtime.update_target(7, 1280, 720);
+        assert_eq!(runtime.target_activity(7), 2);
+    }
+    #[test]
+    fn transport_probe_keeps_frame_request_capability() {
+        let probed = CAP_SHM | CAP_DMABUF;
+        let advertised = probed | CAP_FRAME_REQUEST;
+        assert_ne!(advertised & CAP_FRAME_REQUEST, 0);
     }
     #[test]
     fn fail_open_transition_is_atomic() {

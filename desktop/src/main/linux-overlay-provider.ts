@@ -8,6 +8,7 @@ import type { ConfigStore } from "./config";
 import type { EditingTarget } from "./types";
 import EventEmitter from "node:events";
 import { type ForegroundTracker } from "./foreground-tracker";
+import { enableNativeFramePacing } from "./frame-pacing";
 import { LinuxOverlayProcess } from "./linux-overlay-process";
 import type { LocalOverlayRegistry } from "./local-overlays";
 import type { RuntimeOptions } from "./options";
@@ -413,7 +414,7 @@ export class LinuxOverlayProvider extends OverlayManager {
                     if (handle.createSurface === undefined) {
                         return new NativeOverlayProcess(pid, handle);
                     }
-                    return LinuxOverlayProcess.create(
+                    const overlayProcess = await LinuxOverlayProcess.create(
                         pid,
                         handle,
                         editingTarget,
@@ -422,6 +423,8 @@ export class LinuxOverlayProvider extends OverlayManager {
                         overlayRegistry,
                         visible,
                     );
+                    enableNativeFramePacing(overlayProcess, handle, options.fpsLimit);
+                    return overlayProcess;
                 }),
         });
     }

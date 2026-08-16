@@ -11,6 +11,7 @@ import {
     Tray,
     app,
     globalShortcut,
+    ipcMain,
     nativeImage,
     session,
 } from "electron";
@@ -19,6 +20,7 @@ import { type OverlayProvider } from "./overlay-provider";
 import { RemoteOverlayServer } from "./remote-server";
 import { createOverlayProvider } from "./provider-factory";
 import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { resolveStoragePaths } from "./storage-path";
 
 const APP_EXIT_FAILURE = 1;
@@ -39,6 +41,8 @@ const TRAY_RING_WIDTH = 4;
 
 const EDIT_ACCELERATOR = "Control+Shift+Space";
 const VISIBILITY_ACCELERATOR = "Control+Alt+Shift+H";
+const FRAME_RATE_CHANNEL = "vosulay:frame-rate";
+const FRAME_RATE_PRELOAD_ID = "vosulay-frame-rate";
 
 if (process.platform === "win32") {
     app.commandLine.appendSwitch("force_high_performance_gpu");
@@ -196,6 +200,22 @@ async function start(options: RuntimeOptions): Promise<void> {
     });
 
     await app.whenReady();
+
+    /*
+     * Every manager and counter iframe gets the same early rAF ceiling. A
+     * session frame preload runs before WebContents preloads and before page
+     * scripts, including cross-origin subframes, without enabling Node in those
+     * frames. The synchronous IPC happens once per document load, never on the
+     * render or game-present hot paths.
+     */
+    ipcMain.on(FRAME_RATE_CHANNEL, (event) => {
+        event.returnValue = options.fpsLimit;
+    });
+    session.defaultSession.registerPreloadScript({
+        filePath: join(app.getAppPath(), "out/preload/frame-rate.js"),
+        id: FRAME_RATE_PRELOAD_ID,
+        type: "frame",
+    });
 
     installCustomProtocols(options, overlayRegistry);
     const loadedConfig = await configStore.load();

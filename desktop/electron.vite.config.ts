@@ -16,7 +16,10 @@ export default defineConfig({
     preload: {
         build: {
             rollupOptions: {
-                input: resolve(__dirname, "src/preload/index.ts"),
+                input: {
+                    "frame-rate": resolve(__dirname, "src/preload/frame-rate.ts"),
+                    index: resolve(__dirname, "src/preload/index.ts"),
+                },
             },
         },
         plugins: [externalizeDepsPlugin()],

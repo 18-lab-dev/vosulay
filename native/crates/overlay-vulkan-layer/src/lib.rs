@@ -12,7 +12,9 @@ use ash::{
 };
 use compositor::SwapchainState;
 use overlay_agent_core::{Agent, AgentConfig, CompletionQueue, Frame, FrameDescriptor};
-use overlay_protocol::{COOKIE_LEN, Endpoint, FrameConsumed, SelectedTarget, Target};
+use overlay_protocol::{
+    COOKIE_LEN, Endpoint, FrameConsumed, FrameRequest, SelectedTarget, Target,
+};
 use std::{
     collections::{HashMap, VecDeque},
     ffi::{CStr, c_char, c_void},
@@ -191,6 +193,10 @@ struct Session {
     /// Most recently presented registered swapchain. The present hook only
     /// writes this atomic; protocol I/O stays on the control thread.
     selected_target: AtomicU64,
+    /// Monotonic presentation demand. The present hook only advances this
+    /// counter; the control thread coalesces it into FrameRequest packets.
+    present_sequence: AtomicU64,
+    visible: AtomicBool,
     connected: AtomicBool,
 }
 
@@ -247,6 +253,8 @@ fn session() -> &'static Arc<Session> {
             completion_failed,
             targets: Mutex::new(VecDeque::new()),
             selected_target: AtomicU64::new(0),
+            present_sequence: AtomicU64::new(0),
+            visible: AtomicBool::new(false),
             connected: AtomicBool::new(false),
         });
         if let Some((endpoint, cookie)) = session_configuration() {
@@ -286,6 +294,7 @@ fn run_session(session: Arc<Session>, endpoint: Endpoint, cookie: [u8; COOKIE_LE
     session.connected.store(true, Ordering::Release);
     let mut announced_target = 0u64;
     let mut selection_generation = 0u64;
+    let mut sent_present_sequence = 0u64;
     loop {
         if session.completion_failed.load(Ordering::Acquire) {
             break;
@@ -323,6 +332,20 @@ fn run_session(session: Arc<Session>, endpoint: Endpoint, cookie: [u8; COOKIE_LE
             }
             announced_target = selected;
         }
+        let present_sequence = session.present_sequence.load(Ordering::Acquire);
+        if announced_target != 0 && present_sequence != sent_present_sequence {
+            if agent
+                .send_frame_request(FrameRequest {
+                    target_id: announced_target,
+                    sequence: present_sequence,
+                })
+                .is_err()
+            {
+                session.connected.store(false, Ordering::Release);
+                return;
+            }
+            sent_present_sequence = present_sequence;
+        }
         let _ = agent.watchdog_tick();
         match agent.poll() {
             Ok(overlay_agent_core::AgentEvent::Frame(_)) => {
@@ -336,10 +359,13 @@ fn run_session(session: Arc<Session>, endpoint: Endpoint, cookie: [u8; COOKIE_LE
                     }));
                 }
             }
-            Ok(
-                overlay_agent_core::AgentEvent::Visible(false)
-                | overlay_agent_core::AgentEvent::Clear(_),
-            ) => {
+            Ok(overlay_agent_core::AgentEvent::Visible(visible)) => {
+                session.visible.store(visible, Ordering::Release);
+                if !visible && let Ok(mut latest) = session.latest.lock() {
+                    latest.take();
+                }
+            }
+            Ok(overlay_agent_core::AgentEvent::Clear(_)) => {
                 if let Ok(mut latest) = session.latest.lock() {
                     latest.take();
                 }
@@ -357,6 +383,7 @@ fn run_session(session: Arc<Session>, endpoint: Endpoint, cookie: [u8; COOKIE_LE
         }
         thread::sleep(Duration::from_millis(2));
     }
+    session.visible.store(false, Ordering::Release);
     session.connected.store(false, Ordering::Release);
     if let Ok(mut latest) = session.latest.lock() {
         latest.take();
@@ -1124,9 +1151,19 @@ unsafe fn observe_presented_target(original: &vk::PresentInfoKHR<'_>) {
                 .and_then(|record| record.lock().ok().map(|record| record.target_id))
         })
     };
-    session()
-        .selected_target
-        .store(selected.unwrap_or(0), Ordering::Release);
+    let session = session();
+    let selected = selected.unwrap_or(0);
+    session.selected_target.store(selected, Ordering::Release);
+    if selected != 0
+        && session.connected.load(Ordering::Acquire)
+        && session.visible.load(Ordering::Acquire)
+    {
+        let _ = session.present_sequence.fetch_update(
+            Ordering::AcqRel,
+            Ordering::Acquire,
+            |sequence| Some(sequence.wrapping_add(1).max(1)),
+        );
+    }
 }
 
 /// Poll every registered swapchain in this present even when no overlay frame
@@ -1403,5 +1440,14 @@ mod tests {
         let mut generation = u64::MAX;
         generation = generation.wrapping_add(1).max(1);
         assert_eq!(generation, 1);
+    }
+
+    #[test]
+    fn present_demand_sequence_never_uses_zero() {
+        let sequence = AtomicU64::new(u64::MAX);
+        let _ = sequence.fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+            Some(current.wrapping_add(1).max(1))
+        });
+        assert_eq!(sequence.load(Ordering::Acquire), 1);
     }
 }
