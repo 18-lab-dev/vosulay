@@ -990,16 +990,24 @@ pub const MANAGER_BRIDGE_SCRIPT: &str = r#"
     return payload;
   };
   let sender = (payload) => queuedMessages.push(payload);
-  document.documentElement.addEventListener("vosulay-bridge-message", () => {
-    const payload =
-      document.documentElement.getAttribute("data-vosulay-bridge-message");
+  document.addEventListener("vosulay-bridge-message", () => {
+    const root = document.documentElement;
+    if (!root) return;
+    const payload = root.getAttribute("data-vosulay-bridge-message");
     if (payload !== null) sender(payload);
   });
-  new QWebChannel(qt.webChannelTransport, (channel) => {
-    const bridge = channel.objects.vosulayBridge;
-    sender = (payload) => bridge.postMessage(serializePayload(payload));
-    for (const payload of queuedMessages.splice(0)) sender(payload);
-  });
+  const connectWebChannel = () => {
+    if (typeof qt === "undefined" || !qt.webChannelTransport) {
+      window.setTimeout(connectWebChannel, 0);
+      return;
+    }
+    new QWebChannel(qt.webChannelTransport, (channel) => {
+      const bridge = channel.objects.vosulayBridge;
+      sender = (payload) => bridge.postMessage(serializePayload(payload));
+      for (const payload of queuedMessages.splice(0)) sender(payload);
+    });
+  };
+  connectWebChannel();
 })();
 "#;
 
