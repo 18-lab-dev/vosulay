@@ -1,12 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
+import { type JsonValue, isJsonNumber } from "../main/json";
 
 const FRAME_RATE_CHANNEL = "vosulay:frame-rate";
 const MILLISECONDS_PER_SECOND = 1000;
 const FRAME_INTERVAL_TOLERANCE_MS = 0.5;
-
-function isFrameRate(value: unknown): value is number {
-    return typeof value === "number" && Number.isFinite(value) && Number.isInteger(value) && value > 0;
-}
 
 function installAnimationFrameLimiter(
     fpsLimit: number,
@@ -110,8 +107,12 @@ function installAnimationFrameLimiter(
     });
 }
 
-const configuredFrameRate: unknown = ipcRenderer.sendSync(FRAME_RATE_CHANNEL);
-if (isFrameRate(configuredFrameRate)) {
+const configuredFrameRate: JsonValue = ipcRenderer.sendSync(FRAME_RATE_CHANNEL);
+if (
+    isJsonNumber(configuredFrameRate) &&
+    Number.isSafeInteger(configuredFrameRate) &&
+    configuredFrameRate > 0
+) {
     contextBridge.executeInMainWorld({
         args: [configuredFrameRate, MILLISECONDS_PER_SECOND, FRAME_INTERVAL_TOLERANCE_MS],
         func: installAnimationFrameLimiter,
