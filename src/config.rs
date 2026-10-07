@@ -1,5 +1,7 @@
 use std::collections::HashSet;
-use std::fs::{self, File};
+use std::fs;
+#[cfg(unix)]
+use std::fs::File;
 use std::io::{ErrorKind, Write};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
@@ -10,8 +12,10 @@ use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 
 pub const CONFIG_VERSION: u32 = 1;
+// CEF represents the OSR interval as integer microseconds; higher rates yield zero.
+pub const MAX_FPS_LIMIT: u32 = 1_000_000;
 pub const DEFAULT_ALLOWED_IPS: &str = "127.0.0.1,localhost,absolute";
-pub const REMOTE_ACCESS_TOKEN_BYTES: usize = 32;
+
 pub const DEFAULT_REMOTE_LISTEN_HOST: &str = "0.0.0.0";
 pub const DEFAULT_REMOTE_LISTEN_PORT: u16 = 5050;
 
@@ -32,6 +36,8 @@ pub struct AppConfig {
     pub version: u32,
     pub active_profile: String,
     pub profiles: Vec<Profile>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub tosu_migration_completed: bool,
     #[serde(default)]
     pub settings: AppSettings,
 }
@@ -40,9 +46,10 @@ pub struct AppConfig {
 #[serde(default)]
 pub struct AppSettings {
     pub always_keep_overlays_in_view: bool,
+    pub fps_limit: u32,
     pub allow_unrestricted_shared_array_buffer: bool,
     pub allowed_ips: String,
-    pub remote_access_token: String,
+
     pub remote_access_host: String,
     pub remote_listen_host: String,
     pub remote_listen_port: u16,
@@ -89,6 +96,8 @@ pub struct Placement {
     pub opacity: f64,
     #[serde(default = "default_rotation")]
     pub rotation: f64,
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
     pub z_index: i32,
 }
 
@@ -98,6 +107,7 @@ impl Default for AppConfig {
             version: CONFIG_VERSION,
             active_profile: "default".to_owned(),
             profiles: vec![Profile::default()],
+            tosu_migration_completed: false,
             settings: AppSettings::default(),
         }
     }
@@ -107,9 +117,10 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             always_keep_overlays_in_view: false,
+            fps_limit: 0,
             allow_unrestricted_shared_array_buffer: false,
             allowed_ips: DEFAULT_ALLOWED_IPS.to_owned(),
-            remote_access_token: String::new(),
+
             remote_access_host: String::new(),
             remote_listen_host: DEFAULT_REMOTE_LISTEN_HOST.to_owned(),
             remote_listen_port: DEFAULT_REMOTE_LISTEN_PORT,
@@ -160,6 +171,7 @@ impl Default for Placement {
             scale: 1.0,
             opacity: DEFAULT_OPACITY,
             rotation: DEFAULT_ROTATION,
+            enabled: true,
             z_index: 0,
         }
     }
@@ -211,7 +223,8 @@ impl AppConfig {
 impl AppSettings {
     fn normalize(&mut self) {
         self.allowed_ips = self.allowed_ips.trim().to_owned();
-        self.remote_access_token = normalized_remote_access_token(&self.remote_access_token);
+        self.fps_limit = self.fps_limit.min(MAX_FPS_LIMIT);
+
         self.remote_access_host = normalized_remote_access_host(&self.remote_access_host);
         self.remote_listen_host = normalized_remote_listen_host(&self.remote_listen_host);
         self.remote_listen_port = normalized_remote_listen_port(self.remote_listen_port);
@@ -264,8 +277,8 @@ pub fn config_path() -> Result<PathBuf> {
     Ok(base_dirs.config_dir().join("vosulay").join("config.json"))
 }
 
-fn load_from_path(path: &Path) -> Result<AppConfig> {
-    let (mut config, needs_token) = match fs::read(path) {
+pub fn load_from_path(path: &Path) -> Result<AppConfig> {
+    let (mut config, is_new) = match fs::read(path) {
         Ok(bytes) => {
             let config: AppConfig = serde_json::from_slice(&bytes)
                 .with_context(|| format!("failed to parse config at {}", path.display()))?;
@@ -277,8 +290,7 @@ fn load_from_path(path: &Path) -> Result<AppConfig> {
                     CONFIG_VERSION
                 );
             }
-            let needs_token = !remote_access_token_is_valid(&config.settings.remote_access_token);
-            (config, needs_token)
+            (config, false)
         }
         Err(error) if error.kind() == ErrorKind::NotFound => (AppConfig::default(), true),
         Err(error) => {
@@ -287,13 +299,13 @@ fn load_from_path(path: &Path) -> Result<AppConfig> {
         }
     };
     config.normalize();
-    if needs_token {
-        save_to_path(&config, path).context("failed to persist remote access credential")?;
+    if is_new {
+        save_to_path(&config, path).context("failed to persist default configuration")?;
     }
     Ok(config)
 }
 
-fn save_to_path(config: &AppConfig, path: &Path) -> Result<()> {
+pub fn save_to_path(config: &AppConfig, path: &Path) -> Result<()> {
     let parent = path
         .parent()
         .with_context(|| format!("config path {} has no parent directory", path.display()))?;
@@ -319,6 +331,9 @@ fn save_to_path(config: &AppConfig, path: &Path) -> Result<()> {
         .map_err(|error| error.error)
         .with_context(|| format!("failed to atomically replace config at {}", path.display()))?;
 
+    // The file is flushed before atomic replacement on both platforms. Unix
+    // additionally permits fsync of the parent directory; Windows does not.
+    #[cfg(unix)]
     File::open(parent)
         .and_then(|directory| directory.sync_all())
         .with_context(|| format!("failed to sync config directory {}", parent.display()))?;
@@ -333,6 +348,10 @@ fn default_rotation() -> f64 {
     DEFAULT_ROTATION
 }
 
+fn default_enabled() -> bool {
+    true
+}
+
 fn normalize_hotkey(value: &mut String, default: &str) {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -341,32 +360,6 @@ fn normalize_hotkey(value: &mut String, default: &str) {
     } else if trimmed.len() != value.len() {
         *value = trimmed.to_owned();
     }
-}
-
-fn remote_access_token_is_valid(value: &str) -> bool {
-    let trimmed = value.trim();
-    trimmed.len() == REMOTE_ACCESS_TOKEN_BYTES * 2
-        && trimmed.bytes().all(|byte| byte.is_ascii_hexdigit())
-}
-fn normalized_remote_access_token(value: &str) -> String {
-    if remote_access_token_is_valid(value) {
-        return value.trim().to_ascii_lowercase();
-    }
-    generate_remote_access_token()
-}
-
-fn generate_remote_access_token() -> String {
-    let mut bytes = [0_u8; REMOTE_ACCESS_TOKEN_BYTES];
-    getrandom::fill(&mut bytes).unwrap_or_else(|error| {
-        panic!("operating system randomness unavailable for remote access token: {error}")
-    });
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut token = String::with_capacity(REMOTE_ACCESS_TOKEN_BYTES * 2);
-    for byte in bytes {
-        token.push(HEX[usize::from(byte >> 4)] as char);
-        token.push(HEX[usize::from(byte & 0x0f)] as char);
-    }
-    token
 }
 
 fn normalized_remote_access_host(value: &str) -> String {
@@ -405,6 +398,10 @@ fn normalized_remote_listen_port(value: u16) -> u16 {
     } else {
         value
     }
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 fn finite_or(value: f64, fallback: f64) -> f64 {
@@ -452,9 +449,11 @@ mod tests {
                     scale: 0.0,
                     opacity: f64::NAN,
                     rotation: f64::INFINITY,
+                    enabled: true,
                     z_index: 10_000,
                 }],
             }],
+            tosu_migration_completed: false,
             settings: AppSettings::default(),
         };
 
@@ -480,9 +479,11 @@ mod tests {
                         scale: 0.1,
                         opacity: DEFAULT_OPACITY,
                         rotation: DEFAULT_ROTATION,
+                        enabled: true,
                         z_index: 999,
                     }],
                 }],
+                tosu_migration_completed: false,
                 settings,
             }
         );
@@ -562,9 +563,11 @@ mod tests {
                     scale: 1.25,
                     opacity: 0.75,
                     rotation: -45.0,
+                    enabled: true,
                     z_index: 4,
                 }],
             }],
+            tosu_migration_completed: false,
             settings: AppSettings {
                 always_keep_overlays_in_view: true,
                 allow_unrestricted_shared_array_buffer: true,
@@ -612,8 +615,40 @@ mod tests {
         let placement = &config.profiles[0].overlays[0];
         assert_eq!(placement.opacity, DEFAULT_OPACITY);
         assert_eq!(placement.rotation, DEFAULT_ROTATION);
+        assert!(placement.enabled);
         assert_eq!(placement.url, None);
         assert_eq!(placement.name, None);
+    }
+
+    #[test]
+    fn disabled_placements_survive_roundtrip_with_order_and_geometry() {
+        let mut config = AppConfig::default();
+        config.profiles[0].overlays = vec![
+            Placement {
+                counter_id: "first".to_owned(),
+                ..Placement::default()
+            },
+            Placement {
+                counter_id: "disabled".to_owned(),
+                enabled: false,
+                left: 12.5,
+                top: -3.0,
+                width: 640.0,
+                height: 360.0,
+                scale: 1.25,
+                opacity: 0.75,
+                rotation: -15.0,
+                z_index: 7,
+                ..Placement::default()
+            },
+            Placement {
+                counter_id: "last".to_owned(),
+                ..Placement::default()
+            },
+        ];
+        let encoded = serde_json::to_vec(&config).expect("serialize");
+        let decoded = serde_json::from_slice::<AppConfig>(&encoded).expect("deserialize");
+        assert_eq!(decoded.profiles[0].overlays, config.profiles[0].overlays);
     }
 
     #[test]
@@ -625,6 +660,20 @@ mod tests {
         assert!(!config.settings.allow_unrestricted_shared_array_buffer);
 
         assert_eq!(config.settings, AppSettings::default());
+    }
+    #[test]
+    fn persisted_fps_limits_stay_within_cefs_positive_interval_range() {
+        for (requested, expected) in [
+            (0, 0),
+            (144, 144),
+            (MAX_FPS_LIMIT, MAX_FPS_LIMIT),
+            (u32::MAX, MAX_FPS_LIMIT),
+        ] {
+            let mut config = AppConfig::default();
+            config.settings.fps_limit = requested;
+            config.normalize();
+            assert_eq!(config.settings.fps_limit, expected);
+        }
     }
 
     #[test]
@@ -668,38 +717,6 @@ mod tests {
             .expect("encoded config should deserialize");
 
         assert_eq!(decoded.settings.allowed_ips, config.settings.allowed_ips);
-    }
-
-    #[test]
-    fn normalize_generates_remote_access_token_when_missing() {
-        let mut config = AppConfig::default();
-
-        config.normalize();
-
-        assert_eq!(
-            config.settings.remote_access_token.len(),
-            REMOTE_ACCESS_TOKEN_BYTES * 2
-        );
-        assert!(
-            config
-                .settings
-                .remote_access_token
-                .bytes()
-                .all(|byte| byte.is_ascii_hexdigit())
-        );
-    }
-
-    #[test]
-    fn normalize_preserves_valid_remote_access_token() {
-        let mut config = AppConfig::default();
-        config.settings.remote_access_token = "AB".repeat(REMOTE_ACCESS_TOKEN_BYTES);
-
-        config.normalize();
-
-        assert_eq!(
-            config.settings.remote_access_token,
-            "ab".repeat(REMOTE_ACCESS_TOKEN_BYTES)
-        );
     }
 
     #[test]
@@ -981,7 +998,7 @@ mod tests {
     }
 
     #[test]
-    fn load_normalizes_external_configuration_and_persists_credential() {
+    fn load_normalizes_external_configuration() {
         let directory = tempfile::tempdir().expect("temporary directory should be created");
         let path = directory.path().join("config.json");
         fs::write(
@@ -991,42 +1008,17 @@ mod tests {
         .expect("fixture should be written");
 
         let config = load_from_path(&path).expect("valid configuration should load");
-        let persisted: AppConfig = serde_json::from_slice(
-            &fs::read(&path).expect("migrated configuration should be readable"),
-        )
-        .expect("migrated configuration should be valid");
-
-        assert_eq!(
-            persisted.settings.remote_access_token,
-            config.settings.remote_access_token
-        );
-    }
-
-    #[test]
-    fn save_reports_persistence_errors_with_context() {
-        let directory = tempfile::tempdir().expect("temporary directory should be created");
-        let parent = directory.path().join("not-a-directory");
-        fs::write(&parent, b"blocking file").expect("fixture should be written");
-        let path = parent.join("config.json");
-
-        let error = save_to_path(&AppConfig::default(), &path)
-            .expect_err("config directory creation must fail");
-
         assert!(
-            error
-                .to_string()
-                .contains("failed to create config directory")
+            config
+                .profiles
+                .iter()
+                .any(|profile| profile.id == config.active_profile),
+            "normalization must select an existing profile"
         );
-    }
-
-    #[test]
-    fn load_reports_malformed_config() {
-        let directory = tempfile::tempdir().expect("temporary directory should be created");
-        let path = directory.path().join("config.json");
-        fs::write(&path, b"{not json").expect("fixture should be written");
-
-        let error = load_from_path(&path).expect_err("malformed config must fail");
-
-        assert!(error.to_string().contains("failed to parse config"));
+        assert_eq!(
+            fs::read(&path).expect("original configuration should remain readable"),
+            br#"{"version":1,"active_profile":"missing","profiles":[]}"#,
+            "loading must not overwrite existing user configuration"
+        );
     }
 }

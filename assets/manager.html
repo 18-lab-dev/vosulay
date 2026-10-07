@@ -76,6 +76,7 @@
         <label>Title<input id="field-name" type="text" autocomplete="off"></label>
         <label id="field-url-label">URL<input id="field-url" type="text" inputmode="url" autocomplete="url" spellcheck="false"></label>
       </div>
+      <label class="enabled-control"><input id="field-enabled" type="checkbox"> Enabled</label>
       <div class="field-grid">
         <label>X<input id="field-left" type="number" step="1" aria-describedby="field-left-warning"><small id="field-left-warning" class="field-warning" hidden></small></label>
         <label>Y<input id="field-top" type="number" step="1" aria-describedby="field-top-warning"><small id="field-top-warning" class="field-warning" hidden></small></label>
@@ -132,12 +133,23 @@
               </span>
               <input id="allow-unrestricted-shared-array-buffer" type="checkbox">
             </label>
+            <label class="settings-field" for="fps-limit">
+              <span><strong>FPS limit</strong><small>Automatic follows the display refresh rate; fixed values cap rendering.</small></span>
+              <select id="fps-limit-mode" aria-label="FPS limit mode"><option value="auto">Automatic</option><option value="fixed">Fixed</option></select>
+              <input id="fps-limit" type="number" min="1" max="1000000" step="1" inputmode="numeric" required aria-label="Fixed FPS limit">
+            </label>
+          </fieldset>
+
+          <fieldset class="settings-section">
+            <legend>Tosu layout</legend>
+            <p class="settings-note">Import <code>settings/__ingame__.values.json</code> from tosu. Adds the imported profiles without replacing your existing profiles or changing the tosu file.</p>
+            <button id="import-tosu-layout" class="quiet-button" type="button">Import tosu layout</button>
           </fieldset>
 
           <fieldset class="settings-section">
             <legend>Remote overlay server</legend>
             <p class="settings-note">
-              Serves a credential-protected, view-only copy of your overlays to other devices.
+              Serves a view-only copy of your overlays to devices allowed by the client IP list.
               Enter the LAN IP or hostname that those devices use to reach this computer.
             </p>
             <label class="settings-field" for="remote-listen-host">
@@ -154,20 +166,10 @@
               </span>
               <input id="remote-listen-port" type="number" min="1" max="65535" step="1" inputmode="numeric" placeholder="5050">
             </label>
-            <label class="settings-field" for="remote-access-token">
-              <span>
-                <strong>Remote access credential</strong>
-                <small>Shared secret required by the access URL below. Regenerating it invalidates previously shared URLs.</small>
-              </span>
-              <div class="settings-field-row">
-                <input id="remote-access-token" type="text" readonly spellcheck="false" autocomplete="off">
-                <button id="regenerate-remote-access-token" type="button" class="quiet-button">Regenerate</button>
-              </div>
-            </label>
             <label class="settings-field" for="remote-access-url">
               <span>
                 <strong>Remote access URL</strong>
-                <small>Keep this URL secret. Only available once a remote host is set below.</small>
+                <small>Use this URL to connect remotely. Only available once a remote host is set below.</small>
               </span>
               <input id="remote-access-url" type="text" readonly spellcheck="false" autocomplete="off">
             </label>
@@ -181,7 +183,7 @@
             <label class="settings-field" for="allowed-ips">
               <span>
                 <strong>Allowed client IPs</strong>
-                <small>Comma- or space-separated. Every remote device must be listed here <em>and</em> allowed by vosu itself. Leave empty to allow this computer only. Default <code>127.0.0.1,localhost,absolute</code> mirrors the string vosu expects.</small>
+                <small>Comma- or space-separated. Every remote viewing device must be listed here. The vosu or tosu-compatible backend must allow this computer, not each viewing device. Leave empty to allow this computer only.</small>
               </span>
               <textarea id="allowed-ips" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
             </label>

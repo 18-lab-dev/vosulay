@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Vosulay CEF OSR smoke</title>
+<style>html,body{margin:0;background:transparent}#marker{position:absolute;left:16px;top:16px;width:80px;height:80px;background:#ff0000}iframe{position:absolute;left:112px;top:16px;width:80px;height:80px;border:0}</style>
+<div id="marker"></div><iframe id="counter" src="counter.html"></iframe>
+<script>
+(async () => {
+  const result = { javascript: 6 * 7 === 42, secure: isSecureContext, webgl: false, webgpu: { exposed: Boolean(navigator.gpu), adapter: false }, iframe: false };
+  const iframe = document.getElementById('counter');
+  await new Promise(resolve => iframe.addEventListener('load', resolve, { once: true }));
+  result.iframe = iframe.contentDocument?.getElementById('counter-proof')?.textContent === 'tosu-compatible iframe';
+  const gl = document.createElement('canvas').getContext('webgl2');
+  if (gl) {
+    gl.clearColor(1, 0, 1, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+    const pixel = new Uint8Array(4); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    result.glPixels = Array.from(pixel);
+    result.glError = gl.getError();
+    result.webgl = pixel[0] === 255 && pixel[1] === 0 && pixel[2] === 255 && pixel[3] === 255 && result.glError === gl.NO_ERROR;
+    const debug = gl.getExtension('WEBGL_debug_renderer_info');
+    result.glRenderer = debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+  }
+  if (navigator.gpu) {
+    try {
+      const adapter = await navigator.gpu.requestAdapter();
+      result.webgpu.adapter = Boolean(adapter);
+      if (adapter) {
+        result.webgpu.info = { vendor: adapter.info.vendor, architecture: adapter.info.architecture, device: adapter.info.device, description: adapter.info.description, fallback: adapter.info.isFallbackAdapter };
+        const device = await adapter.requestDevice();
+        const storage = device.createBuffer({size:4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+        const readback = device.createBuffer({size:4,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});
+        const module = device.createShaderModule({code:'@group(0) @binding(0) var<storage, read_write> result: u32; @compute @workgroup_size(1) fn main() { result = 42u; }'});
+        const pipeline = device.createComputePipeline({layout:'auto',compute:{module,entryPoint:'main'}});
+        const group = device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:storage}}]});
+        const encoder = device.createCommandEncoder(); const pass = encoder.beginComputePass();
+        pass.setPipeline(pipeline); pass.setBindGroup(0,group); pass.dispatchWorkgroups(1); pass.end();
+        encoder.copyBufferToBuffer(storage,0,readback,0,4); device.queue.submit([encoder.finish()]);
+        await readback.mapAsync(GPUMapMode.READ);
+        result.webgpu.compute = new Uint32Array(readback.getMappedRange())[0] === 42;
+        readback.unmap(); storage.destroy(); readback.destroy(); device.destroy();
+      }
+    } catch (error) { result.webgpu.error = String(error); }
+  }
+  window.__VOSULAY_POST_MESSAGE__({ type: 'smoke', capabilities: result });
+})();
+</script>

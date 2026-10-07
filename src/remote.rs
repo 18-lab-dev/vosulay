@@ -7,12 +7,15 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result};
+use tokio_tungstenite::tungstenite::{Utf8Bytes, handshake::server::create_response, http};
 use url::Url;
 
-use crate::config::{AppConfig, AppSettings, Placement, Profile};
+use crate::{
+    backend::{Broker, supports_websocket},
+    config::{AppConfig, AppSettings, Placement, Profile},
+};
 
-pub const DEFAULT_VOSU_URL: &str = "http://127.0.0.1:24050";
 const TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_REQUEST: usize = 16 * 1024;
 const MAX_CONNECTIONS: usize = 32;
@@ -20,41 +23,110 @@ type ConfigLoader = dyn Fn() -> Result<AppConfig> + Send + Sync;
 
 pub struct RemoteServer {
     stop: Arc<AtomicBool>,
-    thread: Option<JoinHandle<()>>,
+    threads: Vec<(SocketAddr, JoinHandle<()>)>,
+    browser_url: Url,
+}
+
+struct Backend {
+    upstream: Url,
+    broker: Broker,
+    http: ureq::Agent,
 }
 
 impl RemoteServer {
     pub fn start(base_url: Url) -> Result<Self> {
-        let config =
-            AppConfig::load().context("failed to load configuration for remote overlay server")?;
-        let address = listen_address(&config.settings);
-        let listener = TcpListener::bind(address)
-            .with_context(|| format!("failed to bind remote overlay server to {address}"))?;
-        Self::start_with_listener(listener, base_url, Arc::new(AppConfig::load))
+        Self::start_from_path(base_url, crate::config::config_path()?)
     }
 
+    pub fn start_from_path(base_url: Url, config_path: PathBuf) -> Result<Self> {
+        let config = crate::config::load_from_path(&config_path)
+            .context("failed to load configuration for overlay server")?;
+        // Browser routing must work even when the optional LAN port is occupied.
+        let local = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .context("failed to bind local backend broker")?;
+        let address = listen_address(&config.settings);
+        let mut listeners = vec![local];
+        match TcpListener::bind(address) {
+            Ok(listener) => listeners.push(listener),
+            Err(error) => eprintln!("Remote overlay hosting at {address} is unavailable: {error}"),
+        }
+        Self::start_with_listeners(
+            listeners,
+            base_url,
+            Arc::new(move || crate::config::load_from_path(&config_path)),
+        )
+    }
+
+    pub fn browser_url(&self) -> &Url {
+        &self.browser_url
+    }
+
+    #[cfg(test)]
     fn start_with_listener(
         listener: TcpListener,
         base_url: Url,
         loader: Arc<ConfigLoader>,
     ) -> Result<Self> {
-        listener.set_nonblocking(true)?;
-        let stop = Arc::new(AtomicBool::new(false));
-        let thread_stop = Arc::clone(&stop);
-        let thread = thread::Builder::new()
-            .name("vosulay-remote-listener".to_owned())
-            .spawn(move || serve(listener, base_url, loader, thread_stop))?;
-        Ok(Self {
-            stop,
-            thread: Some(thread),
-        })
+        Self::start_with_listeners(vec![listener], base_url, loader)
+    }
+
+    fn start_with_listeners(
+        listeners: Vec<TcpListener>,
+        base_url: Url,
+        loader: Arc<ConfigLoader>,
+    ) -> Result<Self> {
+        let browser_url = Url::parse(&format!("http://{}/", listeners[0].local_addr()?))?;
+        let backend = Arc::new(Backend {
+            broker: Broker::new(base_url.clone())?,
+            upstream: base_url,
+            http: ureq::Agent::new_with_config(
+                ureq::Agent::config_builder()
+                    .http_status_as_error(false)
+                    .max_redirects(0)
+                    .max_redirects_will_error(false)
+                    .timeout_global(Some(TIMEOUT))
+                    .build(),
+            ),
+        });
+        let mut server = Self {
+            stop: Arc::new(AtomicBool::new(false)),
+            threads: Vec::with_capacity(listeners.len()),
+            browser_url,
+        };
+        let active = Arc::new(AtomicUsize::new(0));
+        for listener in listeners {
+            listener.set_nonblocking(false)?;
+            let mut wake_address = listener.local_addr()?;
+            if wake_address.ip().is_unspecified() {
+                wake_address.set_ip(if wake_address.is_ipv4() {
+                    Ipv4Addr::LOCALHOST.into()
+                } else {
+                    std::net::Ipv6Addr::LOCALHOST.into()
+                });
+            }
+            let stop = server.stop.clone();
+            let backend = backend.clone();
+            let loader = loader.clone();
+            let active = active.clone();
+            server.threads.push((
+                wake_address,
+                thread::Builder::new()
+                    .name("vosulay-overlay-listener".to_owned())
+                    .spawn(move || serve(listener, backend, loader, stop, active))?,
+            ));
+        }
+        Ok(server)
     }
 }
 
 impl Drop for RemoteServer {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
-        if let Some(thread) = self.thread.take() {
+        // Wake blocking accepts locally, including wildcard-bound LAN listeners.
+        for (address, _) in &self.threads {
+            let _ = TcpStream::connect_timeout(address, TIMEOUT);
+        }
+        for (_, thread) in self.threads.drain(..) {
             let _ = thread.join();
         }
     }
@@ -68,11 +140,19 @@ fn listen_address(settings: &AppSettings) -> SocketAddr {
     SocketAddr::new(host, settings.remote_listen_port)
 }
 
-fn serve(listener: TcpListener, base_url: Url, loader: Arc<ConfigLoader>, stop: Arc<AtomicBool>) {
-    let active = Arc::new(AtomicUsize::new(0));
+fn serve(
+    listener: TcpListener,
+    backend: Arc<Backend>,
+    loader: Arc<ConfigLoader>,
+    stop: Arc<AtomicBool>,
+    active: Arc<AtomicUsize>,
+) {
     while !stop.load(Ordering::Acquire) {
         match listener.accept() {
             Ok((mut stream, _)) => {
+                if stop.load(Ordering::Acquire) {
+                    break;
+                }
                 if active.load(Ordering::Acquire) >= MAX_CONNECTIONS {
                     let _ = stream.set_write_timeout(Some(TIMEOUT));
                     let _ = Response::plain(503, "Service Unavailable", "Server is busy\n")
@@ -80,14 +160,14 @@ fn serve(listener: TcpListener, base_url: Url, loader: Arc<ConfigLoader>, stop: 
                     continue;
                 }
                 active.fetch_add(1, Ordering::AcqRel);
-                let base_url = base_url.clone();
+                let backend = Arc::clone(&backend);
                 let loader = Arc::clone(&loader);
                 let request_active = Arc::clone(&active);
                 if let Err(error) = thread::Builder::new()
                     .name("vosulay-remote-request".to_owned())
                     .spawn(move || {
                         let _active_request = ActiveRequest(request_active);
-                        if let Err(error) = handle(&mut stream, &base_url, &loader) {
+                        if let Err(error) = handle(&mut stream, &backend, &loader) {
                             eprintln!("Remote overlay request failed: {error}");
                         }
                     })
@@ -95,9 +175,6 @@ fn serve(listener: TcpListener, base_url: Url, loader: Arc<ConfigLoader>, stop: 
                     active.fetch_sub(1, Ordering::AcqRel);
                     eprintln!("Could not start remote overlay request worker: {error}");
                 }
-            }
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                thread::sleep(Duration::from_millis(10));
             }
             Err(error) => {
                 eprintln!("Remote overlay listener stopped accepting requests: {error}");
@@ -118,7 +195,7 @@ impl Drop for ActiveRequest {
     }
 }
 
-fn handle(stream: &mut TcpStream, base_url: &Url, loader: &Arc<ConfigLoader>) -> Result<()> {
+fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>) -> Result<()> {
     stream.set_read_timeout(Some(TIMEOUT))?;
     stream.set_write_timeout(Some(TIMEOUT))?;
     let request = match read_request(stream) {
@@ -131,18 +208,16 @@ fn handle(stream: &mut TcpStream, base_url: &Url, loader: &Arc<ConfigLoader>) ->
     };
     if request.method != "GET" && request.method != "HEAD" {
         let mut response = Response::plain(405, "Method Not Allowed", "Use GET or HEAD\n");
-        response.headers.push(("Allow", "GET, HEAD".to_owned()));
+        response
+            .headers
+            .push(("Allow".into(), "GET, HEAD".to_owned()));
         return response.write(stream, false).map_err(Into::into);
     }
     let path = request
         .target
         .split_once('?')
         .map_or(request.target.as_str(), |parts| parts.0);
-    let Some((credential, protected_path)) = protected_path(path) else {
-        return Response::plain(404, "Not Found", "Route not found\n")
-            .write(stream, request.method == "HEAD")
-            .map_err(Into::into);
-    };
+    let route = path.strip_prefix('/').expect("validated request target");
     let local_address = stream.local_addr()?;
     let config = match loader() {
         Ok(config) => config,
@@ -161,24 +236,44 @@ fn handle(stream: &mut TcpStream, base_url: &Url, loader: &Arc<ConfigLoader>) ->
         &request,
         local_address,
         &config.settings.remote_access_host,
-        protected_path.starts_with("local/"),
+        route.starts_with("local/") || request.is_frame_navigation(),
     ) || !peer_is_allowed(stream.peer_addr()?.ip(), &config.settings.allowed_ips)
-        || !credential_matches(credential, &config.settings.remote_access_token)
     {
         return Response::plain(403, "Forbidden", "Request is not authorized\n")
             .write(stream, request.method == "HEAD")
             .map_err(Into::into);
     }
-    let result = if protected_path == "overlay" {
-        overlay_response(
-            base_url,
-            request.host.as_deref(),
-            &config,
-            &request.target,
-            credential,
-        )
-    } else {
-        local_response(&config, protected_path)
+    if request.header("upgrade").is_some() {
+        if request.method != "GET" || !supports_websocket(&request.target) {
+            return Response::plain(404, "Not Found", "WebSocket route not found\n")
+                .write(stream, request.method == "HEAD")
+                .map_err(Into::into);
+        }
+        return upgrade(stream, backend, &request);
+    }
+    let serving_url = Url::parse(&format!(
+        "http://{}/",
+        request.host.as_deref().expect("authorized authority")
+    ))?;
+    let result = match route {
+        "overlay" => overlay_response(&serving_url, &backend.upstream, &config, &request.target),
+        route if route.starts_with("local/") => local_response(&config, route),
+        "__vosulay/backend.js" => {
+            let mut response = Response::bytes(
+                200,
+                "OK",
+                "text/javascript; charset=utf-8",
+                backend_script(&backend.upstream, &serving_url).into_bytes(),
+            );
+            response
+                .headers
+                .push(("Cache-Control".into(), "no-store".into()));
+            Ok(response)
+        }
+        route if route.starts_with("__vosulay/") => {
+            Err(HttpError::new(404, "Not Found", "Route not found\n"))
+        }
+        _ => proxy_response(backend, &serving_url, &request),
     };
     let response = match result {
         Ok(response) => response,
@@ -189,21 +284,243 @@ fn handle(stream: &mut TcpStream, base_url: &Url, loader: &Arc<ConfigLoader>) ->
         .map_err(Into::into)
 }
 
-fn protected_path(path: &str) -> Option<(&str, &str)> {
-    let protected = path.strip_prefix("/access/")?;
-    let (credential, route) = protected.split_once('/')?;
-    (route == "overlay" || route.starts_with("local/")).then_some((credential, route))
+fn backend_script(upstream: &Url, broker: &Url) -> String {
+    let arguments = serde_json::to_string(&[upstream.as_str(), broker.as_str()])
+        .expect("URL strings serialize");
+    format!(
+        "({})(...{});",
+        include_str!("../assets/backend.js"),
+        arguments
+    )
 }
 
-fn credential_matches(provided: &str, expected: &str) -> bool {
-    provided.len() == expected.len()
-        && provided
-            .bytes()
-            .zip(expected.bytes())
-            .fold(0_u8, |difference, (left, right)| {
-                difference | (left ^ right)
-            })
-            == 0
+fn upgrade(stream: &mut TcpStream, backend: &Backend, request: &Request) -> Result<()> {
+    let mut handshake = http::Request::builder()
+        .method(request.method.as_str())
+        .uri(&request.target)
+        .version(request.version);
+    for (name, value) in &request.headers {
+        handshake = handshake.header(name, value);
+    }
+    let handshake = handshake.body(())?;
+    let response = match create_response(&handshake) {
+        Ok(response) => response,
+        Err(_) => {
+            return Response::plain(400, "Bad Request", "Invalid WebSocket handshake\n")
+                .write(stream, false)
+                .map_err(Into::into);
+        }
+    };
+    write!(stream, "HTTP/1.1 101 Switching Protocols\r\n")?;
+    for (name, value) in response.headers() {
+        write!(stream, "{name}: {}\r\n", value.to_str()?)?;
+    }
+    stream.write_all(b"\r\n")?;
+    stream.flush()?;
+    backend.broker.attach(
+        stream.try_clone()?,
+        request.prefetched.clone(),
+        &request.target,
+    )
+}
+
+fn hop_header(name: &str, connection: Option<&str>) -> bool {
+    [
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+    ]
+    .iter()
+    .any(|header| name.eq_ignore_ascii_case(header))
+        || connection.is_some_and(|value| {
+            value
+                .split(',')
+                .any(|header| name.eq_ignore_ascii_case(header.trim()))
+        })
+}
+
+fn proxy_response(
+    backend: &Backend,
+    serving_url: &Url,
+    request: &Request,
+) -> std::result::Result<Response, HttpError> {
+    if let Some((status, text)) = backend.broker.snapshot(&request.target) {
+        return Ok(Response {
+            status,
+            reason: "OK",
+            mime: "application/json".into(),
+            headers: vec![("Cache-Control".into(), "no-store".into())],
+            body: Body::Shared(text),
+        });
+    }
+    let (path, query) = request
+        .target
+        .split_once('?')
+        .map_or((request.target.as_str(), None), |(path, query)| {
+            (path, Some(query))
+        });
+    let mut target = backend.upstream.clone();
+    target.set_path(path);
+    target.set_query(query);
+    target.set_fragment(None);
+    let mut outgoing = http::Request::builder()
+        .method(request.method.as_str())
+        .uri(target.as_str());
+    for (name, value) in &request.headers {
+        if hop_header(name, request.header("connection"))
+            || [
+                "host",
+                "content-length",
+                "accept-encoding",
+                "origin",
+                "referer",
+            ]
+            .iter()
+            .any(|header| name.eq_ignore_ascii_case(header))
+            || name.to_ascii_lowercase().starts_with("sec-fetch-")
+        {
+            continue;
+        }
+        outgoing = outgoing.header(name, value);
+    }
+    if request.origin.is_some() {
+        outgoing = outgoing.header("Origin", backend.upstream.origin().ascii_serialization());
+    }
+    let outgoing = outgoing
+        .body(())
+        .map_err(|_| HttpError::new(400, "Bad Request", "Invalid backend request\n"))?;
+    let upstream = backend.http.run(outgoing).map_err(|error| {
+        HttpError::new(
+            502,
+            "Bad Gateway",
+            format!("Backend request failed: {error}\n"),
+        )
+    })?;
+    let status = upstream.status();
+    let mime = upstream
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("application/octet-stream")
+        .to_owned();
+    let length = upstream
+        .headers()
+        .get("content-length")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok());
+    let connection = upstream
+        .headers()
+        .get("connection")
+        .and_then(|value| value.to_str().ok());
+    let mut headers = Vec::new();
+    for (name, value) in upstream.headers() {
+        if hop_header(name.as_str(), connection)
+            || matches!(name.as_str(), "content-type" | "content-length")
+        {
+            continue;
+        }
+        let Ok(value) = value.to_str() else {
+            continue;
+        };
+        let value = if name == http::header::LOCATION {
+            match Url::parse(value) {
+                Ok(url) => routed_backend_url(&url, serving_url, &backend.upstream)?.into(),
+                Err(_) => value.to_owned(),
+            }
+        } else {
+            value.to_owned()
+        };
+        headers.push((name.to_string(), value));
+    }
+    let (_, mut body) = upstream.into_parts();
+    let body = if request.method == "GET"
+        && status == http::StatusCode::OK
+        && mime
+            .split(';')
+            .next()
+            .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("text/html"))
+    {
+        let mut html = body
+            .with_config()
+            .limit(32 * 1024 * 1024)
+            .read_to_vec()
+            .map_err(|_| HttpError::new(502, "Bad Gateway", "Could not read backend HTML\n"))?;
+        let bootstrap = format!(
+            "<script src=\"{}__vosulay/backend.js\"></script>",
+            escape_html(serving_url.as_str())
+        );
+        // Keep a leading doctype/BOM: prepending a script before it would enable quirks mode.
+        let start = if html.starts_with(b"\xef\xbb\xbf") {
+            3
+        } else {
+            0
+        };
+        let start = html[start..]
+            .iter()
+            .position(|byte| !byte.is_ascii_whitespace())
+            .map_or(start, |offset| start + offset);
+        let insertion = if html
+            .get(start..start + 9)
+            .is_some_and(|value| value.eq_ignore_ascii_case(b"<!doctype"))
+        {
+            html[start..]
+                .iter()
+                .position(|byte| *byte == b'>')
+                .map_or(start, |offset| start + offset + 1)
+        } else {
+            start
+        };
+        html.splice(insertion..insertion, bootstrap.bytes());
+        headers.retain(|(name, _)| {
+            !matches!(name.as_str(), "etag" | "last-modified" | "cache-control")
+        });
+        headers.push(("Cache-Control".into(), "no-store".into()));
+        Body::Bytes(html)
+    } else {
+        Body::Proxy(body.into_reader(), length)
+    };
+    Ok(Response {
+        status: status.as_u16(),
+        reason: status.canonical_reason().unwrap_or("Upstream Response"),
+        mime,
+        headers,
+        body,
+    })
+}
+
+fn routed_backend_url(
+    source: &Url,
+    broker: &Url,
+    upstream: &Url,
+) -> std::result::Result<Url, HttpError> {
+    let loopback = |url: &Url| match url.host() {
+        Some(url::Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+        None => false,
+    };
+    let aliases = source.scheme() == upstream.scheme()
+        && source.port_or_known_default() == upstream.port_or_known_default()
+        && loopback(source)
+        && loopback(upstream);
+    let mut routed = source.clone();
+    if source.origin() == upstream.origin() || aliases {
+        routed.set_scheme(broker.scheme()).map_err(|()| {
+            HttpError::new(500, "Internal Server Error", "Invalid broker scheme\n")
+        })?;
+        routed
+            .set_host(broker.host_str())
+            .map_err(|_| HttpError::new(500, "Internal Server Error", "Invalid broker host\n"))?;
+        routed
+            .set_port(broker.port())
+            .map_err(|()| HttpError::new(500, "Internal Server Error", "Invalid broker port\n"))?;
+    }
+    Ok(routed)
 }
 
 fn request_metadata_is_allowed(
@@ -269,6 +586,24 @@ struct Request {
     host: Option<String>,
     origin: Option<String>,
     fetch_site: Option<String>,
+    version: http::Version,
+    headers: Vec<(String, String)>,
+    prefetched: Vec<u8>,
+}
+
+impl Request {
+    fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
+
+    fn is_frame_navigation(&self) -> bool {
+        self.header("sec-fetch-mode") == Some("navigate")
+            && self.header("sec-fetch-dest") == Some("iframe")
+            && self.origin.is_none()
+    }
 }
 
 fn read_request(stream: &mut TcpStream) -> std::result::Result<Request, HttpError> {
@@ -330,6 +665,7 @@ fn read_request(stream: &mut TcpStream) -> std::result::Result<Request, HttpErro
     let mut host = None;
     let mut origin = None;
     let mut fetch_site = None;
+    let mut headers = Vec::new();
     for line in lines.filter(|line| !line.is_empty()) {
         let Some((name, value)) = line.split_once(':') else {
             return Err(request_error(
@@ -378,6 +714,7 @@ fn read_request(stream: &mut TcpStream) -> std::result::Result<Request, HttpErro
             }
             *slot = Some(value.to_owned());
         }
+        headers.push((name.to_owned(), value.trim().to_owned()));
     }
     Ok(Request {
         method: method.to_owned(),
@@ -385,6 +722,13 @@ fn read_request(stream: &mut TcpStream) -> std::result::Result<Request, HttpErro
         host,
         origin,
         fetch_site,
+        version: if version == "HTTP/1.1" {
+            http::Version::HTTP_11
+        } else {
+            http::Version::HTTP_10
+        },
+        headers,
+        prefetched: bytes[end + 2..].to_vec(),
     })
 }
 
@@ -401,29 +745,23 @@ fn request_error(
 
 fn overlay_response(
     base_url: &Url,
-    request_host: Option<&str>,
+    upstream: &Url,
     config: &AppConfig,
     target: &str,
-    credential: &str,
 ) -> std::result::Result<Response, HttpError> {
     let profile = select_profile(config, parse_profile(target)?)?;
     let mut response = Response::bytes(
         200,
         "OK",
         "text/html; charset=utf-8",
-        render_profile(
-            profile,
-            &vosu_url_for_request(base_url, request_host),
-            credential,
-        )?
-        .into_bytes(),
+        render_profile(profile, base_url, upstream)?.into_bytes(),
     );
     response.headers.extend([
-        ("Cache-Control", "no-store".to_owned()),
-        ("Referrer-Policy", "no-referrer".to_owned()),
-        ("X-Content-Type-Options", "nosniff".to_owned()),
-        ("Cross-Origin-Resource-Policy", "same-origin".to_owned()),
-        ("Content-Security-Policy", "default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; style-src 'unsafe-inline'; frame-src 'self' http: https:; frame-ancestors *".to_owned()),
+        ("Cache-Control".into(), "no-store".to_owned()),
+        ("Referrer-Policy".into(), "no-referrer".to_owned()),
+        ("X-Content-Type-Options".into(), "nosniff".to_owned()),
+        ("Cross-Origin-Resource-Policy".into(), "same-origin".to_owned()),
+        ("Content-Security-Policy".into(), "default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; style-src 'unsafe-inline'; frame-src 'self' http: https:; frame-ancestors *".to_owned()),
     ]);
     Ok(response)
 }
@@ -515,48 +853,20 @@ fn select_profile(
     }
 }
 
-fn vosu_url_for_request(base_url: &Url, request_host: Option<&str>) -> Url {
-    let loopback = match base_url.host() {
-        Some(url::Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
-        Some(url::Host::Ipv4(address)) => address.is_loopback(),
-        Some(url::Host::Ipv6(address)) => normalize_ip(IpAddr::V6(address)).is_loopback(),
-        None => false,
-    };
-    let Some(request_host) = request_host.filter(|_| loopback) else {
-        return base_url.clone();
-    };
-    let Ok(request_url) = Url::parse(&format!("http://{request_host}/")) else {
-        return base_url.clone();
-    };
-    if !request_url.username().is_empty()
-        || request_url.password().is_some()
-        || request_url.path() != "/"
-        || request_url.query().is_some()
-        || request_url.fragment().is_some()
-    {
-        return base_url.clone();
-    }
-    let Some(host) = request_url.host_str() else {
-        return base_url.clone();
-    };
-    let mut result = base_url.clone();
-    if result.set_host(Some(host)).is_err() {
-        return base_url.clone();
-    }
-    result
-}
-
 fn render_profile(
     profile: &Profile,
     base_url: &Url,
-    credential: &str,
+    upstream: &Url,
 ) -> std::result::Result<String, HttpError> {
     let title = escape_html(&profile.name);
     let mut html = format!(
         "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title}</title><style>html,body{{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}}body{{position:relative}}iframe{{display:block;border:0}}</style></head><body>"
     );
     for item in &profile.overlays {
-        let source = match placement_url(item, base_url, credential) {
+        if !item.enabled {
+            continue;
+        }
+        let source = match placement_url(item, base_url, upstream) {
             Ok(source) => escape_html(&source),
             Err(_) if item.url.is_some() => continue,
             Err(error) => return Err(error),
@@ -591,7 +901,7 @@ fn placement_title(item: &Placement) -> &str {
 fn placement_url(
     item: &Placement,
     base_url: &Url,
-    credential: &str,
+    upstream: &Url,
 ) -> std::result::Result<String, HttpError> {
     let Some(custom) = item.url.as_ref() else {
         let mut url = base_url.clone();
@@ -605,7 +915,7 @@ fn placement_url(
         return Ok(url.into());
     };
     match custom.scheme() {
-        "http" | "https" => Ok(custom.as_str().to_owned()),
+        "http" | "https" => Ok(routed_backend_url(custom, base_url, upstream)?.into()),
         "vosulay-overlay" => {
             let token = custom
                 .host_str()
@@ -631,7 +941,7 @@ fn placement_url(
                     "Invalid local path\n",
                 ));
             }
-            let mut result = format!("/access/{credential}/local/{token}/{relative_path}");
+            let mut result = format!("/local/{token}/{relative_path}");
             if let Some(query) = custom.query() {
                 result.push('?');
                 result.push_str(query);
@@ -675,11 +985,14 @@ fn local_response(config: &AppConfig, path: &str) -> std::result::Result<Respons
         .map_err(|_| HttpError::new(403, "Forbidden", "Local resource is not readable\n"))?;
     let mut response = Response::file(resource.mime, file, resource.length);
     response.headers.extend([
-        ("Cache-Control", "no-store".to_owned()),
-        ("Referrer-Policy", "no-referrer".to_owned()),
-        ("X-Content-Type-Options", "nosniff".to_owned()),
-        ("Cross-Origin-Resource-Policy", "cross-origin".to_owned()),
-        ("Access-Control-Allow-Origin", "null".to_owned()),
+        ("Cache-Control".into(), "no-store".to_owned()),
+        ("Referrer-Policy".into(), "no-referrer".to_owned()),
+        ("X-Content-Type-Options".into(), "nosniff".to_owned()),
+        (
+            "Cross-Origin-Resource-Policy".into(),
+            "cross-origin".to_owned(),
+        ),
+        ("Access-Control-Allow-Origin".into(), "null".to_owned()),
     ]);
     Ok(response)
 }
@@ -951,48 +1264,6 @@ impl Ipv4Pattern {
     }
 }
 
-pub fn vosu_base_url_from_arguments(arguments: &[String]) -> Result<Url> {
-    let mut configured = None;
-    let mut index = 1;
-    while index < arguments.len() {
-        let argument = &arguments[index];
-        if matches!(argument.as_str(), "--vosu-url" | "-t") {
-            index += 1;
-            configured = Some(
-                arguments
-                    .get(index)
-                    .ok_or_else(|| anyhow!("{argument} requires a URL value"))?
-                    .as_str(),
-            );
-        } else if let Some(value) = argument
-            .strip_prefix("--vosu-url=")
-            .or_else(|| argument.strip_prefix("-t="))
-        {
-            if value.is_empty() {
-                bail!("{argument} requires a URL value");
-            }
-            configured = Some(value);
-        }
-        index += 1;
-    }
-    let source = configured.unwrap_or(DEFAULT_VOSU_URL);
-    let mut url = Url::parse(source).with_context(|| format!("invalid vosu URL {source:?}"))?;
-    if !matches!(url.scheme(), "http" | "https")
-        || url.host_str().is_none()
-        || url.cannot_be_a_base()
-    {
-        bail!("vosu URL must be an HTTP(S) origin");
-    }
-    if !url.username().is_empty() || url.password().is_some() {
-        bail!("vosu URL must not contain credentials");
-    }
-    if url.query().is_some() || url.fragment().is_some() {
-        bail!("vosu URL must not contain a query or fragment");
-    }
-    url.set_path("/");
-    Ok(url)
-}
-
 #[derive(Debug)]
 struct HttpError {
     status: u16,
@@ -1014,12 +1285,14 @@ impl HttpError {
 enum Body {
     Bytes(Vec<u8>),
     File(File, u64),
+    Shared(Utf8Bytes),
+    Proxy(ureq::BodyReader<'static>, Option<u64>),
 }
 struct Response {
     status: u16,
     reason: &'static str,
-    mime: &'static str,
-    headers: Vec<(&'static str, String)>,
+    mime: String,
+    headers: Vec<(String, String)>,
     body: Body,
 }
 impl Response {
@@ -1035,7 +1308,7 @@ impl Response {
         Self {
             status,
             reason,
-            mime,
+            mime: mime.to_owned(),
             headers: Vec::new(),
             body: Body::Bytes(value),
         }
@@ -1044,21 +1317,27 @@ impl Response {
         Self {
             status: 200,
             reason: "OK",
-            mime,
+            mime: mime.to_owned(),
             headers: Vec::new(),
             body: Body::File(file, length),
         }
     }
     fn write(self, stream: &mut TcpStream, head: bool) -> io::Result<()> {
         let length = match &self.body {
-            Body::Bytes(value) => value.len() as u64,
-            Body::File(_, length) => *length,
+            Body::Bytes(value) => Some(value.len() as u64),
+            Body::Shared(value) => Some(value.len() as u64),
+            Body::File(_, length) => Some(*length),
+            Body::Proxy(_, length) => *length,
         };
         write!(
             stream,
-            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n",
-            self.status, self.reason, self.mime, length
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nConnection: close\r\n",
+            self.status, self.reason, self.mime
         )?;
+        match length {
+            Some(length) => write!(stream, "Content-Length: {length}\r\n")?,
+            None => stream.write_all(b"Transfer-Encoding: chunked\r\n")?,
+        }
         for (name, value) in self.headers {
             write!(stream, "{name}: {value}\r\n")?;
         }
@@ -1066,8 +1345,25 @@ impl Response {
         if !head {
             match self.body {
                 Body::Bytes(value) => stream.write_all(&value)?,
+                Body::Shared(value) => stream.write_all(value.as_bytes())?,
                 Body::File(mut file, length) => {
                     io::copy(&mut Read::by_ref(&mut file).take(length), stream)?;
+                }
+                Body::Proxy(mut reader, Some(length)) => {
+                    io::copy(&mut reader.by_ref().take(length), stream)?;
+                }
+                Body::Proxy(mut reader, None) => {
+                    let mut buffer = [0_u8; 32 * 1024];
+                    loop {
+                        let count = reader.read(&mut buffer)?;
+                        if count == 0 {
+                            break;
+                        }
+                        write!(stream, "{count:x}\r\n")?;
+                        stream.write_all(&buffer[..count])?;
+                        stream.write_all(b"\r\n")?;
+                    }
+                    stream.write_all(b"0\r\n\r\n")?;
                 }
             }
         }
@@ -1081,7 +1377,7 @@ mod tests {
     use std::net::{Ipv4Addr, Shutdown};
 
     fn base() -> Url {
-        Url::parse(DEFAULT_VOSU_URL).expect("URL")
+        Url::parse("http://127.0.0.1:24050/").expect("URL")
     }
 
     #[test]
@@ -1110,13 +1406,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn listen_address_defaults_match_previous_hardcoded_bind() {
-        assert_eq!(
-            listen_address(&AppSettings::default()),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 5050)
-        );
-    }
     #[test]
     fn peer_matching_covers_loopback_exact_wildcard_and_tokens() {
         assert!(peer_is_allowed(IpAddr::V4(Ipv4Addr::LOCALHOST), "absolute"));
@@ -1184,15 +1473,30 @@ mod tests {
                 ..Placement::default()
             }],
         };
-        let html = render_profile(&profile, &base(), &"a".repeat(64)).expect("render");
+        let html = render_profile(&profile, &base(), &base()).expect("render");
         assert!(html.contains("http://127.0.0.1:24050/a%2Fb/"));
         assert!(html.contains("allow=\"autoplay\""));
         assert!(html.contains("left:12.5px;top:-3px;width:640px;height:360px;transform-origin:0 0;transform:scale(1.25) rotate(-15deg);opacity:0.75;z-index:7"));
     }
 
     #[test]
+    fn disabled_counter_is_not_rendered_or_loaded_remotely() {
+        let profile = Profile {
+            id: "disabled".to_owned(),
+            name: "Disabled".to_owned(),
+            overlays: vec![Placement {
+                counter_id: "secret-counter".to_owned(),
+                enabled: false,
+                ..Placement::default()
+            }],
+        };
+        let html = render_profile(&profile, &base(), &base()).expect("render");
+        assert!(!html.contains("secret-counter"));
+        assert!(!html.contains("<iframe"));
+    }
+
+    #[test]
     fn custom_frame_sandboxes_isolate_forwarded_local_sources() {
-        let credential = "a".repeat(64);
         let profile = Profile {
             id: "custom".to_owned(),
             name: "Custom".to_owned(),
@@ -1215,10 +1519,10 @@ mod tests {
             ],
         };
 
-        let html = render_profile(&profile, &base(), &credential).expect("render");
-        assert!(html.contains(&format!(
-            "src=\"/access/{credential}/local/0123456789abcdef0123456789abcdef/index.html\" title=\"local\" allow=\"autoplay\" loading=\"eager\" sandbox=\"allow-scripts\""
-        )));
+        let html = render_profile(&profile, &base(), &base()).expect("render");
+        assert!(html.contains(
+            "src=\"/local/0123456789abcdef0123456789abcdef/index.html\" title=\"local\" allow=\"autoplay\" loading=\"eager\" sandbox=\"allow-scripts\""
+        ));
         assert!(html.contains(
             "src=\"https://overlay.example/widget\" title=\"remote\" allow=\"autoplay\" loading=\"eager\" sandbox=\"allow-scripts allow-same-origin\""
         ));
@@ -1272,12 +1576,9 @@ mod tests {
                 .mime,
             "text/html; charset=utf-8"
         );
-        let remote_url = placement_url(&config.profiles[0].overlays[0], &base(), &"b".repeat(64))
-            .expect("remote URL");
-        assert_eq!(
-            remote_url,
-            format!("/access/{}/local/{token}/index.html", "b".repeat(64))
-        );
+        let remote_url =
+            placement_url(&config.profiles[0].overlays[0], &base(), &base()).expect("remote URL");
+        assert_eq!(remote_url, format!("/local/{token}/index.html"));
         assert!(!remote_url.contains(&root64));
     }
 
@@ -1289,11 +1590,6 @@ mod tests {
         let capability = "0123456789abcdef0123456789abcdef";
         let root64 = encoded(root.as_os_str().as_encoded_bytes());
         let mut config = AppConfig::default();
-        let access_token = "c".repeat(64);
-        config
-            .settings
-            .remote_access_token
-            .clone_from(&access_token);
         config.profiles[0].overlays.push(Placement {
             url: Some(
                 Url::parse(&format!(
@@ -1323,15 +1619,13 @@ mod tests {
             response
         };
 
-        let local = send(&format!(
-            "/access/{access_token}/local/{capability}/external.js"
-        ));
+        let local = send(&format!("/local/{capability}/external.js"));
         assert!(local.starts_with("HTTP/1.1 200 OK\r\n"));
         assert!(local.contains("Cross-Origin-Resource-Policy: cross-origin\r\n"));
         assert!(local.contains("Access-Control-Allow-Origin: null\r\n"));
         assert!(local.ends_with("window.loaded=true"));
 
-        let overlay = send(&format!("/access/{access_token}/overlay"));
+        let overlay = send("/overlay");
         assert!(overlay.starts_with("HTTP/1.1 403 Forbidden\r\n"));
         drop(server);
     }
@@ -1346,15 +1640,40 @@ mod tests {
     }
 
     #[test]
+    fn shutdown_releases_idle_loopback_and_wildcard_listeners() {
+        let listeners = vec![
+            TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("local listener"),
+            TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).expect("LAN listener"),
+        ];
+        let addresses: Vec<_> = listeners
+            .iter()
+            .map(|listener| listener.local_addr().expect("listener address"))
+            .collect();
+        let server = RemoteServer::start_with_listeners(
+            listeners,
+            base(),
+            Arc::new(|| Ok(AppConfig::default())),
+        )
+        .expect("server");
+        let (stopped, completion) = std::sync::mpsc::channel();
+        thread::spawn(move || {
+            drop(server);
+            let _ = stopped.send(());
+        });
+        completion
+            .recv_timeout(TIMEOUT)
+            .expect("idle listener shutdown must not wait for an HTTP request");
+        let _rebound: Vec<_> = addresses
+            .into_iter()
+            .map(|address| TcpListener::bind(address).expect("listener port released"))
+            .collect();
+    }
+
+    #[test]
     fn ephemeral_listener_serves_overlay() {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let address = listener.local_addr().expect("address");
         let mut config = AppConfig::default();
-        let access_token = "c".repeat(64);
-        config
-            .settings
-            .remote_access_token
-            .clone_from(&access_token);
         config.profiles[0].overlays.push(Placement {
             counter_id: "counter".to_owned(),
             ..Placement::default()
@@ -1366,8 +1685,7 @@ mod tests {
         )
         .expect("server");
         let mut client = TcpStream::connect(address).expect("connect");
-        let request =
-            format!("GET /access/{access_token}/overlay HTTP/1.1\r\nHost: {address}\r\n\r\n");
+        let request = format!("GET /overlay HTTP/1.1\r\nHost: {address}\r\n\r\n");
         client.write_all(request.as_bytes()).expect("write");
         client.shutdown(Shutdown::Write).expect("shutdown");
         let mut response = String::new();
@@ -1375,15 +1693,9 @@ mod tests {
         drop(server);
         assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
         assert!(response.contains("allow=\"autoplay\""));
-        assert!(response.contains("src=\"http://127.0.0.1:24050/counter/\""));
-    }
-    #[test]
-    fn runtime_url_options_match_qt() {
-        let url = vosu_base_url_from_arguments(&[
-            "vosulay".to_owned(),
-            "--vosu-url=https://example.test/path".to_owned(),
-        ])
-        .expect("URL");
-        assert_eq!(url.as_str(), "https://example.test/");
+        assert!(response.contains(&format!("src=\"http://{address}/counter/\"")));
     }
 }
+
+#[cfg(test)]
+mod tests_broker;

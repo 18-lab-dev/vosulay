@@ -10,12 +10,11 @@ const BOOTSTRAP_MARKER: &str = "__VOSULAY_BOOTSTRAP__";
 /// JavaScript and CSS are encoded as JavaScript string literals before they are
 /// inserted into the document. In particular, `<` is encoded as `\u003c`, so
 /// embedded `</script>` text cannot terminate the bootstrap script early.
-pub fn manager_document(fps_limit: Option<u32>) -> String {
-    let fps = fps_limit.map_or_else(|| "null".to_owned(), |limit| limit.to_string());
+pub fn manager_document() -> String {
     let css = javascript_string(MANAGER_CSS);
     let javascript = javascript_string(MANAGER_JS);
     let bootstrap = format!(
-        "window.__VOSULAY_FPS_LIMIT__={fps};(()=>{{const style=document.createElement(\"style\");style.textContent={css};document.head.appendChild(style);(0,eval)({javascript});}})();"
+        "(()=>{{const style=document.createElement(\"style\");style.textContent={css};document.head.appendChild(style);(0,eval)({javascript});}})();"
     );
 
     debug_assert_eq!(MANAGER_HTML.matches(BOOTSTRAP_MARKER).count(), 1);
@@ -48,32 +47,4 @@ fn javascript_string(source: &str) -> String {
     }
     encoded.push('"');
     encoded
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{BOOTSTRAP_MARKER, javascript_string, manager_document};
-
-    #[test]
-    fn document_is_self_contained_and_has_numeric_fps_bootstrap() {
-        let document = manager_document(Some(144));
-
-        assert!(!document.contains(BOOTSTRAP_MARKER));
-        assert!(document.contains("window.__VOSULAY_FPS_LIMIT__=144"));
-        assert!(!document.contains("manager.css"));
-        assert!(!document.contains("manager.js"));
-    }
-
-    #[test]
-    fn no_limiter_is_bootstrapped_as_null() {
-        assert!(manager_document(None).contains("window.__VOSULAY_FPS_LIMIT__=null"));
-    }
-
-    #[test]
-    fn embedded_script_closers_are_encoded() {
-        let encoded = javascript_string("before</ScRiPt><style>&after");
-
-        assert!(!encoded.contains('<'));
-        assert!(encoded.contains("\\u003c/ScRiPt\\u003e"));
-    }
 }

@@ -26,7 +26,7 @@ pub fn fetch_installed_counters(base_url: &Url) -> Result<Vec<InstalledCounter>>
     fetch_installed_counters_with_timeout(base_url, FETCH_DEADLINE)
 }
 
-fn fetch_installed_counters_with_timeout(
+pub(crate) fn fetch_installed_counters_with_timeout(
     base_url: &Url,
     timeout: Duration,
 ) -> Result<Vec<InstalledCounter>> {
@@ -273,6 +273,75 @@ mod tests {
                 },
             ]
         );
+    }
+
+    // Source-derived Tosu 4.26.0 markup (not a live capture); see fixture provenance.
+    #[test]
+    fn parse_source_derived_tosu_426_fixture_without_product_identity() {
+        let source = include_str!("../tests/fixtures/backend/tosu-4.26.0-counter-search.html");
+        let base = Url::parse("https://backend.example:24050/base?old=1#fragment")
+            .expect("fixture URL should parse");
+
+        let counters = parse_installed_counters(&base, source).expect("Tosu fixture should parse");
+
+        assert_eq!(counters.len(), 2);
+        assert_eq!(counters[0].name, "Independent Overlay");
+        assert_eq!(counters[0].version, "4.2");
+        assert_eq!(counters[0].id, "nested/folder");
+        assert_eq!(counters[0].width, 720.0);
+        assert_eq!(counters[0].height, 480.0);
+        assert!(counters[0].has_settings);
+        assert_eq!(
+            counters[0].url.as_str(),
+            "https://backend.example:24050/nested%2Ffolder/"
+        );
+        assert_eq!(counters[1].id, "settings-absent");
+        assert!(!counters[1].has_settings);
+        assert_eq!(counters[1].width, DEFAULT_WIDTH);
+        assert_eq!(counters[1].height, DEFAULT_HEIGHT);
+        assert_eq!(
+            counters[1].url.scheme(),
+            "https",
+            "counter links retain the configured backend scheme"
+        );
+    }
+
+    #[test]
+    fn parse_vosu_fixture_with_expected_http_counter_url() {
+        let source = include_str!("../tests/fixtures/backend/vosu-counter-search.html");
+        let base = Url::parse("http://127.0.0.1:24050/api/counters/search/")
+            .expect("fixture URL should parse");
+
+        let counters = parse_installed_counters(&base, source).expect("Vosu fixture should parse");
+
+        assert_eq!(counters.len(), 1);
+        assert_eq!(counters[0].name, "Independent Overlay");
+        assert_eq!(counters[0].id, "nested/folder");
+        assert_eq!(counters[0].width, 720.0);
+        assert_eq!(counters[0].height, 480.0);
+        assert!(counters[0].has_settings);
+        assert_eq!(
+            counters[0].url.as_str(),
+            "http://127.0.0.1:24050/nested%2Ffolder/"
+        );
+    }
+
+    #[test]
+    fn parse_tosu_fixture_empty_catalog_as_empty() {
+        let source = include_str!("../tests/fixtures/backend/tosu-4.26.0-counter-search.html");
+        let empty_only = source
+            .split("<!-- Source-derived emptyCounters")
+            .nth(1)
+            .expect("fixture includes source-derived Tosu empty state");
+        let empty = empty_only
+            .split("-->")
+            .nth(1)
+            .expect("fixture empty-state marker closes");
+        let base = Url::parse("http://127.0.0.1:24050").expect("fixture URL should parse");
+
+        let counters =
+            parse_installed_counters(&base, empty).expect("Tosu empty catalog should parse");
+        assert!(counters.is_empty());
     }
 
     #[test]

@@ -1,24 +1,54 @@
+[workspace]
+members = ["crates/browser-cef", "crates/cef-smoke", "crates/frame", "crates/frame-transport", "crates/platform-windows", "crates/platform-linux", "crates/overlay-linux"]
+default-members = ["."]
+resolver = "3"
+
+[workspace.package]
+version = "0.2.0"
+
 [package]
 name = "vosulay"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 rust-version = "1.96.1"
 license = "MIT"
-description = "Native Linux in-game overlay manager for vosu"
+description = "Cross-platform in-game overlay manager for vosu or tosu-compatible backends"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[[bin]]
+name = "vosulay"
+path = "src/main.rs"
+required-features = ["cef-host"]
+
+[features]
+default = ["cef-host"]
+cef-host = ["dep:vosulay-browser", "dep:vosulay-frame", "dep:vosulay-windows", "dep:vosulay-linux", "dep:rfd", "dep:open"]
 
 [dependencies]
 base64 = "0.22"
 anyhow = "1.0"
-cxx = "1.0"
 directories = "6.0"
+futures-util = { version = "0.3", features = ["sink"] }
 getrandom = "0.4"
 scraper = { version = "0.24", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tempfile = "3.20"
+tokio = { version = "=1.53.2", features = ["rt", "net", "sync", "time", "macros"] }
+tokio-tungstenite = { version = "=0.29.0", features = ["rustls-tls-webpki-roots"] }
 ureq = { version = "=3.3.0", default-features = false, features = ["rustls"] }
 url = { version = "2.5", features = ["serde"] }
+vosulay-browser = { path = "crates/browser-cef", optional = true }
+vosulay-frame = { path = "crates/frame", optional = true }
+rfd = { version = "0.15.4", default-features = false, features = ["xdg-portal", "async-std"], optional = true }
+open = { version = "5.3", optional = true }
 
-[build-dependencies]
-cxx-build = "1.0"
-pkg-config = "0.3"
+[target.'cfg(target_os = "linux")'.dependencies]
+vosulay-linux = { path = "crates/platform-linux", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+vosulay-windows = { path = "crates/platform-windows", optional = true }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading"] }
+

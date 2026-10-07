@@ -14,32 +14,29 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: windows
+    runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: windows/package-lock.json
+          python-version: "3.12"
 
-      - name: Install dependencies
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
-        run: npm ci --force
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.96.1 --profile minimal --target x86_64-pc-windows-msvc
+          rustup default 1.96.1
 
-      - name: Typecheck
-        run: npm run typecheck
+      - name: Acquire CEF, build client, and package portable runtime
+        run: python tools/cef/package_windows.py dist/package
 
-      - name: Test
-        run: npm test
 
-      - name: Build production bundle
-        run: npm run build
+      - name: Upload portable package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vosulay-windows-x86_64
+          path: dist/vosulay-*-windows-x86_64.zip
+          if-no-files-found: error

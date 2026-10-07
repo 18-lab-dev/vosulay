@@ -1,0 +1,16 @@
+{
+  "file_format_version": "1.2.0",
+  "layer": {
+    "name": "VK_LAYER_VOSULAY_overlay",
+    "type": "INSTANCE",
+    "library_path": "./libvosulay_overlay.so",
+    "api_version": "1.3.0",
+    "implementation_version": "1",
+    "description": "Vosulay process-local transparent overlay Vulkan layer",
+    "functions": {
+      "vkGetInstanceProcAddr": "vkGetInstanceProcAddr",
+      "vkGetDeviceProcAddr": "vkGetDeviceProcAddr",
+      "vkNegotiateLoaderLayerInterfaceVersion": "vkNegotiateLoaderLayerInterfaceVersion"
+    }
+  }
+}

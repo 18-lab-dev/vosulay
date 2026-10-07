@@ -1,0 +1,26 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=480, initial-scale=1"><title>Vosulay autoresearch counter</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:480px;height:160px;overflow:hidden;background:transparent;color:#edf4ff;font:14px system-ui,sans-serif}
+#panel{position:relative;width:480px;height:160px;padding:14px 16px;background:rgba(15,24,39,.94);border:1px solid #49617c;border-radius:8px}
+.top{display:flex;align-items:baseline;justify-content:space-between}.label{color:#a8bdd5;font-size:12px;letter-spacing:.12em;text-transform:uppercase}.value{font:700 38px/1.05 ui-monospace,monospace;font-variant-numeric:tabular-nums}.meta{color:#9db0c7;font-size:12px}
+.track{height:7px;margin-top:9px;background:#27384b;border-radius:5px;overflow:hidden}.fill{height:100%;width:0;background:#62d6a5;border-radius:5px}.chart{height:28px;margin-top:8px;display:flex;align-items:end;gap:2px}.bar{flex:1;background:#4c91ba;border-radius:2px 2px 0 0;opacity:.85}
+/* Marker origin (4,4) in page pixels; 48x8: two identical 4-row codewords. */
+#marker{position:fixed;left:4px;top:4px;width:48px;height:8px;image-rendering:pixelated}
+</style></head><body><main id="panel"><canvas id="marker" width="48" height="8"></canvas><div class="top"><span class="label">Render workload</span><span class="meta">FRAME <b id="frame">00000000</b></span></div><div class="value" id="value">0</div><div class="track"><div class="fill"></div></div><div class="chart" id="chart"></div></main>
+<script>
+(()=>{'use strict';
+const WIDTH=480,HEIGHT=160,MARKER={x:4,y:4,width:48,height:8,rowCopies:2},SEED=0x51f15e,MAGIC=0xA7;
+const canvas=document.getElementById('marker'),ctx=canvas.getContext('2d',{alpha:false}),imageData=ctx.createImageData(48,8),pixels=imageData.data;
+const frameEl=document.getElementById('frame'),valueEl=document.getElementById('value'),fillEl=document.querySelector('.fill'),chart=document.getElementById('chart');
+const bars=[];for(let i=0;i<28;i++){const e=document.createElement('i');e.className='bar';chart.appendChild(e);bars.push(e)}
+let id=0,phase=0;
+function crc8(n){let c=0;for(let i=0;i<4;i++){c^=(n>>>(i*8))&255;for(let b=0;b<8;b++)c=(c&128)?((c<<1)^7)&255:(c<<1)&255}return c}
+function paintMarker(n){const bytes=[MAGIC,n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255,crc8(n)];for(let y=0;y<8;y++)for(let x=0;x<48;x++){const v=((bytes[x>>3]>>(7-(x&7)))&1)*255,o=(y*48+x)*4;pixels[o]=pixels[o+1]=pixels[o+2]=v;pixels[o+3]=255}ctx.putImageData(imageData,0,0)}
+function tick(){id=(id+1)>>>0;phase=(phase+1)>>>0;frameEl.textContent=id.toString(16).padStart(8,'0');valueEl.textContent=(id*17>>>0).toLocaleString('en-US');fillEl.style.width=((id%1000)/10)+'%';for(let i=0;i<bars.length;i++){const v=((Math.imul(i+1,SEED)>>>0)+Math.imul(phase,31+i*7))>>>0;bars[i].style.height=(4+(v%23))+'px'}paintMarker(id);requestAnimationFrame(tick)}
+const renderer=(()=>{try{const c=document.createElement('canvas'),g=c.getContext('webgl'),ext=g&&g.getExtension('WEBGL_debug_renderer_info');return g?g.getParameter(ext?ext.UNMASKED_RENDERER_WEBGL:g.RENDERER):'unavailable'}catch(_){return'unavailable'}})();
+window.__autoresearch={width:WIDTH,height:HEIGHT,marker:MARKER,frameId:()=>id,userAgent:navigator.userAgent,webglRenderer:renderer};
+const capabilities=encodeURIComponent(JSON.stringify({userAgent:navigator.userAgent,webglRenderer:renderer}));fetch('/capabilities?data='+capabilities,{method:'GET',cache:'no-store',keepalive:true}).catch(()=>{});
+paintMarker(0);requestAnimationFrame(tick);
+})();
+</script></body></html>

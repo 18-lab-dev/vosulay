@@ -1,0 +1,21 @@
+[package]
+name = "vosulay-browser"
+version.workspace = true
+edition = "2024"
+rust-version = "1.96.1"
+license = "MIT"
+[[example]]
+name = "autoresearch_browser_windows"
+path = "examples/autoresearch_browser_windows.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+anyhow = "1.0"
+cef = { version = "=152.4.0", default-features = false, features = ["dox"] }
+serde_json = "1.0"
+url = "2.5"
+vosulay-frame = { path = "../frame" }
+
+[build-dependencies]
+serde_json = "1.0"
+sha2 = "0.10"

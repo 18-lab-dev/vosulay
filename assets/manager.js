@@ -34,17 +34,25 @@
     height: $("field-height"), scale: $("field-scale"), z_index: $("field-z"),
     opacity: $("field-opacity"), rotation: $("field-rotation")
   };
+  const enabledField = $("field-enabled");
+  enabledField.addEventListener("change", () => {
+    const overlay = selectedOverlay();
+    if (!overlay) return;
+    overlay.enabled = enabledField.checked;
+    scheduleSave(true);
+    requestRender("stageStructure", "inspector");
+  });
   const openSettings = $("open-settings");
   const settingsModal = $("settings-modal");
   const settingsForm = $("settings-form");
   const keepOverlaysInView = $("keep-overlays-in-view");
+  const fpsLimitMode = $("fps-limit-mode");
+  const fpsLimit = $("fps-limit");
   const allowUnrestrictedSharedArrayBuffer = $("allow-unrestricted-shared-array-buffer");
   const allowedIps = $("allowed-ips");
   const remoteListenHost = $("remote-listen-host");
   const remoteListenPort = $("remote-listen-port");
   const remoteAccessUrl = $("remote-access-url");
-  const remoteAccessTokenField = $("remote-access-token");
-  const regenerateRemoteAccessToken = $("regenerate-remote-access-token");
   const remoteAccessHost = $("remote-access-host");
   const hotkeyList = $("hotkey-list");
   const settingsError = $("settings-error");
@@ -59,7 +67,6 @@
   const DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute";
   const DEFAULT_REMOTE_LISTEN_HOST = "0.0.0.0";
   const DEFAULT_REMOTE_LISTEN_PORT = 5050;
-  const REMOTE_ACCESS_TOKEN_PATTERN = /^[0-9a-f]{64}$/;
   const DEFAULT_HOTKEYS = Object.freeze({
     profile_0: "Ctrl+0",
     profile_1: "Ctrl+1",
@@ -182,6 +189,7 @@
     const rotation = clamp(finite(overlay.rotation, 0), -180, 180);
     const normalized = {
       counter_id: safeId(overlay.counter_id, "missing"),
+      enabled: overlay.enabled !== false,
       top: finite(overlay.top, 0),
       left: finite(overlay.left, 0),
       width,
@@ -274,13 +282,14 @@
       version: 1,
       active_profile: ids.has(requested) ? requested : profiles[0].id,
       profiles,
+      tosu_migration_completed: Boolean(source.tosu_migration_completed),
       settings: {
+        fps_limit: Number.isInteger(sourceSettings.fps_limit)
+          && sourceSettings.fps_limit >= 0 && sourceSettings.fps_limit <= 4294967295
+          ? Math.min(sourceSettings.fps_limit, 1000000) : 0,
         always_keep_overlays_in_view: Boolean(sourceSettings.always_keep_overlays_in_view),
         allow_unrestricted_shared_array_buffer: Boolean(sourceSettings.allow_unrestricted_shared_array_buffer),
         allowed_ips: typeof sourceSettings.allowed_ips === "string" ? sourceSettings.allowed_ips : DEFAULT_ALLOWED_IPS,
-        remote_access_token: typeof sourceSettings.remote_access_token === "string"
-          && REMOTE_ACCESS_TOKEN_PATTERN.test(sourceSettings.remote_access_token)
-          ? sourceSettings.remote_access_token : "",
         remote_access_host: typeof sourceSettings.remote_access_host === "string"
           ? sourceSettings.remote_access_host : "",
         remote_listen_host: typeof sourceSettings.remote_listen_host === "string"
@@ -593,15 +602,17 @@
   }
 
   function overlayElement(overlay, details = overlayDetails(overlay)) {
-    const root = makeElement("div", `overlay${details.available ? "" : " missing"}${state.selected.has(overlay) ? " selected" : ""}`);
+    const enabled = overlay.enabled !== false;
+    const root = makeElement("div", `overlay${details.available && enabled ? "" : " missing"}${enabled ? "" : " disabled"}${state.selected.has(overlay) ? " selected" : ""}`);
     root.dataset.counterId = overlay.counter_id;
     root._vosulayOverlay = overlay;
-    root._vosulaySourceIdentity = `${details.available ? "available" : "missing"}\n${details.url || ""}\n${overlay.url ? "custom" : "counter"}`;
+    root._vosulaySourceIdentity = `${enabled}:${details.available ? "available" : "missing"}\n${details.url || ""}\n${overlay.url ? "custom" : "counter"}`;
     applyOverlayStyle(root, overlay);
 
-    if (details.available) {
+    if (enabled && details.available) {
       const frame = makeElement("iframe", "overlay-frame");
-      frame.src = details.url;
+      frame.src = typeof window.__VOSULAY_BACKEND_URL__ === "function"
+        ? window.__VOSULAY_BACKEND_URL__(details.url) : details.url;
       frame.title = details.name;
       frame.setAttribute("allow", "autoplay");
       if (overlay.url) {
@@ -611,8 +622,8 @@
       root.append(frame);
     } else {
       const missing = makeElement("div", "missing-card");
-      missing.append(makeElement("strong", "", "Counter unavailable"));
-      missing.append(makeElement("small", "", overlay.counter_id));
+      missing.append(makeElement("strong", "", enabled ? "Counter unavailable" : "Disabled"));
+      missing.append(makeElement("small", "", enabled ? overlay.counter_id : `${details.name} · disabled`));
       root.append(missing);
     }
 
@@ -641,7 +652,7 @@
 
       for (const overlay of overlays) {
         const details = overlayDetails(overlay);
-        const identity = `${details.available ? "available" : "missing"}\n${details.url || ""}\n${overlay.url ? "custom" : "counter"}`;
+        const identity = `${overlay.enabled !== false}:${details.available ? "available" : "missing"}\n${details.url || ""}\n${overlay.url ? "custom" : "counter"}`;
         let root = overlayRoots.get(overlay);
         if (root && root._vosulaySourceIdentity !== identity) {
           const replacement = overlayElement(overlay, details);
@@ -872,6 +883,7 @@
     renderInspectorText(nameField, details.name);
     urlFieldLabel.hidden = !custom;
     renderInspectorText(urlField, custom ? overlay.url : "");
+    enabledField.checked = overlay.enabled !== false;
     renderInspectorNumbers(overlay);
     $("settings").disabled = custom || !counter || !counter.has_settings;
   }
@@ -1398,6 +1410,13 @@
     closeProfileCreator();
     ipc({ type: "export-profile", profile });
   });
+  $("import-tosu-layout").addEventListener("click", () => {
+    if (!state.config) return;
+    closeSettingsModal(false);
+    closeProfileMenu();
+    closeProfileCreator();
+    ipc({ type: "import-tosu-layout" });
+  });
   profileCreate.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!state.config) return;
@@ -1577,19 +1596,13 @@
     return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : DEFAULT_REMOTE_LISTEN_PORT;
   }
 
-  function generateRemoteAccessToken() {
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-  }
 
   function renderRemoteAccessUrl() {
     if (!state.settingsDraft) return;
-    remoteAccessTokenField.value = state.settingsDraft.remote_access_token;
     const configuredHost = normalizedRemoteAccessHost(state.settingsDraft.remote_access_host);
     const port = normalizedRemoteListenPort(state.settingsDraft.remote_listen_port);
-    remoteAccessUrl.value = state.settingsDraft.remote_access_token && configuredHost
-      ? `http://${configuredHost.includes(":") && !configuredHost.startsWith("[") ? `[${configuredHost}]` : configuredHost}:${port}/access/${state.settingsDraft.remote_access_token}/overlay`
+    remoteAccessUrl.value = configuredHost
+      ? `http://${configuredHost.includes(":") && !configuredHost.startsWith("[") ? `[${configuredHost}]` : configuredHost}:${port}/overlay`
       : "Enter a valid remote host below";
   }
 
@@ -1597,6 +1610,9 @@
     if (!state.settingsDraft) return;
     keepOverlaysInView.checked = state.settingsDraft.always_keep_overlays_in_view;
     allowUnrestrictedSharedArrayBuffer.checked = state.settingsDraft.allow_unrestricted_shared_array_buffer;
+    fpsLimitMode.value = state.settingsDraft.fps_limit === 0 ? "auto" : "fixed";
+    fpsLimit.value = state.settingsDraft.fps_limit || "";
+    fpsLimit.disabled = fpsLimitMode.value !== "fixed";
     allowedIps.value = state.settingsDraft.allowed_ips;
     remoteListenHost.value = state.settingsDraft.remote_listen_host;
     remoteListenPort.value = state.settingsDraft.remote_listen_port;
@@ -1628,11 +1644,12 @@
     const settings = state.config.settings;
     state.settingsDraft = {
       always_keep_overlays_in_view: settings.always_keep_overlays_in_view,
+      fps_limit: settings.fps_limit,
       allow_unrestricted_shared_array_buffer: settings.allow_unrestricted_shared_array_buffer,
       allowed_ips: settings.allowed_ips,
       remote_listen_host: settings.remote_listen_host,
       remote_listen_port: settings.remote_listen_port,
-      remote_access_token: settings.remote_access_token,
+
       remote_access_host: settings.remote_access_host,
       hotkeys: { ...settings.hotkeys }
     };
@@ -1686,6 +1703,15 @@
   allowUnrestrictedSharedArrayBuffer.addEventListener("change", () => {
     if (state.settingsDraft) state.settingsDraft.allow_unrestricted_shared_array_buffer = allowUnrestrictedSharedArrayBuffer.checked;
   });
+  fpsLimitMode.addEventListener("change", () => {
+    fpsLimit.disabled = fpsLimitMode.value !== "fixed";
+    if (state.settingsDraft && fpsLimitMode.value === "auto") state.settingsDraft.fps_limit = 0;
+  });
+  fpsLimit.addEventListener("input", () => {
+    if (!state.settingsDraft) return;
+    const value = Number(fpsLimit.value);
+    if (Number.isInteger(value) && value >= 1 && value <= 1000000) state.settingsDraft.fps_limit = value;
+  });
   allowedIps.addEventListener("input", () => {
     if (state.settingsDraft) state.settingsDraft.allowed_ips = allowedIps.value;
   });
@@ -1706,13 +1732,6 @@
     showSettingsError(candidate && !normalizedRemoteAccessHost(candidate)
       ? "Remote host must be a hostname or IP address without a scheme, port, or path."
       : "");
-    renderRemoteAccessUrl();
-  });
-  regenerateRemoteAccessToken.addEventListener("click", () => {
-    if (!state.settingsDraft) return;
-    if (!window.confirm("Regenerate the remote access credential? Previously shared URLs will stop working.")) return;
-    state.settingsDraft.remote_access_token = generateRemoteAccessToken();
-    showSettingsError("");
     renderRemoteAccessUrl();
   });
   settingsResetHotkeys.addEventListener("click", () => {
@@ -1774,11 +1793,12 @@
     }
     state.config.settings = {
       always_keep_overlays_in_view: state.settingsDraft.always_keep_overlays_in_view,
+      fps_limit: fpsLimitMode.value === "auto" ? 0 : Number(fpsLimit.value),
       allow_unrestricted_shared_array_buffer: state.settingsDraft.allow_unrestricted_shared_array_buffer,
       allowed_ips: state.settingsDraft.allowed_ips,
       remote_listen_host: normalizedRemoteListenHost(state.settingsDraft.remote_listen_host),
       remote_listen_port: normalizedRemoteListenPort(state.settingsDraft.remote_listen_port),
-      remote_access_token: state.settingsDraft.remote_access_token,
+
       remote_access_host: normalizedHost,
       hotkeys: normalizeHotkeys(state.settingsDraft.hotkeys)
     };
@@ -2058,6 +2078,8 @@
       } else if (envelope.type === "profile-exported") {
         status.textContent = "Profile exported";
         toast("Profile exported");
+      } else if (envelope.type === "tosu-layout-imported") {
+        toast(`Imported ${envelope.profiles} tosu profile${envelope.profiles === 1 ? "" : "s"}`);
       } else if (envelope.type === "profile-import") {
         prepareProfileImport(envelope.profile);
       } else if (envelope.type === "profile-import-authorized") {

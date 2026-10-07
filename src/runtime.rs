@@ -1,0 +1,201 @@
+mod editor;
+mod host;
+mod resources;
+mod tosu;
+
+pub use host::run;
+pub use resources::ProductResources;
+
+use anyhow::{Context, Result, bail, ensure};
+use std::path::PathBuf;
+use url::Url;
+
+struct Options {
+    runtime: PathBuf,
+    config: PathBuf,
+    backend: Url,
+    fps_limit: Option<u32>,
+    pids: Vec<u32>,
+    process_names: Vec<String>,
+}
+
+impl Options {
+    fn parse() -> Result<Option<Self>> {
+        let executable = std::env::current_exe()?;
+        let directory = executable
+            .parent()
+            .context("executable has no parent directory")?;
+        let mut options = Self {
+            runtime: directory.to_owned(),
+            config: if directory.join("portable").is_file()
+                || directory.join("data/config.json").is_file()
+            {
+                directory.join("data/config.json")
+            } else {
+                crate::config::config_path()?
+            },
+            backend: Url::parse("http://127.0.0.1:24050/").expect("default backend URL is valid"),
+            fps_limit: None,
+            pids: Vec::new(),
+            process_names: Vec::new(),
+        };
+        let mut benchmark_uncapped = false;
+        let mut arguments = std::env::args().skip(1);
+        while let Some(argument) = arguments.next() {
+            match argument.as_str() {
+                "--help" | "-h" => {
+                    println!(
+                        "vosulay {}\n\nUsage: vosulay [options]\n  --vosu-url, -t URL    vosu or tosu-compatible backend (default http://127.0.0.1:24050/)\n  --fps-limit, -f FPS   auto/0 or a positive cap (default display refresh)\n  --benchmark-uncapped  Disable Chromium pacing; use minimum positive OSR interval\n  --pid PID            Additional supported game process; repeatable\n  --process-name NAME  Additional supported game executable; repeatable\n  --config PATH        Configuration file (default user configuration directory)\n  --cef-dir PATH       Packaged CEF directory (default beside executable)\n  --version            Product version\n\nCtrl+Shift+Space toggles editing in game. Escape leaves edit mode.",
+                        env!("CARGO_PKG_VERSION")
+                    );
+                    return Ok(None);
+                }
+                "--version" | "-v" => {
+                    println!("vosulay {}", env!("CARGO_PKG_VERSION"));
+                    return Ok(None);
+                }
+                "--vosu-url" | "-t" => {
+                    options.backend =
+                        Url::parse(&arguments.next().context("backend URL is required")?)
+                            .context("invalid backend URL")?;
+                    ensure!(
+                        matches!(options.backend.scheme(), "http" | "https")
+                            && options.backend.host_str().is_some()
+                            && options.backend.username().is_empty()
+                            && options.backend.password().is_none()
+                            && options.backend.query().is_none()
+                            && options.backend.fragment().is_none(),
+                        "backend must be an HTTP(S) URL without credentials, query, or fragment"
+                    );
+                    if !options.backend.path().ends_with('/') {
+                        options
+                            .backend
+                            .set_path(&format!("{}/", options.backend.path()));
+                    }
+                }
+                "--benchmark-uncapped" => benchmark_uncapped = true,
+                "--fps-limit" | "-f" => {
+                    let value = arguments.next().context("FPS limit is required")?;
+                    options.fps_limit = Some(parse_fps_limit(&value)?);
+                }
+                "--pid" => {
+                    let pid = arguments
+                        .next()
+                        .context("PID is required")?
+                        .parse::<u32>()
+                        .context("invalid PID")?;
+                    ensure!(pid != 0, "PID must be positive");
+                    options.pids.push(pid);
+                }
+                "--process-name" => {
+                    let name = arguments.next().context("process name is required")?;
+                    ensure!(
+                        !name.is_empty() && !name.contains(['/', '\\']),
+                        "process name must be an executable basename"
+                    );
+                    options.process_names.push(name);
+                }
+                "--config" => {
+                    options.config =
+                        PathBuf::from(arguments.next().context("configuration path is required")?)
+                }
+                "--cef-dir" => {
+                    options.runtime =
+                        PathBuf::from(arguments.next().context("CEF directory is required")?)
+                }
+                _ => bail!("unknown option {argument}; use --help"),
+            }
+        }
+        if benchmark_uncapped {
+            // CEF has no unlimited OSR sentinel: one microsecond is its smallest
+            // positive interval. This benchmark-only ceiling is not a prod cap.
+            options.fps_limit = Some(crate::config::MAX_FPS_LIMIT);
+        }
+        Ok(Some(options))
+    }
+}
+
+fn parse_fps_limit(value: &str) -> Result<u32> {
+    if value == "auto" || value == "0" {
+        return Ok(0);
+    }
+    let fps = value
+        .parse::<u32>()
+        .context("FPS limit must be auto, 0, or a positive integer")?;
+    ensure!(
+        (1..=crate::config::MAX_FPS_LIMIT).contains(&fps),
+        "FPS limit must be between 1 and {}",
+        crate::config::MAX_FPS_LIMIT
+    );
+    Ok(fps)
+}
+
+fn frame_rate(cli: Option<u32>, configured: u32, refresh_hz: f64) -> f64 {
+    let limit = cli.unwrap_or(configured);
+    if limit != 0 {
+        f64::from(limit.min(crate::config::MAX_FPS_LIMIT))
+    } else if refresh_hz.is_finite() && refresh_hz > 0.0 {
+        refresh_hz.min(f64::from(crate::config::MAX_FPS_LIMIT))
+    } else {
+        60.0
+    }
+}
+
+fn receive(browser: &vosulay_browser::OsrBrowser, envelope: &serde_json::Value) -> Result<()> {
+    browser.evaluate(&format!(
+        "window.__VOSULAY_RECEIVE__({});",
+        serde_json::to_string(envelope)?
+    ));
+    Ok(())
+}
+
+/// Entry point called only by the matching, packaged CEF sandbox bootstrap.
+///
+/// # Safety
+/// `sandbox_info` must be the live context supplied by that bootstrap.
+#[cfg(windows)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RunWinMain(
+    _instance: *mut std::ffi::c_void,
+    _command_line: *mut u16,
+    _show: i32,
+    sandbox_info: *mut u8,
+    _version_info: *mut std::ffi::c_void,
+) -> i32 {
+    // The pinned CEF bootstrap owns the main thread and sandbox context.
+    match unsafe { run(sandbox_info) } {
+        Ok(code) => code,
+        Err(error) => {
+            eprintln!("{error:#}");
+            // A failed bounded shutdown must not unload Rust while a native
+            // dialog/worker remains live. Process exit also releases game input.
+            std::process::exit(1);
+        }
+    }
+}
+#[cfg(test)]
+mod fps_tests {
+    use super::*;
+
+    #[test]
+    fn explicit_auto_overrides_persisted_fixed_rate_and_tracks_monitor_changes() {
+        assert_eq!(frame_rate(None, 144, 59.94), 144.0);
+        assert_eq!(frame_rate(Some(0), 144, 59.94), 59.94);
+        assert_eq!(frame_rate(Some(0), 144, 240.0), 240.0);
+        assert_eq!(frame_rate(Some(120), 144, 240.0), 120.0);
+        assert_eq!(frame_rate(None, 0, 240.0), 240.0);
+        assert_eq!(frame_rate(None, 0, f64::NAN), 60.0);
+    }
+
+    #[test]
+    fn caps_with_a_zero_cef_interval_are_rejected() {
+        assert_eq!(parse_fps_limit("auto").unwrap(), 0);
+        assert_eq!(
+            parse_fps_limit("1000000").unwrap(),
+            crate::config::MAX_FPS_LIMIT
+        );
+        for value in ["1000001", "-1", "1.5", "", "unlimited"] {
+            assert!(parse_fps_limit(value).is_err(), "{value}");
+        }
+    }
+}

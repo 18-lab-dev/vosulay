@@ -38,6 +38,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-stro
 .missing-card { opacity: var(--overlay-opacity, 1); }
 body.editing .overlay.missing .missing-card { display: flex; }
 .missing-card small { color: #d9a7af; }
+.enabled-control { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; }
+.enabled-control input { accent-color: var(--accent); }
+body.editing .overlay.disabled .missing-card { display: flex; border-color: rgba(255,255,255,.5); color: var(--text); background: rgba(25,29,40,.92); }
 
 #editor[hidden], #inspector[hidden] { display: none; }
 body.editing #stage { background: rgba(5, 7, 12, .30); }
@@ -198,6 +201,12 @@ button:disabled { opacity: .42; cursor: default; }
   background: rgba(255,255,255,.055); color: var(--text); font: inherit; scrollbar-width: thin;
 }
 .settings-field textarea:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+#fps-limit-mode, #fps-limit {
+  margin-top: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px;
+  background: rgba(255,255,255,.055); color: var(--text); font: inherit;
+}
+#fps-limit-mode { margin-right: 7px; }
+#fps-limit { width: 110px; }
 .settings-field-row { display: flex; align-items: center; gap: 7px; }
 .settings-field-row input { flex: 1 1 auto; min-width: 0; }
 .settings-field-row button { flex: 0 0 auto; white-space: nowrap; }

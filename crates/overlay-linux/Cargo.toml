@@ -1,0 +1,23 @@
+[package]
+name = "vosulay-overlay"
+version.workspace = true
+edition = "2024"
+rust-version = "1.96.1"
+license = "MIT"
+
+[lib]
+name = "vosulay_overlay"
+crate-type = ["cdylib", "rlib"]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ash = "0.38"
+libc = "0.2"
+parking_lot = "0.12"
+vosulay-frame = { path = "../frame" }
+vosulay-transport = { path = "../frame-transport" }
+
+[build-dependencies]
+naga = { version = "23", features = ["glsl-in", "spv-out"] }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+tempfile = "3.20"

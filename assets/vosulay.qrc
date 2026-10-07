@@ -1,5 +1,0 @@
-<RCC>
-  <qresource prefix="/vosulay">
-    <file alias="vosulay-app-icon.png">branding/vosulay-app-icon.png</file>
-  </qresource>
-</RCC>

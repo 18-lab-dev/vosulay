@@ -15,34 +15,30 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
-    timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: windows
+    timeout-minutes: 60
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: windows/package-lock.json
+          python-version: "3.12"
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.96.1 --profile minimal --target x86_64-pc-windows-msvc
+          rustup default 1.96.1
 
-      - name: Build Windows installer and portable distributions
-        run: npm run dist:win
+      - name: Acquire CEF, build client, and package portable runtime
+        run: python tools/cef/package_windows.py dist/package
 
-      - name: Publish release with Windows distributions
+      - name: Publish release with portable Windows package
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "$env:GITHUB_REF_NAME"
-          --verify-tag
-          --title "vosulay $env:GITHUB_REF_NAME"
-          --generate-notes
-          (Get-Item dist/vosulay-*-setup.exe).FullName
-          (Get-Item dist/vosulay-*-portable.exe).FullName
+        run: |
+          $version = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages |
+            Where-Object { $_.name -eq "vosulay" } | Select-Object -First 1 -ExpandProperty version
+          $archive = "dist/vosulay-$version-windows-x86_64.zip"
+          if (-not (Test-Path $archive)) { throw "Expected package missing: $archive" }
+          gh release create "$env:GITHUB_REF_NAME" --verify-tag --title "vosulay $version" --generate-notes $archive

@@ -1,13 +1,13 @@
 # Rust build output
 /target/
+/dist/
 /CMakeFiles/
 
+# Python bytecode
+__pycache__/
+*.py[cod]
 
-# Windows Electron build output
-/windows/node_modules/
-/windows/out/
-/windows/dist/
-*.tsbuildinfo
+
 # Editor and operating-system metadata
 .idea/
 .vscode/

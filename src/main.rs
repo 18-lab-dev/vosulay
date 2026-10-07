@@ -1,39 +1,11 @@
-mod ffi;
-
-use anyhow::{Context, Result};
-use vosulay::{
-    remote::{RemoteServer, vosu_base_url_from_arguments},
-    shell_policy::should_start_remote_server,
-};
-
-fn main() -> Result<()> {
-    let arguments = std::env::args_os()
-        .map(|argument| argument.to_string_lossy().into_owned())
-        .collect::<Vec<_>>();
-    let remote_server = if should_start_remote_server(&arguments) {
-        match vosu_base_url_from_arguments(&arguments) {
-            Ok(base_url) => match RemoteServer::start(base_url) {
-                Ok(server) => Some(server),
-                Err(error) => {
-                    eprintln!("Remote overlay hosting is unavailable: {error:#}");
-                    None
-                }
-            },
-            Err(error) => {
-                eprintln!("Remote overlay hosting is unavailable: {error:#}");
-                None
-            }
+fn main() {
+    // Linux dispatches CEF subprocesses through this executable. The Windows
+    // package instead invokes RunWinMain through CEF's sandbox bootstrap.
+    match unsafe { vosulay::runtime::run(std::ptr::null_mut()) } {
+        Ok(code) => std::process::exit(code),
+        Err(error) => {
+            eprintln!("Vosulay: {error:#}");
+            std::process::exit(1);
         }
-    } else {
-        None
-    };
-    let arguments_json =
-        serde_json::to_string(&arguments).context("failed to serialize command-line arguments")?;
-    let exit_code = ffi::run_qt_application(&arguments_json);
-    drop(remote_server);
-
-    if exit_code != 0 {
-        std::process::exit(exit_code);
     }
-    Ok(())
 }

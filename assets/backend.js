@@ -1,0 +1,65 @@
+function (configuredBackend, brokerBase) {
+  if (typeof window.__VOSULAY_BACKEND_URL__ === 'function') return;
+  const backend = new URL(configuredBackend);
+  const broker = brokerBase ? new URL(brokerBase) : null;
+  if (!['http:', 'https:'].includes(backend.protocol) || backend.username || backend.password ||
+      (broker && (!['http:', 'https:'].includes(broker.protocol) || broker.username || broker.password))) {
+    throw new TypeError('Invalid Vosulay backend routing URL');
+  }
+  const manager = location.protocol === 'vosulay:' && location.host === 'manager';
+  if (!manager && location.origin !== backend.origin && location.origin !== broker?.origin) return;
+  const loopback = host => host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+  const equivalent = candidate => {
+    if (!broker || !['http:', 'https:', 'ws:', 'wss:'].includes(candidate.protocol)) return false;
+    const backendPort = backend.port || (backend.protocol === 'https:' ? '443' : '80');
+    const candidatePort = candidate.port || (candidate.protocol === 'https:' || candidate.protocol === 'wss:' ? '443' : '80');
+    const exact = candidate.hostname.toLowerCase() === backend.hostname.toLowerCase();
+    const alias = loopback(candidate.hostname.toLowerCase()) && loopback(backend.hostname.toLowerCase());
+    return (exact || alias) && candidatePort === backendPort &&
+      ((backend.protocol === 'http:' && (candidate.protocol === 'http:' || candidate.protocol === 'ws:')) ||
+       (backend.protocol === 'https:' && (candidate.protocol === 'https:' || candidate.protocol === 'wss:')));
+  };
+  const route = value => {
+    try {
+      const original = value instanceof URL ? value : new URL(String(value), document.baseURI);
+      if (!equivalent(original)) return value instanceof URL ? value.href : String(value);
+      const routed = new URL(original.href);
+      routed.protocol = original.protocol === 'ws:' || original.protocol === 'wss:'
+        ? (broker.protocol === 'https:' ? 'wss:' : 'ws:') : broker.protocol;
+      routed.host = broker.host;
+      return routed.href;
+    } catch (_) { return value; }
+  };
+  if (!manager && typeof window.COUNTER_PATH !== 'string') {
+    try {
+      const pathname = location.pathname.endsWith('/')
+        ? location.pathname : location.pathname.slice(0, location.pathname.lastIndexOf('/') + 1);
+      const counterPath = pathname.split('/').filter(Boolean).map(segment => decodeURIComponent(segment)).join('/');
+      if (counterPath) window.COUNTER_PATH = counterPath;
+    } catch (_) {}
+  }
+  Object.defineProperty(window, '__VOSULAY_BACKEND_URL__', { value: route, configurable: true });
+  if (broker) {
+    const nativeFetch = window.fetch;
+    if (typeof nativeFetch === 'function') window.fetch = function(input, init) {
+      if (input instanceof Request) {
+        const target = route(input.url);
+        if (target !== input.url) input = new Request(target, input);
+      } else input = route(input);
+      return Reflect.apply(nativeFetch, this, [input, init]);
+    };
+    const nativeOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url, ...args) {
+      return Reflect.apply(nativeOpen, this, [method, route(url), ...args]);
+    };
+    const NativeWebSocket = window.WebSocket;
+    if (typeof NativeWebSocket === 'function') {
+      window.WebSocket = new Proxy(NativeWebSocket, {
+        construct(target, args, newTarget) {
+          if (args.length === 0) return Reflect.construct(target, args, newTarget);
+          return Reflect.construct(target, [route(args[0]), ...args.slice(1)], newTarget);
+        }
+      });
+    }
+  }
+}
