@@ -3,6 +3,12 @@
 /dist/
 /CMakeFiles/
 
+# Node dependencies and retired Electron build output
+node_modules/
+/windows/dist/
+/windows/out/
+*.tsbuildinfo
+
 # Python bytecode
 __pycache__/
 *.py[cod]

@@ -439,10 +439,7 @@ impl OsrBrowser {
         let window = WindowInfo {
             windowless_rendering_enabled: 1,
             shared_texture_enabled: i32::from(options.shared_texture),
-            // Chromium 152 can retain a prior external-frame acknowledgement
-            // while OSR child sinks complete, then fail CHECK(!pending_ack_).
-            // Linux CPU OSR uses CEF's damage-driven, frame-rate-limited clock.
-            external_begin_frame_enabled: i32::from(cfg!(windows)),
+            // Let CEF's damage-driven OSR clock apply the configured frame rate.
             ..Default::default()
         };
         let mut extra_info = bridge::renderer_extra_info(options.backend_url, options.broker_url)
@@ -616,14 +613,6 @@ impl OsrBrowser {
             bail!("CEF browser closed unexpectedly");
         }
         Ok(())
-    }
-
-    #[cfg(windows)]
-    pub fn begin_frame(&self) {
-        if let Some(host) = self.browser.as_ref().and_then(ImplBrowser::host) {
-            host.send_external_begin_frame();
-            self.schedule.schedule(0);
-        }
     }
 
     pub fn resize(&self, width: u32, height: u32, scale: f32) -> Result<()> {

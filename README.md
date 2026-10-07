@@ -118,10 +118,10 @@ Run `vosulay --help` (Windows: `vosulay.exe --help`) for details.
 
 Both hosts default to the attached game window's display refresh rate.
 Automatic mode updates when the target moves between displays or its refresh
-rate changes. Linux CPU OSR uses CEF's internal, damage-driven frame scheduler;
-the injected compositor consumes the newest complete frame at game present.
-Windows requests external begin frames on display/FPS timing because
-asdf-overlay 2.1.0 exposes no present-cadence notification.
+rate changes. Both hosts use CEF's internal, damage-driven OSR frame scheduler.
+Linux's injected compositor consumes the newest complete frame at game present;
+Windows publishes completed application-owned GPU textures to asdf-overlay.
+Automatic mode applies the display rate without an external begin-frame loop.
 
 Settings → General → **FPS limit** persists either **Automatic** (the default,
 stored as `settings.fps_limit: 0`) or a **Fixed** integer cap. Saving applies it
@@ -238,6 +238,13 @@ transport counts are not delivery metrics. Actual observation cadence, skipped
 IDs, and invalid samples are retained; observed changes remain a lower bound,
 not physical scanout FPS. Linux and Windows are separate performance boundaries.
 
+Windows Desktop Duplication observes DWM composition at approximately 60 Hz.
+Removing renderer pacing does not uncap that observer. Its primary cost and
+control ratios describe display-limited samples, not uncapped rendering parity.
+A Windows throughput study needs checksum-valid pixels from the actual
+post-overlay game surface before DWM and an equivalent browser-surface boundary,
+with a fresh baseline for that changed observation path.
+
 The primary metric is `cpu_us_per_visible_update` (lower is better). Secondary
 metrics include absolute CPU, visible updates/s, matching-browser cost and
 throughput ratios, game CPU, and observation cadence. A lower cost per update
@@ -250,10 +257,10 @@ these uncapped measurements directly with earlier 60-FPS production samples.
 `--benchmark-uncapped` is testing-only: it disables Chromium frame/vsync pacing
 and overrides the normal limit with CEF's smallest positive OSR interval,
 one microsecond (a `1,000,000` Hz API ceiling, not achievable promised FPS).
-CEF has no unlimited OSR sentinel; zero selects its default rate. Linux external
-begin frames remain disabled. Production uses the persisted Settings FPS policy
-unless explicitly overridden by `--fps-limit`; testing mode overrides both and
-does not change the saved setting.
+CEF has no unlimited OSR sentinel; zero selects its default rate. External begin
+frames are disabled on both platforms. Production uses the persisted Settings
+FPS policy unless explicitly overridden by `--fps-limit`; testing mode overrides
+both and does not change the saved setting.
 
 Staging requires the verified pinned CEF SDKs and cached locked Cargo
 dependencies. Linux also stages cached Python `3.13.13`, Pillow `12.3.0`,
@@ -380,6 +387,67 @@ Evidence: `target/autoresearch-vm/runs/reports/run-0409q737/`,
 `target/autoresearch-vm/gl-state-no-wake/`, and
 `target/autoresearch-vm/no-wake-input-recovery-result.json`.
 
+### Windows internal OSR clock
+
+The native Windows diagnostic submitted **1,093,235 external begin-frame
+requests for 29,696 copied frames**. The host now uses CEF's internal OSR clock
+instead of its redundant request loop. Callback-owned texture lifetime,
+application-owned GPU copies, alpha conversion, completion deadlines, and
+consumer leases are unchanged.
+
+Three frozen uncapped pairs per generation recorded:
+
+| Windows measurement | CEF before | CEF after | Windowed control before | Windowed control after |
+| --- | ---: | ---: | ---: | ---: |
+| Process-tree CPU (% of one core) | 383.76 | 278.88 | 307.37 | 308.44 |
+| Separate injected-game CPU (% of one core) | 4.76 | 3.71 | 2.95 | 3.41 |
+| Observed changing updates/s | 59.62 | 59.74 | 45.87 | 54.51 |
+| CPU µs / observed update | 64,875 | 46,687 | 66,433 | 55,823 |
+
+Process-tree CPU fell **27.3%** and cost per observed update fell **28.0%**;
+observed delivery was effectively unchanged. The display-limited result costs
+**0.84×** its same-engine control per observed update, with **1.10×** the observed
+changing updates. The control's observed delivery varied between generations;
+each ratio uses its own paired control. These approximately 60-Hz DWM samples
+do not establish uncapped rendering parity, physical scanout, or latency.
+
+The final samples had zero invalid markers. Including skipped counter IDs gives
+median sequence advancement of **1,150.70 IDs/s** for CEF and **2,134.79 IDs/s**
+for the paired control, calculated as observed updates/s plus skipped IDs divided
+by the observation interval. The counter advances once per
+`requestAnimationFrame`; these are animation-sequence rates, not counts of
+completed, composed, or delivered frames. The desktop observer misses
+intermediate IDs; approximately 60 observed changes/s is not a renderer limit.
+
+Do not apply the CPU reduction to the earlier 60-FPS tosu comparison:
+production CPU/memory was not remeasured for this change. Linux's separate
+parity shortfall remains.
+
+Native Windows verification passed **75 tests**, workspace Clippy with
+`-D warnings`, and formatting. Editor drag/save and persisted FPS settings
+passed: Fixed 10 observed **9.96** changing updates/s; restored Automatic
+observed **45.62**, bounded by its **47.49-Hz** desktop observer.
+Actual osu!lazer Direct3D11/NVIDIA passed drag persistence, Escape release, and
+normal game keyboard input. Suspending the owned renderers while editing made
+the host exit in **4.981 seconds** with the heartbeat-expiry safety message;
+Ctrl+O opened game settings afterward without restarting the game.
+
+The packaged CEF smoke passed transparent OSR, JavaScript, secure scheme,
+native bridge, iframe pixels, WebGL, resize, and clean shutdown. On this Windows
+configuration it also obtained a non-fallback NVIDIA WebGPU adapter and completed
+compute; this does not establish Linux WebGPU adapter availability.
+
+Evidence: `target/autoresearch-vm/windows-optimization-baseline-20261007/`,
+`target/autoresearch-vm/windows-cost-profile-20261007/`,
+`target/autoresearch-vm/windows-internal-clock-20261007/`,
+`target/autoresearch-vm/windows-internal-clock-native-verification.json`,
+`target/autoresearch-vm/windows-internal-clock-fps10.observer.log`,
+`target/autoresearch-vm/windows-internal-clock-auto.observer.log`,
+`target/autoresearch-vm/windows-internal-clock-osu-failure.json`, and
+`target/autoresearch-vm/windows-internal-clock-smoke-proof/result.json`.
+Version remains **0.2.0**; the full release matrix and performance gates are
+not cleared.
+
 
 
 ## Performance validation
@@ -415,9 +483,11 @@ showed no measured CPU gain; the standard D3D11 creation flags remain in use.
 
 Fresh extracted-package active samples measured 13.19% of one logical core and
 350.1 MiB private memory for tosu, versus 15.53% and 391.3 MiB for CEF.
-A separate bounded internal-clock Windows trial used 16.76% and 374.4 MiB while
-visible, and 2.25% and 330.6 MiB while hidden. It did not demonstrate a CPU gain;
-Windows retains external begin frames. Neither trial clears the release gate.
+A separate historical, bounded internal-clock Windows trial used 16.76%
+and 374.4 MiB while visible, and 2.25% and 330.6 MiB while hidden. It did not
+demonstrate a CPU gain, so that earlier runtime retained external begin frames.
+The October 7 uncapped internal-clock change above has a different workload;
+neither establishes a cleared release gate.
 
 Separate paired OBS Game Capture recordings decoded 55.30 changing counter
 updates/second for tosu and 53.57 for the external-clock CEF host at a 60 Hz capture

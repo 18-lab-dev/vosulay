@@ -139,8 +139,6 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<()> {
         )
     }?;
     let deadline = Instant::now() + Duration::from_secs(20);
-    #[cfg(windows)]
-    let mut next_frame = Instant::now();
     let mut resized = false;
     let mut capabilities = None;
     let mut native_bridge = false;
@@ -159,11 +157,6 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<()> {
             browser.resize(384, 192, 1.0)?;
             resized = true;
         }
-        #[cfg(windows)]
-        if Instant::now() >= next_frame {
-            browser.begin_frame();
-            next_frame = Instant::now() + Duration::from_micros(16_667);
-        }
         if capabilities.is_some() && proof.borrow().resized {
             break;
         }
@@ -171,8 +164,6 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<()> {
             .next_pump_deadline()
             .unwrap_or(deadline)
             .min(deadline);
-        #[cfg(windows)]
-        let next = next.min(next_frame);
         std::thread::park_timeout(next.saturating_duration_since(Instant::now()));
     }
     browser.close()?;

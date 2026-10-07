@@ -90,10 +90,6 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         editing: false,
         visible: true,
         dialog: false,
-        #[cfg(windows)]
-        frame_interval: Duration::from_secs_f64(1.0 / initial_fps),
-        #[cfg(windows)]
-        next_frame: Instant::now(),
         next_ping: Instant::now(),
         nonce: 0,
         pending_ping: None,
@@ -142,10 +138,6 @@ struct Host<'a> {
     persisted_fps_limit: u32,
     refresh_hz: f64,
     effective_fps: f64,
-    #[cfg(windows)]
-    frame_interval: Duration,
-    #[cfg(windows)]
-    next_frame: Instant,
     next_ping: Instant,
     nonce: u64,
     pending_ping: Option<u64>,
@@ -155,13 +147,7 @@ struct Host<'a> {
 impl Host<'_> {
     fn apply_fps(&mut self) -> Result<()> {
         self.browser
-            .set_frame_rate(self.effective_fps.ceil() as u32)?;
-        #[cfg(windows)]
-        {
-            self.frame_interval = Duration::from_secs_f64(1.0 / self.effective_fps);
-            self.next_frame = Instant::now();
-        }
-        Ok(())
+            .set_frame_rate(self.effective_fps.ceil() as u32)
     }
     fn editing(&mut self, enabled: bool) -> Result<()> {
         let enabled = enabled && self.attached && self.visible && self.ready;
@@ -268,10 +254,6 @@ impl Host<'_> {
                     PlatformEvent::Attached { .. } => {
                         self.attached = true;
                         self.browser.set_visible(self.visible)?;
-                        #[cfg(windows)]
-                        {
-                            self.next_frame = Instant::now();
-                        }
                     }
                     PlatformEvent::Detached => {
                         self.attached = false;
@@ -457,12 +439,6 @@ impl Host<'_> {
                     &json!({"type":"error", "message":"Could not save edits within five seconds; reload/exit cancelled"}),
                 )?;
             }
-            #[cfg(windows)]
-            if self.attached && self.visible && now >= self.next_frame {
-                self.browser.begin_frame();
-                // One due frame, never a catch-up burst or an unbounded queue.
-                self.next_frame = next_frame_deadline(self.next_frame, now, self.frame_interval);
-            }
             // Native publishers and CEF scheduling callbacks wake this thread.
             let mut next = now + Duration::from_millis(100);
             if let Some(deadline) = self.browser.next_pump_deadline() {
@@ -471,59 +447,10 @@ impl Host<'_> {
             if self.ready {
                 next = next.min(self.next_ping);
             }
-            #[cfg(windows)]
-            if self.attached && self.visible {
-                next = next.min(self.next_frame);
-            }
             if let Some((_, _, started)) = &self.closing {
                 next = next.min(*started + Duration::from_secs(5));
             }
             thread::park_timeout(next.saturating_duration_since(Instant::now()));
         }
-    }
-}
-
-#[cfg(any(windows, test))]
-// Keep the frame clock's phase across polling jitter, skipping every missed
-// deadline in one step instead of drifting or generating catch-up bursts.
-fn next_frame_deadline(previous: Instant, now: Instant, interval: Duration) -> Instant {
-    let remainder = now.duration_since(previous).as_nanos() % interval.as_nanos();
-    now + interval - Duration::from_nanos(remainder as u64)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sixty_fps_requests_every_fourth_240_hz_present_despite_poll_jitter() {
-        let start = Instant::now();
-        let interval = Duration::from_secs_f64(1.0 / 60.0);
-        let mut deadline = start;
-        let mut requested = Vec::new();
-        for index in 0..240 {
-            let now = start
-                + Duration::from_secs_f64(f64::from(index) / 240.0)
-                + Duration::from_micros(100);
-            if now >= deadline {
-                requested.push(index);
-                deadline = next_frame_deadline(deadline, now, interval);
-            }
-        }
-        assert_eq!(requested, (0..240).step_by(4).collect::<Vec<_>>());
-    }
-
-    #[test]
-    fn stalled_clock_skips_missed_frames_without_catchup_or_phase_drift() {
-        let start = Instant::now();
-        let interval = Duration::from_millis(16);
-        let delayed = start + Duration::from_millis(503);
-        let next = next_frame_deadline(start, delayed, interval);
-        assert_eq!(next, start + Duration::from_millis(512));
-        assert!(next > delayed);
-        assert_eq!(
-            next_frame_deadline(next, next, interval),
-            start + Duration::from_millis(528)
-        );
     }
 }
