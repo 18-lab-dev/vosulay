@@ -678,6 +678,11 @@ counter identity and dimensions; real game pointer input worked after release.
 
 [OpenWiki](openwiki/quickstart.md) contains detailed engineering documentation, but its generated pages await manual regeneration for the CEF cutover and still describe the retired Qt/Electron hosts. Use the current runtime, build, and verification instructions above until it is regenerated.
 
+Regenerate the wiki locally from the umbrella repository root with
+`openwiki code --update --print`, using the installed CLI and local OpenCode Go
+subscription. Scheduled and manually dispatched OpenWiki GitHub Actions are
+retired; do not restore them or hand-edit generated wiki pages.
+
 ## Security
 
 `vosulay-overlay` local HTML overlays run in a secure context, but overlay pages are not cross-origin isolated. As a result, `SharedArrayBuffer` is unavailable by default.
