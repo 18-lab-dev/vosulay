@@ -2863,8 +2863,8 @@ dependencies = [
  "anyhow",
  "cef",
  "serde_json",
- "sha2",
  "url",
+ "vosulay-cef-tools",
  "vosulay-frame",
 ]
 
@@ -2876,6 +2876,23 @@ dependencies = [
  "serde_json",
  "vosulay-browser",
  "vosulay-frame",
+]
+
+[[package]]
+name = "vosulay-cef-tools"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "bzip2",
+ "crc32fast",
+ "flate2",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2",
+ "tar",
+ "tempfile",
+ "ureq",
 ]
 
 [[package]]

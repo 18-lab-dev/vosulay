@@ -1,0 +1,203 @@
+use anyhow::{Context, Result, bail};
+use serde::Serialize;
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
+
+use crate::{files, pins, verify_runtime};
+
+#[path = "zip.rs"]
+mod zip;
+
+#[derive(Serialize)]
+struct Manifest<'a> {
+    product_version: &'a str,
+    cef_version: &'a str,
+    platform: &'a str,
+    archive: &'a str,
+    archive_sha256: &'a str,
+    runtime_sha256: BTreeMap<String, String>,
+}
+
+pub fn package_runtime(
+    platform: &str,
+    cef: &Path,
+    output: &Path,
+    executables: &[PathBuf],
+    overlays: &[PathBuf],
+    client: Option<&Path>,
+) -> Result<()> {
+    let receipt = verify_runtime(cef, platform)?;
+    let pins = pins()?;
+    let pin = pins
+        .platforms
+        .get(platform)
+        .with_context(|| format!("unsupported CEF platform: {platform}"))?;
+
+    if output.exists() {
+        bail!("output already exists: {}", output.display());
+    }
+    if let Some(client) = client
+        && (platform != "windows-x86_64"
+            || !client
+                .extension()
+                .is_some_and(|ext| ext.to_string_lossy().eq_ignore_ascii_case("dll"))
+            || !client.is_file()
+            || client.symlink_metadata()?.file_type().is_symlink())
+    {
+        bail!(
+            "--client requires a regular Windows client DLL: {}",
+            client.display()
+        );
+    }
+    if let Some(parent) = output.parent().filter(|path| !path.as_os_str().is_empty()) {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("creating package parent {}", parent.display()))?;
+    }
+    fs::create_dir(output)
+        .with_context(|| format!("creating package directory {}", output.display()))?;
+
+    let result = (|| -> Result<()> {
+        for name in &pin.package_release_files {
+            copy_file(&cef.join("Release").join(name), &output.join(name))?;
+        }
+        for name in &pin.package_resources {
+            copy_tree(&cef.join("Resources").join(name), &output.join(name))?;
+        }
+        for name in ["LICENSE.txt", "CREDITS.html"] {
+            copy_file(&cef.join(name), &output.join(name))?;
+        }
+
+        for executable in executables {
+            check_input(executable)?;
+            if !executable.is_file() {
+                bail!(
+                    "executable input must be a regular file: {}",
+                    executable.display()
+                );
+            }
+            let basename = executable
+                .file_name()
+                .context("executable has no basename")?;
+            copy_file(executable, &output.join(basename))?;
+        }
+        if let Some(client) = client {
+            let client_name = client.file_name().context("client has no basename")?;
+            let bootstrap_name = client
+                .with_extension("exe")
+                .file_name()
+                .context("client has no basename")?
+                .to_os_string();
+            for (source, basename) in [
+                (client.to_path_buf(), client_name.to_os_string()),
+                (cef.join("Release/bootstrap.exe"), bootstrap_name),
+            ] {
+                copy_file(&source, &output.join(basename))?;
+            }
+        }
+        for overlay in overlays {
+            check_input(overlay)?;
+            let basename = overlay.file_name().context("overlay has no basename")?;
+            copy_tree(overlay, &output.join(basename))?;
+        }
+
+        let manifest_path = output.join("vosulay-cef.json");
+        if manifest_path.exists() {
+            bail!("duplicate reserved package basename: vosulay-cef.json");
+        }
+        let mut hashes = BTreeMap::new();
+        for file in files(output)? {
+            let relative = file
+                .strip_prefix(output)?
+                .to_str()
+                .context("package path is not valid UTF-8")?;
+            let name = if cfg!(windows) {
+                relative.replace('\\', "/")
+            } else {
+                relative.to_owned()
+            };
+            hashes.insert(name, crate::sha256(&file)?);
+        }
+        let manifest = Manifest {
+            product_version: &receipt.product_version,
+            cef_version: &receipt.cef_version,
+            platform,
+            archive: &receipt.archive,
+            archive_sha256: &receipt.archive_sha256,
+            runtime_sha256: hashes,
+        };
+        let mut bytes = serde_json::to_vec_pretty(&manifest)?;
+        bytes.push(b'\n');
+        fs::write(manifest_path, bytes)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_dir_all(output);
+    }
+    result
+}
+
+/// Write a ZIP32 package containing every regular file below `root` under `vosulay/`.
+pub fn write_zip(output: &Path, root: &Path) -> Result<()> {
+    let files = files(root)?;
+    zip::write_zip(output, root, &files)
+}
+
+fn check_input(path: &Path) -> Result<()> {
+    let metadata = fs::symlink_metadata(path)
+        .with_context(|| format!("reading package input {}", path.display()))?;
+    if metadata.file_type().is_symlink() || !(metadata.is_file() || metadata.is_dir()) {
+        bail!(
+            "package input must be a regular file or directory: {}",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
+fn copy_file(source: &Path, destination: &Path) -> Result<()> {
+    let metadata = fs::symlink_metadata(source)
+        .with_context(|| format!("required package file missing: {}", source.display()))?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        bail!(
+            "package source must be a regular file: {}",
+            source.display()
+        );
+    }
+    if destination.exists() {
+        bail!(
+            "duplicate package basename: {}",
+            destination.file_name().unwrap().to_string_lossy()
+        );
+    }
+    fs::copy(source, destination).with_context(|| format!("copying {}", source.display()))?;
+    Ok(())
+}
+
+fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
+    let metadata = fs::symlink_metadata(source)
+        .with_context(|| format!("reading package input {}", source.display()))?;
+    if metadata.file_type().is_symlink() {
+        bail!("package input contains symlink: {}", source.display());
+    }
+    if destination.exists() {
+        bail!(
+            "duplicate package basename: {}",
+            destination.file_name().unwrap().to_string_lossy()
+        );
+    }
+    if metadata.is_file() {
+        return copy_file(source, destination);
+    }
+    if !metadata.is_dir() {
+        bail!("package input is not regular: {}", source.display());
+    }
+    fs::create_dir(destination).with_context(|| format!("creating {}", destination.display()))?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        copy_tree(&entry.path(), &destination.join(entry.file_name()))?;
+    }
+    Ok(())
+}

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/browser-cef", "crates/cef-smoke", "crates/frame", "crates/frame-transport", "crates/platform-windows", "crates/platform-linux", "crates/overlay-linux"]
+members = ["crates/browser-cef", "crates/cef-tools", "crates/cef-smoke", "crates/frame", "crates/frame-transport", "crates/platform-windows", "crates/platform-linux", "crates/overlay-linux"]
 default-members = ["."]
 resolver = "3"
 

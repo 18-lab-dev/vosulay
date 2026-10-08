@@ -29,22 +29,37 @@ Extract the complete Linux runtime package and run `./vosulay`. Keep the CEF
 libraries, resources, locales, sandbox helper, and `libvosulay_overlay.so`
 beside the executable. Nothing is downloaded at application startup.
 
-Developers use the pinned **precompiled** CEF distribution; no Qt, Electron,
-Chromium source build, or CEF source build is required:
+With Rust 1.96.1 and the native platform toolchain installed, developers can
+build directly:
 
 ```sh
-export CEF_PATH="$(python3 tools/cef/acquire.py acquire --platform linux-x86_64)"
+cargo build
+```
+
+When `CEF_PATH` is unset, Cargo acquires the pinned **precompiled** CEF
+distribution automatically. It verifies the pinned archive size, SHA1/SHA256,
+and runtime files, then reuses the verified cache on subsequent builds.
+No Python, Qt, Electron, Chromium source build, or CEF source build is required.
+
+To build and assemble the complete portable package:
+
+```sh
 cargo build --release --locked
 cargo build --release --locked -p vosulay-overlay
-python3 tools/cef/acquire.py package --platform linux-x86_64 \
+CEF_PATH="$(cargo run --quiet --locked -p vosulay-cef-tools -- acquire --platform linux-x86_64)"
+cargo run --quiet --locked -p vosulay-cef-tools -- package --platform linux-x86_64 \
   --cef-path "$CEF_PATH" --output dist/linux \
   --exe target/release/vosulay --overlay target/release/libvosulay_overlay.so \
   --overlay crates/overlay-linux/VkLayer_vosulay_overlay.json
 ./dist/linux/vosulay
 ```
 
-The acquisition step verifies the exact archive SHA-256 and reuses the dependency
-cache. `CEF_PATH` must point to that verified distribution while compiling.
+The default CEF cache is `$XDG_CACHE_HOME/vosulay/cef`, or
+`~/.cache/vosulay/cef` when `XDG_CACHE_HOME` is unset. Cargo and packaging share
+the [Rust acquisition helper](crates/cef-tools/src/lib.rs); the first SDK
+download requires internet access. An explicit `CEF_PATH` overrides acquisition
+and must point to a verified distribution; cached and explicit-path builds need
+no network access.
 Package the complete directory rather than installing the executable alone.
 
 Vosulay discovers native same-user game processes and attempts live attachment.
@@ -94,10 +109,12 @@ Input capture/release and browser-heartbeat failures have a five-second bound.
 Failure releases capture or terminates vosulay so the injected connection closes
 and game input recovers. Restart vosulay to attach again.
 
-To build and package on Windows with Python 3.12, Rust 1.96.1, and MSVC:
+Plain `cargo build` also acquires the pinned Windows CEF distribution
+automatically when `CEF_PATH` is unset. To build and package on Windows with
+Rust 1.96.1 and the native MSVC toolchain:
 
 ```powershell
-python tools/cef/package_windows.py dist/package
+cargo run --locked -p vosulay-cef-tools -- package-windows dist/package
 ```
 
 The helper acquires and verifies cached pinned CEF/asdf assets **before** building
@@ -569,8 +586,10 @@ See [Testing guidance](openwiki/testing/guidance.md) for the development and ver
 The `vosulay-cef-smoke` binary verifies transparent OSR, secure JavaScript,
 native manager-bridge initialization, iframe pixels, WebGL, resize, and clean
 shutdown. It also checks WebGPU compute when Chromium exposes an adapter.
-[CEF acquisition and packaging](tools/cef/acquire.py) use the exact precompiled
-versions and digests in [the runtime pins](tools/cef/pins.json).
+[Rust CEF acquisition and packaging](crates/cef-tools) use the exact precompiled
+versions and digests in [the runtime pins](tools/cef/pins.json), sharing the same
+verification code with Cargo's build script. Build and packaging need no Python;
+the benchmark and private smoke runners still use Python.
 [The private Linux smoke runner](tools/cef/private-smoke.py) uses an isolated
 Xvfb display instead of opening test windows on the working desktop.
 
@@ -582,9 +601,10 @@ recovery, selected-subscription deltas/removals/errors, proxy responses, and
 remote/local-resource authorization.
 
 The native Windows CEF host builds with `cargo build -p vosulay --lib`.
-Package the resulting `vosulay.dll` with `python3 tools/cef/acquire.py package
---platform windows-x86_64 --output DIR --client PATH --overlay ASDF_X64_DLL
---overlay ASDF_X86_DLL`; the pinned CEF bootstrap supplies `vosulay.exe`.
+Package the resulting `vosulay.dll` with `cargo run --locked -p vosulay-cef-tools
+-- package --platform windows-x86_64 --cef-path CEF_DIRECTORY --output DIR
+--client PATH --overlay ASDF_X64_DLL --overlay ASDF_X86_DLL`; the pinned CEF
+bootstrap supplies `vosulay.exe`.
 The [native compositor](crates/platform-windows/src/d3d11.rs) copies CEF's
 callback-borrowed D3D11 texture into reusable application-owned GPU textures;
 the normal Windows path rejects CPU frames.

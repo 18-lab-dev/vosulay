@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import math
 import os
@@ -50,12 +49,9 @@ def run(command, **kwargs):
 
 
 def prepare(args):
-    spec = importlib.util.spec_from_file_location("cef_acquire", ROOT / "tools/cef/acquire.py")
-    acquire = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(acquire)
     args.cef_dir = args.cef_dir.resolve(strict=True)
-    acquire.verify_tree(args.cef_dir, PIN)
-    acquire.verify_receipt(args.cef_dir, "linux-x86_64", PIN)
+    run(["cargo", "run", "--offline", "--locked", "-p", "vosulay-cef-tools", "--",
+         "verify", "--platform", "linux-x86_64", "--cef-path", args.cef_dir], cwd=ROOT)
     if not (args.weston / "bin/weston").is_file():
         raise RuntimeError(f"private headless Weston is missing: {args.weston}; set --weston to the extracted package usr directory")
     args.weston = args.weston.resolve(strict=True)
