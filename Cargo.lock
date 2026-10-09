@@ -2850,8 +2850,11 @@ dependencies = [
  "ureq",
  "url",
  "vosulay-browser",
+ "vosulay-cef-tools",
  "vosulay-frame",
  "vosulay-linux",
+ "vosulay-lookup",
+ "vosulay-overlay",
  "vosulay-windows",
  "windows",
 ]
@@ -2913,6 +2916,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "vosulay-lookup"
+version = "0.2.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "vosulay-overlay"
 version = "0.2.0"
 dependencies = [
@@ -2922,6 +2932,7 @@ dependencies = [
  "parking_lot",
  "tempfile",
  "vosulay-frame",
+ "vosulay-lookup",
  "vosulay-transport",
 ]
 

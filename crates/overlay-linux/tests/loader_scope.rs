@@ -43,11 +43,15 @@ fn preload_preserves_native_caller_scope_and_explicit_library_identity() {
     compile(&fixtures.join("loader_driver.c"), &driver, false, None);
     let executable = std::env::current_exe().unwrap();
     let overlay = executable.parent().unwrap().join("libvosulay_overlay.so");
+    let lookup = executable.parent().unwrap().join("libvosulay_lookup.so");
     for scope in ["next", "local", "explicit"] {
         let result = Command::new(&driver)
             .args([scope, caller.to_str().unwrap(), provider.to_str().unwrap()])
             .arg(&overlay)
-            .env("LD_PRELOAD", &overlay)
+            .env(
+                "LD_PRELOAD",
+                format!("{}:{}", lookup.display(), overlay.display()),
+            )
             .output()
             .unwrap();
         assert!(

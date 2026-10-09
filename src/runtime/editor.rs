@@ -7,6 +7,7 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 use std::{
+    cell::Cell,
     fmt::Write as _,
     io::Write,
     path::{Path, PathBuf},
@@ -28,6 +29,7 @@ pub(super) struct Reply {
     pub document: String,
     pub envelope: Value,
     pub dialog_closed: bool,
+    task_finished: bool,
 }
 
 pub(super) struct EditorWorker {
@@ -37,6 +39,7 @@ pub(super) struct EditorWorker {
     counters: Arc<CounterQueue>,
     counter_tx: Option<CounterSender>,
     counter_thread: Option<JoinHandle<()>>,
+    pending: Cell<usize>,
 }
 
 // At shutdown there can be one active fetch and one coalesced fetch to drain.
@@ -93,6 +96,7 @@ fn counter_worker(queue: Arc<CounterQueue>, backend: Url) {
                     document,
                     envelope,
                     dialog_closed: false,
+                    task_finished: false,
                 },
             ));
             queue.host.unpark();
@@ -136,12 +140,13 @@ impl EditorWorker {
                     })],
                     Err(error) => vec![json!({"type": "error", "message": format!("{error:#}")})],
                 };
-                if envelopes.is_empty() && dialog_closed {
-                    if replies.send(Reply { document: work.document, envelope: Value::Null, dialog_closed: true }).is_err() { break; }
+                let count = envelopes.len();
+                if count == 0 {
+                    if replies.send(Reply { document: work.document, envelope: Value::Null, dialog_closed, task_finished: true }).is_err() { break; }
                     host.unpark();
                 } else {
                     for (index, envelope) in envelopes.into_iter().enumerate() {
-                        if replies.send(Reply { document: work.document.clone(), envelope, dialog_closed: dialog_closed && index == 0 }).is_err() { return; }
+                        if replies.send(Reply { document: work.document.clone(), envelope, dialog_closed: dialog_closed && index == 0, task_finished: index + 1 == count }).is_err() { return; }
                         host.unpark();
                     }
                 }
@@ -163,6 +168,7 @@ impl EditorWorker {
             counters,
             counter_tx: Some(counter_tx),
             counter_thread: Some(counter_thread),
+            pending: Cell::new(0),
         })
     }
 
@@ -186,8 +192,11 @@ impl EditorWorker {
             return Ok(());
         }
         let document = (kind == "ready").then(|| work.document.clone());
-        tx.try_send(work)
-            .map_err(|error| anyhow::anyhow!("manager task queue unavailable: {error}"))?;
+        self.pending.set(self.pending.get() + 1);
+        if let Err(error) = tx.try_send(work) {
+            self.pending.set(self.pending.get() - 1);
+            bail!("manager task queue unavailable: {error}");
+        }
         if let Some(document) = document {
             // New documents invalidate old fetches and discover the backend without blocking saves.
             let mut state = self.counters.state.lock().expect("counter queue poisoned");
@@ -198,8 +207,14 @@ impl EditorWorker {
         }
         Ok(())
     }
+    pub fn pending_tasks(&self) -> bool {
+        self.pending.get() != 0
+    }
     pub fn next_reply(&self) -> Option<Reply> {
         if let Ok(reply) = self.rx.try_recv() {
+            if reply.task_finished {
+                self.pending.set(self.pending.get() - 1);
+            }
             return Some(reply);
         }
         let mut state = self.counters.state.lock().expect("counter queue poisoned");
@@ -279,7 +294,7 @@ impl State {
                 self.config = config;
                 self.revision += 1;
                 Ok(vec![
-                    json!({"type": "saved", "save_id": save_id, "revision": self.revision, "fps_limit": self.config.settings.fps_limit}),
+                    json!({"type": "saved", "save_id": save_id, "revision": self.revision, "fps_limit": self.config.settings.fps_limit, "allow_unrestricted_shared_array_buffer": self.config.settings.allow_unrestricted_shared_array_buffer}),
                 ])
             }
             "choose-overlay-file" => {

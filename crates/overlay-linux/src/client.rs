@@ -7,7 +7,7 @@ use std::{
 use vosulay_frame::BrowserInput;
 use vosulay_transport::{
     Connection, Consumer, ReadFrame, default_endpoint,
-    protocol::{FORMAT_BGRA, Kind, Packet, pixel_bytes},
+    protocol::{FORMAT_BGRA, Kind, Packet, focus_timestamp, pixel_bytes},
 };
 
 static ENDPOINT: OnceLock<String> = OnceLock::new();
@@ -54,9 +54,12 @@ pub(crate) struct Client {
     visible: bool,
     capture: bool,
     focused: bool,
+    focus_time: u64,
+    focus_gain: u64,
+    sent_focus: Option<u64>,
     last_receive: Instant,
     last_attempt: Option<Instant>,
-    last_surface: Option<(u32, u32, u32, bool)>,
+    last_surface: Option<(u32, u32, u32, bool, u64)>,
 }
 
 impl Client {
@@ -71,6 +74,9 @@ impl Client {
             visible: false,
             capture: false,
             focused: false,
+            focus_time: focus_timestamp(),
+            focus_gain: 0,
+            sent_focus: None,
             last_receive: Instant::now(),
             last_attempt: None,
             last_surface: None,
@@ -97,6 +103,7 @@ impl Client {
         self.connection = Some(connection);
         self.last_receive = now;
         self.last_surface = None;
+        self.sent_focus = None;
     }
     pub(crate) fn disconnect(&mut self) {
         self.capture = false;
@@ -104,6 +111,7 @@ impl Client {
         self.consumer = None;
         self.connection = None;
         self.last_surface = None;
+        self.sent_focus = None;
         self.session = 0;
         self.generation = 0;
     }
@@ -133,6 +141,7 @@ impl Client {
         if now.duration_since(self.last_receive) >= Duration::from_secs(5) {
             self.disconnect();
         }
+        self.flush_focus();
     }
     fn receive(&mut self, mut received: vosulay_transport::Received) -> io::Result<()> {
         let packet = received.packet;
@@ -147,6 +156,12 @@ impl Client {
                 self.consumer = None;
                 self.visible = false;
                 self.capture = false;
+                // A new session starts with current focus, not a stale gain
+                // retained from a dead attachment.
+                self.focus_time = focus_timestamp().max(self.focus_time.saturating_add(1));
+                self.focus_gain = if self.focused { self.focus_time } else { 0 };
+                self.sent_focus = None;
+                self.last_surface = None;
             }
             self.session = packet.session;
             return Ok(());
@@ -216,31 +231,50 @@ impl Client {
             return;
         }
         self.extent = Some((width, height));
-        self.focused = focused;
+        self.focus(focused);
         let refresh = if refresh_hz.is_finite() && refresh_hz > 0.0 {
             (refresh_hz * 1000.0).round().min(u32::MAX as f64) as u32
         } else {
             0
         };
-        let state = (width, height, refresh, focused);
+        let state = (width, height, refresh, focused, self.focus_time);
         if self.last_surface != Some(state) {
             let mut packet = Packet::new(Kind::Surface);
+            packet.sequence = self.focus_time;
             packet.width = width;
             packet.height = height;
             packet.stride = width * 4;
             packet.value[0] = self.surface;
             packet.value[1] = u64::from(refresh);
             packet.value[2] = u64::from(focused);
+            packet.value[3] = self.focus_gain;
             if self.send(packet) {
                 self.last_surface = Some(state);
+                self.sent_focus = Some(self.focus_time);
             }
         }
     }
     pub(crate) fn focus(&mut self, focused: bool) {
-        self.focused = focused;
+        if self.focused != focused {
+            self.focused = focused;
+            self.focus_time = focus_timestamp().max(self.focus_time.saturating_add(1));
+            if focused {
+                self.focus_gain = self.focus_time;
+            }
+        }
+        self.flush_focus();
+    }
+    fn flush_focus(&mut self) {
+        if self.sent_focus == Some(self.focus_time) {
+            return;
+        }
         let mut packet = Packet::new(Kind::Focus);
-        packet.code = u32::from(focused);
-        let _ = self.send(packet);
+        packet.code = u32::from(self.focused);
+        packet.sequence = self.focus_time;
+        packet.value[3] = self.focus_gain;
+        if self.send(packet) {
+            self.sent_focus = Some(self.focus_time);
+        }
     }
     pub(crate) fn visible(&self) -> bool {
         self.visible && self.connection.is_some()
@@ -286,5 +320,41 @@ impl Drop for Client {
     fn drop(&mut self) {
         let _ = self.send(Packet::new(Kind::SurfaceGone));
         self.disconnect();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Client;
+
+    #[test]
+    fn repeated_focus_observations_preserve_transition_timestamp() {
+        let mut client = Client::new(1);
+        client.focus(true);
+        let gained = client.focus_time;
+        client.focus(true);
+        assert_eq!(client.focus_time, gained);
+        assert_eq!(client.focus_gain, gained);
+        client.focus(false);
+        let lost = client.focus_time;
+        client.focus(false);
+        assert_eq!(client.focus_time, lost);
+        assert!(lost > gained);
+        assert_eq!(client.focus_gain, gained);
+    }
+
+    #[test]
+    fn undelivered_gain_then_loss_keeps_latest_gain_for_surface_retry() {
+        let mut client = Client::new(1);
+        client.focus(true);
+        let gained = client.focus_gain;
+        client.focus(false);
+        assert_eq!(client.sent_focus, None);
+        assert!(!client.focused);
+        assert_eq!(client.focus_gain, gained);
+        assert!(client.focus_time > gained);
+        client.focus(true);
+        assert!(client.focus_gain > gained);
+        assert_eq!(client.focus_gain, client.focus_time);
     }
 }

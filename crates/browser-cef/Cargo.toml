@@ -4,6 +4,7 @@ version.workspace = true
 edition = "2024"
 rust-version = "1.96.1"
 license = "MIT"
+links = "vosulay_cef"
 [[example]]
 name = "autoresearch_browser_windows"
 path = "examples/autoresearch_browser_windows.rs"

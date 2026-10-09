@@ -5,6 +5,7 @@ pub mod injector;
 use anyhow::{Context, Result, anyhow, ensure};
 use std::{
     collections::VecDeque,
+    os::fd::{AsRawFd, FromRawFd, OwnedFd},
     path::PathBuf,
     sync::{
         Arc, Mutex,
@@ -38,6 +39,8 @@ struct Shared {
     capture: AtomicBool,
     stop: AtomicBool,
     epoch: Instant,
+    wake: Arc<OwnedFd>,
+    worker_done: AtomicBool,
     heartbeat: AtomicU64,
     host: Thread,
 }
@@ -73,6 +76,7 @@ impl Shared {
     }
     fn fail(&self, error: String) {
         self.capture.store(false, Ordering::Release);
+        self.frames.wake_control();
         let mut fatal = self.fatal.lock().unwrap_or_else(|error| error.into_inner());
         if fatal.is_none() {
             *fatal = Some(error);
@@ -95,14 +99,23 @@ impl LinuxController {
         let endpoint = default_endpoint();
         let listener = Listener::bind(&endpoint)
             .context("starting Linux overlay endpoint (another vosulay may be running)")?;
+        let fd = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) };
+        ensure!(
+            fd >= 0,
+            "creating control wake descriptor: {}",
+            std::io::Error::last_os_error()
+        );
+        let wake = Arc::new(unsafe { OwnedFd::from_raw_fd(fd) });
         let shared = Arc::new(Shared {
-            frames: Arc::new(FrameMailbox::default()),
+            frames: Arc::new(FrameMailbox::with_wake(wake.clone())),
             events: Mutex::new(VecDeque::with_capacity(MAX_EVENTS)),
             viewport: Mutex::new(None),
             fatal: Mutex::new(None),
             focused: AtomicBool::new(false),
             capture: AtomicBool::new(false),
             stop: AtomicBool::new(false),
+            wake,
+            worker_done: AtomicBool::new(false),
             epoch: Instant::now(),
             heartbeat: AtomicU64::new(1),
             host: thread::current(),
@@ -114,6 +127,8 @@ impl LinuxController {
                 if let Err(error) = worker_main(options, endpoint, listener, &worker_shared) {
                     worker_shared.fail(format!("{error:#}"));
                 }
+                worker_shared.worker_done.store(true, Ordering::Release);
+                worker_shared.host.unpark();
             })?;
         Ok(Self {
             shared,
@@ -171,6 +186,7 @@ impl LinuxController {
             );
         }
         self.shared.capture.store(enabled, Ordering::Release);
+        self.shared.frames.wake_control();
         Ok(())
     }
     /// Update only after a nonce-matched heartbeat from the trusted manager page.
@@ -178,19 +194,20 @@ impl LinuxController {
         self.shared
             .heartbeat
             .store(self.shared.now(), Ordering::Release);
+        self.shared.frames.wake_control();
     }
     pub fn shutdown(&mut self) -> Result<()> {
         self.shared.capture.store(false, Ordering::Release);
         self.shared.stop.store(true, Ordering::Release);
         if let Some(worker) = self.worker.take() {
-            worker.thread().unpark();
+            self.shared.frames.wake_control();
             let deadline = Instant::now() + DEADLINE;
-            while !worker.is_finished() {
+            while !self.shared.worker_done.load(Ordering::Acquire) {
                 ensure!(
                     Instant::now() < deadline,
                     "Linux overlay shutdown exceeded five seconds"
                 );
-                thread::park_timeout(Duration::from_millis(1));
+                thread::park_timeout(deadline.saturating_duration_since(Instant::now()));
             }
             worker
                 .join()
@@ -212,9 +229,10 @@ struct Peer {
     session: u64,
     surface: u64,
     viewport: Option<Viewport>,
-    focused: bool,
+    focus: FocusState,
     alive: bool,
     hello: bool,
+    blocked: bool,
     sent_generation: u64,
     sent_visible: Option<bool>,
     sent_capture: Option<bool>,
@@ -227,7 +245,10 @@ impl Peer {
         packet.surface = self.surface;
         match self.connection.send(&packet, descriptors) {
             Ok(()) => true,
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => false,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                self.blocked = true;
+                false
+            }
             Err(_) => {
                 self.alive = false;
                 false
@@ -238,6 +259,43 @@ impl Peer {
         let mut packet = Packet::new(kind);
         packet.code = u32::from(value);
         self.send(packet, &[])
+    }
+}
+
+#[derive(Default)]
+struct FocusState {
+    focused: bool,
+    timestamp: u64,
+    gained: u64,
+}
+impl FocusState {
+    fn observe(&mut self, focused: bool, timestamp: u64, gained: u64) {
+        if timestamp > self.timestamp {
+            self.focused = focused;
+            self.timestamp = timestamp;
+            self.gained = gained;
+        }
+    }
+}
+
+#[derive(Default)]
+struct FocusSelection {
+    active: Option<u64>,
+    newest: Option<(u64, u64)>,
+}
+impl FocusSelection {
+    fn observe(&mut self, id: u64, gained: u64) {
+        let order = (gained, id);
+        if gained != 0 && self.newest.is_none_or(|newest| order > newest) {
+            self.newest = Some(order);
+            self.active = Some(id);
+        }
+    }
+    fn remove(&mut self, id: u64) {
+        if self.active == Some(id) {
+            self.active = None;
+        }
+        // Keep the watermark: an old unfocused peer must not replace a dead game.
     }
 }
 
@@ -253,6 +311,7 @@ fn worker_main(
         ^ (u64::from(std::process::id()) << 32);
     let session = session.max(1);
     let mut active = None;
+    let mut selection = FocusSelection::default();
     let mut next_discovery = Instant::now();
     let mut attempted = Vec::<(u32, u64)>::new();
     while !shared.stop.load(Ordering::Acquire) {
@@ -276,9 +335,10 @@ fn worker_main(
                 session,
                 surface: 0,
                 viewport: None,
-                focused: false,
+                focus: FocusState::default(),
                 alive: true,
                 hello: false,
+                blocked: false,
                 sent_generation: 0,
                 sent_visible: None,
                 sent_capture: None,
@@ -289,7 +349,6 @@ fn worker_main(
                 .checked_add(1)
                 .context("Linux peer identity exhausted")?;
         }
-        let mut select = None;
         for peer in &mut peers {
             for _ in 0..64 {
                 let message = match peer.connection.recv() {
@@ -301,14 +360,14 @@ fn worker_main(
                     }
                 };
                 if message.kind == Kind::Hello {
-                    if message.value[0] != u64::from(peer.pid) || message.surface == 0 {
+                    if message.value[0] != u64::from(peer.pid)
+                        || message.surface == 0
+                        || peer.surface != 0
+                    {
                         peer.alive = false;
                         break;
                     }
                     peer.surface = message.surface;
-                    let mut hello = Packet::new(Kind::Hello);
-                    hello.value[0] = u64::from(std::process::id());
-                    peer.hello = peer.send(hello, &[]);
                     continue;
                 }
                 if !peer.hello || message.session != session || message.surface != peer.surface {
@@ -339,18 +398,15 @@ fn worker_main(
                             shared.host.unpark();
                         }
                         peer.viewport = Some(viewport);
-                        let was_focused = peer.focused;
-                        peer.focused = message.value[2] == 1;
-                        if peer.focused && (active.is_none() || !was_focused) {
-                            select = Some(peer.id);
-                        }
+                        peer.focus.observe(
+                            message.value[2] == 1,
+                            message.sequence,
+                            message.value[3],
+                        );
                     }
                     Kind::Focus => {
-                        let was_focused = peer.focused;
-                        peer.focused = message.code == 1;
-                        if peer.focused && !was_focused && peer.viewport.is_some() {
-                            select = Some(peer.id);
-                        }
+                        peer.focus
+                            .observe(message.code == 1, message.sequence, message.value[3]);
                     }
                     Kind::Input if active == Some(peer.id) => {
                         let input = message.browser_input()?;
@@ -369,7 +425,7 @@ fn worker_main(
                                 && modifiers.control
                                 && modifiers.shift
                                 && !modifiers.alt
-                                && peer.focused
+                                && peer.focus.focused
                             {
                                 if !peer.toggle_down {
                                     shared.event(PlatformEvent::ShortcutToggleEdit);
@@ -392,29 +448,34 @@ fn worker_main(
                 }
             }
         }
-        if let Some(id) = select
-            && active != Some(id)
-        {
+        for peer in &peers {
+            if !peer.alive {
+                selection.remove(peer.id);
+            }
+        }
+        for peer in &peers {
+            if peer.alive && peer.viewport.is_some() {
+                selection.observe(peer.id, peer.focus.gained);
+            }
+        }
+        if active != selection.active {
             shared.capture.store(false, Ordering::Release);
-            active = Some(id);
-            if let Some(peer) = peers.iter().find(|peer| peer.id == id && peer.alive) {
+            active = selection.active;
+            if let Some(peer) = active.and_then(|id| peers.iter().find(|peer| peer.id == id)) {
                 shared.event(PlatformEvent::Attached { pid: peer.pid });
                 *shared
                     .viewport
                     .lock()
                     .unwrap_or_else(|error| error.into_inner()) = peer.viewport;
                 shared.host.unpark();
+            } else {
+                shared.focused.store(false, Ordering::Release);
+                shared.event(PlatformEvent::Detached);
             }
-        }
-        if active.is_some_and(|id| !peers.iter().any(|peer| peer.id == id && peer.alive)) {
-            active = None;
-            shared.capture.store(false, Ordering::Release);
-            shared.focused.store(false, Ordering::Release);
-            shared.event(PlatformEvent::Detached);
         }
         let focused = active
             .and_then(|id| peers.iter().find(|peer| peer.id == id))
-            .is_some_and(|peer| peer.focused);
+            .is_some_and(|peer| peer.focus.focused);
         if shared.focused.swap(focused, Ordering::AcqRel) != focused {
             shared.host.unpark();
         }
@@ -431,8 +492,20 @@ fn worker_main(
         let capture = shared.capture.load(Ordering::Acquire);
         let ring = shared.frames.snapshot()?;
         for peer in &mut peers {
-            if !peer.alive || !peer.hello {
+            peer.blocked = false;
+            if !peer.alive {
                 continue;
+            }
+            if !peer.hello {
+                if peer.surface == 0 {
+                    continue;
+                }
+                let mut hello = Packet::new(Kind::Hello);
+                hello.value[0] = u64::from(std::process::id());
+                if !peer.send(hello, &[]) {
+                    continue;
+                }
+                peer.hello = true;
             }
             let visible = active == Some(peer.id) && shared.frames.visible();
             if peer.sent_visible != Some(visible) {
@@ -468,12 +541,37 @@ fn worker_main(
                 peer.next_ping = now + Duration::from_millis(100);
             }
         }
+        for peer in &peers {
+            if !peer.alive {
+                selection.remove(peer.id);
+            }
+        }
+        if active != selection.active {
+            active = selection.active;
+            shared.capture.store(false, Ordering::Release);
+            shared.focused.store(false, Ordering::Release);
+            shared.event(PlatformEvent::Detached);
+        }
         peers.retain(|peer| peer.alive);
         if now >= next_discovery {
             discover_and_attach(&options, &endpoint, &peers, &mut attempted, shared);
             next_discovery = now + Duration::from_secs(1);
         }
-        thread::park_timeout(Duration::from_millis(1));
+        let mut deadline = next_discovery;
+        for peer in &peers {
+            if peer.hello && !peer.blocked {
+                deadline = deadline.min(peer.next_ping);
+            }
+        }
+        if capture {
+            let remaining = (DEADLINE.as_millis() as u64).saturating_sub(
+                shared
+                    .now()
+                    .saturating_sub(shared.heartbeat.load(Ordering::Acquire)),
+            );
+            deadline = deadline.min(Instant::now() + Duration::from_millis(remaining));
+        }
+        wait_control(&listener, &peers, &shared.wake, deadline)?;
     }
     for peer in &mut peers {
         let _ = peer.boolean(Kind::Capture, false);
@@ -482,6 +580,68 @@ fn worker_main(
     // Socket close immediately fails open at the next input poll/present; the
     // injected component also has its own five-second silence expiration.
     drop(peers);
+    Ok(())
+}
+
+fn wait_control(
+    listener: &Listener,
+    peers: &[Peer],
+    wake: &OwnedFd,
+    deadline: Instant,
+) -> Result<()> {
+    let mut descriptors = [libc::pollfd {
+        fd: -1,
+        events: 0,
+        revents: 0,
+    }; MAX_PEERS + 2];
+    descriptors[0] = libc::pollfd {
+        fd: listener.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    descriptors[1] = libc::pollfd {
+        fd: wake.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    for (descriptor, peer) in descriptors[2..].iter_mut().zip(peers) {
+        *descriptor = libc::pollfd {
+            fd: peer.connection.as_raw_fd(),
+            events: libc::POLLIN | if peer.blocked { libc::POLLOUT } else { 0 },
+            revents: 0,
+        };
+    }
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    let timeout = remaining
+        .as_millis()
+        .saturating_add(u128::from(
+            !remaining.subsec_nanos().is_multiple_of(1_000_000),
+        ))
+        .min(i32::MAX as u128) as i32;
+    let result = unsafe {
+        libc::poll(
+            descriptors.as_mut_ptr(),
+            (peers.len() + 2) as libc::nfds_t,
+            timeout,
+        )
+    };
+    if result < 0 {
+        let error = std::io::Error::last_os_error();
+        if error.kind() != std::io::ErrorKind::Interrupted {
+            return Err(error.into());
+        }
+    }
+    if descriptors[1].revents & libc::POLLIN != 0 {
+        let mut value = 0_u64;
+        loop {
+            let read = unsafe { libc::read(wake.as_raw_fd(), (&mut value as *mut u64).cast(), 8) };
+            if read >= 0
+                || std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted
+            {
+                break;
+            }
+        }
+    }
     Ok(())
 }
 
@@ -575,7 +735,79 @@ fn discover_and_attach(
 
 #[cfg(test)]
 mod tests {
-    use super::supported_image;
+    use super::{FocusSelection, FocusState, supported_image};
+
+    #[test]
+    fn latest_focus_gain_wins_batched_a_b_a_in_either_peer_order() {
+        let mut a = FocusState::default();
+        a.observe(true, 100, 100);
+        a.observe(false, 200, 100);
+        a.observe(true, 300, 300);
+        let mut b = FocusState::default();
+        b.observe(true, 200, 200);
+        b.observe(false, 300, 200);
+        for order in [[(1, &a), (2, &b)], [(2, &b), (1, &a)]] {
+            let mut selection = FocusSelection::default();
+            for (id, state) in order {
+                selection.observe(id, state.gained);
+            }
+            assert_eq!(selection.active, Some(1));
+        }
+    }
+
+    #[test]
+    fn unrelated_focus_loss_and_resize_retain_selected_game() {
+        let mut selection = FocusSelection::default();
+        selection.observe(1, 100);
+        selection.observe(2, 200);
+        let mut state = FocusState::default();
+        state.observe(true, 200, 200);
+        state.observe(false, 300, 200);
+        selection.observe(2, state.gained);
+        selection.observe(1, 100);
+        selection.observe(3, 0);
+        assert_eq!(selection.active, Some(2));
+        assert!(!state.focused);
+    }
+
+    #[test]
+    fn selected_death_clears_without_falling_back_to_old_focus() {
+        let mut selection = FocusSelection::default();
+        selection.observe(1, 100);
+        selection.observe(2, 200);
+        selection.remove(1);
+        assert_eq!(selection.active, Some(2));
+        selection.remove(2);
+        selection.observe(1, 100);
+        selection.observe(3, 0);
+        assert_eq!(selection.active, None);
+        selection.observe(3, 300);
+        assert_eq!(selection.active, Some(3));
+    }
+
+    #[test]
+    fn stale_surface_cannot_reverse_focus_and_coalesced_loss_retains_gain() {
+        let mut state = FocusState::default();
+        state.observe(false, 300, 200);
+        state.observe(true, 200, 200);
+        assert!(!state.focused);
+        assert_eq!(state.gained, 200);
+        let mut selection = FocusSelection::default();
+        selection.observe(1, 100);
+        selection.observe(2, state.gained);
+        assert_eq!(selection.active, Some(2));
+    }
+
+    #[test]
+    fn equal_timestamps_have_a_stable_peer_identity_tiebreak() {
+        for order in [[1, 2], [2, 1]] {
+            let mut selection = FocusSelection::default();
+            for id in order {
+                selection.observe(id, 100);
+            }
+            assert_eq!(selection.active, Some(2));
+        }
+    }
 
     #[test]
     fn discovers_native_games_and_explicit_process_names() {

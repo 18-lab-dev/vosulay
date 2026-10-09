@@ -21,6 +21,7 @@ fn native_sdl_filter_preserves_replaced_and_removed_callback_state() {
         "product overlay missing: {}",
         overlay.display()
     );
+    let lookup = overlay.with_file_name("libvosulay_lookup.so");
     let endpoint = directory.path().join("unused-overlay-endpoint");
     let mut exercised = 0;
 
@@ -50,7 +51,10 @@ fn native_sdl_filter_preserves_replaced_and_removed_callback_state() {
         );
 
         let result = Command::new(&executable)
-            .env("LD_PRELOAD", &overlay)
+            .env(
+                "LD_PRELOAD",
+                format!("{}:{}", lookup.display(), overlay.display()),
+            )
             .env("VOSULAY_ENDPOINT", &endpoint)
             .env("SDL_VIDEODRIVER", "dummy")
             .env("SDL_AUDIODRIVER", "dummy")

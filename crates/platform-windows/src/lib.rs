@@ -3,9 +3,13 @@ use std::path::PathBuf;
 #[cfg(windows)]
 mod d3d11;
 #[cfg(windows)]
+mod foreground;
+#[cfg(windows)]
 mod gpu_mailbox;
 #[cfg(windows)]
 mod platform;
+#[cfg(any(windows, test))]
+mod target_selection;
 #[cfg(windows)]
 mod tray;
 #[cfg(windows)]

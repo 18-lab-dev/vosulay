@@ -753,9 +753,14 @@ pub(crate) fn capture(window: usize) -> bool {
                 .and_then(crate::vulkan::capturing_surface)
                 .unwrap_or(false));
     sync_text_capture(window, capturing);
+    sync_cursor_capture(API.sdl3, window, capturing);
     capturing
 }
 pub(crate) fn set_focus(window: usize, value: bool) {
+    if !value {
+        release_cursor(window);
+        sync_text_capture(window, false);
+    }
     hooks::focus(window, value);
     if let Some(surface) = native_window(window) {
         crate::vulkan::focus(surface, value);
@@ -1038,33 +1043,29 @@ unsafe fn poll_real(event: *mut c_void) -> c_int {
 pub unsafe extern "C" fn SDL_GL_SwapWindow(window: *mut c_void) -> bool {
     activate();
     remember_window(window as usize);
-    if let Some(_guard) = hooks::Guard::enter() {
-        let (mut w, mut h) = (0, 0);
-        unsafe {
-            if API.sdl3 {
-                if let Some(f) = function::<
-                    unsafe extern "C" fn(*mut c_void, *mut i32, *mut i32) -> bool,
-                >(API.size)
-                {
-                    f(window, &mut w, &mut h);
-                }
-            } else if let Some(f) =
-                function::<unsafe extern "C" fn(*mut c_void, *mut i32, *mut i32)>(API.size)
+    let (mut w, mut h) = (0, 0);
+    unsafe {
+        if API.sdl3 {
+            if let Some(f) =
+                function::<unsafe extern "C" fn(*mut c_void, *mut i32, *mut i32) -> bool>(API.size)
             {
                 f(window, &mut w, &mut h);
             }
+        } else if let Some(f) =
+            function::<unsafe extern "C" fn(*mut c_void, *mut i32, *mut i32)>(API.size)
+        {
+            f(window, &mut w, &mut h);
         }
-        hooks::present_sdl(
-            window as usize,
-            w.max(0) as u32,
-            h.max(0) as u32,
-            focused(window as usize),
-        );
-        capture(window as usize);
-        unsafe { swap_real(window) }
-    } else {
-        unsafe { swap_real(window) }
     }
+    let window = window as usize;
+    capture(window);
+    hooks::with_sdl_present(
+        window,
+        w.max(0) as u32,
+        h.max(0) as u32,
+        focused(window),
+        || unsafe { swap_real(window as *mut c_void) },
+    )
 }
 unsafe fn swap_real(window: *mut c_void) -> bool {
     if API.sdl3 {
@@ -1088,6 +1089,7 @@ unsafe fn swap_real(window: *mut c_void) -> bool {
 pub unsafe extern "C" fn SDL_DestroyWindow(window: *mut c_void) {
     activate();
     sync_text_capture(window as usize, false);
+    release_cursor(window as usize);
     clear_window_key_state(window as usize);
     if let Some(state) = CAPTURED_MOTION
         .lock()
@@ -1255,6 +1257,13 @@ pub(crate) fn hooked(name: &[u8]) -> Option<*const c_void> {
         b"SDL_GetMouseState" => SDL_GetMouseState as _,
         b"SDL_GetRelativeMouseState" => SDL_GetRelativeMouseState as _,
         b"SDL_GetGlobalMouseState" => SDL_GetGlobalMouseState as _,
+        b"SDL_ShowCursor" => SDL_ShowCursor as _,
+        b"SDL_HideCursor" => SDL_HideCursor as _,
+        b"SDL_CursorVisible" => SDL_CursorVisible as _,
+        b"SDL_SetRelativeMouseMode" => SDL_SetRelativeMouseMode as _,
+        b"SDL_GetRelativeMouseMode" => SDL_GetRelativeMouseMode as _,
+        b"SDL_SetWindowRelativeMouseMode" => SDL_SetWindowRelativeMouseMode as _,
+        b"SDL_GetWindowRelativeMouseMode" => SDL_GetWindowRelativeMouseMode as _,
         _ => return None,
     })
 }
@@ -1561,6 +1570,449 @@ fn pointer_modifiers() -> InputModifiers {
     modifiers.right_button = state & 4 != 0;
     modifiers
 }
+// Cursor visibility is global within each SDL provider; SDL3 relative mode is
+// window-local. Keep requested game state separate from the editor's physical
+// state. SDL calls are main-thread operations and always run outside our locks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CursorCapture {
+    window: usize,
+    visible: Option<bool>,
+    relative: Option<bool>,
+}
+impl CursorCapture {
+    fn request_visible(&mut self, visible: bool) {
+        self.visible = Some(visible);
+    }
+
+    fn request_relative(&mut self, window: usize, relative: bool) -> bool {
+        if self.window != window {
+            return false;
+        }
+        self.relative = Some(relative);
+        true
+    }
+}
+
+#[derive(Default)]
+struct CursorState {
+    capture: Option<CursorCapture>,
+}
+impl CursorState {
+    fn release(&mut self, window: usize, focus: usize, capturing: bool) -> Option<CursorCapture> {
+        if self
+            .capture
+            .is_some_and(|state| state.window != focus || (state.window == window && !capturing))
+        {
+            self.capture.take()
+        } else {
+            None
+        }
+    }
+
+    fn release_window(&mut self, window: usize) -> Option<CursorCapture> {
+        if self.capture.is_some_and(|state| state.window == window) {
+            self.capture.take()
+        } else {
+            None
+        }
+    }
+
+    fn begin(&mut self, initial: CursorCapture) -> bool {
+        if self.capture.is_some() || initial.window == 0 {
+            return false;
+        }
+        self.capture = Some(initial);
+        true
+    }
+
+    fn visible_request(&mut self, visible: bool) -> bool {
+        if let Some(state) = self.capture.as_mut() {
+            state.request_visible(visible);
+            true
+        } else {
+            visible
+        }
+    }
+
+    fn relative_request(&mut self, window: usize, relative: bool) -> bool {
+        let captured = self
+            .capture
+            .as_mut()
+            .is_some_and(|state| state.request_relative(window, relative));
+        relative && !captured
+    }
+}
+
+struct CursorApi {
+    sdl3: bool,
+    show: usize,
+    hide: usize,
+    visible: usize,
+    set_relative: usize,
+    get_relative: usize,
+    focus: usize,
+}
+
+impl CursorApi {
+    fn load(sdl3: bool) -> Self {
+        let name = c"SDL_ShowCursor";
+        #[cfg(all(target_arch = "x86_64", target_env = "gnu"))]
+        let retained =
+            unsafe { crate::lookup::sdl_version_symbol(usize::from(sdl3), name.as_ptr()) };
+        #[cfg(not(all(target_arch = "x86_64", target_env = "gnu")))]
+        let retained: *mut c_void = std::ptr::null_mut();
+        let retained = if retained.is_null() {
+            let global = symbol(b"SDL_ShowCursor\0");
+            if provider_sdl3(global, symbol(b"SDL_GetWindowProperties\0")) == sdl3 {
+                global as *mut c_void
+            } else {
+                std::ptr::null_mut()
+            }
+        } else {
+            retained
+        };
+        // Resolve all cursor operations from the same DSO, never from a mixed
+        // global symbol scope. Retain its handle like the explicit-lookup path.
+        let mut provider: libc::Dl_info = unsafe { mem::zeroed() };
+        let path = if !retained.is_null()
+            && unsafe { libc::dladdr(retained, &mut provider) } != 0
+            && !provider.dli_fname.is_null()
+        {
+            provider.dli_fname
+        } else if sdl3 {
+            c"libSDL3.so.0".as_ptr()
+        } else {
+            c"libSDL2-2.0.so.0".as_ptr()
+        };
+        let handle =
+            unsafe { libc::dlopen(path, libc::RTLD_NOW | libc::RTLD_LOCAL | libc::RTLD_NOLOAD) };
+        let resolve = |name: &std::ffi::CStr| -> usize {
+            if handle.is_null() {
+                return 0;
+            }
+            #[cfg(all(target_arch = "x86_64", target_env = "gnu"))]
+            {
+                unsafe { crate::lookup::resolve(handle, name.as_ptr()) as usize }
+            }
+            #[cfg(not(all(target_arch = "x86_64", target_env = "gnu")))]
+            {
+                unsafe { libc::dlsym(handle, name.as_ptr()) as usize }
+            }
+        };
+        Self {
+            sdl3,
+            show: resolve(name),
+            hide: if sdl3 { resolve(c"SDL_HideCursor") } else { 0 },
+            visible: if sdl3 {
+                resolve(c"SDL_CursorVisible")
+            } else {
+                0
+            },
+            set_relative: resolve(if sdl3 {
+                c"SDL_SetWindowRelativeMouseMode"
+            } else {
+                c"SDL_SetRelativeMouseMode"
+            }),
+            get_relative: resolve(if sdl3 {
+                c"SDL_GetWindowRelativeMouseMode"
+            } else {
+                c"SDL_GetRelativeMouseMode"
+            }),
+            focus: resolve(c"SDL_GetKeyboardFocus"),
+        }
+    }
+
+    fn focus(&self) -> usize {
+        unsafe {
+            function::<GetCurrentWindow>(self.focus)
+                .map(|f| f() as usize)
+                .unwrap_or(0)
+        }
+    }
+
+    fn visible(&self) -> Option<bool> {
+        unsafe {
+            if self.sdl3 {
+                function::<unsafe extern "C" fn() -> bool>(self.visible).map(|f| f())
+            } else {
+                function::<unsafe extern "C" fn(c_int) -> c_int>(self.show).and_then(|f| {
+                    match f(-1) {
+                        value if value >= 0 => Some(value != 0),
+                        _ => None,
+                    }
+                })
+            }
+        }
+    }
+
+    fn relative(&self, window: usize) -> Option<bool> {
+        unsafe {
+            if self.sdl3 {
+                function::<unsafe extern "C" fn(*mut c_void) -> bool>(self.get_relative)
+                    .map(|f| f(window as _))
+            } else {
+                function::<unsafe extern "C" fn() -> c_int>(self.get_relative).map(|f| f() != 0)
+            }
+        }
+    }
+
+    fn set_relative(&self, window: usize, enabled: bool) -> bool {
+        unsafe {
+            if self.sdl3 {
+                function::<unsafe extern "C" fn(*mut c_void, bool) -> bool>(self.set_relative)
+                    .map(|f| f(window as _, enabled))
+                    .unwrap_or(false)
+            } else {
+                function::<unsafe extern "C" fn(c_int) -> c_int>(self.set_relative)
+                    .map(|f| f(c_int::from(enabled)) == 0)
+                    .unwrap_or(false)
+            }
+        }
+    }
+
+    fn set_visible(&self, visible: bool) -> bool {
+        unsafe {
+            if self.sdl3 {
+                function::<unsafe extern "C" fn() -> bool>(if visible {
+                    self.show
+                } else {
+                    self.hide
+                })
+                .map(|f| f())
+                .unwrap_or(false)
+            } else {
+                function::<unsafe extern "C" fn(c_int) -> c_int>(self.show)
+                    .map(|f| f(c_int::from(visible)) >= 0)
+                    .unwrap_or(false)
+            }
+        }
+    }
+
+    fn restore(&self, state: CursorCapture) {
+        if let Some(relative) = state.relative
+            && self.relative(state.window) != Some(relative)
+        {
+            self.set_relative(state.window, relative);
+        }
+        if let Some(visible) = state.visible
+            && self.visible() != Some(visible)
+        {
+            self.set_visible(visible);
+        }
+    }
+}
+
+static CURSOR_APIS: [LazyLock<CursorApi>; 2] = [
+    LazyLock::new(|| CursorApi::load(false)),
+    LazyLock::new(|| CursorApi::load(true)),
+];
+static CURSOR_STATES: LazyLock<parking_lot::Mutex<[CursorState; 2]>> =
+    LazyLock::new(|| parking_lot::Mutex::new(std::array::from_fn(|_| CursorState::default())));
+thread_local! { static CURSOR_ENTERED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+struct CursorGuard;
+impl CursorGuard {
+    fn enter() -> Option<Self> {
+        CURSOR_ENTERED.with(|entered| {
+            if entered.replace(true) {
+                None
+            } else {
+                Some(Self)
+            }
+        })
+    }
+}
+impl Drop for CursorGuard {
+    fn drop(&mut self) {
+        CURSOR_ENTERED.with(|entered| entered.set(false));
+    }
+}
+
+fn sync_cursor_capture(sdl3: bool, window: usize, capturing: bool) {
+    let Some(_guard) = CursorGuard::enter() else {
+        return;
+    };
+    let index = usize::from(sdl3);
+    let api = &*CURSOR_APIS[index];
+    let focus = api.focus();
+    let released = CURSOR_STATES.lock()[index].release(window, focus, capturing);
+    if let Some(state) = released {
+        api.restore(state);
+    }
+    if !capturing || window == 0 || window != focus || CURSOR_STATES.lock()[index].capture.is_some()
+    {
+        return;
+    }
+    // Query before disabling relative mode or showing the cursor.
+    let initial = CursorCapture {
+        window,
+        visible: api.visible(),
+        relative: api.relative(window),
+    };
+    let started = CURSOR_STATES.lock()[index].begin(initial);
+    if started {
+        if initial.relative == Some(true) {
+            api.set_relative(window, false);
+        }
+        if initial.visible == Some(false) {
+            api.set_visible(true);
+        }
+    }
+}
+
+pub(crate) fn release_cursor(window: usize) {
+    let Some(_guard) = CursorGuard::enter() else {
+        return;
+    };
+    let released: [Option<CursorCapture>; 2] = {
+        let mut states = CURSOR_STATES.lock();
+        std::array::from_fn(|index| states[index].release_window(window))
+    };
+    for (index, state) in released.into_iter().enumerate() {
+        if let Some(state) = state {
+            CURSOR_APIS[index].restore(state);
+        }
+    }
+}
+
+pub(crate) fn release_cursor_for_surface(native: u64) {
+    let windows: [Option<usize>; 2] = {
+        let states = CURSOR_STATES.lock();
+        std::array::from_fn(|index| states[index].capture.map(|state| state.window))
+    };
+    for window in windows.into_iter().flatten() {
+        if native_window(window) == Some(native) {
+            release_cursor(window);
+        }
+    }
+}
+
+fn refresh_cursor_capture(sdl3: bool) {
+    if API.sdl3 == sdl3 {
+        capture_focus();
+    }
+}
+
+pub(crate) fn show_cursor_hook(sdl3: bool) -> *const c_void {
+    if sdl3 {
+        show_cursor3 as _
+    } else {
+        show_cursor2 as _
+    }
+}
+
+// ELF interposition shares a name for incompatible prototypes. Just like
+// CreateWindow, consume the argument only for SDL2 and use typed native calls.
+static SHOW_CURSOR_SDL3: LazyLock<bool> = LazyLock::new(|| {
+    provider_sdl3(
+        symbol(b"SDL_ShowCursor\0"),
+        symbol(b"SDL_GetWindowProperties\0"),
+    )
+});
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn SDL_ShowCursor(toggle: c_int) -> c_int {
+    if *SHOW_CURSOR_SDL3 {
+        c_int::from(unsafe { show_cursor3() })
+    } else {
+        unsafe { show_cursor2(toggle) }
+    }
+}
+
+unsafe extern "C" fn show_cursor2(toggle: c_int) -> c_int {
+    activate();
+    refresh_cursor_capture(false);
+    let api = &*CURSOR_APIS[0];
+    let Some(_guard) = CursorGuard::enter() else {
+        return unsafe {
+            function::<unsafe extern "C" fn(c_int) -> c_int>(api.show)
+                .map(|f| f(toggle))
+                .unwrap_or(-1)
+        };
+    };
+    let effective = if toggle >= 0 {
+        c_int::from(CURSOR_STATES.lock()[0].visible_request(toggle != 0))
+    } else {
+        toggle
+    };
+    // SDL2 returns the visibility *before* the request, including query=-1.
+    unsafe {
+        function::<unsafe extern "C" fn(c_int) -> c_int>(api.show)
+            .map(|f| f(effective))
+            .unwrap_or(-1)
+    }
+}
+
+unsafe extern "C" fn show_cursor3() -> bool {
+    cursor_visibility3(true)
+}
+
+fn cursor_visibility3(visible: bool) -> bool {
+    activate();
+    refresh_cursor_capture(true);
+    let api = &*CURSOR_APIS[1];
+    let Some(_guard) = CursorGuard::enter() else {
+        return api.set_visible(visible);
+    };
+    let effective = CURSOR_STATES.lock()[1].visible_request(visible);
+    api.set_visible(effective)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn SDL_HideCursor() -> bool {
+    cursor_visibility3(false)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn SDL_CursorVisible() -> bool {
+    activate();
+    refresh_cursor_capture(true);
+    CURSOR_APIS[1].visible().unwrap_or(false)
+}
+
+fn relative_request(sdl3: bool, window: usize, enabled: bool) -> bool {
+    let api = &*CURSOR_APIS[usize::from(sdl3)];
+    let Some(_guard) = CursorGuard::enter() else {
+        return api.set_relative(window, enabled);
+    };
+    let effective = CURSOR_STATES.lock()[usize::from(sdl3)].relative_request(window, enabled);
+    api.set_relative(window, effective)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn SDL_SetRelativeMouseMode(enabled: c_int) -> c_int {
+    activate();
+    refresh_cursor_capture(false);
+    let window = CURSOR_APIS[0].focus();
+    if relative_request(false, window, enabled != 0) {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn SDL_GetRelativeMouseMode() -> c_int {
+    activate();
+    refresh_cursor_capture(false);
+    c_int::from(CURSOR_APIS[0].relative(0).unwrap_or(false))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn SDL_SetWindowRelativeMouseMode(
+    window: *mut c_void,
+    enabled: bool,
+) -> bool {
+    activate();
+    refresh_cursor_capture(true);
+    relative_request(true, window as usize, enabled)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn SDL_GetWindowRelativeMouseMode(window: *mut c_void) -> bool {
+    activate();
+    refresh_cursor_capture(true);
+    CURSOR_APIS[1].relative(window as usize).unwrap_or(false)
+}
+
 #[derive(Clone, Copy)]
 struct TextCapture {
     window: usize,
@@ -1576,7 +2028,7 @@ static TEXT_API: LazyLock<[usize; 3]> = LazyLock::new(|| {
     ]
 });
 fn sync_text_capture(window: usize, capturing: bool) {
-    let Some(mut captures) = TEXT_CAPTURES.try_lock() else {
+    let Some(_guard) = CursorGuard::enter() else {
         return;
     };
     let focus = unsafe {
@@ -1584,25 +2036,29 @@ fn sync_text_capture(window: usize, capturing: bool) {
             .map(|f| f() as usize)
             .unwrap_or(0)
     };
-    for capture in captures.iter_mut() {
-        if capture
-            .is_some_and(|state| state.window != focus || (!capturing && state.window == window))
-            && let Some(state) = capture.take()
-            && state.owned
-        {
-            stop_owned_text(state.window);
-        }
+    let stopped: [Option<usize>; 16] = {
+        let Some(mut captures) = TEXT_CAPTURES.try_lock() else {
+            return;
+        };
+        std::array::from_fn(|index| {
+            if captures[index].is_some_and(|state| {
+                state.window != focus || (!capturing && state.window == window)
+            }) {
+                captures[index]
+                    .take()
+                    .filter(|state| state.owned)
+                    .map(|state| state.window)
+            } else {
+                None
+            }
+        })
+    };
+    for window in stopped.into_iter().flatten() {
+        stop_owned_text(window);
     }
     if window == 0 || !capturing {
         return;
     }
-    let Some(index) = captures
-        .iter()
-        .position(|v| v.is_some_and(|v| v.window == window))
-        .or_else(|| captures.iter().position(Option::is_none))
-    else {
-        return;
-    };
     let active = unsafe {
         if API.sdl3 {
             function::<unsafe extern "C" fn(*mut c_void) -> bool>(TEXT_API[0])
@@ -1629,10 +2085,17 @@ fn sync_text_capture(window: usize, capturing: bool) {
         }
     };
     if started {
-        captures[index] = Some(TextCapture {
-            window,
-            owned: true,
-        });
+        let mut captures = TEXT_CAPTURES.lock();
+        if let Some(index) = captures
+            .iter()
+            .position(|state| state.is_some_and(|state| state.window == window))
+            .or_else(|| captures.iter().position(Option::is_none))
+        {
+            captures[index] = Some(TextCapture {
+                window,
+                owned: true,
+            });
+        }
     }
 }
 fn stop_owned_text(window: usize) {
@@ -1722,6 +2185,188 @@ mod motion_state_tests {
         assert_eq!(
             restore_relative_motion(&mut states, 2, false, 0.25, 1.0),
             (0.75, 0.75)
+        );
+    }
+}
+
+#[cfg(test)]
+mod cursor_state_tests {
+    use super::{CursorApi, CursorCapture, CursorState};
+    use std::cell::Cell;
+
+    thread_local! {
+        static VISIBLE: Cell<bool> = const { Cell::new(false) };
+        static RELATIVE: Cell<bool> = const { Cell::new(false) };
+    }
+
+    unsafe extern "C" fn show2(toggle: i32) -> i32 {
+        VISIBLE.with(|state| {
+            let previous = state.get();
+            if toggle >= 0 {
+                state.set(toggle != 0);
+            }
+            i32::from(previous)
+        })
+    }
+    unsafe extern "C" fn show3() -> bool {
+        VISIBLE.with(|state| state.set(true));
+        true
+    }
+    unsafe extern "C" fn hide3() -> bool {
+        VISIBLE.with(|state| state.set(false));
+        true
+    }
+    unsafe extern "C" fn visible3() -> bool {
+        VISIBLE.with(Cell::get)
+    }
+    unsafe extern "C" fn relative2() -> i32 {
+        RELATIVE.with(|state| i32::from(state.get()))
+    }
+    unsafe extern "C" fn set_relative2(enabled: i32) -> i32 {
+        RELATIVE.with(|state| state.set(enabled != 0));
+        0
+    }
+    unsafe extern "C" fn relative3(_: *mut libc::c_void) -> bool {
+        RELATIVE.with(Cell::get)
+    }
+    unsafe extern "C" fn set_relative3(_: *mut libc::c_void, enabled: bool) -> bool {
+        RELATIVE.with(|state| state.set(enabled));
+        true
+    }
+
+    fn api(sdl3: bool) -> CursorApi {
+        CursorApi {
+            sdl3,
+            show: if sdl3 {
+                show3 as *const () as usize
+            } else {
+                show2 as *const () as usize
+            },
+            hide: hide3 as *const () as usize,
+            visible: visible3 as *const () as usize,
+            set_relative: if sdl3 {
+                set_relative3 as *const () as usize
+            } else {
+                set_relative2 as *const () as usize
+            },
+            get_relative: if sdl3 {
+                relative3 as *const () as usize
+            } else {
+                relative2 as *const () as usize
+            },
+            focus: 0,
+        }
+    }
+
+    #[test]
+    fn restores_initial_state_and_latest_game_requests_for_both_native_abis() {
+        for sdl3 in [false, true] {
+            let api = api(sdl3);
+            for initial_visible in [false, true] {
+                for initial_relative in [false, true] {
+                    for requested in [
+                        None,
+                        Some((false, false)),
+                        Some((false, true)),
+                        Some((true, false)),
+                        Some((true, true)),
+                    ] {
+                        VISIBLE.with(|state| state.set(initial_visible));
+                        RELATIVE.with(|state| state.set(initial_relative));
+                        let mut state = CursorState::default();
+                        let initial = CursorCapture {
+                            window: 1,
+                            visible: api.visible(),
+                            relative: api.relative(1),
+                        };
+                        assert!(state.begin(initial));
+                        assert!(!state.begin(CursorCapture {
+                            window: 2,
+                            ..initial
+                        }));
+                        assert!(api.set_relative(1, false));
+                        assert!(api.set_visible(true));
+                        assert_eq!(api.visible(), Some(true));
+                        assert_eq!(api.relative(1), Some(false));
+                        if let Some((visible, relative)) = requested {
+                            // Exercise the same effective-state decisions as
+                            // the hooks, including repeated opposing requests.
+                            assert!(api.set_visible(state.visible_request(!visible)));
+                            assert!(api.set_visible(state.visible_request(visible)));
+                            assert!(
+                                state
+                                    .capture
+                                    .as_mut()
+                                    .unwrap()
+                                    .request_relative(1, !relative)
+                            );
+                            assert!(
+                                !state
+                                    .capture
+                                    .as_mut()
+                                    .unwrap()
+                                    .request_relative(2, !relative)
+                            );
+                            assert!(api.set_relative(1, state.relative_request(1, relative)));
+                            assert_eq!(api.visible(), Some(true));
+                            assert_eq!(api.relative(1), Some(false));
+                        }
+                        assert_eq!(state.release(2, 1, false), None);
+                        let released = state.release(1, 1, false).unwrap();
+                        api.restore(released);
+                        let (visible, relative) =
+                            requested.unwrap_or((initial_visible, initial_relative));
+                        assert_eq!(api.visible(), Some(visible));
+                        assert_eq!(api.relative(1), Some(relative));
+                        assert_eq!(state.release(1, 1, false), None);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn focus_loss_disconnect_and_destruction_release_once_without_touching_other_windows() {
+        let initial = CursorCapture {
+            window: 1,
+            visible: Some(false),
+            relative: Some(true),
+        };
+        for focus in [0, 2] {
+            let mut state = CursorState::default();
+            assert!(state.begin(initial));
+            assert_eq!(state.release(2, focus, true), Some(initial));
+            assert_eq!(state.release(2, focus, true), None);
+        }
+        let mut state = CursorState::default();
+        assert!(state.begin(initial));
+        assert_eq!(state.release_window(2), None);
+        assert_eq!(state.release_window(1), Some(initial));
+        assert_eq!(state.release_window(1), None);
+        assert!(state.begin(initial));
+        // A disconnected controller reports capture=false, just like edit exit.
+        assert_eq!(state.release(1, 1, false), Some(initial));
+        assert!(!state.begin(CursorCapture {
+            window: 0,
+            ..initial
+        }));
+    }
+
+    #[test]
+    fn unknown_initial_state_is_not_invented_on_release() {
+        let mut state = CursorState::default();
+        assert!(state.begin(CursorCapture {
+            window: 1,
+            visible: None,
+            relative: None
+        }));
+        assert_eq!(
+            state.release_window(1),
+            Some(CursorCapture {
+                window: 1,
+                visible: None,
+                relative: None,
+            })
         );
     }
 }

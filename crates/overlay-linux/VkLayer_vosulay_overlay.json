@@ -8,8 +8,6 @@
     "implementation_version": "1",
     "description": "Vosulay process-local transparent overlay Vulkan layer",
     "functions": {
-      "vkGetInstanceProcAddr": "vkGetInstanceProcAddr",
-      "vkGetDeviceProcAddr": "vkGetDeviceProcAddr",
       "vkNegotiateLoaderLayerInterfaceVersion": "vkNegotiateLoaderLayerInterfaceVersion"
     }
   }

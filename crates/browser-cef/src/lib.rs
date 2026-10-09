@@ -5,10 +5,13 @@ mod strings;
 use anyhow::{Context, Result, bail, ensure};
 use cef::{args::Args, *};
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     path::Path,
     rc::Rc as Shared,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     thread::{self, Thread},
     time::{Duration, Instant},
 };
@@ -26,16 +29,19 @@ fn configure_api() {
     );
 }
 
-pub struct BrowserOptions<'a> {
+pub struct RuntimeOptions<'a> {
     pub runtime: &'a Path,
     /// Windows: sandbox context supplied by the pinned CEF bootstrap.
     /// Linux: null; Chromium uses the user-namespace sandbox.
     pub sandbox_info: *mut u8,
     pub cache: &'a Path,
+    pub resources: Arc<dyn scheme::ResourceService>,
+}
+
+pub struct BrowserOptions<'a> {
     pub url: &'a str,
     pub backend_url: &'a str,
     pub broker_url: Option<&'a str>,
-    pub resources: Arc<dyn scheme::ResourceService>,
     pub width: u32,
     pub height: u32,
     pub scale: f32,
@@ -51,50 +57,72 @@ struct View {
     closed: bool,
     error: Option<String>,
     console: Vec<String>,
-    backend: Box<dyn BrowserFrameBackend>,
+    backend: Option<Box<dyn BrowserFrameBackend>>,
 }
 
 type ViewState = Shared<RefCell<View>>;
 const PUMP_INTERVAL: Duration = Duration::from_millis(1000 / 30);
 
-// CEF replaces its previous scheduled work; only the callback uses this state
-// off the UI thread. A park token retains a wake posted before the host sleeps.
+// Only callbacks cross threads. Keep real CEF work separate from the view's
+// reference-pump fallback so a retained runtime has no idle rendering clock.
+struct PumpState {
+    requested: Option<Instant>,
+    fallback: Option<Instant>,
+}
+
 struct PumpSchedule {
-    deadline: Mutex<Option<Instant>>,
+    state: Mutex<PumpState>,
     host: Thread,
 }
 
 impl PumpSchedule {
     fn new() -> Self {
         Self {
-            deadline: Mutex::new(Some(Instant::now())),
+            state: Mutex::new(PumpState {
+                requested: Some(Instant::now()),
+                fallback: None,
+            }),
             host: thread::current(),
         }
     }
 
+    fn set_active(&self, active: bool) {
+        self.state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .fallback = active.then(Instant::now);
+    }
+
     fn schedule(&self, delay_ms: i64) {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let delay = Duration::from_millis(delay_ms.max(0) as u64);
-        let delay = delay.min(PUMP_INTERVAL);
-        *self.deadline.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now() + delay);
+        let delay = if state.fallback.is_some() {
+            delay.min(PUMP_INTERVAL)
+        } else {
+            delay
+        };
+        state.requested = Some(Instant::now() + delay);
         self.host.unpark();
     }
 
     fn deadline(&self) -> Option<Instant> {
-        *self.deadline.lock().unwrap_or_else(|e| e.into_inner())
+        let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        state.requested.into_iter().chain(state.fallback).min()
     }
 
     fn pump(&self) {
         let due = {
-            let mut deadline = self.deadline.lock().unwrap_or_else(|e| e.into_inner());
+            let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
             let now = Instant::now();
-            if deadline.is_some_and(|deadline| deadline <= now) {
-                // Native events can arrive without a CEF scheduling callback.
-                // Match CEF's reference-pump fallback, including during startup.
-                *deadline = Some(now + PUMP_INTERVAL);
-                true
-            } else {
-                false
+            let due = state.requested.is_some_and(|deadline| deadline <= now)
+                || state.fallback.is_some_and(|deadline| deadline <= now);
+            if due {
+                state.requested = None;
+                if state.fallback.is_some() {
+                    state.fallback = Some(now + PUMP_INTERVAL);
+                }
             }
+            due
         };
         if due {
             // Never hold the scheduling lock: CEF may synchronously reschedule.
@@ -103,17 +131,89 @@ impl PumpSchedule {
     }
 }
 
+#[cfg(test)]
+mod schedule_tests {
+    use super::*;
+
+    #[test]
+    fn final_view_close_removes_only_the_fallback_clock() {
+        let schedule = PumpSchedule::new();
+        let requested = Instant::now() + Duration::from_secs(60);
+        schedule
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .requested = Some(requested);
+        schedule.set_active(true);
+        assert!(schedule.deadline().unwrap() < requested);
+        schedule.set_active(false);
+        assert_eq!(schedule.deadline(), Some(requested));
+        schedule
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .requested = None;
+        assert_eq!(schedule.deadline(), None);
+    }
+
+    #[test]
+    fn detached_callbacks_keep_their_real_maintenance_delay() {
+        let schedule = PumpSchedule::new();
+        let before = Instant::now();
+        schedule.schedule(60_000);
+        assert!(schedule.deadline().unwrap() >= before + Duration::from_secs(60));
+        schedule.set_active(true);
+        schedule.schedule(60_000);
+        let after = Instant::now();
+        assert!(
+            schedule
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .requested
+                .unwrap()
+                <= after + PUMP_INTERVAL
+        );
+    }
+}
+
 wrap_browser_process_handler! {
-    struct Scheduling { schedule: Arc<PumpSchedule> }
+    struct Scheduling { schedule: Arc<PumpSchedule>, shared_array_buffer: Arc<AtomicBool> }
     impl BrowserProcessHandler {
         fn on_schedule_message_pump_work(&self, delay_ms: i64) {
             self.schedule.schedule(delay_ms);
+        }
+        fn on_before_child_process_launch(&self, command_line: Option<&mut CommandLine>) {
+            let Some(command_line) = command_line else { return };
+            let enabled = self.shared_array_buffer.load(Ordering::Relaxed);
+            let feature = "SharedArrayBufferUnrestrictedAccessAllowed";
+            for (switch, include) in [
+                ("enable-blink-features", enabled),
+                ("disable-blink-features", !enabled),
+            ] {
+                let current = command_line.switch_value(Some(&switch.into()));
+                let current = CefString::from(&current).to_string();
+                let mut value = String::with_capacity(current.len() + feature.len() + 1);
+                for item in current.split(',').filter(|item| !item.is_empty() && *item != feature) {
+                    if !value.is_empty() {
+                        value.push(',');
+                    }
+                    value.push_str(item);
+                }
+                if include {
+                    if !value.is_empty() {
+                        value.push(',');
+                    }
+                    value.push_str(feature);
+                }
+                command_line.append_switch_with_value(Some(&switch.into()), Some(&value.as_str().into()));
+            }
         }
     }
 }
 
 wrap_app! {
-    struct Application { renderer: RenderProcessHandler, shared_array_buffer: Option<bool>, schedule: Option<Arc<PumpSchedule>> }
+    struct Application { renderer: RenderProcessHandler, shared_array_buffer: Option<Arc<AtomicBool>>, schedule: Option<Arc<PumpSchedule>> }
     impl App {
         fn on_before_command_line_processing(&self, _process_type: Option<&CefString>, command_line: Option<&mut CommandLine>) {
             if let Some(command_line) = command_line {
@@ -148,8 +248,8 @@ wrap_app! {
                 }
                 command_line.append_switch_with_value(Some(&disable_features), Some(&disabled.as_str().into()));
                 command_line.append_switch_with_value(Some(&"autoplay-policy".into()), Some(&"no-user-gesture-required".into()));
-                if let Some(enabled) = self.shared_array_buffer {
-                    let switch = if enabled { "enable-blink-features" } else { "disable-blink-features" };
+                if let Some(enabled) = self.shared_array_buffer.as_ref() {
+                    let switch = if enabled.load(Ordering::Relaxed) { "enable-blink-features" } else { "disable-blink-features" };
                     command_line.append_switch_with_value(Some(&switch.into()), Some(&"SharedArrayBufferUnrestrictedAccessAllowed".into()));
                 }
             }
@@ -159,7 +259,8 @@ wrap_app! {
         }
         fn render_process_handler(&self) -> Option<RenderProcessHandler> { Some(self.renderer.clone()) }
         fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
-            self.schedule.as_ref().map(|schedule| Scheduling::new(schedule.clone()))
+            self.schedule.as_ref().zip(self.shared_array_buffer.as_ref())
+                .map(|(schedule, enabled)| Scheduling::new(schedule.clone(), enabled.clone()))
         }
     }
 }
@@ -212,8 +313,9 @@ wrap_render_handler! {
             // CEF provides a complete BGRA view valid only until this callback returns.
             let pixels = unsafe { std::slice::from_raw_parts(buffer, length) };
             let mut state = self.state.borrow_mut();
+            let Some(backend) = state.backend.as_mut() else { return };
             let damage = paint_damage(dirty_rects, width as u32, height as u32);
-            if let Err(error) = state.backend.submit_frame(BrowserFrame::Bgra { pixels, width: width as u32, height: height as u32, damage }) {
+            if let Err(error) = backend.submit_frame(BrowserFrame::Bgra { pixels, width: width as u32, height: height as u32, damage }) {
                 state.error = Some(error.to_string());
             }
         }
@@ -231,7 +333,8 @@ wrap_render_handler! {
                 handle: info.shared_texture_handle, width: rect.width as u32, height: rect.height as u32,
                 source_x: rect.x as u32, source_y: rect.y as u32,
             };
-            if let Err(error) = state.backend.submit_frame(frame) { state.error = Some(error.to_string()); }
+            let Some(backend) = state.backend.as_mut() else { return };
+            if let Err(error) = backend.submit_frame(frame) { state.error = Some(error.to_string()); }
         }
     }
 }
@@ -269,6 +372,7 @@ wrap_client! {
         fn request_handler(&self) -> Option<RequestHandler> { Some(FailureHandler::new(self.state.clone())) }
         fn permission_handler(&self) -> Option<PermissionHandler> { Some(NetworkAccess::new()) }
         fn on_process_message_received(&self, browser: Option<&mut Browser>, frame: Option<&mut Frame>, source_process: ProcessId, message: Option<&mut ProcessMessage>) -> i32 {
+            if self.state.borrow().closed { return 1; }
             self.inbox.dispatch(browser, frame, source_process, message)
         }
     }
@@ -336,47 +440,42 @@ pub unsafe fn execute_subprocess(sandbox_info: *mut u8) -> Option<i32> {
     (code >= 0).then_some(code)
 }
 
-pub struct OsrBrowser {
-    browser: Option<Browser>,
-    state: ViewState,
-    inbox: bridge::BridgeInbox,
+struct RuntimeState {
     schedule: Arc<PumpSchedule>,
+    shared_array_buffer: Arc<AtomicBool>,
+    active: Cell<bool>,
+    poisoned: Cell<bool>,
     _app: App,
-    _client: Client,
 }
 
-impl OsrBrowser {
+impl Drop for RuntimeState {
+    fn drop(&mut self) {
+        // A timed-out native close must never shut down CEF with live objects.
+        if !self.poisoned.get() {
+            shutdown();
+        }
+    }
+}
+
+pub struct CefRuntime {
+    state: Shared<RuntimeState>,
+}
+
+impl CefRuntime {
     /// # Safety
-    /// Call once on the main thread after subprocess dispatch. On Windows the
-    /// sandbox context must come from the live, matching CEF bootstrap.
-    pub unsafe fn open(
-        options: BrowserOptions<'_>,
-        mut backend: Box<dyn BrowserFrameBackend>,
-    ) -> Result<Self> {
+    /// Initialize once on the main thread after subprocess dispatch. Windows
+    /// requires the live matching bootstrap sandbox context.
+    pub unsafe fn initialize(options: RuntimeOptions<'_>) -> Result<Self> {
+        static INITIALIZED: AtomicBool = AtomicBool::new(false);
+        ensure!(
+            !INITIALIZED.swap(true, Ordering::Relaxed),
+            "CEF cannot be initialized twice in one process"
+        );
         configure_api();
         #[cfg(windows)]
         ensure!(
             !options.sandbox_info.is_null(),
             "Windows CEF requires the packaged sandbox bootstrap"
-        );
-        ensure!(
-            options.width > 0
-                && options.height > 0
-                && options.width <= 16384
-                && options.height <= 16384,
-            "invalid browser extent"
-        );
-        ensure!(
-            options.scale.is_finite() && options.scale > 0.0,
-            "invalid browser scale"
-        );
-        ensure!(
-            (1..=i32::MAX as u32).contains(&options.fps_limit),
-            "invalid browser FPS limit"
-        );
-        ensure!(
-            !options.shared_texture || cfg!(windows),
-            "shared-texture OSR is Windows-only"
         );
         std::fs::create_dir_all(options.cache)?;
         let cache = options.cache.canonicalize()?;
@@ -387,9 +486,10 @@ impl OsrBrowser {
             runtime
         };
         let schedule = Arc::new(PumpSchedule::new());
+        let shared_array_buffer = Arc::new(AtomicBool::new(false));
         let mut app = Application::new(
             bridge::renderer_handler(),
-            Some(options.shared_array_buffer),
+            Some(shared_array_buffer.clone()),
             Some(schedule.clone()),
         );
         let args = Args::new();
@@ -421,10 +521,62 @@ impl OsrBrowser {
             shutdown();
             bail!("CEF rejected vosulay scheme handler");
         }
-        if let Err(error) = backend.resize(options.width, options.height, options.scale) {
-            shutdown();
-            return Err(error);
-        }
+        Ok(Self {
+            state: Shared::new(RuntimeState {
+                schedule,
+                shared_array_buffer,
+                active: Cell::new(false),
+                poisoned: Cell::new(false),
+                _app: app,
+            }),
+        })
+    }
+
+    pub fn next_pump_deadline(&self) -> Option<Instant> {
+        self.state.schedule.deadline()
+    }
+
+    pub fn pump(&self) {
+        self.state.schedule.pump();
+    }
+
+    /// Open a fresh view on this runtime's main thread, without reinitializing CEF.
+    pub fn open(
+        &self,
+        options: BrowserOptions<'_>,
+        mut backend: Box<dyn BrowserFrameBackend>,
+    ) -> Result<OsrBrowser> {
+        ensure!(
+            !self.state.poisoned.get(),
+            "CEF runtime has a failed native close"
+        );
+        ensure!(
+            !self.state.active.get(),
+            "CEF runtime already has an OSR view"
+        );
+        ensure!(
+            options.width > 0
+                && options.height > 0
+                && options.width <= 16384
+                && options.height <= 16384,
+            "invalid browser extent"
+        );
+        ensure!(
+            options.scale.is_finite() && options.scale > 0.0,
+            "invalid browser scale"
+        );
+        ensure!(
+            (1..=i32::MAX as u32).contains(&options.fps_limit),
+            "invalid browser FPS limit"
+        );
+        ensure!(
+            !options.shared_texture || cfg!(windows),
+            "shared-texture OSR is Windows-only"
+        );
+        backend.resize(options.width, options.height, options.scale)?;
+        self.state
+            .shared_array_buffer
+            .store(options.shared_array_buffer, Ordering::Relaxed);
         let state = Shared::new(RefCell::new(View {
             width: options.width,
             height: options.height,
@@ -432,7 +584,7 @@ impl OsrBrowser {
             closed: false,
             error: None,
             console: Vec::new(),
-            backend,
+            backend: Some(backend),
         }));
         let inbox = bridge::BridgeInbox::new();
         let mut client = ClientHandlers::new(state.clone(), inbox.clone());
@@ -458,19 +610,29 @@ impl OsrBrowser {
             None,
         );
         let Some(browser) = browser else {
-            shutdown();
             bail!("CEF rejected OSR browser creation");
         };
-        Ok(Self {
+        self.state.active.set(true);
+        self.state.schedule.set_active(true);
+        Ok(OsrBrowser {
             browser: Some(browser),
             state,
             inbox,
-            schedule,
-            _app: app,
+            runtime: self.state.clone(),
             _client: client,
         })
     }
+}
 
+pub struct OsrBrowser {
+    browser: Option<Browser>,
+    state: ViewState,
+    inbox: bridge::BridgeInbox,
+    _client: Client,
+    runtime: Shared<RuntimeState>,
+}
+
+impl OsrBrowser {
     pub fn take_console(&self) -> Vec<String> {
         std::mem::take(&mut self.state.borrow_mut().console)
     }
@@ -600,11 +762,11 @@ impl OsrBrowser {
     }
 
     pub fn next_pump_deadline(&self) -> Option<Instant> {
-        self.schedule.deadline()
+        self.runtime.schedule.deadline()
     }
 
     pub fn pump(&self) -> Result<()> {
-        self.schedule.pump();
+        self.runtime.schedule.pump();
         let state = self.state.borrow();
         if let Some(error) = state.error.as_ref() {
             bail!("CEF: {error}");
@@ -626,7 +788,11 @@ impl OsrBrowser {
             "invalid browser resize"
         );
         let mut state = self.state.borrow_mut();
-        state.backend.resize(width, height, scale)?;
+        state
+            .backend
+            .as_mut()
+            .context("browser backend is closed")?
+            .resize(width, height, scale)?;
         state.width = width;
         state.height = height;
         state.scale = scale;
@@ -639,7 +805,12 @@ impl OsrBrowser {
     }
 
     pub fn set_visible(&self, visible: bool) -> Result<()> {
-        self.state.borrow_mut().backend.set_visible(visible)?;
+        self.state
+            .borrow_mut()
+            .backend
+            .as_mut()
+            .context("browser backend is closed")?
+            .set_visible(visible)?;
         if let Some(host) = self.browser.as_ref().and_then(ImplBrowser::host) {
             host.was_hidden(i32::from(!visible));
         }
@@ -660,13 +831,15 @@ impl OsrBrowser {
         let Some(browser) = self.browser.take() else {
             return Ok(());
         };
-        browser
-            .host()
-            .context("browser has no host")?
-            .close_browser(1);
+        let Some(host) = browser.host() else {
+            self.runtime.poisoned.set(true);
+            std::mem::forget(browser);
+            bail!("browser has no host");
+        };
+        host.close_browser(1);
         let deadline = Instant::now() + Duration::from_secs(5);
         while !self.state.borrow().closed {
-            self.schedule.pump();
+            self.runtime.schedule.pump();
             if self.state.borrow().closed {
                 break;
             }
@@ -674,13 +847,22 @@ impl OsrBrowser {
                 // Do not call cef_shutdown with live browser objects. Bounded process
                 // exit releases platform capture; callers treat this as fatal.
                 std::mem::forget(browser);
+                self.runtime.poisoned.set(true);
                 bail!("CEF browser did not close within five seconds");
             }
-            let next = self.schedule.deadline().unwrap_or(deadline).min(deadline);
+            let next = self
+                .runtime
+                .schedule
+                .deadline()
+                .unwrap_or(deadline)
+                .min(deadline);
             thread::park_timeout(next.saturating_duration_since(Instant::now()));
         }
         drop(browser);
-        shutdown();
+        self.state.borrow_mut().backend.take();
+        while self.inbox.next_message().is_some() {}
+        self.runtime.active.set(false);
+        self.runtime.schedule.set_active(false);
         Ok(())
     }
 }

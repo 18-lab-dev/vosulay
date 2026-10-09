@@ -1,6 +1,7 @@
 use crate::{
     WindowsOptions,
     d3d11::{FrameBackend, TextureLease},
+    foreground::{ForegroundEvents, Target, foreground_pid},
     gpu_mailbox::{Binding, GpuMailbox},
     tray::Tray,
 };
@@ -44,21 +45,14 @@ use vosulay_frame::{
 };
 use windows::{
     Win32::{
-        Foundation::{CloseHandle, HANDLE, HWND, WAIT_TIMEOUT},
+        Foundation::HWND,
         Graphics::Gdi::{
             DEVMODEW, ENUM_CURRENT_SETTINGS, EnumDisplaySettingsW, GetMonitorInfoW,
             MONITOR_DEFAULTTONEAREST, MONITORINFOEXW, MonitorFromWindow,
         },
-        System::Threading::{
-            OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
-            PROCESS_SYNCHRONIZE, QueryFullProcessImageNameW, WaitForSingleObject,
-        },
-        UI::{
-            Input::KeyboardAndMouse::GetAsyncKeyState,
-            WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId},
-        },
+        UI::{Input::KeyboardAndMouse::GetAsyncKeyState, WindowsAndMessaging::GetForegroundWindow},
     },
-    core::{PCWSTR, PWSTR},
+    core::PCWSTR,
 };
 
 const DEADLINE: Duration = Duration::from_secs(5);
@@ -412,6 +406,7 @@ struct TargetState {
 }
 struct Connection {
     pid: u32,
+    target: Target,
     ipc: IpcClientConn,
     state: Arc<Mutex<TargetState>>,
     reader: AsyncTask<()>,
@@ -425,7 +420,8 @@ impl Drop for Connection {
     }
 }
 
-async fn attach(dir: &Path, pid: u32, shared: Arc<Shared>) -> Result<Connection> {
+async fn attach(dir: &Path, target: Target, shared: Arc<Shared>) -> Result<Connection> {
+    let pid = target.pid();
     let x64 = dir.join("asdf_overlay-x64.dll");
     let x86 = dir.join("asdf_overlay-x86.dll");
     let (ipc, events) = tokio::time::timeout(
@@ -448,6 +444,7 @@ async fn attach(dir: &Path, pid: u32, shared: Arc<Shared>) -> Result<Connection>
     let reader = tokio::spawn(read_events(events, reader_state, shared, pid));
     Ok(Connection {
         pid,
+        target,
         ipc,
         state,
         reader,
@@ -583,6 +580,9 @@ async fn capture(connection: &mut Connection, enabled: bool, shared: &Shared) ->
 }
 
 async fn disconnect(current: &mut Option<Connection>, shared: &Shared) -> Result<()> {
+    // Clear local capture even if a release RPC fails; dropping the pipe is the
+    // native fail-open path and no stale browser input may survive the switch.
+    shared.input_capture(false);
     *shared.gpu.binding.lock().unwrap_or_else(|e| e.into_inner()) = None;
     shared
         .gpu
@@ -593,23 +593,37 @@ async fn disconnect(current: &mut Option<Connection>, shared: &Shared) -> Result
     if let Some(mut connection) = current.take() {
         // A disconnected pipe releases native capture in asdf itself. Never retry
         // a cancelled/partly written IPC request against that connection.
-        if !connection
-            .state
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .disconnected
+        if connection.target.alive()
+            && !connection
+                .state
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .disconnected
         {
-            capture(&mut connection, false, shared).await?;
-            if let Some(binding) = connection.binding {
-                let _deadline = RpcGuard::new(shared);
-                connection
-                    .ipc
-                    .surface(binding.surface)
-                    .request(UpdateSharedHandle::None)
-                    .await?;
+            let released: Result<()> = async {
+                capture(&mut connection, false, shared).await?;
+                if let Some(binding) = connection.binding {
+                    let _deadline = RpcGuard::new(shared);
+                    connection
+                        .ipc
+                        .surface(binding.surface)
+                        .request(UpdateSharedHandle::None)
+                        .await?;
+                }
+                Ok(())
+            }
+            .await;
+            if let Err(error) = released
+                && connection.target.alive()
+                && !connection
+                    .state
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .disconnected
+            {
+                return Err(error);
             }
         }
-        shared.input_capture(false);
         shared.emit(PlatformEvent::Detached);
     }
     Ok(())
@@ -621,9 +635,9 @@ async fn worker_main(
     commands: Receiver<Command>,
 ) -> Result<()> {
     let mut current: Option<Connection> = None;
+    let focus = ForegroundEvents::start(options.clone(), shared.gpu.clone())?;
     let mut generation = 0;
-    let mut last_foreground = None;
-    let mut last_scan = Instant::now() - Duration::from_secs(1);
+    let mut retry_attach = None;
     let mut last_viewport = None;
     let mut last_display_read = Instant::now() - Duration::from_secs(2);
     while !shared.stop.load(Ordering::Acquire) {
@@ -654,39 +668,67 @@ async fn worker_main(
         if shared.stop.load(Ordering::Acquire) {
             break;
         }
-        if last_scan.elapsed() >= Duration::from_millis(100) {
-            last_scan = Instant::now();
-            let focused = foreground_pid();
-            let target = if focused != last_foreground || current.is_none() {
-                focused.filter(|pid| supported(*pid, &options)).or_else(|| {
-                    if current.is_none() {
-                        options.pids.iter().copied().find(|pid| process_alive(*pid))
-                    } else {
-                        None
+        let target = focus.target()?;
+        if retry_attach
+            .as_ref()
+            .is_some_and(|(failed, _): &(Target, Instant)| {
+                target
+                    .as_ref()
+                    .is_none_or(|target| !failed.same_selection(target))
+            })
+        {
+            retry_attach = None;
+        }
+        let dead_or_stale = current.as_ref().is_some_and(|connection| {
+            target
+                .as_ref()
+                .is_none_or(|target| !connection.target.same_selection(target))
+                || connection
+                    .state
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .disconnected
+        });
+        if dead_or_stale {
+            disconnect(&mut current, &shared).await?;
+            last_viewport = None;
+        }
+        if let Some(target) = target.filter(|_| current.is_none()) {
+            let retry_ready =
+                retry_attach
+                    .as_ref()
+                    .is_none_or(|(failed, until): &(Target, Instant)| {
+                        !failed.same_selection(&target) || Instant::now() >= *until
+                    });
+            if retry_ready && target.alive() {
+                let pid = target.pid();
+                match attach(&options.dll_dir, target.clone(), shared.clone()).await {
+                    Ok(connection) => {
+                        let latest = focus.revalidate().await?;
+                        if !shared.stop.load(Ordering::Acquire)
+                            && target.alive()
+                            && latest
+                                .as_ref()
+                                .is_some_and(|latest| target.same_selection(latest))
+                        {
+                            current = Some(connection);
+                        } else {
+                            // This connection has never enabled capture or published
+                            // a binding. Dropping it closes IPC and aborts its reader.
+                            drop(connection);
+                        }
+                        retry_attach = None;
                     }
-                })
-            } else {
-                None
-            };
-            last_foreground = focused;
-            let dead = current.as_ref().is_some_and(|c| {
-                !process_alive(c.pid)
-                    || c.state
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .disconnected
-            });
-            if dead || target.is_some_and(|pid| current.as_ref().is_some_and(|c| c.pid != pid)) {
-                disconnect(&mut current, &shared).await?;
-                last_viewport = None;
-            }
-            if let Some(pid) = target.filter(|_| current.is_none()) {
-                match attach(&options.dll_dir, pid, shared.clone()).await {
-                    Ok(connection) => current = Some(connection),
-                    Err(error) => shared.emit(PlatformEvent::Warning(format!(
-                        "could not attach to game PID {pid}: {error:#}"
-                    ))),
+                    Err(error) => {
+                        shared.emit(PlatformEvent::Warning(format!(
+                            "could not attach to game PID {pid}: {error:#}"
+                        )));
+                        retry_attach = Some((target, Instant::now() + Duration::from_millis(100)));
+                    }
                 }
+                // Re-enter selection before exposing surfaces from a completion;
+                // a foreground notification during injection must win.
+                continue;
             }
         }
         if let Some(connection) = current.as_mut() {
@@ -764,23 +806,37 @@ async fn worker_main(
                     binding
                 });
                 connection.lease = None;
-                {
-                    let mut binding = shared.gpu.binding.lock().unwrap_or_else(|e| e.into_inner());
-                    shared
-                        .gpu
-                        .update
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .take();
-                    *binding = connection.binding;
-                }
+                *shared.gpu.binding.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                shared
+                    .gpu
+                    .update
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .take();
                 if let Some(binding) = connection.binding {
-                    let _deadline = RpcGuard::new(&shared);
-                    connection
-                        .ipc
-                        .surface(binding.surface)
-                        .request(SetPosition { x: 0, y: 0 })
-                        .await?;
+                    {
+                        let _deadline = RpcGuard::new(&shared);
+                        connection
+                            .ipc
+                            .surface(binding.surface)
+                            .request(SetPosition { x: 0, y: 0 })
+                            .await?;
+                    }
+                    // Positioning also awaits IPC. Do not publish a surface if
+                    // another supported instance won while that RPC was pending.
+                    let latest = focus.revalidate().await?;
+                    if shared.stop.load(Ordering::Acquire)
+                        || !connection.target.alive()
+                        || latest
+                            .as_ref()
+                            .is_none_or(|latest| !connection.target.same_selection(latest))
+                    {
+                        disconnect(&mut current, &shared).await?;
+                        last_viewport = None;
+                        continue;
+                    }
+                    *shared.gpu.binding.lock().unwrap_or_else(|e| e.into_inner()) =
+                        connection.binding;
                     shared.emit(PlatformEvent::Attached {
                         pid: connection.pid,
                     });
@@ -825,12 +881,34 @@ async fn worker_main(
         }
         // asdf 2.1 does not expose game-present notifications. CEF is paced by
         // the product's display/FPS clock; no fictitious Present events are emitted.
-        let next_scan = last_scan + Duration::from_millis(100);
-        let _ = tokio::time::timeout(
-            next_scan.saturating_duration_since(Instant::now()),
-            shared.gpu.worker_wakeup.notified(),
-        )
-        .await;
+        let wakeup = shared.gpu.worker_wakeup.notified();
+        if current
+            .as_ref()
+            .is_some_and(|connection| connection.binding.is_some())
+        {
+            // Attached display metadata still needs bounded maintenance, but
+            // native foreground/process-exit events drive target selection.
+            let next_display = last_display_read + Duration::from_secs(1);
+            let _ = tokio::time::timeout(
+                next_display.saturating_duration_since(Instant::now()),
+                wakeup,
+            )
+            .await;
+        } else if let Some((failed, until)) = retry_attach.as_ref()
+            && focus
+                .target()?
+                .as_ref()
+                .is_some_and(|target| target.same_selection(failed))
+        {
+            // Retry only a failed attachment to an already selected instance.
+            // This is not a foreground/enumeration polling clock.
+            let _ =
+                tokio::time::timeout(until.saturating_duration_since(Instant::now()), wakeup).await;
+        } else {
+            // No target: no scan timer. Commands, shutdown, and the native
+            // message-pump notifications all wake the same retained permit.
+            wakeup.await;
+        }
     }
     disconnect(&mut current, &shared).await
 }
@@ -874,61 +952,6 @@ fn viewport(binding: Binding) -> Result<Viewport> {
         scale: 1.0,
         refresh_hz: f64::from(mode.dmDisplayFrequency),
     })
-}
-
-struct Process(HANDLE);
-impl Drop for Process {
-    fn drop(&mut self) {
-        let _ = unsafe { CloseHandle(self.0) };
-    }
-}
-fn process_alive(pid: u32) -> bool {
-    unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) }.is_ok_and(|handle| {
-        let handle = Process(handle);
-        (unsafe { WaitForSingleObject(handle.0, 0) }) == WAIT_TIMEOUT
-    })
-}
-fn supported(pid: u32, options: &WindowsOptions) -> bool {
-    if options.pids.contains(&pid) {
-        return true;
-    }
-    let Ok(handle) = (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }) else {
-        return false;
-    };
-    let handle = Process(handle);
-    let mut path = [0u16; 32768];
-    let mut length = path.len() as u32;
-    if unsafe {
-        QueryFullProcessImageNameW(
-            handle.0,
-            PROCESS_NAME_WIN32,
-            PWSTR(path.as_mut_ptr()),
-            &mut length,
-        )
-    }
-    .is_err()
-    {
-        return false;
-    }
-    let path = String::from_utf16_lossy(&path[..length as usize]);
-    let name = path.rsplit(['/', '\\']).next().unwrap_or("");
-    name.eq_ignore_ascii_case("osu!.exe")
-        || name.eq_ignore_ascii_case("osulazer.exe")
-        || options
-            .process_names
-            .iter()
-            .any(|wanted| name.eq_ignore_ascii_case(wanted))
-}
-fn foreground_pid() -> Option<u32> {
-    let window = unsafe { GetForegroundWindow() };
-    if window.is_invalid() {
-        return None;
-    }
-    let mut pid = 0;
-    unsafe {
-        GetWindowThreadProcessId(window, Some(&mut pid));
-    }
-    (pid != 0).then_some(pid)
 }
 
 fn modifiers() -> InputModifiers {

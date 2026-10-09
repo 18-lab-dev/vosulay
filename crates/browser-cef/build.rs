@@ -33,6 +33,17 @@ fn main() {
              Set CEF_PATH to a verified pinned distribution to override acquisition."
         )
     });
+    let runtime = runtime
+        .canonicalize()
+        .expect("canonical verified CEF directory");
+    let installed_runtime = if windows {
+        runtime.clone()
+    } else {
+        vosulay_cef_tools::default_cache("runtime")
+            .and_then(|cache| vosulay_cef_tools::cache_runtime(&runtime, &receipt, &cache))
+            .expect("retain verified executable-adjacent CEF runtime")
+    };
+    println!("cargo::metadata=runtime={}", installed_runtime.display());
     println!(
         "cargo:rerun-if-changed={}",
         runtime.join(".vosulay-cef-verified.json").display()
@@ -48,6 +59,16 @@ fn main() {
             "cargo:rerun-if-changed={}",
             runtime.join(relative).display()
         );
+        if !windows {
+            let name = relative
+                .strip_prefix("Release/")
+                .or_else(|| relative.strip_prefix("Resources/"))
+                .expect("verified runtime file directory");
+            println!(
+                "cargo:rerun-if-changed={}",
+                installed_runtime.join(name).display()
+            );
+        }
     }
     println!(
         "cargo:rustc-link-search=native={}",

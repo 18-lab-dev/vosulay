@@ -60,7 +60,7 @@ def prepare(args):
             raise RuntimeError(f"required benchmark tool missing: {binary}")
     environment = dict(os.environ, CEF_PATH=str(args.cef_dir))
     # The measured workload and preparation both fail closed without live network.
-    run(["cargo", "build", "--offline", "--release", "--locked", "-p", "vosulay", "-p", "vosulay-overlay"], cwd=ROOT, env=environment)
+    run(["cargo", "build", "--offline", "--release", "--locked", "-p", "vosulay", "-p", "vosulay-overlay", "-p", "vosulay-lookup"], cwd=ROOT, env=environment)
     run(["cargo", "build", "--offline", "--release", "--locked", "-p", "vosulay-browser", "--example", "autoresearch_browser"], cwd=ROOT, env=environment)
     runtime = STATE / "runtime"
     runtime.mkdir(parents=True, exist_ok=True)
@@ -76,6 +76,7 @@ def prepare(args):
             shutil.copy2(args.cef_dir / relative, destination)
     for source, name in ((ROOT / "target/release/vosulay", "vosulay"),
                          (ROOT / "target/release/libvosulay_overlay.so", "libvosulay_overlay.so"),
+                         (ROOT / "target/release/libvosulay_lookup.so", "libvosulay_lookup.so"),
                          (ROOT / "target/release/examples/autoresearch_browser", "autoresearch_browser")):
         shutil.copy2(source, runtime / name)
     flags = shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "sdl2", "gl"], text=True))
@@ -240,7 +241,7 @@ def inside(args):
               "workload_sha256": sha256(TOOLS / "counter.html"), "game_source_sha256": sha256(TOOLS / "game.c"),
               "observer_source_sha256": sha256(TOOLS / "observe.c"),
               "cef_archive_sha256": PIN["sha256"],
-              "binary_sha256": {name: sha256(args.runtime / name) for name in ("vosulay", "autoresearch_browser", "libvosulay_overlay.so", "game", "observe")},
+              "binary_sha256": {name: sha256(args.runtime / name) for name in ("vosulay", "autoresearch_browser", "libvosulay_overlay.so", "libvosulay_lookup.so", "game", "observe")},
               "cpu_seconds": args.cpu_seconds, "delivery_seconds": args.delivery_seconds, "warmup_seconds": args.warmup,
               "fps_mode": "benchmark: Chromium/vsync disabled, no game limiter, CEF minimum positive OSR interval 1us (1000000 Hz API ceiling)",
               "limits": ["Linux OSR uses CPU BGRA transport; windowed reference uses native Chromium composition.",
@@ -283,7 +284,7 @@ def inside(args):
                 display = X11(environment["DISPLAY"])
                 game_env = dict(environment, SDL_VIDEODRIVER="x11")
                 if name == "cef":
-                    game_env["LD_PRELOAD"] = str(args.runtime / "libvosulay_overlay.so")
+                    game_env["LD_PRELOAD"] = f"{args.runtime / 'libvosulay_lookup.so'}:{args.runtime / 'libvosulay_overlay.so'}"
                 game = start([args.runtime / "game"], game_env, "game.log")
                 game_window = wait_until(lambda: display.find_window(game.pid, WINDOW_TITLE), (game,))
                 display.screenshot(game_window).save(out / "game-before.png")
