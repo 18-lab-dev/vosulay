@@ -1,0 +1,113 @@
+name: Linux CI
+
+# Tests and Clippy run on every pull request and on pushes to main. The
+# expensive Windows package and release workflows remain manual-dispatch only.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # A newer push supersedes an open PR's run. Main and manual runs get unique
+  # groups: a shared group would still drop queued runs beyond one pending.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    # Ubuntu 24.04's archive has no libsdl3-dev; 26.04 (resolute) ships both
+    # libsdl2-dev and libsdl3-dev, so the native SDL fixture covers both ABIs.
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Use a job-owned XDG cache
+        # build.rs and vosulay-cef keep the pinned CEF archive, extracted SDK,
+        # retained runtime, and retained compositor under XDG_CACHE_HOME.
+        run: echo "XDG_CACHE_HOME=$RUNNER_TEMP/xdg-cache" >> "$GITHUB_ENV"
+
+      - name: Install native build and test prerequisites
+        # Compiler/pkg-config: ring, the C loader fixtures, and pkg-config probes.
+        # libwayland-dev: rfd's xdg-portal backend links wayland-client.
+        # libegl-dev: the vosulay-overlay gl_surface example links libEGL.
+        # SDL2/SDL3 dev: the native sdl_filter fixture compiles against both.
+        # The remainder are libcef.so's DT_NEEDED runtime libraries; test
+        # executables that link CEF cannot start without them.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config \
+            libwayland-dev libegl-dev libsdl2-dev libsdl3-dev \
+            libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 \
+            libcairo2 libcups2t64 libdbus-1-3 libexpat1 libgbm1 libglib2.0-0t64 \
+            libnspr4 libnss3 libpango-1.0-0 libudev1 libx11-6 libxcb1 \
+            libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2
+
+      - name: Require both SDL development packages
+        # sdl_filter skips a missing SDL ABI and still passes; fail here instead.
+        run: |
+          pkg-config --cflags --libs sdl2
+          pkg-config --cflags --libs sdl3
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.96.1 --profile minimal --component clippy,rustfmt
+          rustup default 1.96.1
+          rustup show active-toolchain
+
+      - name: Restore pinned CEF archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # Only the size/SHA1/SHA256-pinned archive is cached; extraction and
+          # runtime verification run again on every job.
+          path: ${{ runner.temp }}/xdg-cache/vosulay/cef/*.tar.bz2
+          key: cef-linux-x86_64-${{ hashFiles('tools/cef/pins.json') }}
+
+      - name: Restore Cargo registry and target
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-linux-x86_64-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-linux-x86_64-${{ hashFiles('rust-toolchain.toml') }}-
+
+      - name: Acquire and verify pinned CEF
+        # `acquire` prints the canonical verified SDK root (pins.json
+        # cef_path_subdir); its required files include Release/libcef.so.
+        run: |
+          cef="$(cargo run --quiet --locked -p vosulay-cef-tools -- acquire --platform linux-x86_64)"
+          echo "Verified CEF: $cef"
+          test -f "$cef/Release/libcef.so"
+          if ldd "$cef/Release/libcef.so" | grep 'not found'; then
+            echo "::error::libcef.so runtime dependencies are missing"
+            exit 1
+          fi
+          # Only the root package's build.rs adds an RPATH to the retained CEF
+          # runtime; browser-cef and cef-smoke targets get only $ORIGIN, and
+          # Cargo drops link-search paths outside target/ from LD_LIBRARY_PATH.
+          # Expose libcef.so alone: the whole Release/ directory would also
+          # shadow system libEGL, libGLESv2, and libvulkan for the C fixtures.
+          lib="$RUNNER_TEMP/cef-lib"
+          mkdir -p "$lib"
+          ln -sf "$cef/Release/libcef.so" "$lib/libcef.so"
+          echo "LD_LIBRARY_PATH=$lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+
+      - name: Clippy (warnings denied)
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Workspace tests, including C-backed loader fixtures
+        run: cargo test --workspace --all-features --locked

@@ -1,53 +1,175 @@
 ---
 type: Integration Boundary
-title: vosu catalog, overlay sources, and local IPC
-description: Describes vosulay's HTTP/HTML integration with a vosu instance, safe URL construction, local HTML overlay serving, single-instance IPC controls, and the security constraints at each boundary.
-resource: src/api.rs
-tags: [integrations, vosu, http, ipc, security, overlays]
+title: vosu catalog, overlay sources, and remote pages
+description: Describes vosulay's HTTP/HTML integration with a vosu or tosu-compatible backend, the in-browser backend broker, local HTML overlay capabilities, the view-only remote profile server, the Linux host-to-game control channel, and the security constraints at each boundary.
+resource: src/remote.rs
+tags: [integrations, vosu, tosu, http, security, overlays]
 ---
 
-# vosu catalog, overlay sources, and local IPC
+# vosu catalog, overlay sources, and remote pages
 
-## vosu counter catalog
+## Counter catalog
 
-[`src/api.rs`](../../src/api.rs) requests `<base>/api/counters/search/` with a 10-second deadline and a 2 MiB response limit. It requires an HTML/XHTML response and parses result cards matching `.result-item[data-overlay-id]`. Metadata comes from `.calu[n][a][v]`; an optional `.settings-button` marks counters with settings. Width and height metadata are read from `[nft="width"]` and `[nft="height"]` using numeric `nfv` values, with a `500x300` fallback.
+[`src/api.rs`](../../src/api.rs) requests `<base>/api/counters/search/`. It
+applies a 10-second overall deadline and a 2 MiB body limit, and requires a
+`text/html` or `application/xhtml+xml` response.
 
-The parser preserves source order and returns `InstalledCounter` records containing ID, name, author, version, dimensions, settings availability, and a counter URL. The frontend uses these records to populate the catalog and place known counters. The settings and available-counter links are constructed by Rust in [`src/ffi.rs`](../../src/ffi.rs): `/settings?overlay=<id>` and `/available`.
+The parser:
 
-Base URLs must be absolute HTTP(S) URLs with a host, no credentials, and no query or fragment. The helper normalizes a trailing slash before joining paths. Counter IDs are query-encoded for settings URLs and path-segment encoded for counter URLs.
+- accepts vosu markup, tosu 4.26 markup, legacy tosu markup, and empty-state
+  markup;
+- rejects unrecognized markup and counters missing required attributes;
+- preserves source order;
+- falls back to `500×300` when a resolution is missing or invalid.
 
-Some counter bundles expect `window.COUNTER_PATH` before their own scripts execute. [`counterMetadataScript`](../../src/qt/qt_shell.cpp) is installed in WebEngine's MainWorld at DocumentCreation with subframe execution enabled. It returns without changing anything unless the frame's origin exactly equals the configured vosu origin, and it never overwrites an existing string-valued `window.COUNTER_PATH`. Otherwise it takes the frame pathname's containing folder (or the pathname itself when it ends in `/`), splits out empty components, decodes every segment, joins them with `/`, and assigns the non-empty result. Invalid URLs or path decoding failures leave the global unset.
+Fixtures live in [`tests/fixtures/backend`](../../tests/fixtures/backend).
+Compatibility is detected from the counter API markup, not from the server's
+product name.
+
+The `--vosu-url` base must be HTTP(S) without credentials, query, or fragment
+([`src/runtime.rs`](../../src/runtime.rs)). The editor opens the backend's
+`/available` page in the system browser.
+
+## Backend broker inside the browser
+
+Counter pages keep their original public API paths. Every non-manager frame
+receives [`assets/backend.js`](../../assets/backend.js), injected by
+[`crates/browser-cef/src/bridge.rs`](../../crates/browser-cef/src/bridge.rs).
+The script:
+
+- rewrites `fetch`, XMLHttpRequest, and WebSocket URLs that target the backend
+  so they reach the loopback broker in [`src/remote.rs`](../../src/remote.rs);
+- sets `window.COUNTER_PATH` from the frame's directory path, unless the page
+  already defined a string value.
+
+[`src/backend.rs`](../../src/backend.rs) shares one upstream telemetry WebSocket
+per schema (`/ws`, `/tokens`, `/websocket/v2`, `/websocket/v2/precise`).
+
+- Filters and selected-subscription state stay client-local.
+- Matching HTTP JSON requests reuse the newest snapshot.
+- Slow consumers skip stale data instead of queueing it.
+- Settings and other command channels are not shared.
+
+The loopback broker is bound separately from the LAN listener. An occupied
+remote port therefore never prevents in-game counters from loading.
 
 ## Custom and local HTML overlays
 
-The manager accepts HTTP(S) and capability-bearing `vosulay-overlay` sources. Local filesystem paths are never sent directly to WebEngine.
+Placements accept `http`, `https`, and `vosulay-overlay` URLs (see the
+[configuration model](../domain/configuration.md)). Local filesystem paths are
+never handed to CEF directly.
 
-Local HTML selection goes through the XDG Desktop Portal `OpenFile` request, restricted to one HTML/HTM selection. Before opening the chooser, the Qt shell hides the overlay view and releases input capture; on cancellation, failure, or completion it restores the previous visibility and reapplies capture according to the current editing state. The returned URI must be a valid local `file://` URL. Its target must be a regular readable file with a case-insensitive `.html` or `.htm` suffix and must open successfully for read-only access.
+**Selecting a local file.** The editor's Choose HTML overlay action
+([`src/runtime/editor.rs`](../../src/runtime/editor.rs)):
 
-For an accepted file, the shell canonicalizes both the file and its containing directory, verifies that the file is inside that directory, and creates a `vosulay-overlay` URL with a fresh 128-bit hexadecimal host token. The scheme handler authorizes that token for exactly the canonical root encoded in the URL; a token cannot later be rebound to another root. Each request must carry a valid authorized token and the identical canonical root. The requested path is canonicalized again, rejected if it escapes the root (including through traversal or symlinks), and served only when it is a readable regular file that opens read-only. The handler replies with the MIME type detected for that file.
+1. opens an `rfd` file dialog filtered to `.html`/`.htm`;
+2. requires the selected path to have one of those extensions;
+3. generates a fresh 128-bit hexadecimal capability token with `getrandom`;
+4. builds `vosulay-overlay://<token>/<base64url(canonical parent)>/<file>` with
+   [`shell_policy::overlay_url`](../../src/shell_policy.rs). The file must
+   canonicalize to a regular file.
 
-This boundary is security-sensitive: do not replace canonical path checks with string prefix checks, broaden the allowed schemes without reviewing WebEngine settings, or expose arbitrary local filesystem paths. The frontend’s accepted schemes and the C++ handler’s authorization rules must remain consistent with the [configuration model](../domain/configuration.md).
+**Authorization.** `OverlayAuthorization` binds each token to exactly one
+canonical root directory. A token can never be rebound to another root, and a
+batch containing a conflict is rejected as a whole. The editor re-authorizes
+every saved or imported profile's local URLs.
 
-The Qt manager's native `QWebChannel` is attached only to WebEngine's `ApplicationWorld`. The bridge bootstrap also runs only in that isolated world and only in the main frame; `assets/manager.js` relays messages through a same-document custom DOM event. Overlay frames run in `MainWorld`, receive no `qt.webChannelTransport` or native object, and cannot invoke configuration writes or native dialogs through the manager bridge. Preserve both the isolated script world and `runsOnSubFrames=false`.
+**Each request** through the `vosulay-overlay` scheme
+([`src/runtime/resources.rs`](../../src/runtime/resources.rs)) must pass these
+checks:
+
+- the URL has no credentials, port, query, or fragment;
+- the root segment is canonical base64url for an existing canonical directory;
+- every path segment is percent-decoded into a single normal component;
+- the token is authorized for that root;
+- the canonical target stays under the root, which also rejects symlink
+  escapes;
+- the target is a readable regular file;
+- reads stay within the 32 MiB resource limit.
+
+This boundary is security-sensitive. Never replace canonical-path checks with
+string-prefix checks, and never serve paths that bypass `OverlayAuthorization`.
+
+## Manager bridge isolation
+
+Only the main frame whose URL is exactly `vosulay://manager/index.html` receives
+the native bridge function. The manager script removes the function from
+`window` immediately. Messages are capped at 256 KiB, and at most 64 may be
+pending. Counter and overlay frames, including iframes inside the manager, can
+neither write configuration nor open native dialogs. See the
+[architecture overview](../architecture/overview.md#browser-manager-page-and-bridge).
 
 ## Remote profile pages
 
-Linux [`src/remote.rs`](../../src/remote.rs) and Windows [`windows/src/main/remote-server.ts`](../../windows/src/main/remote-server.ts) expose a view-only HTTP service that binds `AppSettings.remote_listen_host:remote_listen_port`, defaulting to `0.0.0.0:5050` when unset or invalid; the bind address is read once at process startup, so listener changes take effect after restarting the host. A generated 256-bit credential prefixes every protected route: `/access/<credential>/overlay` renders the active profile, with the single `profile=<positive 1-based index>` query selecting another profile. `/access/<credential>/local/<capability>/...` forwards local custom-overlay resources. The remote form intentionally uses the capability as an opaque server-side registry key and never discloses the encoded absolute root carried by the internal `vosulay-overlay` URL. HTTP(S) custom overlays load directly in the client, while counter URLs are built against the validated request authority when the configured vosu URL is loopback so remote clients can reach the same machine.
+[`src/remote.rs`](../../src/remote.rs) serves view-only pages on
+`settings.remote_listen_host:remote_listen_port` (default `0.0.0.0:5050`).
 
-The credential is generated on first config load and persists in `AppSettings.remote_access_token`; the settings dialog asks for the LAN IP or hostname that clients use, persists it as `remote_access_host`, and displays a ready-to-copy URL. Protected requests must use either the literal listener destination or this exact configured host in `Host`, preventing any other attacker-controlled DNS authority from being accepted after rebinding to loopback. Profile-document requests reject cross-origin `Origin` and `Sec-Fetch-Site: cross-site`. Local-resource routes additionally accept the `Origin: null` and cross-site metadata emitted by an opaque sandbox, but only after the same credential, peer allowlist, and local capability checks succeed. Requests also check the peer against `AppSettings.allowed_ips`; loopback is always allowed, and configured entries may be exact IPs or four-part IPv4 wildcard patterns. The shared frontend settings dialog exposes the credential directly as a read-only field with a Regenerate control that replaces it with a fresh cryptographically random value; the new value is only persisted once the dialog is saved.
+**Routes**
 
-The Linux implementation uses three-second read/write timeouts, caps requests at 16 KiB and active connections at 32, and shuts down only after request workers drain. Windows keeps a normalized configuration snapshot in memory, rejects overload before route or filesystem work, caps active handlers at 32 and header bytes at 16 KiB, applies three-second request deadlines, and limits connection admission. Remote profile pages are view-only: unprotected routes return 404, bad credentials or browser metadata return 403, unsupported routes return 404, and non-GET/HEAD methods return 405.
+| Route | Behavior |
+|---|---|
+| `GET /overlay` | Renders the active profile. `?profile=N` selects by 1-based position; any other query is rejected. |
+| `/local/<token>/<path>` | Forwards local overlay resources. The URL carries only the opaque token, never the root. The server maps the token through the saved `vosulay-overlay` placements, which must name exactly one canonical root, and confines the decoded path beneath that root. |
+| `/__vosulay/backend.js` | The same routing script, pointed at this server. |
+| Anything else | Proxied to the backend. |
 
-Forwarded local overlay frames are sandboxed with `allow-scripts` only. Omitting `allow-same-origin` gives each local frame an opaque origin even though its resource URL shares the profile page's HTTP origin, preventing its scripts from reading the parent DOM or other capability URLs. Local files therefore use `Cross-Origin-Resource-Policy: cross-origin` so classic scripts, styles, and images load, plus the narrowly scoped `Access-Control-Allow-Origin: null` needed for relative `fetch` and module scripts from that opaque origin. HTTP(S) custom overlays retain `allow-scripts allow-same-origin` because they are genuinely cross-origin from the profile page.
+**Authorization.** There is no URL credential. Every request must pass all of:
 
-This is a network-facing boundary, so preserve the credential, authority and route-specific browser-metadata checks, request bounds, HTML escaping, no-store responses, local capability confinement, opaque remote local-resource paths, and the local-frame CORP/CORS policy when changing either implementation. The server is started by the platform entrypoint and shares the [configuration model](../domain/configuration.md).
+- **Peer:** the client is loopback, or listed in `allowed_ips`. Entries are
+  comma-separated exact IPs or four-part IPv4 `*` patterns.
+- **Host:** the `Host` header names the listener's own IP, `localhost` on a
+  loopback listener, or the configured `remote_access_host`, on the listener
+  port. This blocks DNS rebinding.
+- **Browser metadata:** `Origin` and `Sec-Fetch-Site` must be same-origin or
+  same-site. Cross-site metadata and `Origin: null` are allowed only for
+  `/local/` routes and frame navigations.
 
-## Local IPC and attachment
+**Request handling**
 
-The shell creates a per-user Unix local socket in the runtime directory, with a temporary-directory fallback. New invocations can send newline-delimited JSON commands to toggle editing, toggle overlay visibility, quit, or set geometry. In particular, `--edit`/`-e` sends `toggle-edit`, so it toggles editing in the already-running instance. Payloads are capped at 4096 bytes and connections/read operations have short timeouts. Geometry is accepted only when the running instance was started with `--attach`.
+- Only GET and HEAD are accepted; other methods return 405.
+- Reads and writes time out after three seconds.
+- Requests are capped at 16 KiB, with at most 32 concurrent connections.
+- A LAN bind failure is logged and is not fatal.
 
-[`extra/attach.sh`](../../extra/attach.sh) validates four non-negative numeric arguments and delegates to `vosulay --ipc-geometry`. The [operations page](../operations/build-and-run.md) lists the complete CLI surface and the single-instance failure behavior.
+**Rendered pages**
+
+- Disabled placements are skipped. Profile names and titles are HTML-escaped.
+- Local overlay frames use `sandbox="allow-scripts"`, which gives them an opaque
+  origin. Their resources are sent with `Cross-Origin-Resource-Policy:
+  cross-origin`, `Access-Control-Allow-Origin: null`, `no-store`, and `nosniff`.
+- HTTP(S) custom overlays keep `allow-scripts allow-same-origin`.
+
+Anyone on the allowlist can view every profile and use the proxied backend.
+Keep the listener and allowlist restricted to trusted networks. Listener changes
+take effect after a restart.
+
+## Linux host-to-game control channel
+
+The injected compositor connects to the host over a `SOCK_SEQPACKET` Unix
+socket ([`crates/frame-transport/src/ipc.rs`](../../crates/frame-transport/src/ipc.rs)).
+It uses `VOSULAY_ENDPOINT` if set, otherwise the abstract address
+`@vosulay-<euid>`.
+
+- Peers are authenticated with `SO_PEERCRED`, so only the same user can connect.
+- [`protocol.rs`](../../crates/frame-transport/src/protocol.rs) defines a
+  versioned packet format and rejects frames larger than 16384 px per side or
+  256 MiB.
+- Pixels travel only through the sealed memfd ring, never over the socket.
+- Host and compositor must come from the same package build.
+
+There is no user-facing IPC or geometry command; attachment follows game focus.
 
 ## Testing and change guidance
 
-`src/api.rs` tests cover escaped metadata, ordering, fallback dimensions, URL construction, HTTP status/content limits, and deadlines. [`src/ffi.rs`](../../src/ffi.rs) tests cover settings encoding and base URL rejection. The C++ overlay handler and IPC server have no separate test suite in the repository; changes there need careful manual testing and should preserve the bounds and authorization checks.
+The relevant tests are:
+
+- `src/api.rs`
+- `src/backend/tests.rs`
+- `src/remote.rs` and `src/remote/tests_broker.rs`
+- `src/shell_policy.rs`
+- the frame-transport crate
+
+See the [testing guidance](../testing/guidance.md#coverage-map). Changes to any
+boundary above should extend the matching tests. In particular, preserve the
+authority, origin, and peer checks, the request bounds, HTML escaping,
+capability confinement, and the local-frame CORP/CORS policy.

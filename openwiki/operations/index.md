@@ -6,4 +6,4 @@ description: "Files and subdirectories in Operations."
 
 # Files
 
-- [Build, launch, and operate vosulay](build-and-run.md) - Practical runbook for building vosulay's Rust and Qt stack, satisfying native dependencies, using command-line and IPC controls, selecting displays, and understanding packaging and automation files.
+- [Build, launch, and operate vosulay](build-and-run.md) - Runbook for building vosulay's Rust/CEF workspace and its pinned CEF caches, the host's command-line options and runtime/config selection, Linux attachment and troubleshooting, the remote profile server, packaging, and manual OpenWiki maintenance.
