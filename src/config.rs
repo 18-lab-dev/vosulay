@@ -46,6 +46,7 @@ pub struct AppConfig {
 #[serde(default)]
 pub struct AppSettings {
     pub always_keep_overlays_in_view: bool,
+    pub exit_edit_mode_on_focus_loss: bool,
     pub fps_limit: u32,
     pub allow_unrestricted_shared_array_buffer: bool,
     pub allowed_ips: String,
@@ -121,6 +122,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             always_keep_overlays_in_view: false,
+            exit_edit_mode_on_focus_loss: true,
             fps_limit: 0,
             allow_unrestricted_shared_array_buffer: false,
             allowed_ips: DEFAULT_ALLOWED_IPS.to_owned(),
@@ -744,6 +746,21 @@ mod tests {
         assert_eq!(config.settings.hotkeys.redo, "Alt+Shift+Z");
         assert_eq!(config.settings.hotkeys.refresh_selected_overlay, "Alt+R");
         assert_eq!(config.settings.hotkeys.refresh_all_overlays, "Alt+Shift+R");
+    }
+
+    #[test]
+    fn configs_without_focus_loss_setting_keep_leaving_edit_mode() {
+        let legacy: AppConfig = serde_json::from_str(
+            r#"{"version":1,"active_profile":"default","profiles":[],"settings":{}}"#,
+        )
+        .expect("old config should deserialize");
+        assert!(legacy.settings.exit_edit_mode_on_focus_loss);
+
+        let kept: AppConfig = serde_json::from_str(
+            r#"{"version":1,"active_profile":"default","profiles":[],"settings":{"exit_edit_mode_on_focus_loss":false}}"#,
+        )
+        .expect("config should deserialize");
+        assert!(!kept.settings.exit_edit_mode_on_focus_loss);
     }
 
     #[test]

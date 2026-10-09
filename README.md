@@ -187,6 +187,11 @@ are configurable. The interaction shortcut is intercepted by vosulay before
 counters see it, so it must include Ctrl, Alt, or Meta. Text fields keep their
 native undo/redo. Normal mode leaves game input alone.
 
+By default, editing ends when the game loses focus. Turn off **Settings →
+General → Leave edit mode when the game loses focus** to keep the editor on
+screen while another window, such as a screenshot tool, is focused; input
+returns to the editor when the game is focused again.
+
 The mouse wheel acts on the counter under the pointer while editing: over its
 middle it changes the layer, over an edge it grows (wheel up) or shrinks (wheel
 down) that side by 10 px, and over a corner it changes the scale by 0.05 while

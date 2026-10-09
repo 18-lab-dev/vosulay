@@ -293,9 +293,15 @@ impl State {
                 save_to_path(&config, &self.path)?;
                 self.config = config;
                 self.revision += 1;
-                Ok(vec![
-                    json!({"type": "saved", "save_id": save_id, "revision": self.revision, "fps_limit": self.config.settings.fps_limit, "allow_unrestricted_shared_array_buffer": self.config.settings.allow_unrestricted_shared_array_buffer, "toggle_interaction": self.config.settings.hotkeys.toggle_interaction}),
-                ])
+                Ok(vec![json!({
+                    "type": "saved",
+                    "save_id": save_id,
+                    "revision": self.revision,
+                    "fps_limit": self.config.settings.fps_limit,
+                    "allow_unrestricted_shared_array_buffer": self.config.settings.allow_unrestricted_shared_array_buffer,
+                    "toggle_interaction": self.config.settings.hotkeys.toggle_interaction,
+                    "exit_edit_mode_on_focus_loss": self.config.settings.exit_edit_mode_on_focus_loss,
+                })])
             }
             "choose-overlay-file" => {
                 let Some(path) = rfd::FileDialog::new()

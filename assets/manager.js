@@ -64,6 +64,7 @@
   const settingsModal = $("settings-modal");
   const settingsForm = $("settings-form");
   const keepOverlaysInView = $("keep-overlays-in-view");
+  const exitEditOnFocusLoss = $("exit-edit-on-focus-loss");
   const fpsLimitModes = settingsForm.querySelectorAll('input[name="fps-limit-mode"]');
   const fpsLimit = $("fps-limit");
   const allowUnrestrictedSharedArrayBuffer = $("allow-unrestricted-shared-array-buffer");
@@ -353,6 +354,7 @@
           && sourceSettings.fps_limit >= 0 && sourceSettings.fps_limit <= 4294967295
           ? Math.min(sourceSettings.fps_limit, 1000000) : 0,
         always_keep_overlays_in_view: Boolean(sourceSettings.always_keep_overlays_in_view),
+        exit_edit_mode_on_focus_loss: sourceSettings.exit_edit_mode_on_focus_loss !== false,
         allow_unrestricted_shared_array_buffer: Boolean(sourceSettings.allow_unrestricted_shared_array_buffer),
         allowed_ips: typeof sourceSettings.allowed_ips === "string" ? sourceSettings.allowed_ips : DEFAULT_ALLOWED_IPS,
         remote_listen_host: typeof sourceSettings.remote_listen_host === "string"
@@ -2412,6 +2414,7 @@
   function renderSettingsDraft() {
     if (!state.settingsDraft) return;
     keepOverlaysInView.checked = state.settingsDraft.always_keep_overlays_in_view;
+    exitEditOnFocusLoss.checked = state.settingsDraft.exit_edit_mode_on_focus_loss;
     allowUnrestrictedSharedArrayBuffer.checked = state.settingsDraft.allow_unrestricted_shared_array_buffer;
     for (const radio of fpsLimitModes) radio.checked = radio.value === state.settingsDraft.fps_mode;
     if (fpsLimit.value !== state.settingsDraft.fps_value) fpsLimit.value = state.settingsDraft.fps_value;
@@ -2490,6 +2493,7 @@
     const settings = state.config.settings;
     state.settingsDraft = {
       always_keep_overlays_in_view: settings.always_keep_overlays_in_view,
+      exit_edit_mode_on_focus_loss: settings.exit_edit_mode_on_focus_loss,
       fps_mode: settings.fps_limit === 0 ? "auto" : "fixed",
       fps_value: settings.fps_limit ? String(settings.fps_limit) : "",
       allow_unrestricted_shared_array_buffer: settings.allow_unrestricted_shared_array_buffer,
@@ -2581,6 +2585,9 @@
   }, { passive: true });
   keepOverlaysInView.addEventListener("change", () => {
     if (state.settingsDraft) state.settingsDraft.always_keep_overlays_in_view = keepOverlaysInView.checked;
+  });
+  exitEditOnFocusLoss.addEventListener("change", () => {
+    if (state.settingsDraft) state.settingsDraft.exit_edit_mode_on_focus_loss = exitEditOnFocusLoss.checked;
   });
   allowUnrestrictedSharedArrayBuffer.addEventListener("change", () => {
     if (state.settingsDraft) state.settingsDraft.allow_unrestricted_shared_array_buffer = allowUnrestrictedSharedArrayBuffer.checked;
@@ -2711,6 +2718,7 @@
     }
     state.config.settings = {
       always_keep_overlays_in_view: draft.always_keep_overlays_in_view,
+      exit_edit_mode_on_focus_loss: draft.exit_edit_mode_on_focus_loss,
       fps_limit: fpsValue,
       allow_unrestricted_shared_array_buffer: draft.allow_unrestricted_shared_array_buffer,
       allowed_ips: draft.allowed_ips,

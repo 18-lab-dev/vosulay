@@ -45,11 +45,24 @@ impl NativeHotkey {
     }
 
     pub(super) fn matches(&self, modifiers: InputModifiers, code: i32) -> bool {
-        code == self.code
+        main_key_code(code) == self.code
             && modifiers.control == self.control
             && modifiers.alt == self.alt
             && modifiers.shift == self.shift
             && modifiers.meta == self.meta
+    }
+}
+
+/// The manager records keypad keys by their character, as the main-keyboard
+/// key, so their distinct virtual-key codes must match that binding too.
+fn main_key_code(code: i32) -> i32 {
+    match code {
+        0x60..=0x69 => code - 0x60 + 0x30,
+        0x6B => 0xBB,
+        0x6D => 0xBD,
+        0x6E => 0xBE,
+        0x6F => 0xBF,
+        _ => code,
     }
 }
 
@@ -121,6 +134,29 @@ mod tests {
         assert!(!hotkey.matches(modifiers(true, false, false, false), 0x49));
         assert!(!hotkey.matches(modifiers(true, true, true, false), 0x49));
         assert!(!hotkey.matches(modifiers(true, false, true, false), 0x4A));
+    }
+
+    #[test]
+    fn keypad_keys_match_their_recorded_main_keyboard_binding() {
+        let held = modifiers(true, false, false, false);
+        for (text, keypad) in [
+            ("Ctrl+Plus", 0x6B),
+            ("Ctrl+Minus", 0x6D),
+            ("Ctrl+/", 0x6F),
+            ("Ctrl+.", 0x6E),
+            ("Ctrl+0", 0x60),
+            ("Ctrl+9", 0x69),
+        ] {
+            assert!(
+                NativeHotkey::parse(text).unwrap().matches(held, keypad),
+                "{text}"
+            );
+        }
+        assert!(
+            !NativeHotkey::parse("Ctrl+Plus")
+                .unwrap()
+                .matches(held, 0x6A)
+        );
     }
 
     #[test]

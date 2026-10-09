@@ -89,6 +89,8 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         effective_fps: initial_fps,
         consumed: [false; 256],
         suppress_character: false,
+        capture_suspended: false,
+        exit_edit_on_focus_loss: config.settings.exit_edit_mode_on_focus_loss,
         interaction_hotkey: interaction_hotkey(&config.settings.hotkeys.toggle_interaction),
         viewport: Viewport {
             width: 640,
@@ -156,6 +158,8 @@ struct Host<'a> {
     closing: Option<(Closing, String, Instant)>,
     consumed: [bool; 256],
     suppress_character: bool,
+    capture_suspended: bool,
+    exit_edit_on_focus_loss: bool,
     interaction_hotkey: NativeHotkey,
     viewport: Viewport,
     shared_array_buffer: bool,
@@ -246,6 +250,7 @@ impl Host<'_> {
             self.platform.set_capture(false)?;
         }
         self.editing = enabled;
+        self.capture_suspended = false;
         self.consumed.fill(false);
         self.suppress_character = false;
         if let Some(browser) = self.browser.as_ref() {
@@ -362,7 +367,22 @@ impl Host<'_> {
                             browser.set_visible(false)?;
                         }
                     }
-                    PlatformEvent::CaptureEnded => self.editing(false)?,
+                    PlatformEvent::CaptureEnded => {
+                        if !self.exit_edit_on_focus_loss
+                            && self.editing
+                            && self.attached
+                            && !self.dialog
+                            && !self.platform.game_focused()
+                        {
+                            // The platform already released input; editing resumes capture on
+                            // refocus. A stale renderer fails that recapture and exits editing.
+                            self.capture_suspended = true;
+                            self.consumed.fill(false);
+                            self.suppress_character = false;
+                        } else {
+                            self.editing(false)?;
+                        }
+                    }
                     PlatformEvent::Viewport(viewport) => {
                         self.viewport = viewport;
                         self.refresh_hz = viewport.refresh_hz;
@@ -517,6 +537,16 @@ impl Host<'_> {
                 {
                     self.shared_array_buffer = enabled;
                 }
+                if let Some(enabled) = reply
+                    .envelope
+                    .get("exit_edit_mode_on_focus_loss")
+                    .or_else(|| {
+                        settings.and_then(|settings| settings.get("exit_edit_mode_on_focus_loss"))
+                    })
+                    .and_then(Value::as_bool)
+                {
+                    self.exit_edit_on_focus_loss = enabled;
+                }
                 if let Some(text) = reply
                     .envelope
                     .get("toggle_interaction")
@@ -554,6 +584,8 @@ impl Host<'_> {
                     self.dialog = false;
                     if self.editing && self.attached && self.platform.game_focused() {
                         self.platform.set_capture(true)?;
+                    } else if self.editing && self.attached {
+                        self.capture_suspended = true;
                     }
                 }
             }
@@ -574,6 +606,17 @@ impl Host<'_> {
                     && self.flush(Closing::Detach)?
                 {
                     self.detach()?;
+                }
+            }
+            if self.capture_suspended && self.platform.game_focused() {
+                self.capture_suspended = false;
+                if self.editing
+                    && self.attached
+                    && !self.dialog
+                    && let Err(error) = self.platform.set_capture(true)
+                {
+                    self.editing(false)?;
+                    self.receive(&json!({"type":"error", "message":format!("{error:#}")}))?;
                 }
             }
             let now = Instant::now();
@@ -608,6 +651,11 @@ impl Host<'_> {
                 .and_then(CefRuntime::next_pump_deadline);
             if self.attached && self.ready {
                 next = Some(next.map_or(self.next_ping, |deadline| deadline.min(self.next_ping)));
+            }
+            if self.capture_suspended {
+                // Windows reports no event when the game regains focus, so poll it while suspended.
+                let focus_check = Instant::now() + Duration::from_millis(50);
+                next = Some(next.map_or(focus_check, |deadline| deadline.min(focus_check)));
             }
             if let Some((_, _, started)) = &self.closing {
                 let closing = *started + Duration::from_secs(5);
