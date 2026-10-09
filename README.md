@@ -677,7 +677,10 @@ release risks.
 
 ## Development
 
-See [Testing guidance](openwiki/testing/guidance.md) for the development and verification workflow.
+See [Testing guidance](openwiki/testing/guidance.md) for exact verification
+commands, native prerequisites, the C-backed loader fixtures, and CI triggers.
+Linux CI runs workspace tests and Clippy on pull requests and pushes to `main`;
+the Windows package and release workflows remain manual-dispatch only.
 
 The `vosulay-cef-smoke` binary verifies transparent OSR, secure JavaScript,
 native manager-bridge initialization, iframe pixels, WebGL, resize, and clean
@@ -772,7 +775,7 @@ counter identity and dimensions; real game pointer input worked after release.
 
 ## Engineering documentation
 
-[OpenWiki](openwiki/quickstart.md) contains detailed engineering documentation, but its generated pages await manual regeneration for the CEF cutover and still describe the retired Qt/Electron hosts. Use the current runtime, build, and verification instructions above until it is regenerated.
+[OpenWiki](openwiki/quickstart.md) contains detailed engineering documentation for the current Rust/CEF architecture: quickstart, architecture, configuration model, integrations, build-and-run runbook, testing guidance, and source map.
 
 Regenerate the wiki locally from the umbrella repository root with
 `openwiki code --update --print`, using the installed CLI and local OpenCode Go
