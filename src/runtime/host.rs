@@ -256,6 +256,8 @@ impl Host<'_> {
         let enabled = enabled && self.attached && self.visible && self.ready;
         if enabled && !self.dialog {
             if let Err(error) = self.platform.set_capture(true) {
+                // The tray may show an armed request as checked; it is cleared now.
+                self.platform.set_tray_state(self.editing, self.visible);
                 self.receive(&json!({"type":"error", "message":format!("{error:#}")}))?;
                 return Ok(());
             }
