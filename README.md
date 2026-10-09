@@ -11,6 +11,8 @@
 
 vosulay renders existing tosu-compatible counters inside osu! and preserves the editor and profile model. Use a separately running vosu or tosu-compatible backend at `http://127.0.0.1:24050/` by default. Compatibility is detected from the public counter API, not the server's product name. Vosu remains completely independent from vosulay.
 
+Contributing? Start with [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites and verification on one Linux or Windows machine.
+
 ## Features
 
 - Position, resize, scale, rotate, reorder, and adjust the opacity of overlays.
@@ -179,6 +181,9 @@ Text fields keep native undo/redo; normal mode leaves game input alone.
 Both platforms provide **Edit mode**, **Hide vosulay**, and **Exit vosulay**
 in the tray; the first two are checkable. Linux requires StatusNotifierItem
 tray support. Use **Exit vosulay** to quit; hiding does not exit the app.
+Editing only captures input while the game is focused, so choosing **Edit mode**
+from the tray starts editing as soon as the game is focused again; it stays
+checked until then, and choosing it again cancels.
 
 On startup, vosulay registers an app-launcher entry. Linux installs
 `~/.local/share/applications/com.vosu.vosulay.desktop` with an absolute Exec

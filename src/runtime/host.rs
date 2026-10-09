@@ -108,6 +108,7 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         consumed: [false; 256],
         suppress_character: false,
         capture_suspended: false,
+        edit_armed: false,
         exit_edit_on_focus_loss: config.settings.exit_edit_mode_on_focus_loss,
         interaction_hotkey: interaction_hotkey(&config.settings.hotkeys.toggle_interaction),
         viewport: Viewport {
@@ -176,6 +177,7 @@ struct Host<'a> {
     consumed: [bool; 256],
     suppress_character: bool,
     capture_suspended: bool,
+    edit_armed: bool,
     exit_edit_on_focus_loss: bool,
     interaction_hotkey: NativeHotkey,
     viewport: Viewport,
@@ -250,6 +252,7 @@ impl Host<'_> {
         Ok(())
     }
     fn editing(&mut self, enabled: bool) -> Result<()> {
+        self.edit_armed = false;
         let enabled = enabled && self.attached && self.visible && self.ready;
         if enabled && !self.dialog {
             if let Err(error) = self.platform.set_capture(true) {
@@ -414,6 +417,18 @@ impl Host<'_> {
                         self.apply_fps()?;
                     }
                     PlatformEvent::Input(input) => self.input(input)?,
+                    PlatformEvent::ToggleEdit
+                        if !self.editing
+                            && self.attached
+                            && self.visible
+                            && self.ready
+                            && !self.platform.game_focused() =>
+                    {
+                        // Choosing the tray item focuses the tray, and capture must stay limited
+                        // to a focused game, so edit mode starts when the game is focused next.
+                        self.edit_armed = !self.edit_armed;
+                        self.platform.set_tray_state(self.edit_armed, self.visible);
+                    }
                     PlatformEvent::ToggleEdit | PlatformEvent::ShortcutToggleEdit => {
                         if !self.dialog && self.closing.is_none() && self.flushed.is_none() {
                             self.editing(!self.editing)?;
@@ -636,6 +651,14 @@ impl Host<'_> {
                     self.detach()?;
                 }
             }
+            if self.edit_armed
+                && self.platform.game_focused()
+                && !self.dialog
+                && self.closing.is_none()
+                && self.flushed.is_none()
+            {
+                self.editing(true)?;
+            }
             if self.capture_suspended && self.platform.game_focused() {
                 self.capture_suspended = false;
                 if self.editing && self.attached && !self.dialog {
@@ -685,8 +708,8 @@ impl Host<'_> {
             if self.attached && self.ready {
                 next = Some(next.map_or(self.next_ping, |deadline| deadline.min(self.next_ping)));
             }
-            if self.capture_suspended {
-                // Windows reports no event when the game regains focus, so poll it while suspended.
+            if self.capture_suspended || self.edit_armed {
+                // Windows reports no event when the game regains focus, so poll it while waiting.
                 let focus_check = Instant::now() + Duration::from_millis(50);
                 next = Some(next.map_or(focus_check, |deadline| deadline.min(focus_check)));
             }
