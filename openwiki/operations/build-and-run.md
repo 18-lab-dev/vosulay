@@ -1,65 +1,75 @@
 ---
 type: Runbook
 title: Build, launch, and operate vosulay
-description: Practical runbook for building vosulay's Rust and Qt stack, satisfying native dependencies, using command-line and IPC controls, selecting displays, and understanding packaging and automation files.
+description: Runbook for building vosulay's Rust/CEF workspace and its pinned CEF caches, the host's command-line options and runtime/config selection, Linux attachment and troubleshooting, the remote profile server, packaging, and manual OpenWiki maintenance.
 resource: build.rs
-tags: [operations, build, runbook, qt, wayland, x11]
+tags: [operations, build, runbook, cef, linux, windows]
 ---
 
 # Build, launch, and operate vosulay
 
 ## Native build prerequisites
 
-[`build.rs`](../../build.rs) requires Qt 6.8 or newer with `Qt6Core`, `Qt6Widgets`, `Qt6WebEngineWidgets`, `Qt6WebChannel`, `Qt6Network`, and `Qt6DBus`, plus `moc`, CMake, and a LayerShellQt development package exposing `LayerShellQt::Interface`. It uses pkg-config for Qt and a generated CMake project for LayerShellQt, then compiles the bridge and shell as C++17.
+vosulay builds with Cargo and Rust 1.96.1 ([`rust-toolchain.toml`](../../rust-toolchain.toml)); [`Cargo.toml`](../../Cargo.toml) defines the workspace. Qt, CMake/MOC, LayerShellQt, Dawn Qt WebEngine, Electron, Python, and Chromium/CEF source builds are no longer part of the build.
 
-For non-system installations, the build script recognizes CMake/Qt/LayerShellQt environment variables such as `Qt6_DIR`, `Qt6_ROOT`, `LayerShellQt_DIR`, `LayerShellQt_ROOT`, `CMAKE_PREFIX_PATH`, `CMAKE_TOOLCHAIN_FILE`, and `QT_MOC`. [`Cargo.toml`](../../Cargo.toml) records the Rust, HTTP, parser, serialization, CXX, and build dependencies; [`rust-toolchain.toml`](../../rust-toolchain.toml) pins the Rust toolchain.
+[`crates/browser-cef/build.rs`](../../crates/browser-cef/build.rs) acquires the pinned precompiled CEF distribution from [`tools/cef/pins.json`](../../tools/cef/pins.json) through [`crates/cef-tools`](../../crates/cef-tools) when `CEF_PATH` is unset, verifying archive size, SHA1, SHA256, and the runtime file manifest. The first acquisition needs network access; later builds reuse `$XDG_CACHE_HOME/vosulay/cef` (`~/.cache/vosulay/cef` when unset). An explicit `CEF_PATH` must name an already verified pinned distribution. Only x86_64 Linux and Windows targets have pins.
 
-If Cargo fails before Rust tests run, inspect the native dependency diagnostic from `build.rs` first. The generated MOC and CMake probe outputs live under Cargo `OUT_DIR`, not in the repository.
+On Linux the root [`build.rs`](../../build.rs) also retains the executable-adjacent CEF runtime in `$XDG_CACHE_HOME/vosulay/runtime` and the built compositor and lookup libraries in `$XDG_CACHE_HOME/vosulay/overlay`, then embeds those paths so a Cargo-installed binary runs without environment setup. Keep both caches while using such an installation.
 
-`build.rs` also requires a Dawn WebGPU-enabled Qt WebEngine (stock distro
-builds disable Dawn). If pkg-config doesn't already resolve one, `build.rs`
-builds it automatically via [`extra/build-webgpu-qt.sh`](../../extra/build-webgpu-qt.sh)
-into `$XDG_CACHE_HOME/vosulay/qt-webgpu` (`~/.cache/vosulay/qt-webgpu` by
-default) the first time, then prepends that prefix to `PKG_CONFIG_PATH` for
-the rest of the build; subsequent builds reuse the cached prefix without
-recompiling. `VOSULAY_WEBGPU_QT_PREFIX` overrides the cache location (for a
-pre-built or shared prefix); `VOSULAY_SKIP_AUTO_WEBGPU_BUILD=1` disables the
-automatic build so a missing Dawn Qt WebEngine fails fast with manual
-instructions instead of starting a ~20-40 minute Chromium compile — useful
-for CI or packaging environments that provision Qt WebEngine themselves. The
-Dawn-enabled WebEngine selected at build time is also the runtime
-dependency. `build.rs` records its library directory as the executable
-RUNPATH and embeds its subprocess, resource, and locale paths as defaults.
-Consequently, binaries produced by `cargo install --path .` do not depend on
-the build shell retaining any environment exports. Non-empty runtime
-`QTWEBENGINE*` values remain explicit overrides.
+Linux builds additionally need a C compiler, `pkg-config`, `wayland-client` development files (linked by `rfd`'s portal backend), `libEGL` development files for the compositor example, and the system libraries `libcef.so` loads at runtime. The [testing guidance](../testing/guidance.md#linux-prerequisites) lists the exact Ubuntu packages, the SDL2/SDL3 development packages the loader fixtures need, and the verification commands. Windows builds need the native MSVC toolchain; the `package-windows` helper documented in the [README](../../README.md) acquires CEF and asdf-overlay assets before building.
 
 ## Launch modes and controls
 
-The Qt command-line parser in [`src/qt/qt_shell.cpp`](../../src/qt/qt_shell.cpp) supports:
+[`src/runtime.rs`](../../src/runtime.rs) parses the command line of the single CEF host (`vosulay`, or `vosulay.exe` on Windows):
 
-- `--vosu-url`/`-t`: vosu base URL, default `http://127.0.0.1:24050`.
-- `--monitor`/`-m`: monitor index or exact screen name when not attached.
-- `--fps-limit`/`-f`: `auto`, `0`, or a positive integer.
-- `--attach`/`-a`: accept geometry over IPC.
-- `--edit`/`-e`: toggle editing in an already-running instance, then exit; normal startup creates the instance in display mode.
-- `--ipc-toggle-overlay`/`-i` and `--ipc-quit`/`-q`: control a running instance.
-- `--ipc-geometry x,y,w,h`: set geometry on an attached instance.
+| Option | Effect |
+|---|---|
+| `--vosu-url`/`-t URL` | Backend base URL, default `http://127.0.0.1:24050/`. Must be HTTP(S) without credentials, query, or fragment; a trailing `/` is added. |
+| `--fps-limit`/`-f FPS` | `auto` or `0` follows the target display; otherwise `1`–`1000000`. Overrides the saved Settings value for this run only. |
+| `--pid PID` | Additional supported game process (repeatable, non-zero). |
+| `--process-name NAME` | Additional supported executable basename (repeatable; no path separators). |
+| `--config PATH` | Configuration file. |
+| `--cef-dir PATH` | Runtime directory. On Linux it also selects `libvosulay_overlay.so` and `libvosulay_lookup.so` from that directory. |
+| `--benchmark-uncapped` | Testing only: disables Chromium pacing and forces the smallest positive OSR interval. Not a production setting. |
+| `--help`/`-h`, `--version`/`-v` | Print usage or version and exit. |
 
-A second normal instance exits with an error if the user-scoped IPC endpoint is already owned. IPC behavior and security limits are detailed in the [integration boundary](../integrations/vosu-and-overlays.md).
+Unknown options are rejected. There are no IPC, monitor-selection, or attach-geometry options; the host follows the focused supported game instead.
+
+Runtime selection:
+
+- **Portable package:** when `libcef.so` (Linux) sits beside the executable, the host uses that directory for CEF, the compositor, and the lookup helper. Windows always uses the executable's directory.
+- **Cargo build or install (Linux):** [`src/main.rs`](../../src/main.rs) hard-links (or copies) the executable into the build-time retained runtime directory and re-executes it there, because CEF loads ICU and GPU assets beside the executable. The compositor and lookup paths come from the retained `overlay` cache. Removing either cache breaks an installed binary until it is reinstalled.
+- **Configuration:** a `portable` file or an existing `data/config.json` beside the executable selects `data/config.json`; otherwise the user configuration directory is used. `--config` overrides both.
 
 ## Runtime behavior
 
-The shell configures WebEngine frame-rate behavior before creating `QApplication`. `auto`/`0` follows the detected screen refresh rate; explicit limits use the frontend limiter, and high/native rates may add `--disable-frame-rate-limit` to `QTWEBENGINE_CHROMIUM_FLAGS`. Tray actions support editing, show/hide, reload, and quit.
+CEF starts lazily when a supported game is selected and stays initialized until exit, because CEF cannot be reinitialized in one process. `Ctrl+Shift+Space` toggles edit mode in game, and Escape leaves it. Input capture and browser-heartbeat failures are bounded to five seconds: Windows terminates the host so input recovers, while Linux releases capture and keeps the host running. The README describes the full editor, focus-following, and frame-rate behavior.
 
-On Wayland, LayerShellQt is used for overlay-layer placement; on X11, input transparency and masks implement click-through display mode. When debugging “invisible” or non-interactive overlays, check edit mode, selected monitor/attachment, visibility, and platform-specific shell behavior before changing frontend code.
+Linux delivers frames through the injected compositor. The host refreshes recognized osu desktop shortcuts on startup with `lookup helper → foreign preloads → compositor` preload order and Vulkan layer settings, and also attempts live attachment to same-user native games. Where injection policy blocks live attachment, launch the game through its refreshed shortcut or with the `LD_PRELOAD` or `VK_LAYER_PATH`/`VK_INSTANCE_LAYERS` commands in the README. Package the host and compositor together: the control protocol is versioned.
+
+When an overlay is missing in game, check in this order:
+
+1. Is the game focused? Selection follows focus, not process order.
+2. Is the backend reachable at the `--vosu-url` value?
+3. Did the compositor load? Check the preload order and whether the game was launched before the shortcut refresh.
+4. Is the overlay enabled and inside the game viewport?
 
 ## Remote profile server operations
 
-Both platform hosts serve credential-protected, view-only profile pages on `AppSettings.remote_listen_host:remote_listen_port` (default `0.0.0.0:5050`, configurable in manager settings and applied on the next restart); see the [remote integration boundary](../integrations/vosu-and-overlays.md) for routes and authorization. Copy the complete **Remote access URL** from manager settings rather than sharing `/overlay` directly. Configure **Allowed client IPs** before exposing the service beyond loopback, and remember that rendered counter frames may need the same client network allowed by vosu. Regenerating the credential via the settings dialog's Regenerate control, or replacing it directly in `config.json`, revokes prior URLs. A bind failure is non-fatal to application startup: the host logs that remote hosting is unavailable and continues without the server.
+The host serves view-only profile pages at `/overlay` (`?profile=N` selects by 1-based position) on `settings.remote_listen_host:remote_listen_port`. The default is `0.0.0.0:5050`; changes are made in manager settings and apply after a restart. Clients must use the machine's loopback or LAN address, not the bind address.
+
+There is no access token or credential. Access depends on three checks in [`src/remote.rs`](../../src/remote.rs):
+
+- **Allowed client IPs:** loopback is always allowed. Other entries are exact IPs or four-part IPv4 `*` patterns, separated by commas.
+- **Host header:** it must name the listener's own address or the configured **Remote host**.
+- **Browser metadata:** `Origin` and `Sec-Fetch-Site` are optional. A supplied `Origin` must match the authority's exact HTTP origin; `Sec-Fetch-Site` may be `none`, `same-origin`, or `same-site`. Local overlay resources and frame navigations additionally accept `Origin: null` and `Sec-Fetch-Site: cross-site`.
+
+**Remote access URL** appears in settings only after **Remote host** is set. Anyone allowed can view every profile and use the proxied backend, so restrict the listener and allowlist to trusted networks. The backend must allow the vosulay machine, not each viewing device.
+
+A LAN bind failure is non-fatal: the host logs `Remote overlay hosting at … is unavailable` and keeps the loopback broker that the in-game browser needs. See [vosu catalog, overlay sources, and remote pages](../integrations/vosu-and-overlays.md#remote-profile-pages) for routes and headers.
 
 ## Packaging and documentation maintenance
 
-[`extra/com.vosu.vosulay.desktop`](../../extra/com.vosu.vosulay.desktop) supplies a desktop entry, while [`extra/attach.sh`](../../extra/attach.sh) is a small geometry-control helper. Windows packaging is defined by `windows/package.json`; the setup and portable distributions use different configuration locations described in the [configuration model](../domain/configuration.md). No installer or release runbook is present yet.
+[`extra/com.vosu.vosulay.desktop`](../../extra/com.vosu.vosulay.desktop) supplies the desktop entry that [`CMakeLists.txt`](../../CMakeLists.txt) installs with the application icon. Portable Linux and Windows packages are assembled by [`crates/cef-tools`](../../crates/cef-tools) (`package` and `package-windows`); the README gives the exact commands. Portable configuration selection is described under "Runtime selection" above. No installer or release runbook is present yet.
 
 OpenWiki maintenance is intentionally manual and local. From the repository root, run `openwiki code --update --print` (or `openwiki --update`) after reviewing source changes; inspect the generated diff and commit only the affected `openwiki/` and OpenWiki-managed guidance files. Do not create or restore `.github/workflows/openwiki-update.yml`, or add scheduled/manually dispatched GitHub Actions automation for OpenWiki.

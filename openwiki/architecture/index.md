@@ -6,4 +6,4 @@ description: "Files and subdirectories in Architecture."
 
 # Files
 
-- [vosulay runtime architecture](overview.md) - Explains how the Rust entrypoint, CXX bridge, Qt WebEngine shell, embedded manager frontend, workers, tray controls, and platform-specific overlay behavior compose into the vosulay application.
+- [vosulay runtime architecture](overview.md) - Explains how the single Rust/CEF host, embedded manager page, manager bridge, resource schemes, backend broker, editor worker, and the Linux and Windows in-game frame paths compose into vosulay.

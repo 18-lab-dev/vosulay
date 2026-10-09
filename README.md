@@ -471,7 +471,7 @@ Evidence: `target/autoresearch-vm/runs/reports/run-orq8ep_s/`,
 Linux's unused ring eventfd is also removed: there was no waiter, and the game
 already acquires the newest complete frame at present. The sealed mapping,
 acquire/release atomics, complete snapshots, and owned read leases are unchanged.
-The Linux control protocol is version 2 and hands off one memfd; package the
+The Linux control protocol is version 3 and hands off one memfd; package the
 host and injected library together rather than mixing the old two-descriptor
 transport with the new runtime.
 
@@ -677,7 +677,10 @@ release risks.
 
 ## Development
 
-See [Testing guidance](openwiki/testing/guidance.md) for the development and verification workflow.
+See [Testing guidance](openwiki/testing/guidance.md) for exact verification
+commands, native prerequisites, the C-backed loader fixtures, and CI triggers.
+Linux CI runs workspace tests and Clippy on pull requests and pushes to `main`;
+the Windows package and release workflows remain manual-dispatch only.
 
 The `vosulay-cef-smoke` binary verifies transparent OSR, secure JavaScript,
 native manager-bridge initialization, iframe pixels, WebGL, resize, and clean
@@ -772,7 +775,7 @@ counter identity and dimensions; real game pointer input worked after release.
 
 ## Engineering documentation
 
-[OpenWiki](openwiki/quickstart.md) contains detailed engineering documentation, but its generated pages await manual regeneration for the CEF cutover and still describe the retired Qt/Electron hosts. Use the current runtime, build, and verification instructions above until it is regenerated.
+[OpenWiki](openwiki/quickstart.md) contains detailed engineering documentation for the current Rust/CEF architecture: quickstart, architecture, configuration model, integrations, build-and-run runbook, testing guidance, and source map.
 
 Regenerate the wiki locally from the umbrella repository root with
 `openwiki code --update --print`, using the installed CLI and local OpenCode Go

@@ -1,4 +1,13 @@
 //! Single producer, newest-frame consumer. A read lease cannot be overwritten.
+//!
+//! Geometry trust boundary: both processes map the ring writable, so the
+//! shared header geometry can change after handoff. Width, height, frame size
+//! and slot offsets come only from `Geometry`, validated at creation or
+//! receipt and kept in process-local memory. Shared copies are only compared,
+//! to report corruption, and never feed pointer arithmetic, lengths, damage
+//! clipping or copy ranges, so altered metadata cannot move an access outside
+//! the mapping. Nothing here makes payload bytes or slot control words
+//! trustworthy; those remain a cooperative contract between both processes.
 use crate::protocol::{invalid, pixel_bytes};
 use std::{
     io,
@@ -7,13 +16,14 @@ use std::{
     ptr::NonNull,
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU32, AtomicU64, Ordering},
     },
 };
 use vosulay_frame::DamageRect;
 
 const SLOTS: usize = 3;
-const MAGIC: [u8; 8] = *b"VLAYRNG1";
+// Native-endian load of these bytes; the shared memory holds them verbatim.
+const MAGIC: u64 = u64::from_ne_bytes(*b"VLAYRNG1");
 const FREE: u64 = 0;
 const WRITING: u64 = 1;
 const READY: u64 = 2;
@@ -25,32 +35,68 @@ const SEALS: i32 = libc::F_SEAL_GROW | libc::F_SEAL_SHRINK | libc::F_SEAL_SEAL;
 struct Slot {
     control: AtomicU64,
 }
+// Header fields are atomics so the ordinary (atomic) metadata stores of a
+// cooperating peer do not race with these loads. They are not a defence
+// against arbitrary hostile writes; geometry safety instead rests on never
+// using these fields for offsets or lengths. Atomic integers keep their plain
+// layout, so the wire bytes are unchanged.
 #[repr(C, align(64))]
 struct Header {
-    magic: [u8; 8],
-    width: u32,
-    height: u32,
-    frame_bytes: u64,
+    magic: AtomicU64,
+    width: AtomicU32,
+    height: AtomicU32,
+    frame_bytes: AtomicU64,
     slots: [Slot; SLOTS],
 }
 const HEADER_BYTES: usize = size_of::<Header>();
+const _: () = assert!(
+    std::mem::offset_of!(Header, width) == 8
+        && std::mem::offset_of!(Header, height) == 12
+        && std::mem::offset_of!(Header, frame_bytes) == 16
+        && std::mem::offset_of!(Header, slots) == 64
+        && HEADER_BYTES == 256
+);
+
+/// Process-local ring geometry. It is validated before mapping and is the only
+/// source of offsets and lengths; the shared header copy is only compared.
+#[derive(Clone, Copy)]
+struct Geometry {
+    width: u32,
+    height: u32,
+    frame_bytes: usize,
+}
+impl Geometry {
+    fn new(width: u32, height: u32) -> io::Result<Self> {
+        Ok(Self {
+            width,
+            height,
+            frame_bytes: pixel_bytes(width, height)?,
+        })
+    }
+    fn mapping_bytes(self) -> usize {
+        HEADER_BYTES + SLOTS * self.frame_bytes
+    }
+}
 
 struct Mapping {
     fd: OwnedFd,
     pointer: NonNull<u8>,
     bytes: usize,
+    geometry: Geometry,
 }
 // SAFETY: shared control is accessed atomically. Consumers own payloads only
 // while leased and read them immutably; the sole producer writes only after a
 // successful slot-state CAS. The producer may also compare its last published
 // payload while readers access it because neither side writes that payload.
+// Offsets and lengths come from immutable process-local geometry, never from
+// peer-writable header fields.
 unsafe impl Send for Mapping {}
 unsafe impl Sync for Mapping {}
 
 impl Mapping {
     fn create(width: u32, height: u32) -> io::Result<Self> {
-        let frame_bytes = pixel_bytes(width, height)?;
-        let bytes = HEADER_BYTES + SLOTS * frame_bytes;
+        let geometry = Geometry::new(width, height)?;
+        let bytes = geometry.mapping_bytes();
         // SAFETY: static terminated name; the returned descriptor is uniquely owned.
         let raw = unsafe {
             libc::memfd_create(
@@ -71,12 +117,12 @@ impl Mapping {
         if unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_ADD_SEALS, SEALS) } < 0 {
             return Err(io::Error::last_os_error());
         }
-        let mapping = Self::map(fd, bytes)?;
+        let mapping = Self::map(fd, geometry)?;
         let header = Header {
-            magic: MAGIC,
-            width,
-            height,
-            frame_bytes: frame_bytes as u64,
+            magic: AtomicU64::new(MAGIC),
+            width: AtomicU32::new(width),
+            height: AtomicU32::new(height),
+            frame_bytes: AtomicU64::new(geometry.frame_bytes as u64),
             slots: std::array::from_fn(|_| Slot {
                 control: AtomicU64::new(FREE),
             }),
@@ -88,8 +134,8 @@ impl Mapping {
         Ok(mapping)
     }
     fn receive(fd: OwnedFd, width: u32, height: u32) -> io::Result<Self> {
-        let frame_bytes = pixel_bytes(width, height)?;
-        let bytes = HEADER_BYTES + SLOTS * frame_bytes;
+        let geometry = Geometry::new(width, height)?;
+        let bytes = geometry.mapping_bytes();
         // SAFETY: stat is a writable output struct; descriptor is live.
         let mut status: libc::stat = unsafe { zeroed() };
         if unsafe { libc::fstat(fd.as_raw_fd(), &mut status) } < 0 {
@@ -104,18 +150,12 @@ impl Mapping {
         if seals < 0 || seals & SEALS != SEALS {
             return Err(invalid("unsealed frame ring"));
         }
-        let mapping = Self::map(fd, bytes)?;
-        let header = mapping.header();
-        if header.magic != MAGIC
-            || header.width != width
-            || header.height != height
-            || header.frame_bytes != frame_bytes as u64
-        {
-            return Err(invalid("frame ring header mismatch"));
-        }
+        let mapping = Self::map(fd, geometry)?;
+        mapping.check_header()?;
         Ok(mapping)
     }
-    fn map(fd: OwnedFd, bytes: usize) -> io::Result<Self> {
+    fn map(fd: OwnedFd, geometry: Geometry) -> io::Result<Self> {
+        let bytes = geometry.mapping_bytes();
         // SAFETY: descriptor extent was checked and sealed; map owns this address until Drop.
         let pointer = unsafe {
             libc::mmap(
@@ -137,19 +177,41 @@ impl Mapping {
             }
             return Err(invalid("null frame mapping"));
         };
-        Ok(Self { fd, pointer, bytes })
+        Ok(Self {
+            fd,
+            pointer,
+            bytes,
+            geometry,
+        })
     }
     fn header(&self) -> &Header {
-        // SAFETY: mapping is aligned and at least HEADER_BYTES; immutable header
-        // fields are initialized before handoff and never changed afterward.
+        // SAFETY: mapping is aligned and at least HEADER_BYTES. Fields are only
+        // accessed atomically and geometry fields are only compared.
         unsafe { &*self.pointer.as_ptr().cast::<Header>() }
     }
+    /// Reports peer tampering with the shared header. Passing grants no trust:
+    /// the peer may store again immediately, so callers keep using `geometry`
+    /// instead of anything loaded here.
+    fn check_header(&self) -> io::Result<()> {
+        let header = self.header();
+        let geometry = self.geometry;
+        if header.magic.load(Ordering::Relaxed) != MAGIC
+            || header.width.load(Ordering::Relaxed) != geometry.width
+            || header.height.load(Ordering::Relaxed) != geometry.height
+            || header.frame_bytes.load(Ordering::Relaxed) != geometry.frame_bytes as u64
+        {
+            return Err(invalid("frame ring header mismatch"));
+        }
+        Ok(())
+    }
     fn payload(&self, slot: usize) -> *mut u8 {
-        // SAFETY: callers use an in-range slot and the validated header extent.
+        assert!(slot < SLOTS, "frame ring slot out of range");
+        // SAFETY: slot < SLOTS and the local frame size keep the slot inside
+        // the mapped extent, which `map` sized from the same geometry.
         unsafe {
             self.pointer
                 .as_ptr()
-                .add(HEADER_BYTES + slot * self.header().frame_bytes as usize)
+                .add(HEADER_BYTES + slot * self.geometry.frame_bytes)
         }
     }
 }
@@ -172,10 +234,10 @@ impl RingHandle {
         self.mapping.fd.as_fd()
     }
     pub fn width(&self) -> u32 {
-        self.mapping.header().width
+        self.mapping.geometry.width
     }
     pub fn height(&self) -> u32 {
-        self.mapping.header().height
+        self.mapping.geometry.height
     }
     pub fn mapping_len(&self) -> usize {
         self.mapping.bytes
@@ -220,18 +282,25 @@ impl Producer {
     /// Damage must include changes since the preceding call, including dropped
     /// frames. None requires a full copy. Returns false for unchanged pixels or
     /// when all slots are leased; every readable slot remains a complete image.
+    /// Fails with `InvalidData` if the peer has altered the shared header.
     pub fn publish(&mut self, pixels: &[u8], damage: Option<DamageRect>) -> io::Result<bool> {
         let mapping = &self.handle.mapping;
         let header = mapping.header();
-        if pixels.len() != header.frame_bytes as usize {
+        let Geometry {
+            width,
+            height,
+            frame_bytes,
+        } = mapping.geometry;
+        mapping.check_header()?;
+        if pixels.len() != frame_bytes {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "frame byte length mismatch",
             ));
         }
         let damage = damage
-            .and_then(|rect| rect.clipped(header.width, header.height))
-            .unwrap_or_else(|| DamageRect::full(header.width, header.height));
+            .and_then(|rect| rect.clipped(width, height))
+            .unwrap_or_else(|| DamageRect::full(width, height));
         // Each slot has its own older snapshot. Accumulate even if this call
         // is dropped, and clear only the slot actually brought up to date.
         for pending in &mut self.damage {
@@ -247,8 +316,7 @@ impl Producer {
                 let previous =
                     unsafe { std::slice::from_raw_parts(mapping.payload(index), pixels.len()) };
                 if self.damage[index].is_none_or(|rect| {
-                    damage_rows(rect, header.width)
-                        .all(|range| previous[range.clone()] == pixels[range])
+                    damage_rows(rect, width).all(|range| previous[range.clone()] == pixels[range])
                 }) {
                     return Ok(false);
                 }
@@ -285,10 +353,11 @@ impl Producer {
                     continue;
                 }
                 // SAFETY: the CAS acquired exclusive payload write ownership.
-                // The accumulated clipped region covers every change since
-                // this slot was last written, and every byte range is in bounds.
+                // The accumulated region covers every change since this slot
+                // was last written and is clipped to local geometry, so each
+                // range lies within both `pixels` and this slot.
                 let damage = self.damage[index].expect("current damage accumulated");
-                for range in damage_rows(damage, header.width) {
+                for range in damage_rows(damage, width) {
                     unsafe {
                         std::ptr::copy_nonoverlapping(
                             pixels.as_ptr().add(range.start),
@@ -391,20 +460,21 @@ pub struct ReadFrame {
 }
 impl ReadFrame {
     pub fn width(&self) -> u32 {
-        self.mapping.header().width
+        self.mapping.geometry.width
     }
     pub fn height(&self) -> u32 {
-        self.mapping.header().height
+        self.mapping.geometry.height
     }
     pub fn sequence(&self) -> u64 {
         self.sequence
     }
     pub fn pixels(&self) -> &[u8] {
-        // SAFETY: READING lease protects initialized bytes until this guard drops.
+        // SAFETY: READING lease protects initialized bytes until this guard
+        // drops; the length is the receipt-validated local frame size.
         unsafe {
             std::slice::from_raw_parts(
                 self.mapping.payload(self.index),
-                self.mapping.header().frame_bytes as usize,
+                self.mapping.geometry.frame_bytes,
             )
         }
     }
@@ -648,5 +718,61 @@ mod tests {
             );
         }
         assert_eq!(last, 2000);
+    }
+
+    #[test]
+    fn consumer_corrupted_geometry_fails_publish_without_out_of_bounds_access() {
+        let mut producer = Producer::new(4, 2).unwrap();
+        let mut consumer = consumer(&producer);
+        // Tamper through the game's own mmap of the descriptor, as a hostile
+        // consumer would, rather than through the producer's view.
+        let game_mapping = Arc::clone(&consumer.mapping);
+        assert_ne!(game_mapping.pointer, producer.handle.mapping.pointer);
+        let shared = game_mapping.header();
+        let mut pixels = [7; 32];
+        assert!(producer.publish(&pixels, None).unwrap());
+        let leased = consumer.latest().unwrap();
+        let everything = DamageRect {
+            x: 0,
+            y: 0,
+            width: u32::MAX,
+            height: u32::MAX,
+        };
+        for (width, height, frame_bytes) in [
+            (u32::MAX, 2, 32),
+            (4, u32::MAX, 32),
+            (8, 1, 32),
+            (4, 2, 0),
+            (4, 2, 64),
+            (4, 2, u64::MAX / 2 + 1),
+            (4, 2, u64::MAX),
+            (u32::MAX, u32::MAX, u64::MAX),
+        ] {
+            shared.width.store(width, Ordering::Relaxed);
+            shared.height.store(height, Ordering::Relaxed);
+            shared.frame_bytes.store(frame_bytes, Ordering::Relaxed);
+            // Changed pixels force a copy attempt rather than a no-op compare.
+            let next = pixels[0] + 1;
+            pixels.fill(next);
+            for damage in [None, Some(everything)] {
+                let error = producer.publish(&pixels, damage).unwrap_err();
+                assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+            }
+            // A caller buffer sized to the forged frame length is refused too.
+            let error = producer.publish(&[1; 64], None).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+            assert_eq!((leased.width(), leased.height()), (4, 2));
+            assert_eq!(leased.pixels(), &[7; 32]);
+        }
+        shared.width.store(4, Ordering::Relaxed);
+        shared.height.store(2, Ordering::Relaxed);
+        shared.frame_bytes.store(32, Ordering::Relaxed);
+        drop(leased);
+        pixels[4..8].fill(99);
+        assert!(producer.publish(&pixels, Some(everything)).unwrap());
+        let frame = consumer.latest().unwrap();
+        assert_eq!(frame.sequence(), 2);
+        assert_eq!((frame.width(), frame.height()), (4, 2));
+        assert_eq!(frame.pixels(), &pixels);
     }
 }
