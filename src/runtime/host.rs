@@ -1,7 +1,6 @@
 use super::{
     Options, ProductResources,
     editor::{EditorWorker, Work},
-    hotkey::NativeHotkey,
     receive,
 };
 use anyhow::{Context, Result, bail};
@@ -14,6 +13,7 @@ use std::{
 use vosulay_browser::{
     BrowserOptions, CefRuntime, OsrBrowser, RuntimeOptions, execute_subprocess, scheme::MANAGER_URL,
 };
+use vosulay_frame::hotkey::NativeHotkey;
 use vosulay_frame::{BrowserInput, KeyKind, PlatformEvent, Viewport};
 #[cfg(target_os = "linux")]
 use vosulay_linux::{LinuxController as PlatformController, LinuxOptions};
@@ -24,6 +24,11 @@ fn interaction_hotkey(text: &str) -> NativeHotkey {
     NativeHotkey::parse(text)
         .or_else(|| NativeHotkey::parse(crate::config::DEFAULT_TOGGLE_INTERACTION_HOTKEY))
         .expect("default interaction hotkey parses")
+}
+fn edit_hotkey(text: &str) -> NativeHotkey {
+    NativeHotkey::parse(text)
+        .or_else(|| NativeHotkey::parse(crate::config::DEFAULT_TOGGLE_EDIT_HOTKEY))
+        .expect("default edit hotkey parses")
 }
 
 /// # Safety
@@ -36,6 +41,11 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
     let Some(options) = Options::parse()? else {
         return Ok(0);
     };
+    let Some(_instance) = super::instance::InstanceGuard::acquire()? else {
+        eprintln!("Vosulay is already running; exiting this second instance.");
+        return Ok(0);
+    };
+    super::desktop_entry::register();
     let mut config = crate::config::load_from_path(&options.config)?;
     #[cfg(target_os = "linux")]
     super::launchers::refresh(&options.overlay, &options.lookup);
@@ -47,17 +57,25 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
     )
     .context("could not start overlay backend broker")?;
     #[cfg(windows)]
-    let mut platform = PlatformController::start(WindowsOptions {
-        dll_dir: options.runtime.clone(),
-        pids: options.pids.clone(),
-        process_names: options.process_names.clone(),
-    })?;
+    let mut platform = PlatformController::start(
+        WindowsOptions {
+            dll_dir: options.runtime.clone(),
+            pids: options.pids.clone(),
+            process_names: options.process_names.clone(),
+        },
+        edit_hotkey(&config.settings.hotkeys.toggle_edit),
+        NativeHotkey::parse(&config.settings.hotkeys.toggle_visibility),
+    )?;
     #[cfg(target_os = "linux")]
-    let mut platform = PlatformController::start(LinuxOptions {
-        library: options.overlay.clone(),
-        pids: options.pids.clone(),
-        process_names: options.process_names.clone(),
-    })?;
+    let mut platform = PlatformController::start(
+        LinuxOptions {
+            library: options.overlay.clone(),
+            pids: options.pids.clone(),
+            process_names: options.process_names.clone(),
+        },
+        edit_hotkey(&config.settings.hotkeys.toggle_edit),
+        NativeHotkey::parse(&config.settings.hotkeys.toggle_visibility),
+    )?;
     let mut worker = EditorWorker::start(
         config.clone(),
         options.config.clone(),
@@ -129,7 +147,6 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
 
 #[derive(Clone, Copy)]
 enum Closing {
-    Reload,
     Exit,
     ImportTosu,
     Detach,
@@ -257,7 +274,6 @@ impl Host<'_> {
             browser.set_focus(enabled);
         }
         self.receive(&json!({"type":"editing", "editing":enabled}))?;
-        #[cfg(windows)]
         self.platform.set_tray_state(self.editing, self.visible);
         Ok(())
     }
@@ -297,14 +313,6 @@ impl Host<'_> {
             message: json!({"type": "import-tosu-layout"}),
         })?;
         self.editing(true)
-    }
-    fn reload(&mut self) {
-        self.ready = false;
-        self.document.clear();
-        self.pending_ping = None;
-        if let Some(browser) = self.browser.as_ref() {
-            browser.reload();
-        }
     }
     fn input(&mut self, input: BrowserInput) -> Result<()> {
         if !self.editing || self.dialog || self.closing.is_some() || self.flushed.is_some() {
@@ -417,13 +425,7 @@ impl Host<'_> {
                         if let Some(browser) = self.browser.as_ref() {
                             browser.set_visible(self.visible && self.attached)?;
                         }
-                        #[cfg(windows)]
                         self.platform.set_tray_state(self.editing, self.visible);
-                    }
-                    PlatformEvent::Reload => {
-                        if self.flush(Closing::Reload)? {
-                            self.reload();
-                        }
                     }
                     PlatformEvent::Exit => {
                         if self.flush(Closing::Exit)? {
@@ -568,6 +570,24 @@ impl Host<'_> {
                 {
                     self.interaction_hotkey = interaction_hotkey(text);
                 }
+                let saved_hotkey = |key: &str| {
+                    reply
+                        .envelope
+                        .get(key)
+                        .or_else(|| {
+                            settings
+                                .and_then(|settings| settings.get("hotkeys"))
+                                .and_then(|hotkeys| hotkeys.get(key))
+                        })
+                        .and_then(Value::as_str)
+                };
+                if let (Some(edit), Some(visibility)) = (
+                    saved_hotkey("toggle_edit"),
+                    saved_hotkey("toggle_visibility"),
+                ) {
+                    self.platform
+                        .set_hotkeys(edit_hotkey(edit), NativeHotkey::parse(visibility));
+                }
                 if let Some(limit) = reply
                     .envelope
                     .get("fps_limit")
@@ -601,7 +621,6 @@ impl Host<'_> {
             if !self.dialog && !self.worker.pending_tasks() {
                 if let Some(action) = self.flushed.take() {
                     match action {
-                        Closing::Reload => self.reload(),
                         Closing::Exit => return Ok(()),
                         Closing::ImportTosu => self.import_tosu()?,
                         Closing::Detach if !self.attached => self.detach()?,

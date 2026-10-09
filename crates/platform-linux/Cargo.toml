@@ -8,5 +8,6 @@ license = "MIT"
 [target.'cfg(target_os = "linux")'.dependencies]
 anyhow = "1.0"
 libc = "0.2"
+ksni = { version = "0.3.3", features = ["blocking"] }
 vosulay-frame = { path = "../frame" }
 vosulay-transport = { path = "../frame-transport" }

@@ -1,3 +1,4 @@
+pub mod hotkey;
 mod input;
 pub use input::{BrowserInput, InputModifiers, KeyKind, MouseButton, PlatformEvent, Viewport};
 

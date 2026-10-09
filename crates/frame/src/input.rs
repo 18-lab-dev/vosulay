@@ -81,7 +81,6 @@ pub enum PlatformEvent {
     ShortcutToggleEdit,
     CaptureEnded,
     ToggleVisibility,
-    Reload,
     Exit,
     Warning(String),
     Fatal(String),

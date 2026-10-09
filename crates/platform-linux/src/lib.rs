@@ -1,6 +1,7 @@
 #![cfg(target_os = "linux")]
 
 pub mod injector;
+mod tray;
 
 use anyhow::{Context, Result, anyhow, ensure};
 use std::{
@@ -14,6 +15,7 @@ use std::{
     thread::{self, JoinHandle, Thread},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use vosulay_frame::hotkey::NativeHotkey;
 use vosulay_frame::{BrowserFrameBackend, BrowserInput, KeyKind, PlatformEvent, Viewport};
 use vosulay_transport::{
     Connection, FrameBackend, FrameMailbox, Listener, default_endpoint,
@@ -43,6 +45,7 @@ struct Shared {
     worker_done: AtomicBool,
     heartbeat: AtomicU64,
     host: Thread,
+    hotkeys: Mutex<(NativeHotkey, Option<NativeHotkey>)>,
 }
 impl Shared {
     fn now(&self) -> u64 {
@@ -88,9 +91,14 @@ impl Shared {
 pub struct LinuxController {
     shared: Arc<Shared>,
     worker: Option<JoinHandle<()>>,
+    tray: Option<ksni::blocking::Handle<tray::LinuxTray>>,
 }
 impl LinuxController {
-    pub fn start(options: LinuxOptions) -> Result<Self> {
+    pub fn start(
+        options: LinuxOptions,
+        toggle_edit: NativeHotkey,
+        toggle_visibility: Option<NativeHotkey>,
+    ) -> Result<Self> {
         ensure!(
             options.library.is_file(),
             "missing packaged Linux compositor {}",
@@ -119,6 +127,7 @@ impl LinuxController {
             epoch: Instant::now(),
             heartbeat: AtomicU64::new(1),
             host: thread::current(),
+            hotkeys: Mutex::new((toggle_edit, toggle_visibility)),
         });
         let worker_shared = shared.clone();
         let worker = thread::Builder::new()
@@ -130,9 +139,11 @@ impl LinuxController {
                 worker_shared.worker_done.store(true, Ordering::Release);
                 worker_shared.host.unpark();
             })?;
+        let tray = tray::LinuxTray::start(shared.clone());
         Ok(Self {
             shared,
             worker: Some(worker),
+            tray,
         })
     }
     pub fn frame_backend(&self) -> Box<dyn BrowserFrameBackend> {
@@ -196,7 +207,26 @@ impl LinuxController {
             .store(self.shared.now(), Ordering::Release);
         self.shared.frames.wake_control();
     }
+    pub fn set_hotkeys(&self, toggle_edit: NativeHotkey, toggle_visibility: Option<NativeHotkey>) {
+        *self
+            .shared
+            .hotkeys
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = (toggle_edit, toggle_visibility);
+        self.shared.frames.wake_control();
+    }
+    pub fn set_tray_state(&self, editing: bool, visible: bool) {
+        if let Some(tray) = &self.tray {
+            tray.update(|tray| {
+                tray.editing = editing;
+                tray.visible = visible;
+            });
+        }
+    }
     pub fn shutdown(&mut self) -> Result<()> {
+        if let Some(tray) = self.tray.take() {
+            tray.shutdown();
+        }
         self.shared.capture.store(false, Ordering::Release);
         self.shared.stop.store(true, Ordering::Release);
         if let Some(worker) = self.worker.take() {
@@ -222,6 +252,51 @@ impl Drop for LinuxController {
     }
 }
 
+#[derive(Default)]
+struct ShortcutState {
+    held: [Option<i32>; 2],
+}
+impl ShortcutState {
+    fn input(
+        &mut self,
+        input: &BrowserInput,
+        hotkeys: (NativeHotkey, Option<NativeHotkey>),
+    ) -> (bool, Option<PlatformEvent>) {
+        let BrowserInput::Key {
+            kind,
+            modifiers,
+            windows_key_code: code,
+            ..
+        } = input
+        else {
+            return (false, None);
+        };
+        if *kind == KeyKind::Character && self.held.iter().any(Option::is_some) {
+            return (true, None);
+        }
+        for (index, hotkey) in [Some(hotkeys.0), hotkeys.1].into_iter().enumerate() {
+            if self.held[index] == Some(*code) {
+                if *kind == KeyKind::Up {
+                    self.held[index] = None;
+                }
+                return (true, None);
+            }
+            if *kind == KeyKind::RawDown && hotkey.is_some_and(|key| key.matches(*modifiers, *code))
+            {
+                self.held[index] = Some(*code);
+                return (
+                    true,
+                    Some(if index == 0 {
+                        PlatformEvent::ShortcutToggleEdit
+                    } else {
+                        PlatformEvent::ToggleVisibility
+                    }),
+                );
+            }
+        }
+        (false, None)
+    }
+}
 struct Peer {
     id: u64,
     connection: Connection,
@@ -237,7 +312,8 @@ struct Peer {
     sent_visible: Option<bool>,
     sent_capture: Option<bool>,
     next_ping: Instant,
-    toggle_down: bool,
+    shortcuts: ShortcutState,
+    sent_hotkeys: Option<(NativeHotkey, Option<NativeHotkey>)>,
 }
 impl Peer {
     fn send(&mut self, mut packet: Packet, descriptors: &[std::os::fd::BorrowedFd<'_>]) -> bool {
@@ -343,7 +419,8 @@ fn worker_main(
                 sent_visible: None,
                 sent_capture: None,
                 next_ping: now,
-                toggle_down: false,
+                shortcuts: ShortcutState::default(),
+                sent_hotkeys: None,
             });
             next_id = next_id
                 .checked_add(1)
@@ -407,30 +484,22 @@ fn worker_main(
                     Kind::Focus => {
                         peer.focus
                             .observe(message.code == 1, message.sequence, message.value[3]);
+                        if !peer.focus.focused {
+                            peer.shortcuts = ShortcutState::default();
+                        }
                     }
                     Kind::Input if active == Some(peer.id) => {
                         let input = message.browser_input()?;
-                        if let BrowserInput::Key {
-                            kind,
-                            modifiers,
-                            windows_key_code,
-                            ..
-                        } = input
-                            && windows_key_code == 0x20
-                        {
-                            if kind == KeyKind::Up {
-                                peer.toggle_down = false;
+                        if peer.focus.focused {
+                            let hotkeys = *shared
+                                .hotkeys
+                                .lock()
+                                .unwrap_or_else(|error| error.into_inner());
+                            let (consumed, event) = peer.shortcuts.input(&input, hotkeys);
+                            if let Some(event) = event {
+                                shared.event(event);
                             }
-                            if kind == KeyKind::RawDown
-                                && modifiers.control
-                                && modifiers.shift
-                                && !modifiers.alt
-                                && peer.focus.focused
-                            {
-                                if !peer.toggle_down {
-                                    shared.event(PlatformEvent::ShortcutToggleEdit);
-                                    peer.toggle_down = true;
-                                }
+                            if consumed {
                                 continue;
                             }
                         }
@@ -506,6 +575,19 @@ fn worker_main(
                     continue;
                 }
                 peer.hello = true;
+            }
+            let hotkeys = *shared
+                .hotkeys
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            if peer.sent_hotkeys != Some(hotkeys) {
+                let mut packet = Packet::new(Kind::Configure);
+                packet.value[0] = hotkeys.0.wire_code();
+                packet.value[1] = hotkeys.1.map_or(0, NativeHotkey::wire_code);
+                if !peer.send(packet, &[]) {
+                    continue;
+                }
+                peer.sent_hotkeys = Some(hotkeys);
             }
             let visible = active == Some(peer.id) && shared.frames.visible();
             if peer.sent_visible != Some(visible) {
@@ -737,6 +819,59 @@ fn discover_and_attach(
 mod tests {
     use super::{FocusSelection, FocusState, supported_image};
 
+    #[test]
+    fn configured_shortcuts_consume_press_repeat_and_release() {
+        use super::ShortcutState;
+        use vosulay_frame::{
+            BrowserInput, InputModifiers, KeyKind, PlatformEvent, hotkey::NativeHotkey,
+        };
+        let hotkeys = (
+            NativeHotkey::parse("Alt+E").unwrap(),
+            NativeHotkey::parse("Ctrl+H"),
+        );
+        let key = |kind, code, control, alt| BrowserInput::Key {
+            kind,
+            windows_key_code: code,
+            native_key_code: code,
+            modifiers: InputModifiers {
+                control,
+                alt,
+                ..Default::default()
+            },
+            is_system_key: false,
+            character: 0,
+            unmodified_character: 0,
+        };
+        let mut state = ShortcutState::default();
+        assert!(matches!(
+            state.input(&key(KeyKind::RawDown, 0x45, false, true), hotkeys),
+            (true, Some(PlatformEvent::ShortcutToggleEdit))
+        ));
+        assert!(matches!(
+            state.input(&key(KeyKind::RawDown, 0x45, false, true), hotkeys),
+            (true, None)
+        ));
+        assert!(matches!(
+            state.input(&key(KeyKind::Up, 0x45, false, false), hotkeys),
+            (true, None)
+        ));
+        assert!(matches!(
+            state.input(&key(KeyKind::RawDown, 0x48, true, false), hotkeys),
+            (true, Some(PlatformEvent::ToggleVisibility))
+        ));
+        assert!(matches!(
+            state.input(&key(KeyKind::RawDown, 0x20, true, false), hotkeys),
+            (false, None)
+        ));
+        assert!(matches!(
+            state.input(&key(KeyKind::Up, 0x48, false, false), hotkeys),
+            (true, None)
+        ));
+        assert!(matches!(
+            state.input(&key(KeyKind::RawDown, 0x48, true, false), (hotkeys.0, None)),
+            (false, None)
+        ));
+    }
     #[test]
     fn latest_focus_gain_wins_batched_a_b_a_in_either_peer_order() {
         let mut a = FocusState::default();

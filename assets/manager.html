@@ -186,11 +186,13 @@
 
             <fieldset id="settings-section-shortcuts" class="settings-section" tabindex="-1">
               <legend>Shortcuts</legend>
-              <p class="settings-note">Click a shortcut, then press the new key combination. Esc cancels. Toggle overlay interaction is handled before overlays see the key, so it needs Ctrl, Alt or Meta.</p>
+              <p class="settings-note">Click a shortcut, then press the new key combination. Esc cancels. Native shortcuts (edit mode, hide vosulay, overlay interaction) need Ctrl, Alt or Meta. To clear Hide vosulay, press Backspace or Delete while recording.</p>
               <div id="hotkey-list" class="hotkey-list">
                 <div class="hotkey-group" role="group" aria-labelledby="hotkey-group-editing">
                   <h3 id="hotkey-group-editing" class="settings-subheading">Editing</h3>
                   <div class="hotkey-grid">
+                    <div class="hotkey-row"><span>Toggle edit mode</span><button class="hotkey-input" type="button" data-hotkey="toggle_edit"></button></div>
+                    <div class="hotkey-row"><span>Hide vosulay</span><button class="hotkey-input" type="button" data-hotkey="toggle_visibility"></button></div>
                     <div class="hotkey-row"><span>Toggle overlay interaction</span><button class="hotkey-input" type="button" data-hotkey="toggle_interaction"></button></div>
                     <div class="hotkey-row"><span>Undo</span><button class="hotkey-input" type="button" data-hotkey="undo"></button></div>
                     <div class="hotkey-row"><span>Redo</span><button class="hotkey-input" type="button" data-hotkey="redo"></button></div>

@@ -1,6 +1,7 @@
+mod desktop_entry;
 mod editor;
 mod host;
-mod hotkey;
+mod instance;
 #[cfg(target_os = "linux")]
 mod launchers;
 mod resources;
@@ -75,7 +76,7 @@ impl Options {
             match argument.as_str() {
                 "--help" | "-h" => {
                     println!(
-                        "vosulay {}\n\nUsage: vosulay [options]\n  --vosu-url, -t URL    vosu or tosu-compatible backend (default http://127.0.0.1:24050/)\n  --fps-limit, -f FPS   auto/0 or a positive cap (default display refresh)\n  --benchmark-uncapped  Disable Chromium pacing; use minimum positive OSR interval\n  --pid PID            Additional supported game process; repeatable\n  --process-name NAME  Additional supported game executable; repeatable\n  --config PATH        Configuration file (default user configuration directory)\n  --cef-dir PATH       Runtime package directory (default beside executable or build-time cache)\n  --version            Product version\n\nCtrl+Shift+Space toggles editing in game. Escape leaves edit mode.",
+                        "vosulay {}\n\nUsage: vosulay [options]\n  --vosu-url, -t URL    vosu or tosu-compatible backend (default http://127.0.0.1:24050/)\n  --fps-limit, -f FPS   auto/0 or a positive cap (default display refresh)\n  --benchmark-uncapped  Disable Chromium pacing; use minimum positive OSR interval\n  --pid PID            Additional supported game process; repeatable\n  --process-name NAME  Additional supported game executable; repeatable\n  --config PATH        Configuration file (default user configuration directory)\n  --cef-dir PATH       Runtime package directory (default beside executable or build-time cache)\n  --version            Product version\n\nToggle editing in game with Ctrl+Shift+Space by default; configure it in Settings → Shortcuts. Escape leaves edit mode.",
                         env!("CARGO_PKG_VERSION")
                     );
                     return Ok(None);

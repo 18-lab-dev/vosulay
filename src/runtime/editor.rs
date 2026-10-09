@@ -300,6 +300,8 @@ impl State {
                     "fps_limit": self.config.settings.fps_limit,
                     "allow_unrestricted_shared_array_buffer": self.config.settings.allow_unrestricted_shared_array_buffer,
                     "toggle_interaction": self.config.settings.hotkeys.toggle_interaction,
+                    "toggle_edit": self.config.settings.hotkeys.toggle_edit,
+                    "toggle_visibility": self.config.settings.hotkeys.toggle_visibility,
                     "exit_edit_mode_on_focus_loss": self.config.settings.exit_edit_mode_on_focus_loss,
                 })])
             }

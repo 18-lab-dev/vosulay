@@ -46,12 +46,13 @@ rfd = { version = "0.15.4", default-features = false, features = ["xdg-portal", 
 open = { version = "5.3", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
 vosulay-linux = { path = "crates/platform-linux", optional = true }
 vosulay-cef-tools = { path = "crates/cef-tools", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 vosulay-windows = { path = "crates/platform-windows", optional = true }
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading", "Win32_UI_Shell"] }
 
 [build-dependencies]
 vosulay-cef-tools = { path = "crates/cef-tools" }

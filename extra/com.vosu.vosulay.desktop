@@ -1,8 +1,11 @@
 [Desktop Entry]
 Type=Application
 Name=Vosulay
-Comment=Vosu in-game overlay
+GenericName=In-game overlay for vosu and tosu counters
+Comment=In-game overlay for vosu and tosu counters
 Exec=vosulay
 Icon=com.vosu.vosulay
 Terminal=false
 Categories=Game;Utility;
+StartupNotify=false
+Keywords=osu;vosu;tosu;overlay;counters;

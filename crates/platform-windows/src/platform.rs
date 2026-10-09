@@ -138,14 +138,18 @@ pub struct WindowsController {
     tray: Tray,
 }
 impl WindowsController {
-    pub fn start(options: WindowsOptions) -> Result<Self> {
+    pub fn start(
+        options: WindowsOptions,
+        toggle_edit: vosulay_frame::hotkey::NativeHotkey,
+        toggle_visibility: Option<vosulay_frame::hotkey::NativeHotkey>,
+    ) -> Result<Self> {
         for file in ["asdf_overlay-x64.dll", "asdf_overlay-x86.dll"] {
             ensure!(
                 options.dll_dir.join(file).is_file(),
                 "missing packaged injection asset {file}"
             );
         }
-        let tray = Tray::start()?;
+        let tray = Tray::start(toggle_edit, toggle_visibility)?;
         let shared = Arc::new(Shared {
             epoch: Instant::now(),
             heartbeat: AtomicU64::new(1),
@@ -341,6 +345,13 @@ impl WindowsController {
     }
     pub fn set_tray_state(&self, editing: bool, visible: bool) {
         self.tray.set_state(editing, visible);
+    }
+    pub fn set_hotkeys(
+        &self,
+        toggle_edit: vosulay_frame::hotkey::NativeHotkey,
+        toggle_visibility: Option<vosulay_frame::hotkey::NativeHotkey>,
+    ) {
+        self.tray.set_hotkeys(toggle_edit, toggle_visibility);
     }
     pub fn shutdown(&mut self) -> Result<()> {
         self.shared.input_capture(false);

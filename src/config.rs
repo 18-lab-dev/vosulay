@@ -76,6 +76,8 @@ pub struct HotkeySettings {
     pub refresh_selected_overlay: String,
     pub refresh_all_overlays: String,
     pub toggle_interaction: String,
+    pub toggle_edit: String,
+    pub toggle_visibility: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -154,6 +156,8 @@ impl Default for HotkeySettings {
             refresh_selected_overlay: DEFAULT_REFRESH_SELECTED_OVERLAY_HOTKEY.to_owned(),
             refresh_all_overlays: DEFAULT_REFRESH_ALL_OVERLAYS_HOTKEY.to_owned(),
             toggle_interaction: DEFAULT_TOGGLE_INTERACTION_HOTKEY.to_owned(),
+            toggle_edit: DEFAULT_TOGGLE_EDIT_HOTKEY.to_owned(),
+            toggle_visibility: String::new(),
         }
     }
 }
@@ -269,6 +273,8 @@ impl HotkeySettings {
             &mut self.toggle_interaction,
             DEFAULT_TOGGLE_INTERACTION_HOTKEY,
         );
+        normalize_hotkey(&mut self.toggle_edit, DEFAULT_TOGGLE_EDIT_HOTKEY);
+        self.toggle_visibility = self.toggle_visibility.trim().to_owned();
     }
 }
 
@@ -390,6 +396,7 @@ const DEFAULT_REDO_HOTKEY: &str = "Ctrl+Shift+Z";
 const DEFAULT_REFRESH_SELECTED_OVERLAY_HOTKEY: &str = "Ctrl+R";
 const DEFAULT_REFRESH_ALL_OVERLAYS_HOTKEY: &str = "Ctrl+Shift+R";
 pub(crate) const DEFAULT_TOGGLE_INTERACTION_HOTKEY: &str = "Ctrl+I";
+pub(crate) const DEFAULT_TOGGLE_EDIT_HOTKEY: &str = "Ctrl+Shift+Space";
 fn normalized_remote_listen_host(value: &str) -> String {
     let trimmed = value.trim();
     let unbracketed = trimmed
@@ -434,6 +441,29 @@ fn unique_profile_id(start: usize, used_ids: &HashSet<String>) -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn legacy_configs_gain_native_toggle_defaults() {
+        let config: AppConfig = serde_json::from_str(
+            r#"{"version":1,"active_profile":"default","profiles":[],"settings":{"hotkeys":{"toggle_interaction":"Alt+I"}}}"#,
+        ).unwrap();
+        assert_eq!(config.settings.hotkeys.toggle_edit, "Ctrl+Shift+Space");
+        assert!(config.settings.hotkeys.toggle_visibility.is_empty());
+        assert_eq!(config.settings.hotkeys.toggle_interaction, "Alt+I");
+    }
+    #[test]
+    fn visibility_hotkey_is_optional_and_trimmed() {
+        let mut hotkeys = HotkeySettings {
+            toggle_edit: " ".into(),
+            toggle_visibility: " Alt+H ".into(),
+            ..Default::default()
+        };
+        hotkeys.normalize();
+        assert_eq!(hotkeys.toggle_edit, "Ctrl+Shift+Space");
+        assert_eq!(hotkeys.toggle_visibility, "Alt+H");
+        hotkeys.toggle_visibility = " ".into();
+        hotkeys.normalize();
+        assert!(hotkeys.toggle_visibility.is_empty());
+    }
     #[test]
     fn default_has_one_active_profile() {
         let config = AppConfig::default();
@@ -902,6 +932,8 @@ mod tests {
             refresh_selected_overlay: "\n".to_owned(),
             refresh_all_overlays: "\t".to_owned(),
             toggle_interaction: " ".to_owned(),
+            toggle_edit: " ".to_owned(),
+            toggle_visibility: " ".to_owned(),
         };
 
         hotkeys.normalize();

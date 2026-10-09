@@ -57,6 +57,7 @@ fn launch_cached_runtime() -> anyhow::Result<()> {
         cached.display()
     );
     Err(Command::new(cached)
+        .env("VOSULAY_LAUNCHER_EXECUTABLE", &executable)
         .args(env::args_os().skip(1))
         .exec()
         .into())

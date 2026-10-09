@@ -4,7 +4,7 @@ use std::{
     sync::{LazyLock, OnceLock},
     time::{Duration, Instant},
 };
-use vosulay_frame::BrowserInput;
+use vosulay_frame::{BrowserInput, KeyKind, hotkey::NativeHotkey};
 use vosulay_transport::{
     Connection, Consumer, ReadFrame, default_endpoint,
     protocol::{FORMAT_BGRA, Kind, Packet, focus_timestamp, pixel_bytes},
@@ -60,6 +60,8 @@ pub(crate) struct Client {
     last_receive: Instant,
     last_attempt: Option<Instant>,
     last_surface: Option<(u32, u32, u32, bool, u64)>,
+    hotkeys: [Option<NativeHotkey>; 2],
+    shortcut_keys: [Option<i32>; 2],
 }
 
 impl Client {
@@ -80,6 +82,8 @@ impl Client {
             last_receive: Instant::now(),
             last_attempt: None,
             last_surface: None,
+            hotkeys: [None; 2],
+            shortcut_keys: [None; 2],
         }
     }
     fn connect(&mut self, now: Instant) {
@@ -114,6 +118,8 @@ impl Client {
         self.sent_focus = None;
         self.session = 0;
         self.generation = 0;
+        self.hotkeys = [None; 2];
+        self.shortcut_keys = [None; 2];
     }
     /// Bounded, nonblocking servicing from a game present or input poll.
     pub(crate) fn service(&mut self) {
@@ -196,7 +202,13 @@ impl Client {
             }
             Kind::Capture => self.capture = packet.code != 0 && self.visible,
             Kind::Detach => self.disconnect(),
-            Kind::Ping | Kind::Configure => {}
+            Kind::Ping => {}
+            Kind::Configure => {
+                self.hotkeys = [
+                    NativeHotkey::from_wire_code(packet.value[0]),
+                    NativeHotkey::from_wire_code(packet.value[1]),
+                ];
+            }
             _ => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -257,6 +269,7 @@ impl Client {
     pub(crate) fn focus(&mut self, focused: bool) {
         if self.focused != focused {
             self.focused = focused;
+            self.shortcut_keys = [None; 2];
             self.focus_time = focus_timestamp().max(self.focus_time.saturating_add(1));
             if focused {
                 self.focus_gain = self.focus_time;
@@ -305,6 +318,35 @@ impl Client {
     pub(crate) fn route_input(&mut self, input: BrowserInput) -> bool {
         self.service();
         let captured = self.capturing();
+        let mut shortcut = matches!(
+            input,
+            BrowserInput::Key {
+                kind: KeyKind::Character,
+                ..
+            }
+        ) && self.shortcut_keys.iter().any(Option::is_some);
+        if self.focused
+            && let BrowserInput::Key {
+                kind,
+                modifiers,
+                windows_key_code: code,
+                ..
+            } = input
+        {
+            for (index, hotkey) in self.hotkeys.iter().enumerate() {
+                if self.shortcut_keys[index] == Some(code) {
+                    shortcut = true;
+                    if kind == KeyKind::Up {
+                        self.shortcut_keys[index] = None;
+                    }
+                } else if kind == KeyKind::RawDown
+                    && hotkey.is_some_and(|hotkey| hotkey.matches(modifiers, code))
+                {
+                    self.shortcut_keys[index] = Some(code);
+                    shortcut = true;
+                }
+            }
+        }
         if (captured || matches!(input, BrowserInput::Key { .. }))
             && !self.send(Packet::input(self.surface, input))
         {
@@ -313,7 +355,7 @@ impl Client {
             }
             return false;
         }
-        captured
+        captured || shortcut
     }
 }
 impl Drop for Client {

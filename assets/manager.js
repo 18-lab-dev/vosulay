@@ -89,11 +89,10 @@
     "redo",
     "refresh_selected_overlay",
     "refresh_all_overlays",
-    "toggle_interaction"
+    "toggle_interaction", "toggle_edit", "toggle_visibility"
   ];
-  // The native host intercepts toggle_interaction before the page sees it, so
-  // page dispatch must never act on it too (that would toggle twice).
-  const PAGE_HOTKEY_KEYS = HOTKEY_KEYS.filter((key) => key !== "toggle_interaction");
+  const NATIVE_HOTKEY_KEYS = new Set(["toggle_interaction", "toggle_edit", "toggle_visibility"]);
+  const PAGE_HOTKEY_KEYS = HOTKEY_KEYS.filter((key) => !NATIVE_HOTKEY_KEYS.has(key));
   const REPEATABLE_HOTKEYS = new Set(["undo", "redo"]);
   const DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute";
   const DEFAULT_REMOTE_LISTEN_HOST = "127.0.0.1";
@@ -114,15 +113,16 @@
     redo: "Ctrl+Shift+Z",
     refresh_selected_overlay: "Ctrl+R",
     refresh_all_overlays: "Ctrl+Shift+R",
-    toggle_interaction: "Ctrl+I"
+    toggle_interaction: "Ctrl+I",
+    toggle_edit: "Ctrl+Shift+Space",
+    toggle_visibility: ""
   });
-  // Browser zoom and the overlay toggle chord never reach page hotkeys.
+  // Browser zoom shortcuts never reach page hotkeys.
   const RESERVED_HOTKEYS = new Set([
-    "Ctrl+Shift+Space",
     "Ctrl+Plus", "Ctrl+Shift+Plus", "Ctrl+Minus"
   ]);
   // Keys the native host can map to virtual-key codes for interception.
-  const INTERACTION_HOTKEY_KEY = /^(?:[A-Z0-9]|F(?:[1-9]|1\d|2[0-4])|Space|Enter|Tab|Escape|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Arrow(?:Up|Down|Left|Right)|Plus|Minus|[,./;`[\\\]'])$/;
+  const NATIVE_HOTKEY_KEY = /^(?:[A-Z0-9]|F(?:[1-9]|1\d|2[0-4])|Space|Enter|Tab|Escape|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Arrow(?:Up|Down|Left|Right)|Plus|Minus|[,./;`[\\\]'])$/;
   const PUNCTUATION_CODES = Object.freeze({
     Comma: ",", Period: ".", Slash: "/", Semicolon: ";", Backquote: "`",
     BracketLeft: "[", Backslash: "\\", BracketRight: "]", Quote: "'"
@@ -306,13 +306,13 @@
     return ["Ctrl", "Alt", "Shift", "Meta"].filter((modifier) => modifiers.has(modifier)).concat(key).join("+");
   }
 
-  // Returns why `shortcut` cannot toggle overlay interaction, or "" if it can.
-  function interactionHotkeyError(shortcut) {
+  function nativeHotkeyError(shortcut, action) {
+    if (!shortcut && action === "toggle_visibility") return "";
     const parts = shortcut.split("+");
     const key = parts.pop();
-    if (!INTERACTION_HOTKEY_KEY.test(key)) return `${key} can't be used to toggle overlay interaction.`;
+    if (!NATIVE_HOTKEY_KEY.test(key)) return `${key || "This key"} can't be used for a native shortcut.`;
     if (!parts.some((modifier) => modifier === "Ctrl" || modifier === "Alt" || modifier === "Meta")) {
-      return "Toggle overlay interaction needs Ctrl, Alt or Meta so it doesn't block typing.";
+      return "Native shortcuts need Ctrl, Alt or Meta so they don't block typing.";
     }
     return "";
   }
@@ -322,7 +322,7 @@
     return Object.fromEntries(HOTKEY_KEYS.map((key) => {
       const shortcut = canonicalHotkey(source[key], DEFAULT_HOTKEYS[key]);
       const invalid = RESERVED_HOTKEYS.has(shortcut)
-        || (key === "toggle_interaction" && interactionHotkeyError(shortcut));
+        || (NATIVE_HOTKEY_KEYS.has(key) && nativeHotkeyError(shortcut, key));
       return [key, invalid ? DEFAULT_HOTKEYS[key] : shortcut];
     }));
   }
@@ -2445,7 +2445,7 @@
     remoteListenPort.value = state.settingsDraft.remote_listen_port;
     for (const button of hotkeyList.querySelectorAll(".hotkey-input")) {
       const key = button.dataset.hotkey;
-      button.textContent = state.settingsDraft.hotkeys[key] || DEFAULT_HOTKEYS[key] || "";
+      button.textContent = state.settingsDraft.hotkeys[key] || "Not set";
       button.classList.toggle("recording", state.recordingHotkey === key);
       button.setAttribute("aria-pressed", String(state.recordingHotkey === key));
       button.removeAttribute("aria-invalid");
@@ -2668,6 +2668,16 @@
   });
   hotkeyList.addEventListener("keydown", (event) => {
     if (!state.settingsDraft || !state.recordingHotkey) return;
+    if (state.recordingHotkey === "toggle_visibility" && ["Backspace", "Delete"].includes(event.key)
+        && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      state.settingsDraft.hotkeys.toggle_visibility = "";
+      state.recordingHotkey = "";
+      showSettingsError("");
+      renderSettingsDraft();
+      return;
+    }
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -2688,7 +2698,7 @@
       showSettingsError(`${shortcut} is reserved for built-in overlay controls.`);
       return;
     }
-    const problem = state.recordingHotkey === "toggle_interaction" ? interactionHotkeyError(shortcut) : "";
+    const problem = NATIVE_HOTKEY_KEYS.has(state.recordingHotkey) ? nativeHotkeyError(shortcut, state.recordingHotkey) : "";
     if (problem) {
       showSettingsError(problem);
       return;
@@ -2727,12 +2737,14 @@
       rejectSettingsField(remoteListenPort, "Listener port must be a whole number from 1 to 65535.");
       return;
     }
-    const interactionProblem = interactionHotkeyError(draft.hotkeys.toggle_interaction || "");
-    if (interactionProblem) {
-      rejectSettingsField(hotkeyList.querySelector('.hotkey-input[data-hotkey="toggle_interaction"]'), interactionProblem);
-      return;
+    for (const key of NATIVE_HOTKEY_KEYS) {
+      const problem = nativeHotkeyError(draft.hotkeys[key] || "", key);
+      if (problem) {
+        rejectSettingsField(hotkeyList.querySelector(`.hotkey-input[data-hotkey="${key}"]`), problem);
+        return;
+      }
     }
-    const shortcuts = HOTKEY_KEYS.map((key) => draft.hotkeys[key]);
+    const shortcuts = HOTKEY_KEYS.map((key) => draft.hotkeys[key]).filter(Boolean);
     if (new Set(shortcuts).size !== shortcuts.length) {
       showSettingsError("Each action must have a unique shortcut.");
       return;

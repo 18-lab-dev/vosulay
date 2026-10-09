@@ -4,7 +4,7 @@ use std::{
     io::Cursor,
     mem::size_of,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering},
         mpsc::{self, Receiver, SyncSender, TrySendError},
     },
@@ -14,6 +14,7 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 use vosulay_frame::PlatformEvent;
+use vosulay_frame::hotkey::NativeHotkey;
 use windows::{
     Win32::{
         Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM},
@@ -24,7 +25,8 @@ use windows::{
         System::LibraryLoader::GetModuleHandleW,
         UI::{
             Input::KeyboardAndMouse::{
-                MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, RegisterHotKey, UnregisterHotKey, VK_SPACE,
+                MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN, RegisterHotKey,
+                UnregisterHotKey,
             },
             Shell::{
                 NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_SETFOCUS,
@@ -39,9 +41,10 @@ use windows::{
 const CALLBACK: u32 = WM_APP + 1;
 const STOP: u32 = WM_APP + 2;
 const HOTKEY_ID: i32 = 1;
+const VISIBILITY_HOTKEY_ID: i32 = 2;
+const UPDATE_HOTKEYS: u32 = WM_APP + 3;
 const EDIT: u8 = 1;
 const HIDE: u8 = 2;
-const RELOAD: u8 = 4;
 const EXIT: u8 = 8;
 const SHORTCUT_EDIT: u8 = 16;
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
@@ -54,6 +57,7 @@ struct Shared {
     state: AtomicU8,
     overflow: AtomicU8,
     host: thread::Thread,
+    hotkeys: Mutex<(NativeHotkey, Option<NativeHotkey>)>,
 }
 
 pub(crate) struct Tray {
@@ -64,13 +68,17 @@ pub(crate) struct Tray {
 }
 
 impl Tray {
-    pub(crate) fn start() -> Result<Self> {
+    pub(crate) fn start(
+        toggle_edit: NativeHotkey,
+        toggle_visibility: Option<NativeHotkey>,
+    ) -> Result<Self> {
         let shared = Arc::new(Shared {
             hwnd: AtomicUsize::new(0),
             stopping: AtomicBool::new(false),
             state: AtomicU8::new(2), // Initially visible, not editing.
             overflow: AtomicU8::new(0),
             host: thread::current(),
+            hotkeys: Mutex::new((toggle_edit, toggle_visibility)),
         });
         let (tx, events) = mpsc::sync_channel(16);
         let (ready_tx, ready) = mpsc::sync_channel(1);
@@ -116,9 +124,8 @@ impl Tray {
         if let Ok(event) = self.events.try_recv() {
             return Some(event);
         }
-        // If a caller temporarily stops polling, preserve Exit/Reload and the net
-        // parity of toggles without blocking the message thread or growing a queue.
-        for bit in [EDIT, SHORTCUT_EDIT, HIDE, RELOAD, EXIT] {
+        // Preserve Exit and net toggle parity without blocking the tray thread.
+        for bit in [EDIT, SHORTCUT_EDIT, HIDE, EXIT] {
             if self.shared.overflow.fetch_and(!bit, Ordering::AcqRel) & bit != 0 {
                 return Some(event_for(bit));
             }
@@ -131,6 +138,24 @@ impl Tray {
             u8::from(editing) | (u8::from(visible) << 1),
             Ordering::Release,
         );
+    }
+    pub(crate) fn set_hotkeys(&self, edit: NativeHotkey, visibility: Option<NativeHotkey>) {
+        *self
+            .shared
+            .hotkeys
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = (edit, visibility);
+        let raw = self.shared.hwnd.load(Ordering::Acquire);
+        if raw != 0 {
+            unsafe {
+                let _ = PostMessageW(
+                    Some(HWND(raw as *mut _)),
+                    UPDATE_HOTKEYS,
+                    WPARAM(0),
+                    LPARAM(0),
+                );
+            }
+        }
     }
 
     pub(crate) fn shutdown(&mut self) -> Result<()> {
@@ -175,7 +200,6 @@ fn event_for(bit: u8) -> PlatformEvent {
         EDIT => PlatformEvent::ToggleEdit,
         SHORTCUT_EDIT => PlatformEvent::ShortcutToggleEdit,
         HIDE => PlatformEvent::ToggleVisibility,
-        RELOAD => PlatformEvent::Reload,
         _ => PlatformEvent::Exit,
     }
 }
@@ -200,6 +224,49 @@ struct WindowState {
 }
 
 impl WindowState {
+    unsafe fn register_hotkeys(&self, hwnd: HWND) {
+        let hotkeys = *self
+            .shared
+            .hotkeys
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        for (id, key) in [
+            (HOTKEY_ID, Some(hotkeys.0)),
+            (VISIBILITY_HOTKEY_ID, hotkeys.1),
+        ] {
+            unsafe {
+                let _ = UnregisterHotKey(Some(hwnd), id);
+            }
+            if let Some(key) = key {
+                let mut modifiers = MOD_NOREPEAT;
+                if key.control {
+                    modifiers |= MOD_CONTROL;
+                }
+                if key.alt {
+                    modifiers |= MOD_ALT;
+                }
+                if key.shift {
+                    modifiers |= MOD_SHIFT;
+                }
+                if key.meta {
+                    modifiers |= MOD_WIN;
+                }
+                if let Err(error) =
+                    unsafe { RegisterHotKey(Some(hwnd), id, modifiers, key.code as u32) }
+                {
+                    let _ = self.events.try_send(PlatformEvent::Warning(format!(
+                        "could not register {} shortcut (another application may own it): {error}",
+                        if id == HOTKEY_ID {
+                            "edit mode"
+                        } else {
+                            "visibility"
+                        }
+                    )));
+                    self.shared.host.unpark();
+                }
+            }
+        }
+    }
     fn notify_data(&self, hwnd: HWND) -> NOTIFYICONDATAW {
         let mut data = NOTIFYICONDATAW {
             cbSize: size_of::<NOTIFYICONDATAW>() as u32,
@@ -277,7 +344,7 @@ impl WindowState {
                         MF_UNCHECKED
                     },
                 EDIT as usize,
-                w!("Edit overlays"),
+                w!("Edit mode"),
             )?;
             AppendMenuW(
                 menu,
@@ -288,11 +355,10 @@ impl WindowState {
                         MF_UNCHECKED
                     },
                 HIDE as usize,
-                w!("Hide overlays"),
+                w!("Hide vosulay"),
             )?;
-            AppendMenuW(menu, MF_STRING, RELOAD as usize, w!("Reload overlays"))?;
             AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null())?;
-            AppendMenuW(menu, MF_STRING, EXIT as usize, w!("Exit"))?;
+            AppendMenuW(menu, MF_STRING, EXIT as usize, w!("Exit vosulay"))?;
             if point.x == -1 && point.y == -1 {
                 GetCursorPos(&mut point)?;
             }
@@ -311,7 +377,7 @@ impl WindowState {
             .0 as u8;
             let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
             if !self.shared.stopping.load(Ordering::Acquire) {
-                if matches!(command, EDIT | HIDE | RELOAD | EXIT) {
+                if matches!(command, EDIT | HIDE | EXIT) {
                     self.emit(command);
                 }
                 let _ = Shell_NotifyIconW(NIM_SETFOCUS, &self.notify_data(hwnd));
@@ -326,7 +392,6 @@ struct WindowOwner {
     hwnd: HWND,
     class: Vec<u16>,
     instance: HINSTANCE,
-    hotkey_registered: bool,
 }
 
 impl WindowOwner {
@@ -364,7 +429,6 @@ impl WindowOwner {
                 hwnd: HWND::default(),
                 class,
                 instance,
-                hotkey_registered: false,
             };
             // A hidden top-level window, not HWND_MESSAGE: Explorer's registered
             // TaskbarCreated broadcast must reach this window after a restart.
@@ -387,14 +451,7 @@ impl WindowOwner {
                 .shared
                 .hwnd
                 .store(owner.hwnd.0 as usize, Ordering::Release);
-            RegisterHotKey(
-                Some(owner.hwnd),
-                HOTKEY_ID,
-                MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT,
-                VK_SPACE.0 as u32,
-            )
-            .context("registering Ctrl+Shift+Space; another application may own this shortcut")?;
-            owner.hotkey_registered = true;
+            owner.state.register_hotkeys(owner.hwnd);
             if !owner.state.shared.stopping.load(Ordering::Acquire) {
                 owner.state.add(owner.hwnd)?;
             }
@@ -431,9 +488,8 @@ impl Drop for WindowOwner {
             if self.state.added.replace(false) {
                 let _ = Shell_NotifyIconW(NIM_DELETE, &self.state.notify_data(self.hwnd));
             }
-            if self.hotkey_registered {
-                let _ = UnregisterHotKey(Some(self.hwnd), HOTKEY_ID);
-            }
+            let _ = UnregisterHotKey(Some(self.hwnd), HOTKEY_ID);
+            let _ = UnregisterHotKey(Some(self.hwnd), VISIBILITY_HOTKEY_ID);
             if !self.hwnd.is_invalid() {
                 let _ = DestroyWindow(self.hwnd);
             }
@@ -465,9 +521,17 @@ unsafe extern "system" fn window_proc(
                 PostQuitMessage(0);
                 return LRESULT(0);
             }
-            if message == WM_HOTKEY && wparam.0 == HOTKEY_ID as usize {
+            if message == UPDATE_HOTKEYS {
+                state.register_hotkeys(hwnd);
+                return LRESULT(0);
+            }
+            if message == WM_HOTKEY && matches!(wparam.0 as i32, HOTKEY_ID | VISIBILITY_HOTKEY_ID) {
                 if !state.shared.stopping.load(Ordering::Acquire) {
-                    state.emit(SHORTCUT_EDIT);
+                    state.emit(if wparam.0 == HOTKEY_ID as usize {
+                        SHORTCUT_EDIT
+                    } else {
+                        HIDE
+                    });
                 }
                 return LRESULT(0);
             }

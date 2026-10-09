@@ -1,17 +1,14 @@
-use vosulay_frame::InputModifiers;
+use crate::InputModifiers;
 
-/// A manager hotkey the native host intercepts before the page sees the key.
-///
-/// The page cannot own this binding: while overlay interaction is active, keys
-/// go to the overlay frame, so only the host can toggle interaction back off.
+/// A canonical manager shortcut intercepted by the native platform.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct NativeHotkey {
-    control: bool,
-    alt: bool,
-    shift: bool,
-    meta: bool,
+pub struct NativeHotkey {
+    pub control: bool,
+    pub alt: bool,
+    pub shift: bool,
+    pub meta: bool,
     /// Windows virtual-key code, which CEF reports on every platform.
-    pub(super) code: i32,
+    pub code: i32,
 }
 
 impl NativeHotkey {
@@ -19,7 +16,7 @@ impl NativeHotkey {
     ///
     /// Requires Ctrl, Alt, or Meta: a bare or Shift-only binding would be
     /// stolen from text fields because interception runs before the page.
-    pub(super) fn parse(text: &str) -> Option<Self> {
+    pub fn parse(text: &str) -> Option<Self> {
         let mut parts = text.split('+').map(str::trim);
         let key = parts.next_back()?;
         let mut hotkey = Self {
@@ -44,12 +41,35 @@ impl NativeHotkey {
         (hotkey.control || hotkey.alt || hotkey.meta).then_some(hotkey)
     }
 
-    pub(super) fn matches(&self, modifiers: InputModifiers, code: i32) -> bool {
+    pub fn matches(&self, modifiers: InputModifiers, code: i32) -> bool {
         main_key_code(code) == self.code
             && modifiers.control == self.control
             && modifiers.alt == self.alt
             && modifiers.shift == self.shift
             && modifiers.meta == self.meta
+    }
+    pub fn wire_code(self) -> u64 {
+        self.code as u64
+            | (u64::from(self.control) << 32)
+            | (u64::from(self.alt) << 33)
+            | (u64::from(self.shift) << 34)
+            | (u64::from(self.meta) << 35)
+    }
+    pub fn from_wire_code(value: u64) -> Option<Self> {
+        let code = (value & 0xffff_ffff) as i32;
+        let control = value & (1 << 32) != 0;
+        let alt = value & (1 << 33) != 0;
+        let shift = value & (1 << 34) != 0;
+        let meta = value & (1 << 35) != 0;
+        (value >> 36 == 0 && (1..=255).contains(&code) && (control || alt || meta)).then_some(
+            Self {
+                code,
+                control,
+                alt,
+                shift,
+                meta,
+            },
+        )
     }
 }
 
