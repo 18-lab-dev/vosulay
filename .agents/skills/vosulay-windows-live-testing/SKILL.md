@@ -1,9 +1,15 @@
 ---
 name: vosulay-windows-live-testing
-description: Build, deploy, and verify the native Rust/CEF host in the already-running Windows VM without changing VM lifecycle or the host desktop.
+description: Maintainer environment (optional) only when the private windows-vm command is available; deploy and verify in an already-running Windows guest without changing guest lifecycle.
 ---
 
-# Windows live testing
+# Windows live testing — maintainer environment (optional)
+
+## Availability gate — first step
+
+Run `command -v windows-vm` before following this skill. If it fails, do not try to install private tooling or recreate the maintainer workstation. Fall back to the `vosulay-local-ci`/`vosulay-cross-platform-dev` skills and `CONTRIBUTING.md`: Linux can run optional Windows cross-Clippy; request or run a manual GitHub Actions `windows-build` in a fork for its portable package; use an authorized native Windows machine for manual game testing. With only a Linux machine, report native Windows runtime checks as unexercised. No VM is required to contribute.
+
+Everything below applies only to the authorized maintainer environment with that command and guest GUI tooling available.
 
 ## Safety and guest selection
 
@@ -12,11 +18,11 @@ Read the current `windows-vm-computer-use` skill before guest GUI work. Use acti
 ```sh
 windows-vm status --json
 windows-vm exec 'Get-CimInstance Win32_Process | Select-Object ProcessId,Name,SessionId'
-windows-vm put LOCAL_ARCHIVE 'V:\TASK_WORKSPACE\package.zip'
-windows-vm get 'V:\TASK_WORKSPACE\receipt.json' LOCAL_RECEIPT
+windows-vm put LOCAL_ARCHIVE 'C:\TASK_WORKSPACE\package.zip'
+windows-vm get 'C:\TASK_WORKSPACE\receipt.json' LOCAL_RECEIPT
 ```
 
-Replace uppercase operands with explicit task-owned paths. Require a verified already-running Windows guest and same-account interactive session. If the guest is absent or another VM owns the GPU, report that prerequisite; never start, stop, switch, restart, shut down, hotplug, or modify VM topology without explicit user authorization. Never open VM disk/firmware files with a second emulator.
+Replace uppercase operands with explicit approved task-owned paths; the example drive is not a required workspace layout. Require a verified already-running Windows guest and same-account interactive session. If the guest is absent or another VM owns the GPU, use the contributor fallback above; never start, stop, switch, restart, shut down, hotplug, or modify VM topology without explicit user authorization. Never open VM disk/firmware files with a second emulator.
 
 ## Build and deploy
 
@@ -24,7 +30,7 @@ Use pinned Rust/MSVC and verified CEF/asdf assets. On native Windows:
 
 ```powershell
 cargo clippy --workspace --all-targets --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
-cargo test --workspace --all-targets --all-features --locked --target x86_64-pc-windows-msvc
+cargo test --workspace --all-features --locked --target x86_64-pc-windows-msvc
 cargo run --locked -p vosulay-cef-tools -- package-windows dist/package
 ```
 

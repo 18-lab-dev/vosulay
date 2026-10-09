@@ -5,7 +5,7 @@ description: Build and maintain vosulay's shared Rust/CEF host, native Linux/Win
 
 # Cross-platform development
 
-Work inside the vosulay repository, not the umbrella or other submodules. Read `docs/README.md`, `docs/source-map.md`, and `docs/testing.md` first. One Rust host and `assets/manager.{html,js,css}` serve both platforms; do not fork the frontend or add a second configuration convention.
+Work inside the vosulay repository, not the umbrella or other submodules. Read `CONTRIBUTING.md`, `docs/README.md`, and `docs/source-map.md` first. The contributor verification tiers work on one Linux or Windows machine without private tools. One Rust host and `assets/manager.{html,js,css}` serve both platforms; do not fork the frontend or add a second configuration convention.
 
 ## Source contracts
 
@@ -17,7 +17,7 @@ Work inside the vosulay repository, not the umbrella or other submodules. Read `
 
 ## Build and package
 
-Use the pinned Rust toolchain and prerequisites in `.github/workflows/linux-ci.yml`. Cargo acquires verified precompiled CEF when `CEF_PATH` is unset; explicit paths must match `tools/cef/pins.json`. No runtime startup download is allowed.
+Install rustup and use `rust-toolchain.toml`. Linux prerequisites (including SDL2/SDL3 development packages) are in `CONTRIBUTING.md` and `.github/workflows/linux-ci.yml`; native Windows needs MSVC Build Tools with Desktop development with C++ and a Windows SDK. Cargo acquires verified precompiled CEF when `CEF_PATH` is unset; explicit paths must match `tools/cef/pins.json`. Allow first-download time and several GB of disk space. No runtime startup download is allowed.
 
 ```sh
 cargo build --locked
@@ -30,10 +30,16 @@ Complete Linux package commands are in `docs/operations.md`; Cargo install depen
 cargo run --locked -p vosulay-cef-tools -- package-windows dist/package
 ```
 
-`Cargo.toml` supplies package versioning. Windows build/release workflows are manual-dispatch only.
+`Cargo.toml` supplies package versioning. Linux CI runs on PRs and pushes to main; Windows build/release workflows are manual-dispatch only. Request a Windows Build run or use the Actions tab in a fork for its portable package artifact; never publish releases as verification.
 
 ## Verification and safety
 
-Use the `vosulay-local-ci` skill for workspace Clippy/tests and Windows cross-Clippy. Use `tools/cef/private-smoke.py` for isolated headless CEF checks; never launch GUI tests on the user's working desktop. Runtime claims require actual pixels and game input evidence, not accepted launch/input commands or producer counters. Use the `vosulay-windows-live-testing` skill and canonical `windows-vm` host for authorized guest testing; never start/stop/switch a VM without explicit user authorization.
+Use `vosulay-local-ci` for Tier 1 workspace formatting/Clippy/tests and optional Tier 2 Windows cross-Clippy (including installation instructions). Tier 3 in `CONTRIBUTING.md` covers Chromium previews assembled like `src/ui.rs::manager_document`, a stubbed host bridge, and private Linux CEF smoke. Native popup surfaces do not render in off-screen CEF; do not rely on browser `confirm`, native select menus, or validation bubbles. Never launch unrequested GUI tests on the user's working desktop.
+
+Runtime claims require actual pixels and game input evidence, not accepted launch/input commands or producer counters. When authorized, Tier 4 can run on the contributor's own machine; no guest tooling is required.
+
+### Maintainer environment (optional)
+
+The `vosulay-windows-live-testing` skill applies only when the maintainer's private `windows-vm` host command is available. It is not required for contributor development. Never start/stop/switch a VM without explicit user authorization; fall back to cross-Clippy, a manual Windows Build Actions run, and native Windows manual testing when unavailable.
 
 Report only exercised checks, exact artifacts, and remaining platform boundaries. Update hand-maintained `docs/` with permanent code changes.

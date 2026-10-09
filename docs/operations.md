@@ -1,10 +1,14 @@
 # Build, launch, and package
 
+Start with [CONTRIBUTING.md](../CONTRIBUTING.md) for single-machine prerequisites and verification tiers. The commands below work on a contributor's own Linux or native Windows machine; no private host tooling or offline cache is required.
+
 ## Prerequisites and runtime
 
-Use the pinned [Rust toolchain](../rust-toolchain.toml), a C compiler, and `pkg-config`. Linux needs Wayland/EGL development files and CEF's native runtime libraries; the exact Ubuntu packages and SDL fixture prerequisites are in [Linux CI](../.github/workflows/linux-ci.yml). Windows needs the native MSVC toolchain. See [testing](testing.md) for loader-path setup.
+Install rustup and use the pinned [Rust toolchain](../rust-toolchain.toml). Linux needs a C compiler, `pkg-config`, Wayland/EGL development files, both SDL2/SDL3 development packages for fixtures, and CEF's runtime libraries; [CONTRIBUTING.md](../CONTRIBUTING.md) includes the exact [Linux CI](../.github/workflows/linux-ci.yml) package list and distribution caveats. Native Windows needs MSVC Build Tools with Desktop development with C++, an x64 compiler/linker and Windows SDK. See [testing](testing.md) for library-path preparation.
 
 Cargo automatically acquires the pinned precompiled CEF distribution when `CEF_PATH` is unset. [crates/cef-tools](../crates/cef-tools/) verifies archive size, SHA1/SHA256, and runtime files using [pins.json](../tools/cef/pins.json). An explicit `CEF_PATH` must point to a verified distribution. Only the initial acquisition needs network access; application startup downloads nothing.
+
+The first CEF acquisition requires internet access and time to download/extract approximately 322 MB on Linux or 172 MB on Windows; allow several GB for extracted assets and Cargo outputs. An empty cache is supported. These are precompiled distributions, not Chromium source builds.
 
 Linux caches under `$XDG_CACHE_HOME/vosulay` (`~/.cache/vosulay` by default): `cef/` stores the SDK, `runtime/` retains executable-adjacent CEF assets, and `overlay/` retains native compositor/lookup libraries. Cargo-installed binaries rely on runtime/overlay caches; reinstall if they are removed. Portable packages use adjacent assets instead.
 
@@ -55,3 +59,7 @@ Linux refreshes recognized osu shortcuts with absolute injection paths, preservi
 For a missing overlay, check game focus, backend reachability, loaded compositor/runtime files, hidden state, enabled placement, and viewport position. Selection follows focus, not process order. Do not change ptrace policy or request elevation just to bypass attachment restrictions.
 
 Input failure releases capture within the five-second safety bound; Windows may exit. Restart the host if needed. If a remote bind fails, the local backend broker remains available. Listener/allowlist changes and remote security are described in [integrations](integrations.md).
+
+## Maintainer environment (optional)
+
+Guest deployments and offline performance caches are additional maintainer tooling, not installation prerequisites. See [testing](testing.md#maintainer-environment-optional) for authorized guest safety and benchmark boundaries. Contributors can package locally and request a manual [Windows Build](../.github/workflows/windows-build.yml) Actions run instead; it uploads the complete portable ZIP. Never publish a release as part of routine verification.

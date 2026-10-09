@@ -22,6 +22,7 @@ together.
 | Native hotkeys | [`crates/frame/src/hotkey.rs`](../crates/frame/src/hotkey.rs) | Shared parser and matching used by the host and platform input paths. |
 | CEF wrapper | [`crates/browser-cef`](../crates/browser-cef) (`src/lib.rs`, `bridge.rs`, `scheme.rs`) | OSR browser, native manager bridge, `vosulay://` scheme, permission policy; build script links the pinned CEF. |
 | CEF smoke | [`crates/cef-smoke`](../crates/cef-smoke), [`tools/cef/private-smoke.py`](../tools/cef/private-smoke.py) | Standalone OSR/WebGL/bridge smoke binary and its private-Xvfb runner. |
+| Editor preview | [`tools/manager-preview.py`](../tools/manager-preview.py) | Builds the editor page with a stub host for any Chromium; no CEF or game needed. |
 | CEF acquisition and packaging | [`crates/cef-tools`](../crates/cef-tools), [`tools/cef/pins.json`](../tools/cef/pins.json) | Pinned download/verification, runtime retention, Linux/Windows packaging. |
 | Frame model | [`crates/frame`](../crates/frame) | Browser-independent frame, damage, and editor input types. |
 | Linux frame transport | [`crates/frame-transport`](../crates/frame-transport) (`ring.rs`, `ipc.rs`, `protocol.rs`) | Sealed three-slot memfd ring and authenticated `SOCK_SEQPACKET` control. |
@@ -33,7 +34,7 @@ together.
 | Linux install metadata | [`CMakeLists.txt`](../CMakeLists.txt), [`extra/com.vosu.vosulay.desktop`](../extra/com.vosu.vosulay.desktop) | Desktop entry and icon installation. |
 | CI | [`.github/workflows`](../.github/workflows) | Linux tests/Clippy on pull requests and `main` pushes; manual-dispatch Windows build/release. See [testing guidance](testing.md). |
 | Tests and fixtures | [`tests/`](../tests), [`crates/overlay-linux/tests`](../crates/overlay-linux/tests) | tosu migration and backend HTML fixtures; C-backed loader and SDL fixtures. |
-| Benchmarks | [`autoresearch.sh`](../autoresearch.sh), [`tools/autoresearch`](../tools/autoresearch) | VM-only uncapped CEF performance harness. |
+| Benchmarks | [`autoresearch.sh`](../autoresearch.sh), [`tools/autoresearch`](../tools/autoresearch) | Maintainer environment (optional): guest-only uncapped CEF performance harness; not a contributor prerequisite. |
 | Documentation | [docs/README.md](README.md), [AGENTS.md](../AGENTS.md), [CLAUDE.md](../CLAUDE.md) | Hand-maintained references; update alongside code. |
 
 ## Practical change paths
