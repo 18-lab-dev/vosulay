@@ -242,6 +242,77 @@ fn cache_lock(cache: &Path) -> Result<File> {
     Ok(lock)
 }
 
+/// Retain the verified runtime in CEF's executable-adjacent layout.
+pub fn cache_runtime(cef: &Path, receipt: &Receipt, cache: &Path) -> Result<PathBuf> {
+    let _lock = cache_lock(cache)?;
+    let output = cache.join(format!(
+        "{}-{}",
+        receipt.product_version, receipt.archive_sha256
+    ));
+    let temporary = if output.exists() {
+        None
+    } else {
+        Some(
+            tempfile::Builder::new()
+                .prefix(".runtime-")
+                .tempdir_in(cache)?,
+        )
+    };
+    let directory = temporary
+        .as_ref()
+        .map_or(output.as_path(), |temp| temp.path());
+    for (relative, expected) in &receipt.runtime_sha256 {
+        let name = relative
+            .strip_prefix("Release/")
+            .or_else(|| relative.strip_prefix("Resources/"))
+            .context("CEF receipt file is outside runtime directories")?;
+        let source = cef.join(relative);
+        let destination = directory.join(name);
+        if temporary.is_some() {
+            fs::create_dir_all(destination.parent().context("runtime file has no parent")?)?;
+            link_or_copy(&source, &destination)?;
+        }
+        #[cfg(unix)]
+        let linked = {
+            use std::os::unix::fs::MetadataExt;
+            let source_metadata = regular_file(&source)?.metadata()?;
+            let destination_metadata = regular_file(&destination)?.metadata()?;
+            source_metadata.dev() == destination_metadata.dev()
+                && source_metadata.ino() == destination_metadata.ino()
+        };
+        #[cfg(not(unix))]
+        let linked = false;
+        // The SDK was already hashed. A retained hardlink is the same verified
+        // file; only copies on another filesystem need a second digest pass.
+        ensure!(
+            linked || sha256(&destination)? == *expected,
+            "cached CEF runtime digest mismatch: {}",
+            destination.display()
+        );
+    }
+    if let Some(temporary) = temporary {
+        for name in ["LICENSE.txt", "CREDITS.html"] {
+            link_or_copy(&cef.join(name), &temporary.path().join(name))?;
+        }
+        fs::rename(temporary.path(), &output)?;
+    }
+    output
+        .canonicalize()
+        .context("canonicalizing retained CEF runtime")
+}
+
+fn link_or_copy(source: &Path, destination: &Path) -> Result<()> {
+    regular_file(source)?;
+    match fs::hard_link(source, destination) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::CrossesDevices => {
+            fs::copy(source, destination)?;
+            Ok(())
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
 struct Hashes {
     size: u64,
     sha1: Sha1,

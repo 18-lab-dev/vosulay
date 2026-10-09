@@ -6,7 +6,21 @@ pub const PACKET_SIZE: usize = 128;
 pub const FORMAT_BGRA: u32 = 1;
 pub const MAX_DIMENSION: u32 = 16384;
 pub const MAX_FRAME_BYTES: usize = 256 * 1024 * 1024;
-const VERSION: u16 = 2;
+const VERSION: u16 = 3;
+
+/// CLOCK_MONOTONIC is shared by every local process, unlike an Instant epoch.
+pub fn focus_timestamp() -> u64 {
+    let mut time = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    let result = unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut time) };
+    assert_eq!(result, 0, "CLOCK_MONOTONIC unavailable");
+    (time.tv_sec as u64)
+        .saturating_mul(1_000_000_000)
+        .saturating_add(time.tv_nsec as u64)
+        .max(1)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u16)]
@@ -48,7 +62,10 @@ impl TryFrom<u16> for Kind {
 
 /// Ring carries exactly one descriptor: the sealed memfd.
 /// Surface: physical width/height, value[0] native window, value[1] millihertz,
-/// value[2] focused. Focus: code 0/1.
+/// value[2] focused. Focus: code 0/1. Both carry the most recent focus
+/// transition's CLOCK_MONOTONIC nanoseconds in sequence, unchanged on retry.
+/// value[3] is the most recent focus-gain timestamp (0 before any gain), so
+/// coalescing a blocked gain followed by loss does not erase attachment order.
 /// Visible/Capture: code 0/1. Configure: code FPS cap (0 = display refresh).
 /// Hello: value[0] PID, authenticated independently through SO_PEERCRED.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -146,6 +163,17 @@ impl Packet {
             || (packet.kind != Kind::Input && packet.flags != 0)
         {
             return Err(invalid("invalid control flags"));
+        }
+        if matches!(packet.kind, Kind::Surface | Kind::Focus)
+            && (packet.sequence == 0
+                || packet.value[3] > packet.sequence
+                || ((packet.kind == Kind::Surface && packet.value[2] == 1
+                    || packet.kind == Kind::Focus && packet.code == 1)
+                    && packet.value[3] != packet.sequence)
+                || (packet.kind == Kind::Surface && packet.value[2] > 1)
+                || (packet.kind == Kind::Focus && packet.code > 1))
+        {
+            return Err(invalid("invalid focus transition"));
         }
         Ok(packet)
     }
@@ -348,4 +376,35 @@ pub fn pixel_bytes(width: u32, height: u32) -> io::Result<usize> {
         ));
     }
     Ok(bytes as usize)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Kind, PACKET_SIZE, Packet};
+
+    #[test]
+    fn timestamped_focus_round_trips_in_existing_packet() {
+        for kind in [Kind::Surface, Kind::Focus] {
+            let mut packet = Packet::new(kind);
+            packet.sequence = 300;
+            packet.value[3] = 200;
+            let bytes = packet.encode();
+            assert_eq!(bytes.len(), PACKET_SIZE);
+            assert_eq!(Packet::decode(&bytes).unwrap(), packet);
+        }
+    }
+
+    #[test]
+    fn rejects_missing_or_inconsistent_focus_timestamps() {
+        let mut packet = Packet::new(Kind::Focus);
+        assert!(Packet::decode(&packet.encode()).is_err());
+        packet.sequence = 100;
+        packet.code = 1;
+        assert!(Packet::decode(&packet.encode()).is_err());
+        packet.value[3] = 100;
+        assert_eq!(Packet::decode(&packet.encode()).unwrap(), packet);
+        packet.code = 0;
+        packet.value[3] = 101;
+        assert!(Packet::decode(&packet.encode()).is_err());
+    }
 }

@@ -11,7 +11,66 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
-thread_local! { static ENTERED: Cell<bool> = const { Cell::new(false) }; }
+thread_local! {
+    static ENTERED: Cell<bool> = const { Cell::new(false) };
+    static SDL_PRESENT: Cell<Option<SdlPresent>> = const { Cell::new(None) };
+}
+#[derive(Clone, Copy)]
+struct SdlPresent {
+    window: usize,
+    width: u32,
+    height: u32,
+    focused: bool,
+    drawn: bool,
+}
+struct RestoreSdlPresent(Option<SdlPresent>);
+impl Drop for RestoreSdlPresent {
+    fn drop(&mut self) {
+        SDL_PRESENT.with(|present| present.set(self.0));
+    }
+}
+pub(crate) fn with_sdl_present<T>(
+    window: usize,
+    width: u32,
+    height: u32,
+    focused: bool,
+    present: impl FnOnce() -> T,
+) -> T {
+    let previous = SDL_PRESENT.with(|state| {
+        let previous = state.get();
+        state.set(Some(SdlPresent {
+            window,
+            width,
+            height,
+            focused,
+            drawn: false,
+        }));
+        previous
+    });
+    let _restore = RestoreSdlPresent(previous);
+    present()
+}
+// SDL itself swaps through GLX/EGL. Keep its surface metadata pending until the
+// native swap interposer, which runs after an upstream capture layer has copied
+// the pristine backbuffer.
+fn draw_sdl_present() -> bool {
+    SDL_PRESENT.with(|state| {
+        let Some(mut present) = state.get() else {
+            return false;
+        };
+        if !present.drawn {
+            present.drawn = true;
+            state.set(Some(present));
+            process(
+                Backend::Sdl,
+                0,
+                present.window,
+                Some((present.width, present.height, present.focused)),
+            );
+        }
+        true
+    })
+}
 pub(crate) struct Guard;
 impl Guard {
     pub(crate) fn enter() -> Option<Self> {
@@ -48,20 +107,8 @@ pub(crate) unsafe fn real_symbol(name: &[u8]) -> *const c_void {
     if !next.is_null() {
         return next.cast_const();
     }
-    // A late-loaded hook is after the provider in the link map. Default scope
-    // is usable only when the resolved address is not this injected library.
-    let global = unsafe { lookup_symbol(libc::RTLD_DEFAULT, name.as_ptr().cast()) };
-    if !global.is_null() {
-        let mut own: libc::Dl_info = unsafe { mem::zeroed() };
-        let mut found: libc::Dl_info = unsafe { mem::zeroed() };
-        if unsafe {
-            libc::dladdr(real_symbol as *const c_void, &mut own) != 0
-                && libc::dladdr(global, &mut found) != 0
-                && own.dli_fbase != found.dli_fbase
-        } {
-            return global.cast_const();
-        }
-    }
+    // Default scope can re-enter an upstream capture hook when the native
+    // provider is RTLD_LOCAL. Resolve loaded providers by handle instead.
     const LIBRARIES: [&[u8]; 8] = [
         b"libGL.so.1\0",
         b"libGLX.so.0\0",
@@ -310,9 +357,6 @@ fn draw(surface: &Surface, context: usize, w: u32, h: u32, focused: bool) {
         Ordering::Release,
     );
 }
-pub(crate) fn present_sdl(window: usize, width: u32, height: u32, focused: bool) {
-    process(Backend::Sdl, 0, window, Some((width, height, focused)));
-}
 fn process(backend: Backend, display: usize, drawable: usize, known: Option<(u32, u32, bool)>) {
     let (w, h, focused) = if let Some(v) = known {
         v
@@ -482,6 +526,7 @@ pub(crate) fn remove(backend: Backend, display: usize, drawable: usize) {
             .into_iter()
             .flatten()
     {
+        crate::sdl::release_cursor_for_surface(surface.native);
         retire_surface(&surface);
     }
 }
@@ -503,6 +548,8 @@ pub(crate) fn destroy_context(backend: Backend, ctx: usize) {
             unsafe {
                 renderer.destroy_if_current(current);
             }
+            drop(rendering);
+            crate::sdl::release_cursor_for_surface(surface.native);
         }
     }
     let mut retired = RETIRED.lock();
@@ -526,7 +573,9 @@ pub(crate) fn destroy_context(backend: Backend, ctx: usize) {
 pub unsafe extern "C" fn glXSwapBuffers(d: *mut c_void, w: c_ulong) {
     if let Some(f) = *GX_SWAP {
         if let Some(_guard) = Guard::enter() {
-            process(Backend::Glx, d as usize, w as usize, None);
+            if !draw_sdl_present() {
+                process(Backend::Glx, d as usize, w as usize, None);
+            }
             unsafe { f(d, w) }
         } else {
             unsafe { f(d, w) }
@@ -537,25 +586,51 @@ pub unsafe extern "C" fn glXSwapBuffers(d: *mut c_void, w: c_ulong) {
 pub unsafe extern "C" fn eglSwapBuffers(d: *mut c_void, s: *mut c_void) -> c_uint {
     let Some(f) = *EG_SWAP else { return 0 };
     if let Some(_guard) = Guard::enter() {
-        process(Backend::Egl, d as usize, s as usize, None);
+        if !draw_sdl_present() {
+            process(Backend::Egl, d as usize, s as usize, None);
+        }
         unsafe { f(d, s) }
     } else {
         unsafe { f(d, s) }
     }
 }
+static OBS_EG_SWAP: LazyLock<Option<EglSwap>> = LazyLock::new(|| unsafe {
+    let pointer = lookup_symbol(libc::RTLD_DEFAULT, c"eglSwapBuffers".as_ptr());
+    if pointer.is_null() || pointer == eglSwapBuffers as *const () as *mut c_void {
+        return None;
+    }
+    let mut owner: libc::Dl_info = mem::zeroed();
+    if libc::dladdr(pointer, &mut owner) == 0 || owner.dli_fname.is_null() {
+        return None;
+    }
+    let path = CStr::from_ptr(owner.dli_fname).to_bytes();
+    let file = path.rsplit(|byte| *byte == b'/').next().unwrap_or(path);
+    if !file.starts_with(b"libobs_glcapture.so") {
+        return None;
+    }
+    Some(mem::transmute_copy(&pointer))
+});
 unsafe fn damage(
     f: Option<Damage>,
     d: *mut c_void,
     s: *mut c_void,
-    _r: *const c_int,
-    _n: c_int,
+    r: *const c_int,
+    n: c_int,
 ) -> c_uint {
     let Some(f) = f else { return 0 };
+    // OBS 1.5.6 hooks eglSwapBuffers, not the damage variants. Its standard
+    // wrapper performs the same full-buffer swap, then chains through our
+    // native hook, where composition follows capture.
+    if let Some(obs) = *OBS_EG_SWAP {
+        return unsafe { obs(d, s) };
+    }
     if let Some(_guard) = Guard::enter() {
-        process(Backend::Egl, d as usize, s as usize, None); /* overlay affects whole buffer */
+        if !draw_sdl_present() {
+            process(Backend::Egl, d as usize, s as usize, None); /* overlay affects whole buffer */
+        }
         unsafe { f(d, s, std::ptr::null(), 0) }
     } else {
-        unsafe { f(d, s, _r, _n) }
+        unsafe { f(d, s, r, n) }
     }
 }
 #[unsafe(no_mangle)]
@@ -679,7 +754,7 @@ pub unsafe extern "C" fn vosulay_attach_v1(endpoint: *const c_char) -> c_int {
     if INSTALLED.load(Ordering::Acquire) {
         return 1;
     }
-    let names: [&[u8]; 33] = [
+    let names: [&[u8]; 40] = [
         b"glXSwapBuffers",
         b"eglSwapBuffers",
         b"eglSwapBuffersWithDamageKHR",
@@ -700,6 +775,13 @@ pub unsafe extern "C" fn vosulay_attach_v1(endpoint: *const c_char) -> c_int {
         b"SDL_GetMouseState",
         b"SDL_GetRelativeMouseState",
         b"SDL_GetGlobalMouseState",
+        b"SDL_ShowCursor",
+        b"SDL_HideCursor",
+        b"SDL_CursorVisible",
+        b"SDL_SetRelativeMouseMode",
+        b"SDL_GetRelativeMouseMode",
+        b"SDL_SetWindowRelativeMouseMode",
+        b"SDL_GetWindowRelativeMouseMode",
         b"SDL_GL_GetProcAddress",
         b"SDL_GL_DestroyContext",
         b"SDL_GL_DeleteContext",

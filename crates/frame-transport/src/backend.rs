@@ -1,8 +1,11 @@
 use crate::{Producer, RingHandle};
 use anyhow::{Result, anyhow, ensure};
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
+use std::{
+    os::fd::{AsRawFd, OwnedFd},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
 };
 use vosulay_frame::{BrowserFrame, BrowserFrameBackend};
 
@@ -11,8 +14,32 @@ use vosulay_frame::{BrowserFrame, BrowserFrameBackend};
 pub struct FrameMailbox {
     ring: Mutex<Option<(u64, RingHandle)>>,
     visible: AtomicBool,
+    wake: Option<Arc<OwnedFd>>,
+    generation: AtomicU64,
 }
 impl FrameMailbox {
+    pub fn with_wake(wake: Arc<OwnedFd>) -> Self {
+        Self {
+            wake: Some(wake),
+            ..Self::default()
+        }
+    }
+    pub fn wake_control(&self) {
+        let Some(wake) = &self.wake else {
+            return;
+        };
+        let value = 1_u64;
+        loop {
+            let written =
+                unsafe { libc::write(wake.as_raw_fd(), (&value as *const u64).cast(), 8) };
+            if written >= 0
+                || std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted
+            {
+                break;
+            }
+        }
+        // A saturated nonblocking eventfd is already readable.
+    }
     pub fn snapshot(&self) -> Result<Option<(u64, RingHandle)>> {
         Ok(self
             .ring
@@ -29,15 +56,14 @@ pub struct FrameBackend {
     mailbox: Arc<FrameMailbox>,
     producer: Option<Producer>,
     extent: Option<(u32, u32)>,
-    generation: u64,
 }
 impl FrameBackend {
+    /// The controller owns one live backend; dropping it releases its mailbox ring.
     pub fn new(mailbox: Arc<FrameMailbox>) -> Self {
         Self {
             mailbox,
             producer: None,
             extent: None,
-            generation: 0,
         }
     }
 }
@@ -49,9 +75,13 @@ impl BrowserFrameBackend for FrameBackend {
         }
         let producer = Producer::new(width, height)?;
         let generation = self
+            .mailbox
             .generation
-            .checked_add(1)
-            .ok_or_else(|| anyhow!("frame ring generation exhausted"))?;
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+                value.checked_add(1)
+            })
+            .map_err(|_| anyhow!("frame ring generation exhausted"))?
+            + 1;
         let handle = producer.handle();
         // Allocate/map before locking. The controller only clones the descriptor
         // owner under this lock; it never performs IPC or waits for the game here.
@@ -62,7 +92,7 @@ impl BrowserFrameBackend for FrameBackend {
             .map_err(|_| anyhow!("frame mailbox poisoned"))? = Some((generation, handle));
         self.producer = Some(producer);
         self.extent = Some((width, height));
-        self.generation = generation;
+        self.mailbox.wake_control();
         Ok(())
     }
     fn submit_frame(&mut self, frame: BrowserFrame<'_>) -> Result<()> {
@@ -85,7 +115,42 @@ impl BrowserFrameBackend for FrameBackend {
         Ok(())
     }
     fn set_visible(&mut self, visible: bool) -> Result<()> {
-        self.mailbox.visible.store(visible, Ordering::Release);
+        if self.mailbox.visible.swap(visible, Ordering::AcqRel) != visible {
+            self.mailbox.wake_control();
+        }
         Ok(())
+    }
+}
+
+impl Drop for FrameBackend {
+    fn drop(&mut self) {
+        self.mailbox.visible.store(false, Ordering::Release);
+        *self
+            .mailbox
+            .ring
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = None;
+        self.mailbox.wake_control();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Arc, BrowserFrameBackend, FrameBackend, FrameMailbox};
+
+    #[test]
+    fn detached_backend_releases_ring_without_reusing_generation() {
+        let mailbox = Arc::new(FrameMailbox::default());
+        {
+            let mut backend = FrameBackend::new(mailbox.clone());
+            backend.resize(2, 2, 1.0).unwrap();
+            backend.set_visible(true).unwrap();
+            assert_eq!(mailbox.snapshot().unwrap().unwrap().0, 1);
+        }
+        assert!(!mailbox.visible());
+        assert!(mailbox.snapshot().unwrap().is_none());
+        let mut backend = FrameBackend::new(mailbox.clone());
+        backend.resize(2, 2, 1.0).unwrap();
+        assert_eq!(mailbox.snapshot().unwrap().unwrap().0, 2);
     }
 }

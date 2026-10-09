@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/browser-cef", "crates/cef-tools", "crates/cef-smoke", "crates/frame", "crates/frame-transport", "crates/platform-windows", "crates/platform-linux", "crates/overlay-linux"]
+members = ["crates/browser-cef", "crates/cef-tools", "crates/cef-smoke", "crates/frame", "crates/frame-transport", "crates/platform-windows", "crates/platform-linux", "crates/overlay-linux", "crates/overlay-lookup"]
 default-members = ["."]
 resolver = "3"
 
@@ -24,7 +24,7 @@ required-features = ["cef-host"]
 
 [features]
 default = ["cef-host"]
-cef-host = ["dep:vosulay-browser", "dep:vosulay-frame", "dep:vosulay-windows", "dep:vosulay-linux", "dep:rfd", "dep:open"]
+cef-host = ["dep:vosulay-browser", "dep:vosulay-frame", "dep:vosulay-windows", "dep:vosulay-linux", "dep:vosulay-overlay", "dep:vosulay-lookup", "dep:vosulay-cef-tools", "dep:rfd", "dep:open"]
 
 [dependencies]
 base64 = "0.22"
@@ -47,8 +47,26 @@ open = { version = "5.3", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 vosulay-linux = { path = "crates/platform-linux", optional = true }
+vosulay-cef-tools = { path = "crates/cef-tools", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 vosulay-windows = { path = "crates/platform-windows", optional = true }
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading"] }
 
+[build-dependencies]
+vosulay-cef-tools = { path = "crates/cef-tools" }
+tempfile = "3.20"
+
+[target.'cfg(target_os = "linux")'.build-dependencies]
+vosulay-overlay = { path = "crates/overlay-linux", optional = true }
+vosulay-lookup = { path = "crates/overlay-lookup", optional = true }
+
+# The compositor is retained from a build dependency but runs inside the game.
+# Keep host/target profiles identical to avoid colliding cdylib outputs, and do
+# not ship Cargo's otherwise unoptimized release build-dependency artifact.
+[profile.dev.build-override]
+debug = true
+
+[profile.release.build-override]
+opt-level = 3
+codegen-units = 16

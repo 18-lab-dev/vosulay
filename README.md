@@ -26,8 +26,8 @@ vosulay renders existing tosu-compatible counters inside osu! and preserves the 
 ## Linux
 
 Extract the complete Linux runtime package and run `./vosulay`. Keep the CEF
-libraries, resources, locales, sandbox helper, and `libvosulay_overlay.so`
-beside the executable. Nothing is downloaded at application startup.
+libraries, resources, locales, sandbox helper, `libvosulay_overlay.so`, and
+`libvosulay_lookup.so` beside the executable. Nothing is downloaded at startup.
 
 With Rust 1.96.1 and the native platform toolchain installed, developers can
 build directly:
@@ -41,15 +41,32 @@ distribution automatically. It verifies the pinned archive size, SHA1/SHA256,
 and runtime files, then reuses the verified cache on subsequent builds.
 No Python, Qt, Electron, Chromium source build, or CEF source build is required.
 
+Install from a checkout with Cargo:
+
+```sh
+cargo install --path . --locked
+vosulay
+```
+
+Use `--force` when reinstalling an existing installation. Cargo installs only
+the executable, so the build also retains verified CEF files in
+`$XDG_CACHE_HOME/vosulay/runtime` and both the native compositor and lookup helper
+in `$XDG_CACHE_HOME/vosulay/overlay` (under `~/.cache` when unset). The installed
+launcher runs beside those retained CEF assets; no `LD_LIBRARY_PATH` or
+`--cef-dir` setup is needed. Keep these two caches while using the installation;
+if they are removed, reinstall to recreate them. Nothing is downloaded at
+application startup. `cargo run` uses the same retained runtime.
+
 To build and assemble the complete portable package:
 
 ```sh
 cargo build --release --locked
-cargo build --release --locked -p vosulay-overlay
+cargo build --release --locked -p vosulay-overlay -p vosulay-lookup
 CEF_PATH="$(cargo run --quiet --locked -p vosulay-cef-tools -- acquire --platform linux-x86_64)"
 cargo run --quiet --locked -p vosulay-cef-tools -- package --platform linux-x86_64 \
   --cef-path "$CEF_PATH" --output dist/linux \
   --exe target/release/vosulay --overlay target/release/libvosulay_overlay.so \
+  --overlay target/release/libvosulay_lookup.so \
   --overlay crates/overlay-linux/VkLayer_vosulay_overlay.json
 ./dist/linux/vosulay
 ```
@@ -60,21 +77,32 @@ the [Rust acquisition helper](crates/cef-tools/src/lib.rs); the first SDK
 download requires internet access. An explicit `CEF_PATH` overrides acquisition
 and must point to a verified distribution; cached and explicit-path builds need
 no network access.
-Package the complete directory rather than installing the executable alone.
 
-Vosulay discovers native same-user game processes and attempts live attachment.
-If process-injection policy prevents attachment, start the game with the packaged
-compositor preloaded:
+For distribution to another machine, package the complete directory rather
+than copying a Cargo-installed executable alone. Portable packages use their
+adjacent runtime files instead of the build machine's caches.
+
+On Linux startup, vosulay refreshes recognized osu desktop shortcuts with the
+current compositor and lookup helper's absolute preload paths and Vulkan settings.
+Existing foreign preloads, launch arguments, and OBS capture flags are preserved;
+obsolete vosulay preload paths and duplicate environment assignments are removed.
+System shortcuts get per-user overrides in the XDG applications directory; no
+system files or privilege settings are changed. This affects the next game
+launch, not an already-running game.
+
+Vosulay also discovers native same-user game processes and attempts live
+attachment. If process-injection policy prevents attachment, restart the game
+through its refreshed shortcut, or preload the packaged compositor manually:
 
 ```sh
-LD_PRELOAD=/absolute/path/to/vosulay/libvosulay_overlay.so /path/to/game
+LD_PRELOAD="/absolute/path/to/vosulay/libvosulay_lookup.so:${LD_PRELOAD:+$LD_PRELOAD:}/absolute/path/to/vosulay/libvosulay_overlay.so" /path/to/game
 ```
 
 For Vulkan launch-time attachment, point the Vulkan loader at the packaged layer:
 
 ```sh
-VK_LAYER_PATH=/absolute/path/to/vosulay \
-VK_INSTANCE_LAYERS=VK_LAYER_VOSULAY_overlay /path/to/game
+VK_LAYER_PATH="${VK_LAYER_PATH:+$VK_LAYER_PATH:}/absolute/path/to/vosulay" \
+VK_INSTANCE_LAYERS="${VK_INSTANCE_LAYERS:+$VK_INSTANCE_LAYERS:}VK_LAYER_VOSULAY_overlay" /path/to/game
 ```
 
 CEF renders the complete profile in one transparent OSR browser. Chromium keeps
@@ -83,6 +111,50 @@ pixels and a persistent three-slot memfd ring. The game acquires the newest
 complete frame at present and uploads it to a reusable GPU texture. Linux
 DMA-BUF support is not required.
 
+Linux selection follows authenticated game focus notifications, not process
+enumeration order. Focusing an unrelated window retains the selected game;
+another supported game takes over only after gaining focus. If the selected
+game exits, vosulay waits for a supported game to gain focus instead of selecting
+an already-running background game.
+
+Focus tracking needs neither eBPF/CN_PROC probes nor elevation. It does not
+bypass Linux injection policy; use the preload or Vulkan-layer launch routes
+above when live attachment is restricted.
+
+### OBS game capture
+
+Linux shortcuts use `lookup helper → foreign preloads → compositor` preload order.
+The lookup-only helper catches explicit SDL library lookups even when OBS supplies
+its own `dlsym`; it preserves native caller scope for `RTLD_NEXT` and `RTLD_DEFAULT`.
+OBS's GL capture preload stays before the compositor, and its installed Vulkan
+layer stays before vosulay. OBS copies the game before vosulay draws the overlay.
+SDL2/SDL3 GL swaps defer composition to the native EGL/GLX swap; EGL damage swaps
+use OBS's standard full-buffer swap route so capture still happens before drawing.
+Keep this hook order for manual launches too.
+
+**Display Capture includes the overlay.** Exclusion applies to game capture, not
+screen capture. Vosulay does not change OBS scenes, capture sources, or settings.
+An OBS image-export failure is not hidden or repaired by vosulay.
+
+Live verification exercised the Cargo-installed manager through the usual osu!
+launcher on SDL3/Wayland OpenGL and an RTX 5090. The user observed the overlay in
+game but not in OBS. A 2560×1440 capture of OBS's fullscreen Preview projector
+shows the actual game's song-selection screen. Saved launchers, overlay profiles,
+and OBS scene/settings matched their pre-run hashes. This is visual confirmation,
+not a delivered-frame, frame-pacing, or latency measurement.
+
+Earlier capture-exclusion receipts sampled exported DMA-BUF memory without its
+layout modifier; those samples remain withdrawn. A separate native-EGL pilot
+used modifier-aware GPU import and readback, but changed the OBS export flag and
+does not represent the unchanged live configuration. Vulkan-backed GL export
+failed with OBS alone and with vosulay in private NVIDIA harnesses; later
+device-isolated native-EGL attempts also failed to export a frame. These are
+sandbox failures, not evidence that the live configuration fails.
+
+Live receipt and projector pixels: `target/live-osu-obs-20261009/`.
+Private diagnostics: `target/capture-readback-correction-20261009/` and
+`target/actual-launcher-20261008-OYsbux/`.
+
 ## Windows
 
 Extract the complete x86_64 portable ZIP and run `vosulay.exe` alongside a vosu
@@ -90,7 +162,7 @@ or tosu-compatible backend. The executable is CEF's pinned sandbox bootstrap;
 keep `vosulay.dll`, CEF runtime files, locales, and both asdf-overlay injection
 DLLs beside it. No Node.js or Electron process is used.
 
-The host follows the last focused discovered `osu!.exe` or `osulazer.exe`,
+The host follows the last focused supported `osu!.exe` or `osulazer.exe`,
 remains attached when focus leaves the game, switches only when another
 supported game becomes focused, and recovers after game restart. It copies
 CEF's callback-borrowed D3D11 texture into reusable vosulay-owned GPU textures
@@ -100,10 +172,30 @@ Vosulay does not request elevation. If explicitly launched elevated, its browser
 host keeps the selected privileges for native attachment instead of Chromium
 relaunching it; CEF renderer and GPU processes remain sandboxed.
 
+On Windows, OBS's **Capture third-party overlays** setting controls when OBS
+copies the swapchain; it is not a guaranteed exclusion switch. Vosulay's pinned
+asdf-overlay draws before forwarding `Present`/`Present1`, so exclusion with that
+setting disabled still depends on which Present hook runs first. This is
+source-verified for the DXGI path, not native Windows capture verification.
+
 `Ctrl+Shift+Space` toggles edit mode on both platforms. While editing, Ctrl+I
 toggles counter interaction, Ctrl+R refreshes the selected counter, Delete
 removes it, and Escape exits editing. Profile and copy/paste shortcuts remain
 configurable. Normal mode leaves game input alone.
+
+The Linux editor shows the native system cursor and temporarily disables
+relative mouse mode. Leaving editing, losing focus, disconnecting, or destroying
+the presentation surface restores the game's latest requested cursor state.
+Game focus events and swap-interval requests still reach the game unchanged.
+
+**Keep overlays in view** constrains placement only while editing. A game-window
+resize in normal mode never clamps or saves new placement coordinates.
+
+CEF starts lazily when a game is selected. Detaching closes the in-game view
+after pending edits are flushed and releases its telemetry connections and Linux
+frame ring. The initialized CEF runtime remains until exit: CEF cannot safely be
+reinitialized in the same process. A retained runtime without a view has no
+active-view rendering clock. Remote profile clients remain independently usable.
 
 Input capture/release and browser-heartbeat failures have a five-second bound.
 Failure releases capture or terminates vosulay so the injected connection closes
@@ -162,6 +254,10 @@ microsecond CEF interval and are rejected by the CLI or normalized on config loa
 These are scheduling limits, not guaranteed rendered FPS: complex overlays
 can render more slowly. Idle pages do not continuously publish unchanged frames;
 the transport keeps newest complete pixels instead of accumulating a queue.
+
+The overlay's CEF limit does not change the game's FPS cap, swap interval, or
+window focus. The Linux release build retains an optimized in-game compositor
+even though Cargo builds it as a build dependency.
 
 ## Backend connections
 

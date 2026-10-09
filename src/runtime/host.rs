@@ -10,8 +10,10 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use vosulay_browser::{BrowserOptions, OsrBrowser, execute_subprocess, scheme::MANAGER_URL};
-use vosulay_frame::{BrowserInput, KeyKind, PlatformEvent};
+use vosulay_browser::{
+    BrowserOptions, CefRuntime, OsrBrowser, RuntimeOptions, execute_subprocess, scheme::MANAGER_URL,
+};
+use vosulay_frame::{BrowserInput, KeyKind, PlatformEvent, Viewport};
 #[cfg(target_os = "linux")]
 use vosulay_linux::{LinuxController as PlatformController, LinuxOptions};
 #[cfg(windows)]
@@ -28,6 +30,8 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         return Ok(0);
     };
     let mut config = crate::config::load_from_path(&options.config)?;
+    #[cfg(target_os = "linux")]
+    super::launchers::refresh(&options.overlay, &options.lookup);
     super::tosu::migrate(&mut config, &options.config);
     let resources = Arc::new(ProductResources::new(&config)?);
     let remote = crate::remote::RemoteServer::start_from_path(
@@ -43,7 +47,7 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
     })?;
     #[cfg(target_os = "linux")]
     let mut platform = PlatformController::start(LinuxOptions {
-        library: options.runtime.join("libvosulay_overlay.so"),
+        library: options.overlay.clone(),
         pids: options.pids.clone(),
         process_names: options.process_names.clone(),
     })?;
@@ -53,34 +57,13 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         options.backend.clone(),
         resources.clone(),
     )?;
-    let parent = options
-        .config
-        .parent()
-        .context("configuration has no parent directory")?;
     let initial_fps = super::frame_rate(options.fps_limit, config.settings.fps_limit, 60.0);
-    let browser = unsafe {
-        OsrBrowser::open(
-            BrowserOptions {
-                runtime: &options.runtime,
-                sandbox_info,
-                cache: &parent.join("cef-cache"),
-                url: MANAGER_URL,
-                backend_url: options.backend.as_str(),
-                broker_url: Some(remote.browser_url().as_str()),
-                resources,
-                width: 640,
-                height: 480,
-                scale: 1.0,
-                fps_limit: initial_fps.ceil() as u32,
-                shared_texture: cfg!(windows),
-                shared_array_buffer: config.settings.allow_unrestricted_shared_array_buffer,
-            },
-            platform.frame_backend(),
-        )
-    }?;
-    browser.set_visible(false)?;
     let mut host = Host {
-        browser: &browser,
+        browser: None,
+        runtime: None,
+        sandbox_info,
+        resources,
+        broker_url: remote.browser_url().to_string(),
         platform: &mut platform,
         worker: &mut worker,
         options: &options,
@@ -98,8 +81,20 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         refresh_hz: 60.0,
         effective_fps: initial_fps,
         consumed: [false; 256],
+        viewport: Viewport {
+            width: 640,
+            height: 480,
+            scale: 1.0,
+            refresh_hz: 60.0,
+        },
+        shared_array_buffer: config.settings.allow_unrestricted_shared_array_buffer,
+        pending_detach: false,
+        flushed: None,
     };
     let result = host.event_loop();
+    let browser = host.browser.take();
+    let runtime = host.runtime.take();
+    drop(host);
     // Input is released before browser/worker cleanup, even if the renderer died.
     let release = platform.set_capture(false);
     worker.stop();
@@ -114,7 +109,10 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
     worker.join()?;
     release?;
     platform.shutdown()?;
-    browser.close()?;
+    if let Some(browser) = browser {
+        browser.close()?;
+    }
+    drop(runtime);
     result.map(|()| 0)
 }
 
@@ -123,9 +121,14 @@ enum Closing {
     Reload,
     Exit,
     ImportTosu,
+    Detach,
 }
 struct Host<'a> {
-    browser: &'a OsrBrowser,
+    browser: Option<OsrBrowser>,
+    runtime: Option<CefRuntime>,
+    sandbox_info: *mut u8,
+    resources: Arc<ProductResources>,
+    broker_url: String,
     platform: &'a mut PlatformController,
     worker: &'a mut EditorWorker,
     options: &'a Options,
@@ -143,20 +146,81 @@ struct Host<'a> {
     pending_ping: Option<u64>,
     closing: Option<(Closing, String, Instant)>,
     consumed: [bool; 256],
+    viewport: Viewport,
+    shared_array_buffer: bool,
+    pending_detach: bool,
+    flushed: Option<Closing>,
 }
 impl Host<'_> {
+    fn receive(&self, envelope: &Value) -> Result<()> {
+        if let Some(browser) = self.browser.as_ref() {
+            receive(browser, envelope)?;
+        }
+        Ok(())
+    }
+
+    fn open(&mut self) -> Result<()> {
+        if self.browser.is_some() {
+            return Ok(());
+        }
+        if self.runtime.is_none() {
+            let parent = self
+                .options
+                .config
+                .parent()
+                .context("configuration has no parent directory")?;
+            // The main-thread bootstrap context remains live for the entire host.
+            self.runtime = Some(unsafe {
+                CefRuntime::initialize(RuntimeOptions {
+                    runtime: &self.options.runtime,
+                    sandbox_info: self.sandbox_info,
+                    cache: &parent.join("cef-cache"),
+                    resources: self.resources.clone(),
+                })
+            }?);
+        }
+        let browser = self.runtime.as_ref().unwrap().open(
+            BrowserOptions {
+                url: MANAGER_URL,
+                backend_url: self.options.backend.as_str(),
+                broker_url: Some(&self.broker_url),
+                width: self.viewport.width,
+                height: self.viewport.height,
+                scale: self.viewport.scale,
+                fps_limit: self.effective_fps.ceil() as u32,
+                shared_texture: cfg!(windows),
+                shared_array_buffer: self.shared_array_buffer,
+            },
+            self.platform.frame_backend(),
+        )?;
+        browser.set_visible(self.visible && self.attached)?;
+        self.browser = Some(browser);
+        Ok(())
+    }
+
+    fn detach(&mut self) -> Result<()> {
+        self.editing(false)?;
+        if let Some(browser) = self.browser.take() {
+            browser.close()?;
+        }
+        self.ready = false;
+        self.document.clear();
+        self.pending_ping = None;
+        self.pending_detach = false;
+        self.consumed.fill(false);
+        Ok(())
+    }
     fn apply_fps(&mut self) -> Result<()> {
-        self.browser
-            .set_frame_rate(self.effective_fps.ceil() as u32)
+        if let Some(browser) = self.browser.as_ref() {
+            browser.set_frame_rate(self.effective_fps.ceil() as u32)?;
+        }
+        Ok(())
     }
     fn editing(&mut self, enabled: bool) -> Result<()> {
         let enabled = enabled && self.attached && self.visible && self.ready;
         if enabled && !self.dialog {
             if let Err(error) = self.platform.set_capture(true) {
-                receive(
-                    self.browser,
-                    &json!({"type":"error", "message":format!("{error:#}")}),
-                )?;
+                self.receive(&json!({"type":"error", "message":format!("{error:#}")}))?;
                 return Ok(());
             }
         } else {
@@ -171,23 +235,29 @@ impl Host<'_> {
         }
         self.editing = enabled;
         self.consumed.fill(false);
-        self.browser.set_focus(enabled);
-        receive(self.browser, &json!({"type":"editing", "editing":enabled}))?;
+        if let Some(browser) = self.browser.as_ref() {
+            browser.set_focus(enabled);
+        }
+        self.receive(&json!({"type":"editing", "editing":enabled}))?;
         #[cfg(windows)]
         self.platform.set_tray_state(self.editing, self.visible);
         Ok(())
     }
     fn flush(&mut self, action: Closing) -> Result<bool> {
-        if self.closing.is_some() || self.dialog {
+        if self.closing.is_some() || self.flushed.is_some() || self.dialog {
             return Ok(false);
         }
         self.editing(false)?;
         if !self.ready {
+            if self.worker.pending_tasks() {
+                self.flushed = Some(action);
+                return Ok(false);
+            }
             return Ok(true);
         }
         self.nonce += 1;
         let id = format!("host-{}", self.nonce);
-        receive(self.browser, &json!({"type":"flush-save", "request_id":id}))?;
+        self.receive(&json!({"type":"flush-save", "request_id":id}))?;
         self.closing = Some((action, id, Instant::now()));
         Ok(false)
     }
@@ -203,10 +273,12 @@ impl Host<'_> {
         self.ready = false;
         self.document.clear();
         self.pending_ping = None;
-        self.browser.reload();
+        if let Some(browser) = self.browser.as_ref() {
+            browser.reload();
+        }
     }
     fn input(&mut self, input: BrowserInput) -> Result<()> {
-        if !self.editing || self.dialog || self.closing.is_some() {
+        if !self.editing || self.dialog || self.closing.is_some() || self.flushed.is_some() {
             return Ok(());
         }
         if let BrowserInput::Key {
@@ -236,35 +308,58 @@ impl Host<'_> {
                 && matches!(code, 0x49 | 0x52)
             {
                 self.consumed[code as usize] = true;
-                receive(
-                    self.browser,
+                self.receive(
                     &json!({"type":if code == 0x49 { "toggle-interaction" } else { "refresh-selected-overlay" }}),
                 )?;
                 return Ok(());
             }
         }
-        self.browser.send_input(input);
+        if let Some(browser) = self.browser.as_ref() {
+            browser.send_input(input);
+        }
         Ok(())
     }
     fn event_loop(&mut self) -> Result<()> {
         loop {
-            self.browser.pump()?;
+            if let Some(browser) = self.browser.as_ref() {
+                browser.pump()?;
+            } else if let Some(runtime) = self.runtime.as_ref() {
+                runtime.pump();
+            }
             while let Some(event) = self.platform.poll() {
                 match event {
                     PlatformEvent::Attached { .. } => {
                         self.attached = true;
-                        self.browser.set_visible(self.visible)?;
+                        self.pending_detach = false;
+                        if self
+                            .closing
+                            .as_ref()
+                            .is_some_and(|(action, _, _)| matches!(action, Closing::Detach))
+                        {
+                            self.closing = None;
+                        }
+                        if matches!(self.flushed, Some(Closing::Detach)) {
+                            self.flushed = None;
+                        }
+                        self.open()?;
+                        self.browser.as_ref().unwrap().set_visible(self.visible)?;
                     }
                     PlatformEvent::Detached => {
                         self.attached = false;
                         self.editing(false)?;
-                        self.browser.set_visible(false)?;
+                        self.pending_ping = None;
+                        self.pending_detach = self.browser.is_some();
+                        if let Some(browser) = self.browser.as_ref() {
+                            browser.set_visible(false)?;
+                        }
                     }
                     PlatformEvent::CaptureEnded => self.editing(false)?,
                     PlatformEvent::Viewport(viewport) => {
-                        self.browser
-                            .resize(viewport.width, viewport.height, viewport.scale)?;
+                        self.viewport = viewport;
                         self.refresh_hz = viewport.refresh_hz;
+                        if let Some(browser) = self.browser.as_ref() {
+                            browser.resize(viewport.width, viewport.height, viewport.scale)?;
+                        }
                         self.effective_fps = super::frame_rate(
                             self.options.fps_limit,
                             self.persisted_fps_limit,
@@ -274,14 +369,16 @@ impl Host<'_> {
                     }
                     PlatformEvent::Input(input) => self.input(input)?,
                     PlatformEvent::ToggleEdit | PlatformEvent::ShortcutToggleEdit => {
-                        if !self.dialog && self.closing.is_none() {
+                        if !self.dialog && self.closing.is_none() && self.flushed.is_none() {
                             self.editing(!self.editing)?;
                         }
                     }
                     PlatformEvent::ToggleVisibility => {
                         self.editing(false)?;
                         self.visible = !self.visible;
-                        self.browser.set_visible(self.visible && self.attached)?;
+                        if let Some(browser) = self.browser.as_ref() {
+                            browser.set_visible(self.visible && self.attached)?;
+                        }
                         #[cfg(windows)]
                         self.platform.set_tray_state(self.editing, self.visible);
                     }
@@ -299,7 +396,7 @@ impl Host<'_> {
                     PlatformEvent::Fatal(error) => bail!("{error}"),
                 }
             }
-            while let Some(raw) = self.browser.next_message() {
+            while let Some(raw) = self.browser.as_ref().and_then(OsrBrowser::next_message) {
                 let message: Value =
                     serde_json::from_str(&raw).context("invalid manager bridge message")?;
                 let kind = message
@@ -333,7 +430,9 @@ impl Host<'_> {
                             && message.get("nonce").and_then(Value::as_u64) == self.pending_ping
                         {
                             self.pending_ping = None;
-                            self.platform.heartbeat();
+                            if self.attached {
+                                self.platform.heartbeat();
+                            }
                         }
                     }
                     "set-editing" => self.editing(
@@ -360,16 +459,14 @@ impl Host<'_> {
                         {
                             let (action, _, _) = self.closing.take().unwrap();
                             if kind == "flush-failed" {
-                                receive(
-                                    self.browser,
+                                if matches!(action, Closing::Detach) {
+                                    self.pending_detach = false;
+                                }
+                                self.receive(
                                     &json!({"type":"error", "message":"Could not save edits; requested action cancelled"}),
                                 )?;
                             } else {
-                                match action {
-                                    Closing::Reload => self.reload(),
-                                    Closing::Exit => return Ok(()),
-                                    Closing::ImportTosu => self.import_tosu()?,
-                                }
+                                self.flushed = Some(action);
                             }
                         }
                     }
@@ -378,7 +475,7 @@ impl Host<'_> {
                             kind,
                             "choose-overlay-file" | "import-profile" | "export-profile"
                         ) {
-                            if self.dialog || self.closing.is_some() {
+                            if self.dialog || self.closing.is_some() || self.flushed.is_some() {
                                 continue;
                             }
                             self.platform.set_capture(false)?;
@@ -395,7 +492,28 @@ impl Host<'_> {
                 if reply.document != self.document {
                     continue;
                 }
-                if let Some(limit) = reply.envelope.get("fps_limit").and_then(Value::as_u64) {
+                let settings = reply
+                    .envelope
+                    .get("config")
+                    .and_then(|config| config.get("settings"));
+                if let Some(enabled) = reply
+                    .envelope
+                    .get("allow_unrestricted_shared_array_buffer")
+                    .or_else(|| {
+                        settings.and_then(|settings| {
+                            settings.get("allow_unrestricted_shared_array_buffer")
+                        })
+                    })
+                    .and_then(Value::as_bool)
+                {
+                    self.shared_array_buffer = enabled;
+                }
+                if let Some(limit) = reply
+                    .envelope
+                    .get("fps_limit")
+                    .or_else(|| settings.and_then(|settings| settings.get("fps_limit")))
+                    .and_then(Value::as_u64)
+                {
                     self.persisted_fps_limit =
                         limit.min(u64::from(crate::config::MAX_FPS_LIMIT)) as u32;
                     let fps = super::frame_rate(
@@ -409,23 +527,44 @@ impl Host<'_> {
                     }
                 }
                 if !reply.envelope.is_null() {
-                    receive(self.browser, &reply.envelope)?;
+                    self.receive(&reply.envelope)?;
                 }
                 if reply.dialog_closed {
                     self.dialog = false;
-                    if self.editing && self.platform.game_focused() {
+                    if self.editing && self.attached && self.platform.game_focused() {
                         self.platform.set_capture(true)?;
                     }
                 }
             }
+            if !self.dialog && !self.worker.pending_tasks() {
+                if let Some(action) = self.flushed.take() {
+                    match action {
+                        Closing::Reload => self.reload(),
+                        Closing::Exit => return Ok(()),
+                        Closing::ImportTosu => self.import_tosu()?,
+                        Closing::Detach if !self.attached => self.detach()?,
+                        Closing::Detach => {}
+                    }
+                }
+                if self.pending_detach
+                    && self.closing.is_none()
+                    && self.flushed.is_none()
+                    && !self.dialog
+                    && self.flush(Closing::Detach)?
+                {
+                    self.detach()?;
+                }
+            }
             let now = Instant::now();
-            if self.ready && now >= self.next_ping {
+            if self.attached && self.ready && now >= self.next_ping {
                 self.nonce += 1;
                 self.pending_ping = Some(self.nonce);
-                self.browser.evaluate(&format!(
-                    "window.__VOSULAY_POST_MESSAGE__({{type:'heartbeat',nonce:{}}});",
-                    self.nonce
-                ));
+                if let Some(browser) = self.browser.as_ref() {
+                    browser.evaluate(&format!(
+                        "window.__VOSULAY_POST_MESSAGE__({{type:'heartbeat',nonce:{}}});",
+                        self.nonce
+                    ));
+                }
                 self.next_ping = now + Duration::from_secs(1);
             }
             if self
@@ -433,24 +572,31 @@ impl Host<'_> {
                 .as_ref()
                 .is_some_and(|(_, _, started)| started.elapsed() >= Duration::from_secs(5))
             {
-                self.closing = None;
-                receive(
-                    self.browser,
-                    &json!({"type":"error", "message":"Could not save edits within five seconds; reload/exit cancelled"}),
+                let (action, _, _) = self.closing.take().unwrap();
+                if matches!(action, Closing::Detach) {
+                    self.pending_detach = false;
+                }
+                self.receive(
+                    &json!({"type":"error", "message":"Could not save edits within five seconds; requested action cancelled"}),
                 )?;
             }
             // Native publishers and CEF scheduling callbacks wake this thread.
-            let mut next = now + Duration::from_millis(100);
-            if let Some(deadline) = self.browser.next_pump_deadline() {
-                next = next.min(deadline);
-            }
-            if self.ready {
-                next = next.min(self.next_ping);
+            let mut next = self
+                .runtime
+                .as_ref()
+                .and_then(CefRuntime::next_pump_deadline);
+            if self.attached && self.ready {
+                next = Some(next.map_or(self.next_ping, |deadline| deadline.min(self.next_ping)));
             }
             if let Some((_, _, started)) = &self.closing {
-                next = next.min(*started + Duration::from_secs(5));
+                let closing = *started + Duration::from_secs(5);
+                next = Some(next.map_or(closing, |deadline| deadline.min(closing)));
             }
-            thread::park_timeout(next.saturating_duration_since(Instant::now()));
+            if let Some(next) = next {
+                thread::park_timeout(next.saturating_duration_since(Instant::now()));
+            } else {
+                thread::park();
+            }
         }
     }
 }

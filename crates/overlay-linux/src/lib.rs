@@ -1,5 +1,10 @@
 #![cfg(target_os = "linux")]
 
+// Cargo install removes its build tree, so the product build script retains
+// this crate's cdylib before installation instead of using that temporary path.
+#[doc(hidden)]
+pub const BUILD_OUTPUT_DIRECTORY: &str = env!("OUT_DIR");
+
 mod client;
 mod gl;
 mod hooks;

@@ -436,6 +436,8 @@
   }
 
   function clampOverlay(overlay) {
+    // Game/display changes must not rewrite placements outside the editor.
+    if (!state.editing) return;
     overlay.scale = Math.max(0.1, finite(overlay.scale, 1));
     overlay.opacity = clamp(finite(overlay.opacity, 1), 0, 1);
     overlay.rotation = clamp(finite(overlay.rotation, 0), -180, 180);
@@ -1961,7 +1963,7 @@
       updatePanelAvoidance();
       if (!profileMenu.hidden && profilePicker.getClientRects().length === 0) closeProfileMenu();
       const profile = activeProfile();
-      if (!profile) return;
+      if (!profile || !state.editing) return;
       let changed = false;
       for (const overlay of profile.overlays) {
         const before = `${overlay.left}\n${overlay.top}\n${overlay.width}\n${overlay.height}\n${overlay.scale}\n${overlay.rotation}`;

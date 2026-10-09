@@ -1,5 +1,5 @@
-//! Explicit-handle lookups used by .NET/SDL bypass ordinary ELF interposition.
-//! Keep pseudo-handle lookups in the original caller's scope, not this library's.
+//! The leading lookup helper passes explicit-handle results here for interception.
+//! Native originals bypass that chain so cached APIs never re-enter our hooks.
 use libc::{c_char, c_void};
 use std::{
     ffi::CStr,
@@ -17,8 +17,8 @@ extern "C" fn original_address() -> *mut c_void {
         return cached;
     }
     // A late-injected library can follow libc in the link map. Use its explicit
-    // handle; RTLD_NEXT is not sufficient here and an unversioned default lookup
-    // could find our own export. dlvsym does not recurse through dlsym.
+    // handle; RTLD_NEXT is not sufficient and the default scope has interceptors.
+    // dlvsym does not recurse through dlsym.
     let libc = unsafe { libc::dlopen(c"libc.so.6".as_ptr(), libc::RTLD_NOW | libc::RTLD_NOLOAD) };
     let address = if libc.is_null() {
         std::ptr::null_mut()
@@ -52,6 +52,15 @@ pub(crate) unsafe fn sdl_symbol(name: *const c_char) -> *mut c_void {
     std::ptr::null_mut()
 }
 
+pub(crate) unsafe fn sdl_version_symbol(index: usize, name: *const c_char) -> *mut c_void {
+    let handle = SDL[index].load(Ordering::Acquire);
+    if handle.is_null() {
+        std::ptr::null_mut()
+    } else {
+        unsafe { resolve(handle, name) }
+    }
+}
+
 unsafe fn retain_sdl(index: usize, path: *const c_char) {
     if !SDL[index].load(Ordering::Acquire).is_null() {
         return;
@@ -73,13 +82,14 @@ unsafe fn retain_sdl(index: usize, path: *const c_char) {
     }
 }
 
-unsafe extern "C" fn explicit_lookup(
-    handle: *mut c_void,
+/// # Safety
+/// `name` must be a valid dlsym name and `address` its resolved function.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn vosulay_lookup_v1(
     name: *const c_char,
-    lookup: Lookup,
+    address: *mut c_void,
     caller: *const c_void,
 ) -> *mut c_void {
-    let address = unsafe { lookup(handle, name) };
     if address.is_null() || name.is_null() {
         return address;
     }
@@ -97,7 +107,9 @@ unsafe extern "C" fn explicit_lookup(
             .rsplit(|byte| *byte == b'/')
             .next()
             .unwrap_or(caller_path);
-        if (caller_file.starts_with(b"libSDL2.so") || caller_file.starts_with(b"libSDL2-2.0.so"))
+        if (caller_file.starts_with(b"libSDL2.so")
+            || caller_file.starts_with(b"libSDL2-2.0.so")
+            || caller_file.starts_with(b"libSDL3.so"))
             && name.starts_with(b"SDL_")
         {
             return address;
@@ -116,9 +128,11 @@ unsafe extern "C" fn explicit_lookup(
     } else {
         None
     };
+    // Vendor ICDs resolve their own dispatch through explicit handles. Routing
+    // those lookups through GLVND can return GL-only addresses for Vulkan names.
     let graphics = (name.starts_with(b"glX")
-        && (file.starts_with(b"libGL.so") || file.starts_with(b"libGLX")))
-        || (name.starts_with(b"egl") && file.starts_with(b"libEGL"))
+        && (file.starts_with(b"libGL.so") || file.starts_with(b"libGLX.so")))
+        || (name.starts_with(b"egl") && file.starts_with(b"libEGL.so"))
         || (name.starts_with(b"X") && file.starts_with(b"libX11.so"));
     if let Some(index) = sdl {
         if !name.starts_with(b"SDL_") {
@@ -128,35 +142,13 @@ unsafe extern "C" fn explicit_lookup(
         if SDL[index].load(Ordering::Acquire).is_null() {
             return address;
         }
+        // ShowCursor has incompatible SDL2/SDL3 prototypes. An explicit
+        // handle identifies the provider even when both versions are loaded.
+        if name == b"SDL_ShowCursor" {
+            return crate::sdl::show_cursor_hook(index == 1).cast_mut();
+        }
     } else if !graphics {
         return address;
     }
     replacement.cast_mut()
-}
-
-/// The tail jump preserves the caller return address required by glibc for
-/// RTLD_NEXT and RTLD_DEFAULT. A normal Rust/C forwarding call changes scope.
-#[unsafe(naked)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void {
-    core::arch::naked_asm!(
-        "push rdi",
-        "push rsi",
-        "sub rsp, 8",
-        "call {original}",
-        "add rsp, 8",
-        "pop rsi",
-        "pop rdi",
-        "test rdi, rdi",
-        "jz 2f",
-        "cmp rdi, -1",
-        "je 2f",
-        "mov rdx, rax",
-        "mov rcx, [rsp]",
-        "jmp {explicit}",
-        "2:",
-        "jmp rax",
-        original = sym original_address,
-        explicit = sym explicit_lookup,
-    );
 }

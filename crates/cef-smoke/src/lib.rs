@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 use vosulay_browser::{
-    BrowserOptions, OsrBrowser, execute_subprocess,
+    BrowserOptions, CefRuntime, RuntimeOptions, execute_subprocess,
     scheme::{MANAGER_URL, Resource, ResourceRoute, ResourceService},
 };
 use vosulay_frame::{BrowserFrame, BrowserFrameBackend};
@@ -118,26 +118,28 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<()> {
     });
     let proof = Rc::new(RefCell::new(Proof::default()));
     // The entrypoint provides the bootstrap context and owns the main thread.
-    let browser = unsafe {
-        OsrBrowser::open(
-            BrowserOptions {
-                runtime: &runtime,
-                sandbox_info,
-                cache: &output.join("cache"),
-                url: MANAGER_URL,
-                backend_url: "http://127.0.0.1:24050/",
-                broker_url: None,
-                resources,
-                width: 256,
-                height: 128,
-                scale: 1.0,
-                fps_limit: 60,
-                shared_texture: false,
-                shared_array_buffer: false,
-            },
-            Box::new(Observer(proof.clone())),
-        )
+    let cef = unsafe {
+        CefRuntime::initialize(RuntimeOptions {
+            runtime: &runtime,
+            sandbox_info,
+            cache: &output.join("cache"),
+            resources,
+        })
     }?;
+    let browser = cef.open(
+        BrowserOptions {
+            url: MANAGER_URL,
+            backend_url: "http://127.0.0.1:24050/",
+            broker_url: None,
+            width: 256,
+            height: 128,
+            scale: 1.0,
+            fps_limit: 60,
+            shared_texture: false,
+            shared_array_buffer: false,
+        },
+        Box::new(Observer(proof.clone())),
+    )?;
     let deadline = Instant::now() + Duration::from_secs(20);
     let mut resized = false;
     let mut capabilities = None;
@@ -167,6 +169,7 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<()> {
         std::thread::park_timeout(next.saturating_duration_since(Instant::now()));
     }
     browser.close()?;
+    drop(cef);
     let proof = proof.borrow();
     let result = serde_json::json!({ "osr": proof.frames > 0, "frames": proof.frames, "transparent": proof.transparent, "red_marker": proof.red, "iframe_pixels": proof.iframe_pixels, "resized": proof.resized, "native_bridge": native_bridge, "capabilities": capabilities, "clean_shutdown": true });
     std::fs::write(

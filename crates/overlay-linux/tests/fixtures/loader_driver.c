@@ -14,8 +14,8 @@ static marker_fn function(void *library, const char *name) {
 int main(int argc, char **argv) {
     if (argc != 5) return 2;
     void *overlay = dlopen(argv[4], RTLD_NOW | RTLD_NOLOAD);
-    if (!overlay || dlsym(overlay, "dlsym") != (void *)dlsym) {
-        fprintf(stderr, "overlay lookup interposer is not loaded\n");
+    if (!overlay) {
+        fprintf(stderr, "overlay: %s\n", dlerror());
         return 10;
     }
     int local = strcmp(argv[1], "local") == 0;

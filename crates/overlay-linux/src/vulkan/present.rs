@@ -1,4 +1,3 @@
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkQueuePresentKHR(queue: vk::Queue, info: *const vk::PresentInfoKHR<'_>) -> vk::Result {
     let mut registry = REGISTRY.lock();
     let Some(device_handle) = registry.queue_devices.get(&queue).copied() else { return vk::Result::ERROR_DEVICE_LOST; };

@@ -1,5 +1,7 @@
 mod editor;
 mod host;
+#[cfg(target_os = "linux")]
+mod launchers;
 mod resources;
 mod tosu;
 
@@ -12,6 +14,10 @@ use url::Url;
 
 struct Options {
     runtime: PathBuf,
+    #[cfg(target_os = "linux")]
+    overlay: PathBuf,
+    #[cfg(target_os = "linux")]
+    lookup: PathBuf,
     config: PathBuf,
     backend: Url,
     fps_limit: Option<u32>,
@@ -25,8 +31,31 @@ impl Options {
         let directory = executable
             .parent()
             .context("executable has no parent directory")?;
+        #[cfg(target_os = "linux")]
+        let packaged = directory != std::path::Path::new(env!("VOSULAY_CEF_RUNTIME"))
+            && directory.join("libcef.so").is_file();
+        #[cfg(target_os = "linux")]
+        let runtime = if packaged {
+            directory.to_owned()
+        } else {
+            PathBuf::from(env!("VOSULAY_CEF_RUNTIME"))
+        };
+        #[cfg(windows)]
+        let runtime = directory.to_owned();
         let mut options = Self {
-            runtime: directory.to_owned(),
+            #[cfg(target_os = "linux")]
+            overlay: if packaged {
+                runtime.join("libvosulay_overlay.so")
+            } else {
+                PathBuf::from(env!("VOSULAY_OVERLAY_LIBRARY"))
+            },
+            #[cfg(target_os = "linux")]
+            lookup: if packaged {
+                runtime.join("libvosulay_lookup.so")
+            } else {
+                PathBuf::from(env!("VOSULAY_LOOKUP_LIBRARY"))
+            },
+            runtime,
             config: if directory.join("portable").is_file()
                 || directory.join("data/config.json").is_file()
             {
@@ -45,7 +74,7 @@ impl Options {
             match argument.as_str() {
                 "--help" | "-h" => {
                     println!(
-                        "vosulay {}\n\nUsage: vosulay [options]\n  --vosu-url, -t URL    vosu or tosu-compatible backend (default http://127.0.0.1:24050/)\n  --fps-limit, -f FPS   auto/0 or a positive cap (default display refresh)\n  --benchmark-uncapped  Disable Chromium pacing; use minimum positive OSR interval\n  --pid PID            Additional supported game process; repeatable\n  --process-name NAME  Additional supported game executable; repeatable\n  --config PATH        Configuration file (default user configuration directory)\n  --cef-dir PATH       Packaged CEF directory (default beside executable)\n  --version            Product version\n\nCtrl+Shift+Space toggles editing in game. Escape leaves edit mode.",
+                        "vosulay {}\n\nUsage: vosulay [options]\n  --vosu-url, -t URL    vosu or tosu-compatible backend (default http://127.0.0.1:24050/)\n  --fps-limit, -f FPS   auto/0 or a positive cap (default display refresh)\n  --benchmark-uncapped  Disable Chromium pacing; use minimum positive OSR interval\n  --pid PID            Additional supported game process; repeatable\n  --process-name NAME  Additional supported game executable; repeatable\n  --config PATH        Configuration file (default user configuration directory)\n  --cef-dir PATH       Runtime package directory (default beside executable or build-time cache)\n  --version            Product version\n\nCtrl+Shift+Space toggles editing in game. Escape leaves edit mode.",
                         env!("CARGO_PKG_VERSION")
                     );
                     return Ok(None);
@@ -101,7 +130,12 @@ impl Options {
                 }
                 "--cef-dir" => {
                     options.runtime =
-                        PathBuf::from(arguments.next().context("CEF directory is required")?)
+                        PathBuf::from(arguments.next().context("CEF directory is required")?);
+                    #[cfg(target_os = "linux")]
+                    {
+                        options.overlay = options.runtime.join("libvosulay_overlay.so");
+                        options.lookup = options.runtime.join("libvosulay_lookup.so");
+                    }
                 }
                 _ => bail!("unknown option {argument}; use --help"),
             }

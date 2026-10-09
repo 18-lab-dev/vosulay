@@ -178,6 +178,55 @@ unsafe fn lookup_device(
 ) -> vk::PFN_vkVoidFunction {
     function(device, name.as_ptr())
 }
+type LoaderCreateInstance = unsafe extern "system" fn(
+    *const vk::InstanceCreateInfo<'_>,
+    *const vk::AllocationCallbacks<'_>,
+    *mut vk::Instance,
+) -> vk::Result;
+type LoaderGipa = unsafe extern "system" fn(vk::Instance, *const c_char) -> vk::PFN_vkVoidFunction;
+type LoaderGdpa = unsafe extern "system" fn(vk::Device, *const c_char) -> vk::PFN_vkVoidFunction;
+unsafe fn loader_symbol(name: &CStr) -> *mut c_void {
+    let handle = unsafe {
+        libc::dlopen(
+            c"libvulkan.so.1".as_ptr(),
+            libc::RTLD_NOW | libc::RTLD_NOLOAD,
+        )
+    };
+    if handle.is_null() {
+        return ptr::null_mut();
+    }
+    let symbol = unsafe { libc::dlsym(handle, name.as_ptr()) };
+    unsafe { libc::dlclose(handle) };
+    symbol
+}
+static LOADER_CREATE_INSTANCE: LazyLock<Option<LoaderCreateInstance>> = LazyLock::new(|| unsafe {
+    let symbol = loader_symbol(c"vkCreateInstance");
+    (!symbol.is_null()).then(|| mem::transmute_copy(&symbol))
+});
+static LOADER_GIPA: LazyLock<Option<LoaderGipa>> = LazyLock::new(|| unsafe {
+    let symbol = loader_symbol(c"vkGetInstanceProcAddr");
+    (!symbol.is_null()).then(|| mem::transmute_copy(&symbol))
+});
+static LOADER_GDPA: LazyLock<Option<LoaderGdpa>> = LazyLock::new(|| unsafe {
+    let symbol = loader_symbol(c"vkGetDeviceProcAddr");
+    (!symbol.is_null()).then(|| mem::transmute_copy(&symbol))
+});
+unsafe fn loader_instance_proc(
+    instance: vk::Instance,
+    name: &CStr,
+    bootstrap: bool,
+) -> vk::PFN_vkVoidFunction {
+    if bootstrap
+        && instance == vk::Instance::null()
+        && let Some(next) = *BOOTSTRAP_GIPA.lock()
+        && let Some(pointer) = unsafe { lookup_instance(next, instance, name) }
+    {
+        return Some(pointer);
+    }
+    LOADER_GIPA
+        .as_ref()
+        .and_then(|next| unsafe { next(instance, name.as_ptr()) })
+}
 
 unsafe fn cast<T: Copy>(function: vk::PFN_vkVoidFunction) -> Option<T> {
     function.map(|pointer| mem::transmute_copy(&pointer))
@@ -215,6 +264,8 @@ unsafe fn find_device_chain(
     None
 }
 
+// Only negotiation is exported: preloaded Vulkan proc-address symbols would
+// interpose the loader and NVIDIA's ICD before a layer chain exists.
 /// # Safety
 /// `interface` must point to a writable loader negotiation record with the
 /// layout specified by the Vulkan loader/layer interface.
@@ -238,7 +289,6 @@ pub unsafe extern "system" fn vkNegotiateLoaderLayerInterfaceVersion(
 /// # Safety
 /// `name` must be a readable NUL-terminated string. A non-null `instance`
 /// must be live; returned pointers require the named Vulkan command's ABI.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkGetInstanceProcAddr(
     instance: vk::Instance,
     name: *const c_char,
@@ -274,39 +324,46 @@ pub unsafe extern "system" fn vkGetInstanceProcAddr(
         b"vkDestroySurfaceKHR" => Some(vkDestroySurfaceKHR as *const ()),
         _ => None,
     };
-    if let Some(pointer) = conditional {
-        if instance == vk::Instance::null() {
-            return None;
-        }
+    let (next, tracked) = {
         let registry = REGISTRY.lock();
-        return registry
+        registry
             .instances
             .get(&instance)
-            .filter(|record| lookup_instance(record.next_gipa, instance, name).is_some())
-            .map(|_| mem::transmute(pointer));
+            .map(|record| (Some(record.next_gipa), true))
+            .unwrap_or((None, false))
+    };
+    if let Some(pointer) = conditional {
+        if let Some(next) = next
+            && unsafe { lookup_instance(next, instance, name) }.is_some()
+        {
+            return Some(mem::transmute::<*const (), unsafe extern "system" fn()>(
+                pointer,
+            ));
+        }
+        return unsafe { loader_instance_proc(instance, name, instance == vk::Instance::null()) };
     }
     if let Some(pointer) = own {
-        return Some(mem::transmute::<*const (), unsafe extern "system" fn()>(
-            pointer,
-        ));
+        let global = instance == vk::Instance::null()
+            && matches!(
+                name.to_bytes(),
+                b"vkGetInstanceProcAddr" | b"vkGetDeviceProcAddr" | b"vkCreateInstance"
+            );
+        if global || tracked {
+            return Some(mem::transmute::<*const (), unsafe extern "system" fn()>(
+                pointer,
+            ));
+        }
     }
-    if instance == vk::Instance::null() {
-        return BOOTSTRAP_GIPA
-            .lock()
-            .as_ref()
-            .and_then(|next| lookup_instance(*next, instance, name));
+    if let Some(next) = next {
+        unsafe { lookup_instance(next, instance, name) }
+    } else {
+        unsafe { loader_instance_proc(instance, name, instance == vk::Instance::null()) }
     }
-    let registry = REGISTRY.lock();
-    registry
-        .instances
-        .get(&instance)
-        .and_then(|record| lookup_instance(record.next_gipa, instance, name))
 }
 
 /// # Safety
 /// `device` must be live and `name` a readable NUL-terminated string.
 /// Returned pointers require the named Vulkan command's ABI and valid usage.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkGetDeviceProcAddr(
     device: vk::Device,
     name: *const c_char,
@@ -323,11 +380,6 @@ pub unsafe extern "system" fn vkGetDeviceProcAddr(
         b"vkQueueWaitIdle" => Some(vkQueueWaitIdle as *const ()),
         _ => None,
     };
-    if let Some(pointer) = always {
-        return Some(mem::transmute::<*const (), unsafe extern "system" fn()>(
-            pointer,
-        ));
-    }
     let conditional = match name.to_bytes() {
         b"vkGetDeviceQueue2" => Some(vkGetDeviceQueue2 as *const ()),
         b"vkCreateSwapchainKHR" => Some(vkCreateSwapchainKHR as *const ()),
@@ -335,20 +387,32 @@ pub unsafe extern "system" fn vkGetDeviceProcAddr(
         b"vkQueuePresentKHR" => Some(vkQueuePresentKHR as *const ()),
         _ => None,
     };
-    let registry = REGISTRY.lock();
-    let record = registry.devices.get(&device);
-    if let Some(pointer) = conditional {
-        return record
-            .filter(|record| lookup_device(record.next_gdpa, device, name).is_some())
-            .map(|_| mem::transmute(pointer));
+    let record = REGISTRY.lock().devices.get(&device).map(|record| {
+        let next = record.next_gdpa;
+        (next, record.device.handle())
+    });
+    if let Some(pointer) = always
+        && (name.to_bytes() == b"vkGetDeviceProcAddr" || record.is_some())
+    {
+        return Some(mem::transmute::<*const (), unsafe extern "system" fn()>(
+            pointer,
+        ));
     }
-    record.and_then(|record| lookup_device(record.next_gdpa, device, name))
+    if let Some((next, handle)) = record {
+        if let Some(pointer) = conditional {
+            return unsafe { lookup_device(next, handle, name) }
+                .map(|_| mem::transmute::<*const (), unsafe extern "system" fn()>(pointer));
+        }
+        return unsafe { lookup_device(next, handle, name) };
+    }
+    LOADER_GDPA
+        .as_ref()
+        .and_then(|next| unsafe { next(device, name.as_ptr()) })
 }
 
 /// # Safety
 /// Creation records, loader chain links and allocator callbacks must satisfy
 /// `vkCreateInstance` valid usage; `output` must be writable for one instance.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkCreateInstance(
     create_info: *const vk::InstanceCreateInfo<'_>,
     allocator: *const vk::AllocationCallbacks<'_>,
@@ -358,7 +422,10 @@ pub unsafe extern "system" fn vkCreateInstance(
         return vk::Result::ERROR_INITIALIZATION_FAILED;
     }
     let Some(chain) = find_instance_chain(create_info) else {
-        return vk::Result::ERROR_INITIALIZATION_FAILED;
+        return LOADER_CREATE_INSTANCE
+            .as_ref()
+            .map(|create| unsafe { create(create_info, allocator, output) })
+            .unwrap_or(vk::Result::ERROR_INITIALIZATION_FAILED);
     };
     let link = (*chain).u.layer_info;
     if link.is_null() {
@@ -419,7 +486,6 @@ pub unsafe extern "system" fn vkCreateInstance(
 /// # Safety
 /// The instance and allocator must satisfy `vkDestroyInstance` valid usage.
 /// All child objects must be destroyed and concurrent instance use excluded.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkDestroyInstance(
     instance: vk::Instance,
     allocator: *const vk::AllocationCallbacks<'_>,
@@ -465,7 +531,6 @@ unsafe fn remember_surface(
 /// # Safety
 /// Instance, Wayland objects, creation records and allocator must satisfy
 /// `vkCreateWaylandSurfaceKHR` valid usage; `output` must be writable.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkCreateWaylandSurfaceKHR(
     instance: vk::Instance,
     create_info: *const vk::WaylandSurfaceCreateInfoKHR<'_>,
@@ -508,7 +573,6 @@ pub unsafe extern "system" fn vkCreateWaylandSurfaceKHR(
 /// # Safety
 /// Instance, Xlib objects, creation records and allocator must satisfy
 /// `vkCreateXlibSurfaceKHR` valid usage; `output` must be writable.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkCreateXlibSurfaceKHR(
     instance: vk::Instance,
     create_info: *const vk::XlibSurfaceCreateInfoKHR<'_>,
@@ -551,7 +615,6 @@ pub unsafe extern "system" fn vkCreateXlibSurfaceKHR(
 /// # Safety
 /// Instance, XCB objects, creation records and allocator must satisfy
 /// `vkCreateXcbSurfaceKHR` valid usage; `output` must be writable.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkCreateXcbSurfaceKHR(
     instance: vk::Instance,
     create_info: *const vk::XcbSurfaceCreateInfoKHR<'_>,
@@ -593,7 +656,6 @@ pub unsafe extern "system" fn vkCreateXcbSurfaceKHR(
 /// # Safety
 /// The surface must belong to the instance and have no live swapchains.
 /// Allocation callbacks and synchronization must satisfy `vkDestroySurfaceKHR`.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkDestroySurfaceKHR(
     instance: vk::Instance,
     surface: vk::SurfaceKHR,
@@ -623,7 +685,6 @@ pub unsafe extern "system" fn vkDestroySurfaceKHR(
 /// # Safety
 /// The instance must be live. `count` must be readable/writable; non-null
 /// `devices` must have writable capacity for its initial count.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkEnumeratePhysicalDevices(
     instance: vk::Instance,
 
@@ -662,7 +723,6 @@ pub unsafe extern "system" fn vkEnumeratePhysicalDevices(
 /// # Safety
 /// The instance and output records must satisfy Vulkan enumeration valid
 /// usage; `count` is readable/writable and bounds the writable `groups` array.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkEnumeratePhysicalDeviceGroups(
     instance: vk::Instance,
     count: *mut u32,
@@ -715,7 +775,6 @@ pub unsafe extern "system" fn vkEnumeratePhysicalDeviceGroups(
 /// # Safety
 /// Physical device, creation records, loader links and allocation callbacks
 /// must satisfy `vkCreateDevice` valid usage; `output` must be writable.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkCreateDevice(
     physical: vk::PhysicalDevice,
     create_info: *const vk::DeviceCreateInfo<'_>,
@@ -807,7 +866,6 @@ pub unsafe extern "system" fn vkCreateDevice(
 /// # Safety
 /// Device, allocator, completed work and child lifetimes must satisfy
 /// `vkDestroyDevice` valid usage. Concurrent use of the device is forbidden.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkDestroyDevice(
     device: vk::Device,
     allocator: *const vk::AllocationCallbacks<'_>,
@@ -849,7 +907,6 @@ pub unsafe extern "system" fn vkDestroyDevice(
 /// # Safety
 /// Device, family and index must identify a queue requested at device creation
 /// under `vkGetDeviceQueue` valid usage; `output` must be writable.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkGetDeviceQueue(
     device: vk::Device,
     family: u32,
@@ -880,7 +937,6 @@ pub unsafe extern "system" fn vkGetDeviceQueue(
 /// # Safety
 /// Device and readable queue-info record must satisfy `vkGetDeviceQueue2`
 /// valid usage; `output` must be writable for one queue handle.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkGetDeviceQueue2(
     device: vk::Device,
     info: *const vk::DeviceQueueInfo2<'_>,
@@ -913,7 +969,6 @@ pub unsafe extern "system" fn vkGetDeviceQueue2(
 /// # Safety
 /// The device must be live and all its queues externally synchronized as
 /// required by `vkDeviceWaitIdle`.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkDeviceWaitIdle(device: vk::Device) -> vk::Result {
     let next_gdpa = {
         let registry = REGISTRY.lock();
@@ -946,7 +1001,6 @@ pub unsafe extern "system" fn vkDeviceWaitIdle(device: vk::Device) -> vk::Result
 /// # Safety
 /// The queue and its device must be live. Queue access must be externally
 /// synchronized as required by `vkQueueWaitIdle`.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkQueueWaitIdle(queue: vk::Queue) -> vk::Result {
     let (device, next_gdpa) = {
         let registry = REGISTRY.lock();
@@ -983,7 +1037,6 @@ pub unsafe extern "system" fn vkQueueWaitIdle(queue: vk::Queue) -> vk::Result {
 /// # Safety
 /// Device, surface, creation records and allocator must satisfy
 /// `vkCreateSwapchainKHR` valid usage; `output` must be writable.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkCreateSwapchainKHR(
     device: vk::Device,
     create_info: *const vk::SwapchainCreateInfoKHR<'_>,
@@ -1137,7 +1190,6 @@ pub unsafe extern "system" fn vkCreateSwapchainKHR(
 /// # Safety
 /// Device, swapchain, allocator and completed presentation work must satisfy
 /// `vkDestroySwapchainKHR` valid usage, including external synchronization.
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkDestroySwapchainKHR(
     device: vk::Device,
     swapchain: vk::SwapchainKHR,
@@ -1260,7 +1312,6 @@ pub(crate) fn capturing_surface(surface: u64) -> Option<bool> {
     Some(client.capturing())
 }
 
-#[unsafe(no_mangle)]
 pub unsafe extern "system" fn vkGetPhysicalDeviceProcAddr(
     instance: vk::Instance,
     name: *const c_char,
