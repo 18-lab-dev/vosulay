@@ -471,7 +471,7 @@ Evidence: `target/autoresearch-vm/runs/reports/run-orq8ep_s/`,
 Linux's unused ring eventfd is also removed: there was no waiter, and the game
 already acquires the newest complete frame at present. The sealed mapping,
 acquire/release atomics, complete snapshots, and owned read leases are unchanged.
-The Linux control protocol is version 2 and hands off one memfd; package the
+The Linux control protocol is version 3 and hands off one memfd; package the
 host and injected library together rather than mixing the old two-descriptor
 transport with the new runtime.
 

@@ -62,7 +62,7 @@ There is no access token or credential. Access depends on three checks in [`src/
 
 - **Allowed client IPs:** loopback is always allowed. Other entries are exact IPs or four-part IPv4 `*` patterns, separated by commas.
 - **Host header:** it must name the listener's own address or the configured **Remote host**.
-- **Browser metadata:** same-origin `Origin` and `Sec-Fetch-Site` are required, except for local overlay resources and frame navigations.
+- **Browser metadata:** `Origin` and `Sec-Fetch-Site` are optional. A supplied `Origin` must match the authority's exact HTTP origin; `Sec-Fetch-Site` may be `none`, `same-origin`, or `same-site`. Local overlay resources and frame navigations additionally accept `Origin: null` and `Sec-Fetch-Site: cross-site`.
 
 **Remote access URL** appears in settings only after **Remote host** is set. Anyone allowed can view every profile and use the proxied backend, so restrict the listener and allowlist to trusted networks. The backend must allow the vosulay machine, not each viewing device.
 

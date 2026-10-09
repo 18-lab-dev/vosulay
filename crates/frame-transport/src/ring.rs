@@ -316,8 +316,7 @@ impl Producer {
                 let previous =
                     unsafe { std::slice::from_raw_parts(mapping.payload(index), pixels.len()) };
                 if self.damage[index].is_none_or(|rect| {
-                    damage_rows(rect, width)
-                        .all(|range| previous[range.clone()] == pixels[range])
+                    damage_rows(rect, width).all(|range| previous[range.clone()] == pixels[range])
                 }) {
                     return Ok(false);
                 }

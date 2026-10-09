@@ -42,9 +42,9 @@ Preserve the documented constraints: custom overlay paths must remain within the
 
 ## Repository history
 
-Recent changes extend the product beyond the original Linux shell: the repository now includes a Windows Electron host, first-party Vosulay branding, WebGPU-enabled native build support, and remote profile pages served on the local network. The [operations runbook](operations/build-and-run.md) records the supported manual maintenance path for this wiki. OpenWiki updates must be run manually and locally; no scheduled or manually dispatched GitHub Actions workflow should be restored.
+The current product uses one Rust/CEF host on Linux and Windows, with native in-game composition and remote profile pages served on the local network. The [operations runbook](operations/build-and-run.md) records the supported manual maintenance path for this wiki. OpenWiki updates must be run manually and locally; no scheduled or manually dispatched GitHub Actions workflow should be restored.
 
 ## Backlog
 
 - **CEF, in-game composition, and frontend integration tests — `crates/cef-smoke`, `crates/overlay-linux`, `assets/manager.js`:** no automated test initializes CEF, drives the manager page, or composes into a real game; these need the manual checks listed in the [testing guidance](testing/guidance.md#not-covered-by-automated-checks).
-- **Release and distribution runbook — `extra/com.vosu.vosulay.desktop`, `LICENSE`:** packaging metadata is present, but no release process or installation documentation exists in the repository.
+

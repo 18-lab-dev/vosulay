@@ -120,9 +120,12 @@ neither write configuration nor open native dialogs. See the
 - **Host:** the `Host` header names the listener's own IP, `localhost` on a
   loopback listener, or the configured `remote_access_host`, on the listener
   port. This blocks DNS rebinding.
-- **Browser metadata:** `Origin` and `Sec-Fetch-Site` must be same-origin or
-  same-site. Cross-site metadata and `Origin: null` are allowed only for
-  `/local/` routes and frame navigations.
+- **Origin:** optional. When supplied, it must be the `Host` authority's exact
+  HTTP origin. `Origin: null` is also accepted for `/local/` routes and frame
+  navigations; same-site alone is not sufficient.
+- **Sec-Fetch-Site:** optional. When supplied, it may be `none`, `same-origin`,
+  or `same-site`. `cross-site` is also accepted for `/local/` routes and frame
+  navigations.
 
 **Request handling**
 
