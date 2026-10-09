@@ -96,6 +96,7 @@
   const REPEATABLE_HOTKEYS = new Set(["undo", "redo"]);
   const DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute";
   const DEFAULT_REMOTE_LISTEN_HOST = "127.0.0.1";
+  const DEFAULT_REMOTE_LISTEN_PORT = 5050;
   const DEFAULT_HOTKEYS = Object.freeze({
     profile_0: "Ctrl+0",
     profile_1: "Ctrl+1",
