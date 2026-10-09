@@ -1,16 +1,9 @@
----
-type: Source Map
-title: vosulay source map
-description: Change-oriented map from vosulay's Rust/CEF responsibilities to workspace crates, host modules, native compositor, build/packaging tooling, CI workflows, and tests.
-tags: [source-map, navigation, maintenance, vosulay, cef]
----
-
-# vosulay source map
+# Source map
 
 The [README](../README.md) is the current product, runtime, and build reference.
 Use this page for the first file to open when making a change and the
-[testing guidance](testing/guidance.md) for how to verify it. The
-[architecture overview](architecture/overview.md) explains how the pieces fit
+[testing guidance](testing.md) for how to verify it. The
+[architecture overview](architecture.md) explains how the pieces fit
 together.
 
 | Area | Start here | Responsibility |
@@ -21,10 +14,12 @@ together.
 | Configuration | [`src/config.rs`](../src/config.rs) | Versioned profiles/placements/settings, normalization, config path, atomic persistence. |
 | tosu import | [`src/migration.rs`](../src/migration.rs), [`src/runtime/tosu.rs`](../src/runtime/tosu.rs) | Parse tosu 4.26.x layouts; discover and import them without calling tosu's API. |
 | Counter catalog | [`src/api.rs`](../src/api.rs) | Fetch and parse the backend's counter-search HTML. |
-| Backend telemetry broker | [`src/backend.rs`](../src/backend.rs), [`assets/backend.js`](../assets/backend.js) | Shared upstream WebSocket per schema, client-local filters, HTTP snapshot reuse. |
+| Backend telemetry broker | [`src/backend.rs`](../src/backend.rs), [`assets/backend.js`](../assets/backend.js) | Shared upstream WebSocket per schema, client-local filters, HTTP snapshot reuse, per-client precise-subscription relays. |
 | Remote profile server | [`src/remote.rs`](../src/remote.rs) | View-only profile pages gated by peer allowlist and Host/Origin checks (no credential), backend proxy, local resource forwarding, loopback browser broker. |
 | Local overlay authorization | [`src/shell_policy.rs`](../src/shell_policy.rs), [`src/runtime/resources.rs`](../src/runtime/resources.rs) | Capability-scoped local HTML resolution, traversal/symlink confinement, MIME types. |
-| Linux launcher integration | [`src/runtime/launchers.rs`](../src/runtime/launchers.rs) | Rewrite osu desktop shortcuts with preload order and Vulkan layer settings. |
+| Linux game launchers | [`src/runtime/launchers.rs`](../src/runtime/launchers.rs) | Rewrite osu desktop shortcuts with preload order and Vulkan layer settings. |
+| App launchers and single instance | [`src/runtime/desktop_entry.rs`](../src/runtime/desktop_entry.rs), [`src/runtime/instance.rs`](../src/runtime/instance.rs) | XDG desktop/icon and Windows Start Menu registration; per-user instance ownership. |
+| Native hotkeys | [`crates/frame/src/hotkey.rs`](../crates/frame/src/hotkey.rs) | Shared parser and matching used by the host and platform input paths. |
 | CEF wrapper | [`crates/browser-cef`](../crates/browser-cef) (`src/lib.rs`, `bridge.rs`, `scheme.rs`) | OSR browser, native manager bridge, `vosulay://` scheme, permission policy; build script links the pinned CEF. |
 | CEF smoke | [`crates/cef-smoke`](../crates/cef-smoke), [`tools/cef/private-smoke.py`](../tools/cef/private-smoke.py) | Standalone OSR/WebGL/bridge smoke binary and its private-Xvfb runner. |
 | CEF acquisition and packaging | [`crates/cef-tools`](../crates/cef-tools), [`tools/cef/pins.json`](../tools/cef/pins.json) | Pinned download/verification, runtime retention, Linux/Windows packaging. |
@@ -36,10 +31,10 @@ together.
 | Windows host platform | [`crates/platform-windows`](../crates/platform-windows) | asdf-overlay attachment, D3D11 GPU copies, foreground target selection, tray. |
 | Native build | [`build.rs`](../build.rs), [`Cargo.toml`](../Cargo.toml), [`rust-toolchain.toml`](../rust-toolchain.toml) | Root crate links the retained CEF runtime and embeds retained compositor/lookup paths. |
 | Linux install metadata | [`CMakeLists.txt`](../CMakeLists.txt), [`extra/com.vosu.vosulay.desktop`](../extra/com.vosu.vosulay.desktop) | Desktop entry and icon installation. |
-| CI | [`.github/workflows`](../.github/workflows) | Linux tests/Clippy on pull requests and `main` pushes; manual-dispatch Windows build/release. See [testing guidance](testing/guidance.md#ci-workflows). |
+| CI | [`.github/workflows`](../.github/workflows) | Linux tests/Clippy on pull requests and `main` pushes; manual-dispatch Windows build/release. See [testing guidance](testing.md). |
 | Tests and fixtures | [`tests/`](../tests), [`crates/overlay-linux/tests`](../crates/overlay-linux/tests) | tosu migration and backend HTML fixtures; C-backed loader and SDL fixtures. |
 | Benchmarks | [`autoresearch.sh`](../autoresearch.sh), [`tools/autoresearch`](../tools/autoresearch) | VM-only uncapped CEF performance harness. |
-| Documentation maintenance | [`openwiki/quickstart.md`](quickstart.md), `AGENTS.md`, `CLAUDE.md` | Manual/local OpenWiki updates; no GitHub Actions workflow should be restored. |
+| Documentation | [docs/README.md](README.md), [AGENTS.md](../AGENTS.md), [CLAUDE.md](../CLAUDE.md) | Hand-maintained references; update alongside code. |
 
 ## Practical change paths
 
@@ -56,4 +51,4 @@ together.
   versioned.
 - **Change CEF version or packaging:** update `tools/cef/pins.json` through
   `crates/cef-tools`, then run the CEF smoke and package checks described in the
-  [testing guidance](testing/guidance.md).
+  [testing guidance](testing.md).

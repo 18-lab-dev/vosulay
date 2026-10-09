@@ -1,98 +1,60 @@
 ---
 name: vosulay-local-ci
-description: "Run vosulay's native, Windows, packaging, and GitHub Actions pre-push verification locally on Linux"
+description: Verify vosulay's Rust/CEF workspace on Linux, cross-check Windows source, and run private headless smoke safely.
 ---
 
-# vosulay local CI on Linux
+# Local CI
 
-Use this procedure before pushing `vosulay` changes that affect native or Windows code.
+Run only verification requested by the task. Do not push, publish releases, launch the manager on the user's desktop, or alter user launcher files/configuration during tests. Use task-owned temporary directories and injectable paths for launch-registration tests.
 
-## Preconditions
+## Linux preparation
 
-- Work from the intended clean branch/worktree.
-- Do not push as part of verification.
-- The Dawn-enabled Qt build is available at `/tmp/vosulay-qt-webgpu`.
-- `act` and Podman are installed for workflow/package checks.
-
-## Native matrix
-
-Export the matching Qt paths for every Cargo command:
+Use Rust 1.96.1 and the prerequisite packages in `.github/workflows/linux-ci.yml`: compiler/pkg-config, Wayland/EGL development files, SDL2 and SDL3 development files, and CEF's runtime shared libraries. Confirm both SDL ABIs are reachable:
 
 ```sh
-export PKG_CONFIG_PATH=/tmp/vosulay-qt-webgpu/lib/pkgconfig
-export CMAKE_PREFIX_PATH=/tmp/vosulay-qt-webgpu
-export LD_LIBRARY_PATH=/tmp/vosulay-qt-webgpu/lib
-export QTWEBENGINEPROCESS_PATH=/tmp/vosulay-qt-webgpu/lib/qt6/QtWebEngineProcess
-export QTWEBENGINE_RESOURCES_PATH=/tmp/vosulay-qt-webgpu/share/qt6/resources
-export QTWEBENGINE_LOCALES_PATH=/tmp/vosulay-qt-webgpu/share/qt6/translations/qtwebengine_locales
-cargo fmt --check
-cargo test
-cargo clippy --all-targets --all-features -- -D warnings
+pkg-config --cflags --libs sdl2
+pkg-config --cflags --libs sdl3
+cef="$(cargo run --quiet --locked -p vosulay-cef-tools -- acquire --platform linux-x86_64)"
+ldd "$cef/Release/libcef.so"
+mkdir -p target/cef-lib
+ln -sf "$cef/Release/libcef.so" target/cef-lib/libcef.so
+export LD_LIBRARY_PATH="$PWD/target/cef-lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 ```
 
-Stock Qt WebEngine is expected to fail the repository's Dawn requirement; do not weaken that check.
+Resolve any `not found` dependencies before tests. Expose only `libcef.so`, not the whole CEF Release directory, to avoid shadowing the system graphics libraries used by native fixtures. CEF acquisition verifies pinned archive/runtime digests and caches the SDK; `CEF_PATH` can select an already verified pinned SDK.
 
-## Windows matrix on Linux
-
-`windows/package.json` declares `"os": ["win32"]`, so exact `npm ci` fails with `EBADPLATFORM` on Linux. This is expected; Windows GitHub Actions runs the exact command on Windows. For local source verification:
+## Workspace checks
 
 ```sh
-cd windows
-npm ci --force
-npm run typecheck
-npm test
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --all-features --locked
 ```
 
-## Windows distributions
+Always use `--workspace`; root-only defaults miss compositor, transport, browser, and tooling coverage. `cargo fmt --all --check` is an optional explicit formatting check, not a Linux CI step. Loader/SDL fixture details and skip semantics are in `docs/testing.md`.
 
-If host Wine is unavailable, package with the Wine builder container from the repository root:
+## Windows source check from Linux
+
+With cargo-xwin installed:
 
 ```sh
-podman run --rm \
-  -v "$PWD:/project" \
-  -w /project/windows \
-  docker.io/electronuserland/builder:wine \
-  npm run dist:win
+env -u C_INCLUDE_PATH cargo xwin clippy --workspace --all-targets --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
 ```
 
-Success must include both NSIS and portable artifacts plus `verify:package` success. Confirm:
+Cross-Clippy is not native Windows execution. On native Windows, package via `cargo run --locked -p vosulay-cef-tools -- package-windows dist/package`; native workspace tests/Clippy use `--target x86_64-pc-windows-msvc`. Do not substitute Linux workflow emulation for Windows package/runtime validation.
+
+## Private headless smoke
+
+Requires Python 3, bubblewrap, and Xvfb. Use a new output directory:
 
 ```sh
-sha256sum windows/dist/vosulay-*-setup.exe windows/dist/vosulay-*-portable.exe
+cargo build --locked -p vosulay-cef-smoke
+python3 tools/cef/private-smoke.py \
+  --binary target/debug/vosulay-cef-smoke --cef-dir "$cef" \
+  --xvfb /usr/bin/Xvfb --output target/private-cef-smoke
 ```
 
-Podman rootless volume writes remain owned by the invoking user. Generated `out/`, `dist/`, and `node_modules/` are ignored, but verify Git cleanliness afterward.
+The wrapper isolates the X display and namespaces; never replace it with a launch on the working desktop. Hardware/game behavior needs separate authorized private or VM verification.
 
-## GitHub Actions workflow checks
+## Report
 
-List all workflows:
-
-```sh
-act -l
-```
-
-`act` cannot execute a native `windows-latest` job. Use Linux mappings only for parsing/dry-run validation:
-
-```sh
-act -n workflow_dispatch -W .github/workflows/windows-build.yml -P windows-latest=catthehacker/ubuntu:act-latest
-act -n push -W .github/workflows/windows-release.yml -P windows-latest=catthehacker/ubuntu:act-latest
-```
-
-The no-secret OpenWiki path is safe to exercise; guarded generation and PR steps must remain skipped:
-
-```sh
-act workflow_dispatch \
-  -W .github/workflows/openwiki-update.yml \
-  -P ubuntu-latest=node:22-bookworm-slim
-```
-
-Never provide OpenWiki or release secrets during local preflight.
-
-## Final checks
-
-```sh
-git diff --check
-git status --short --branch
-```
-
-Report native test count, Windows test count, package verification result, generated artifact names/checksums, workflow dry-run limitations, HEAD, and cleanliness. Treat an uncommitted tracked change as a blocker.
+Report exact commands and observed results, skipped fixture ABIs, smoke output, native versus cross-check boundaries, package artifact paths/checksums when generated, and blockers. Do not claim hosted CI, Windows runtime behavior, or cleared performance gates from local source checks. Windows workflow publication remains manual and requires authorization.

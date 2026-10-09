@@ -1,0 +1,34 @@
+# Integrations
+
+## Backend catalog and broker
+
+[src/api.rs](../src/api.rs) fetches `/api/counters/search/` with a 10-second deadline and 2 MiB body limit. It recognizes vosu, tosu 4.26, legacy, and empty-state markup rather than trusting a product name; missing/invalid resolutions fall back to 500×300. [Fixtures](../tests/fixtures/backend/) protect this contract. The backend defaults to `http://127.0.0.1:24050/`; `--vosu-url` accepts HTTP(S) without credentials, query, or fragment.
+
+Counters keep public backend API paths. [assets/backend.js](../assets/backend.js) routes matching fetch, XMLHttpRequest, and WebSocket calls through vosulay. [src/backend.rs](../src/backend.rs) shares one upstream telemetry socket per active schema (`/ws`, `/tokens`, `/websocket/v2`, `/websocket/v2/precise`). Filters stay client-local; matching HTTP JSON can reuse the newest snapshot, with backend HTTP fallback when unavailable. Slow consumers skip stale telemetry instead of queueing it.
+
+`/websocket/v2/subscribe` is relayed per client to preserve backend precise cadence; it is not projected from the slower shared V2 stream. Settings and command channels remain separate with original query/identity because authorization and replies are client-specific. The loopback broker is independent of the remote listener, so a busy remote port does not break in-game counters.
+
+## Local overlay capabilities
+
+The editor's HTML picker creates a fresh 128-bit capability and a `vosulay-overlay://` URL containing the canonical parent root. [src/shell_policy.rs](../src/shell_policy.rs) binds each capability to exactly one canonical root; rebinding conflicts are rejected. Every request is reauthorized, percent-decoded into normal path components, canonicalized, and confined beneath the root, including symlink resolution. Files must be readable regular files and fit the 32 MiB limit. Never replace these checks with a string-prefix path check.
+
+Only the exact trusted manager main frame receives the native bridge. Counter frames cannot write configuration or invoke native dialogs. Local resources are secure contexts but not cross-origin isolated. SharedArrayBuffer is unavailable by default; the unrestricted compatibility opt-in affects all overlays after restart and should be used only with fully trusted content.
+
+## Remote profile pages
+
+[src/remote.rs](../src/remote.rs) defaults to `127.0.0.1:5050`. Settings → Remote overlay server controls the listener address/port and allowed clients; listener changes require restart. LAN clients use the host's actual interface IP, not the wildcard bind address.
+
+- `GET /overlay` renders the active profile; `?profile=N` selects by canonical positive 1-based position.
+- `/local/<capability>/<path>` resolves saved authorized local roots without exposing the filesystem root.
+- `/__vosulay/backend.js` serves the browser routing bootstrap.
+- Other routes proxy the backend.
+
+There is no access token or configurable remote hostname. Loopback is always allowed; other peers must match comma-separated exact IPs or four-part IPv4 wildcard patterns. Host authority must match the listener's accepted IP authority and port (localhost is supported for loopback); Origin and Sec-Fetch-Site checks prevent unrelated cross-origin access. Local resources/frame navigations also support opaque-origin embedding. Canonical-path confinement applies to remote local files too.
+
+Only GET/HEAD are accepted. Requests are capped at 16 KiB, 32 concurrent connections, and three-second I/O timeouts. A remote bind failure is logged without stopping the local broker. Allowed clients can view every profile and use the proxied backend: restrict listener and allowlist to trusted networks. The backend must allow the vosulay host, not each viewing device. Unrelated custom HTTP(S) origins load directly.
+
+## OBS capture boundary
+
+Linux launch order is **lookup helper → foreign preloads → compositor**; OBS GL hooks and Vulkan layer stay ahead of vosulay so game capture copies before overlay drawing. Display Capture still includes the overlay. Vosulay does not modify OBS scenes, capture sources, or export flags.
+
+On Windows, asdf-overlay draws before forwarding DXGI Present/Present1; exclusion depends on hook order. OBS's Capture third-party overlays option is not a guaranteed exclusion switch. Do not claim display/input latency from CPU callback timings or present timings, or capture correctness from an export that failed.

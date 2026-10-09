@@ -1,43 +1,39 @@
 ---
 name: vosulay-cross-platform-dev
-description: "Build, test, and verify the vosulay overlay manager (Rust+Qt Linux app and Electron Windows host in one repo) including the Dawn-Qt env and cross-language parity checks"
+description: Build and maintain vosulay's shared Rust/CEF host, native Linux/Windows composition, and manager frontend.
 ---
 
-# vosulay cross-platform dev workflow
+# Cross-platform development
 
-Repo: `~/gh/vosu-ecosystem/vosulay` (submodule of the vosu-ecosystem umbrella). Linux app = Rust + Qt6 WebEngine (`src/`, `src/qt/`); Windows host = Electron TypeScript (`windows/`); shared frontend = `assets/manager.{html,js,css}` (loaded by BOTH shells — never fork it).
+Work inside the vosulay repository, not the umbrella or other submodules. Read `docs/README.md`, `docs/source-map.md`, and `docs/testing.md` first. One Rust host and `assets/manager.{html,js,css}` serve both platforms; do not fork the frontend or add a second configuration convention.
 
-## Rust (Linux) build/test
+## Source contracts
 
-`build.rs` self-bootstraps: if pkg-config doesn't resolve a Dawn WebGPU-enabled Qt WebEngine, it builds one automatically into `$XDG_CACHE_HOME/vosulay/qt-webgpu` (`~/.cache/vosulay/qt-webgpu` by default) via `extra/build-webgpu-qt.sh`, then uses it for the rest of the build. Plain `cargo build`/`cargo test`/`cargo install --path .` work with **zero manual env vars** as long as `git`, `cmake`, `ninja`, `pkg-config`, `gperf`, and Python's `html5lib` are installed:
+- `src/config.rs` owns serialized defaults/normalization; manager page state mirrors it. Update both and relevant round-trip/migration fixtures when the model changes.
+- `src/api.rs` detects backend compatibility from public counter markup, not the product name. Preserve source order, explicit unrecognized-markup errors, and response limits.
+- `src/backend.rs` shares telemetry by schema; precise subscriptions and commands are per-client relays, not projected shared snapshots.
+- `src/runtime/host.rs` owns CEF/browser lifetime, editing/visibility, frame policy, and input safety. Shared native hotkey parsing is in `crates/frame/src/hotkey.rs`.
+- Linux publishes CPU BGRA through a persistent memfd ring; Windows copies borrowed CEF D3D11 textures into application-owned GPU textures before returning. Preserve frame ownership and bounded input-release behavior.
 
-```sh
-cargo test && cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings
-```
+## Build and package
 
-That auto-build is a full Qt WebEngine/Chromium source compile: ~30 minutes on a 32-thread workstation, **once per cache location** (`~/.cache/vosulay/qt-webgpu` does NOT get wiped on reboot — only `/tmp` does). If it's missing, the very first `cargo build`/`test` after checkout or a reboot triggers it automatically; run that first build via `hub` (`op:"start"`, `persist:true`) in the background and keep working on non-Rust parts (Windows/TS, shared `assets/manager.js` frontend, docs) while it compiles — do not block the whole task on it. `cargo:warning=` lines from build.rs announce when the auto-build starts/finishes; they show up live even without `-vv`.
-
-Point `VOSULAY_WEBGPU_QT_PREFIX=<prefix>` at an already-built prefix (e.g. a leftover one under `/tmp`, or one built by hand with `extra/build-webgpu-qt.sh <prefix>`) to skip the auto-build and reuse it instantly — this also works for a prefix outside the default cache dir. Set `VOSULAY_SKIP_AUTO_WEBGPU_BUILD=1` to disable the auto-build entirely and get the old fail-fast behavior (useful to confirm a specific pre-provisioned Qt is actually being picked up, or in CI that wants to control the Dawn Qt build itself). Manually exporting `PKG_CONFIG_PATH`/`CMAKE_PREFIX_PATH`/`LD_LIBRARY_PATH`/`QTWEBENGINE*` still works exactly as before and takes priority over the auto-detected prefix.
-
-
-## Windows host on a Linux workstation
-
-`npm ci` fails EBADPLATFORM (win32-only natives). Use:
+Use the pinned Rust toolchain and prerequisites in `.github/workflows/linux-ci.yml`. Cargo acquires verified precompiled CEF when `CEF_PATH` is unset; explicit paths must match `tools/cef/pins.json`. No runtime startup download is allowed.
 
 ```sh
-cd windows && npm ci --force --ignore-scripts --no-audit
-npm run typecheck && npm test   # tsc + node:test via tsx; no Electron binary needed
+cargo build --locked
+cargo install --path . --locked
 ```
 
-Real installer builds happen in CI (`.github/workflows/windows-build.yml` on windows-latest; tag `v*` triggers `windows-release.yml` which publishes setup+portable exes). Bump `windows/package.json` version (`npm version X.Y.Z --no-git-tag-version`) before reshipping so artifact names change.
+Complete Linux package commands are in `docs/operations.md`; Cargo install depends on retained runtime/overlay caches and is not a portable bundle. Native Windows packaging is:
 
-## Cross-language contract rules
+```powershell
+cargo run --locked -p vosulay-cef-tools -- package-windows dist/package
+```
 
-- Rust is authoritative: `src/api.rs` (catalog parser), `src/config.rs` (config schema/normalization). TS mirrors live in `windows/src/main/{counters,config,types,urls}.ts`.
-- Any change to those Rust files must update the TS mirror AND the golden fixtures `windows/test/fixtures/config-parity-*.json` (asserted by `tests/config_parity.rs` and `windows/test/config-parity.test.ts`). CI triggers on `src/api.rs`/`src/config.rs` for this reason.
-- Catalog markup contract: `article.counter-card[data-overlay-id]` + `data-counter-name/-author/-version`; zero cards without a `.empty-state` element must throw (guards in both parsers).
-- URL identity: TS `encodePathSegment` in `urls.ts` must keep matching the Rust url crate's path-segment encode set (leaves `$&+,:;=@` bare) so persisted counter URLs are byte-identical across platforms.
+`Cargo.toml` supplies package versioning. Windows build/release workflows are manual-dispatch only.
 
-## End-to-end parser smoke (Linux)
+## Verification and safety
 
-Start the prebuilt daemon (`~/gh/vosu-ecosystem/vosu/target/release/vosu`, port 24050), fetch `/api/counters/search/?query=`, and run the TS parser over the captured HTML with `npx tsx` using an absolute import of `windows/src/main/counters`. Expect real installed counters, not `[]`.
+Use the `vosulay-local-ci` skill for workspace Clippy/tests and Windows cross-Clippy. Use `tools/cef/private-smoke.py` for isolated headless CEF checks; never launch GUI tests on the user's working desktop. Runtime claims require actual pixels and game input evidence, not accepted launch/input commands or producer counters. Use the `vosulay-windows-live-testing` skill and canonical `windows-vm` host for authorized guest testing; never start/stop/switch a VM without explicit user authorization.
+
+Report only exercised checks, exact artifacts, and remaining platform boundaries. Update hand-maintained `docs/` with permanent code changes.

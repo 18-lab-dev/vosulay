@@ -8,7 +8,7 @@ install(
     DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications"
 )
 install(
-    FILES assets/branding/vosulay-app-icon.png
-    DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/1024x1024/apps"
-    RENAME com.vosu.vosulay.png
+    FILES assets/branding/vosulay-app-icon.svg
+    DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps"
+    RENAME com.vosu.vosulay.svg
 )
