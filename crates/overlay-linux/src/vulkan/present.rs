@@ -31,7 +31,7 @@ pub unsafe extern "system" fn vkQueuePresentKHR(queue: vk::Queue, info: *const v
     for (&swapchain, &image_index) in swaps.iter().zip(indices) {
         let Some(swap) = tracked_swaps.get_mut(&swapchain) else { continue; };
         let (focused, refresh_hz) = crate::sdl::surface_status(swap.input.window)
-            .unwrap_or_else(|| (swap.input.backend == 1 && native::focused(swap.input.window), 0.0));
+            .unwrap_or_else(|| (swap.input.backend == 1 && crate::xfocus::focused(swap.input.window), 0.0));
         let visible = {
             let mut client = swap.input.client.lock();
             if !swap.input.active.load(Ordering::Acquire) { continue; }

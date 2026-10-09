@@ -1,6 +1,5 @@
 #![allow(non_snake_case, unsafe_op_in_unsafe_fn)]
 mod gpu;
-mod native;
 include!("present.rs");
 use crate::client::Client;
 use ash::{vk, vk::Handle};
@@ -109,7 +108,7 @@ impl SwapchainInput {
     fn focused(&self) -> bool {
         crate::sdl::surface_status(self.window)
             .map(|(focused, _)| focused)
-            .unwrap_or_else(|| self.backend == 1 && native::focused(self.window))
+            .unwrap_or_else(|| self.backend == 1 && crate::xfocus::focused(self.window))
     }
 }
 struct SwapchainRecord {
@@ -1159,7 +1158,7 @@ pub unsafe extern "system" fn vkCreateSwapchainKHR(
         .map(|(_, window, backend)| (*window, *backend))
         .unwrap_or((info.surface.as_raw().max(1), 0));
     if backend == 1 {
-        native::observe_x11();
+        crate::xfocus::observe();
     }
     let input = Arc::new(SwapchainInput {
         window,

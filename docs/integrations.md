@@ -29,6 +29,6 @@ Only GET/HEAD are accepted. Requests are capped at 16 KiB, 32 concurrent connect
 
 ## OBS capture boundary
 
-Linux launch order is **lookup helper → foreign preloads → compositor**; OBS GL hooks and Vulkan layer stay ahead of vosulay so game capture copies before overlay drawing. Display Capture still includes the overlay. Vosulay does not modify OBS scenes, capture sources, or export flags.
+Linux launch order is **lookup helper → foreign preloads → compositor**, and OBS's Vulkan layer stays ahead of vosulay's. When OBS's GL capture library is loaded, vosulay's GLX/EGL swap hooks call OBS's swap wrapper first, so OBS captures the clean frame and chains back for composition regardless of preload order; this covers games such as Wine that resolve swaps through `dlsym`. Display Capture still includes the overlay. Vosulay does not modify OBS scenes, capture sources, or export flags.
 
 On Windows, asdf-overlay draws before forwarding DXGI Present/Present1; exclusion depends on hook order. OBS's Capture third-party overlays option is not a guaranteed exclusion switch. Do not claim display/input latency from CPU callback timings or present timings, or capture correctness from an export that failed.

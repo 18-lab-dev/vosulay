@@ -200,11 +200,6 @@ api!(
     unsafe extern "C" fn(*mut c_void, *mut c_void, c_int, *mut c_int) -> c_uint,
     "eglQuerySurface"
 );
-api!(
-    X_FOCUS,
-    unsafe extern "C" fn(*mut c_void, *mut c_ulong, *mut c_int) -> c_int,
-    "XGetInputFocus"
-);
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Backend {
     Glx,
@@ -478,6 +473,41 @@ pub(crate) fn focus(window: usize, focused: bool) {
         }
     }
 }
+/// The X11 surface this process's X input belongs to. Wine reads input on its
+/// top-level window while rendering into an unrelated offscreen client window,
+/// so events are matched to the process's surface rather than by window id.
+fn x11_surface() -> Option<Arc<Surface>> {
+    let candidates: Vec<_> = SURFACES
+        .lock()
+        .iter()
+        .filter(|s| s.backend != Backend::Sdl && s.active.load(Ordering::Acquire))
+        .cloned()
+        .collect();
+    // Client locks are never taken while the registry lock is held.
+    candidates
+        .iter()
+        .find(|s| s.client.lock().visible())
+        .or_else(|| candidates.first())
+        .cloned()
+}
+pub(crate) fn route_x11(input: vosulay_frame::BrowserInput) -> bool {
+    let Some(surface) = x11_surface() else {
+        return false;
+    };
+    let focused = crate::xfocus::focused(surface.native);
+    let mut client = surface.client.lock();
+    client.service();
+    client.focus(focused);
+    client.route_input(input) && surface.composed.load(Ordering::Acquire)
+}
+pub(crate) fn capturing_x11() -> bool {
+    let Some(surface) = x11_surface() else {
+        return false;
+    };
+    let mut client = surface.client.lock();
+    client.service();
+    client.capturing() && surface.composed.load(Ordering::Acquire)
+}
 fn take_surfaces(matches: impl Fn(&Surface) -> bool) -> [Option<Arc<Surface>>; 16] {
     let mut removed = std::array::from_fn(|_| None);
     let mut surfaces = SURFACES.lock();
@@ -569,8 +599,48 @@ pub(crate) fn destroy_context(backend: Backend, ctx: usize) {
         }
     }
 }
+thread_local! {
+    /// Set while OBS's swap wrapper runs on this thread: it captures the clean
+    /// frame, then chains to our exported hook, which composites and swaps.
+    static IN_OBS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+/// OBS game capture's wrapper for `name`, when it precedes our hook. Games
+/// such as Wine resolve swaps through `dlsym`, which our lookup helper routes
+/// to us; without this, OBS would never see the frame.
+unsafe fn obs_wrapper<T: Copy>(name: &CStr, ours: *const c_void) -> Option<T> {
+    let pointer = unsafe { lookup_symbol(libc::RTLD_DEFAULT, name.as_ptr()) };
+    if pointer.is_null() || pointer.cast_const() == ours {
+        return None;
+    }
+    let mut owner: libc::Dl_info = unsafe { mem::zeroed() };
+    if unsafe { libc::dladdr(pointer, &mut owner) } == 0 || owner.dli_fname.is_null() {
+        return None;
+    }
+    let path = unsafe { CStr::from_ptr(owner.dli_fname) }.to_bytes();
+    let file = path.rsplit(|byte| *byte == b'/').next().unwrap_or(path);
+    file.starts_with(b"libobs_glcapture.so")
+        .then(|| unsafe { mem::transmute_copy(&pointer) })
+}
+/// Runs `capture` (OBS) once per swap unless this call is OBS chaining back.
+fn through_obs<T>(obs: Option<T>, capture: impl FnOnce(T)) -> bool {
+    let Some(obs) = obs else {
+        return false;
+    };
+    if IN_OBS.get() {
+        return false;
+    }
+    IN_OBS.set(true);
+    capture(obs);
+    IN_OBS.set(false);
+    true
+}
+static OBS_GX_SWAP: LazyLock<Option<GlxSwap>> =
+    LazyLock::new(|| unsafe { obs_wrapper(c"glXSwapBuffers", glXSwapBuffers as *const c_void) });
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn glXSwapBuffers(d: *mut c_void, w: c_ulong) {
+    if through_obs(*OBS_GX_SWAP, |obs| unsafe { obs(d, w) }) {
+        return;
+    }
     if let Some(f) = *GX_SWAP {
         if let Some(_guard) = Guard::enter() {
             if !draw_sdl_present() {
@@ -584,6 +654,10 @@ pub unsafe extern "C" fn glXSwapBuffers(d: *mut c_void, w: c_ulong) {
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn eglSwapBuffers(d: *mut c_void, s: *mut c_void) -> c_uint {
+    let mut result = 0;
+    if through_obs(*OBS_EG_SWAP, |obs| result = unsafe { obs(d, s) }) {
+        return result;
+    }
     let Some(f) = *EG_SWAP else { return 0 };
     if let Some(_guard) = Guard::enter() {
         if !draw_sdl_present() {
@@ -594,22 +668,8 @@ pub unsafe extern "C" fn eglSwapBuffers(d: *mut c_void, s: *mut c_void) -> c_uin
         unsafe { f(d, s) }
     }
 }
-static OBS_EG_SWAP: LazyLock<Option<EglSwap>> = LazyLock::new(|| unsafe {
-    let pointer = lookup_symbol(libc::RTLD_DEFAULT, c"eglSwapBuffers".as_ptr());
-    if pointer.is_null() || pointer == eglSwapBuffers as *const () as *mut c_void {
-        return None;
-    }
-    let mut owner: libc::Dl_info = mem::zeroed();
-    if libc::dladdr(pointer, &mut owner) == 0 || owner.dli_fname.is_null() {
-        return None;
-    }
-    let path = CStr::from_ptr(owner.dli_fname).to_bytes();
-    let file = path.rsplit(|byte| *byte == b'/').next().unwrap_or(path);
-    if !file.starts_with(b"libobs_glcapture.so") {
-        return None;
-    }
-    Some(mem::transmute_copy(&pointer))
-});
+static OBS_EG_SWAP: LazyLock<Option<EglSwap>> =
+    LazyLock::new(|| unsafe { obs_wrapper(c"eglSwapBuffers", eglSwapBuffers as *const c_void) });
 unsafe fn damage(
     f: Option<Damage>,
     d: *mut c_void,
@@ -621,8 +681,9 @@ unsafe fn damage(
     // OBS 1.5.6 hooks eglSwapBuffers, not the damage variants. Its standard
     // wrapper performs the same full-buffer swap, then chains through our
     // native hook, where composition follows capture.
-    if let Some(obs) = *OBS_EG_SWAP {
-        return unsafe { obs(d, s) };
+    let mut result = 0;
+    if through_obs(*OBS_EG_SWAP, |obs| result = unsafe { obs(d, s) }) {
+        return result;
     }
     if let Some(_guard) = Guard::enter() {
         if !draw_sdl_present() {
@@ -673,7 +734,7 @@ pub(crate) fn hooked(name: &[u8]) -> Option<*const c_void> {
         b"eglCreatePlatformWindowSurfaceEXT" => eglCreatePlatformWindowSurfaceEXT as _,
         b"eglTerminate" => eglTerminate as _,
         b"XDestroyWindow" => XDestroyWindow as _,
-        _ => return crate::sdl::hooked(name),
+        _ => return crate::x11input::hooked(name).or_else(|| crate::sdl::hooked(name)),
     })
 }
 unsafe fn get_proc(name: *const c_char, real: Option<Proc>) -> *const c_void {
@@ -754,7 +815,7 @@ pub unsafe extern "C" fn vosulay_attach_v1(endpoint: *const c_char) -> c_int {
     if INSTALLED.load(Ordering::Acquire) {
         return 1;
     }
-    let names: [&[u8]; 40] = [
+    let names: [&[u8]; 43] = [
         b"glXSwapBuffers",
         b"eglSwapBuffers",
         b"eglSwapBuffersWithDamageKHR",
@@ -795,6 +856,9 @@ pub unsafe extern "C" fn vosulay_attach_v1(endpoint: *const c_char) -> c_int {
         b"eglCreatePlatformWindowSurfaceEXT",
         b"eglTerminate",
         b"XDestroyWindow",
+        b"XCheckIfEvent",
+        b"XNextEvent",
+        b"XDefineCursor",
     ];
     let targets: Vec<_> = names
         .iter()
@@ -887,15 +951,8 @@ fn native_focused(backend: Backend, display: usize, drawable: usize) -> bool {
     if let Some((focused, _)) = crate::sdl::surface_status(window) {
         return focused;
     }
-    if xdisplay == 0 {
-        return false;
-    }
-    let mut actual = 0;
-    let mut revert = 0;
-    unsafe {
-        X_FOCUS.map(|f| f(xdisplay as _, &mut actual, &mut revert));
-    }
-    actual == window
+    // Xlib-backed surfaces only; non-SDL Wayland exposes no focus query.
+    xdisplay != 0 && crate::xfocus::focused(window)
 }
 fn register_egl(display: usize, drawable: usize, window: usize) {
     if drawable == 0 {
@@ -1129,6 +1186,7 @@ pub unsafe extern "C" fn eglTerminate(display: *mut c_void) -> c_uint {
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn XDestroyWindow(display: *mut c_void, window: c_ulong) -> c_int {
+    crate::x11input::forget_window(display, window);
     for surface in take_surfaces(|s| s.native == window).into_iter().flatten() {
         retire_surface(&surface);
     }

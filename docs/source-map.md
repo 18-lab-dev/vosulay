@@ -27,7 +27,7 @@ together.
 | Frame model | [`crates/frame`](../crates/frame) | Browser-independent frame, damage, and editor input types. |
 | Linux frame transport | [`crates/frame-transport`](../crates/frame-transport) (`ring.rs`, `ipc.rs`, `protocol.rs`) | Sealed three-slot memfd ring and authenticated `SOCK_SEQPACKET` control. |
 | Linux host platform | [`crates/platform-linux`](../crates/platform-linux) | Focus-driven game selection, discovery, explicit live attachment. |
-| Linux in-game compositor | [`crates/overlay-linux`](../crates/overlay-linux) (`hooks.rs`, `gl.rs`, `vulkan/`, `sdl.rs`, `sdl3.rs`, `late.rs`, `lookup.rs`), [`VkLayer_vosulay_overlay.json`](../crates/overlay-linux/VkLayer_vosulay_overlay.json) | Injected `libvosulay_overlay.so`: Vulkan layer, EGL/GLX/SDL swap hooks, input capture. |
+| Linux in-game compositor | [`crates/overlay-linux`](../crates/overlay-linux) (`hooks.rs`, `gl.rs`, `vulkan/`, `sdl.rs`, `sdl3.rs`, `x11input.rs`, `xfocus.rs`, `late.rs`, `lookup.rs`), [`VkLayer_vosulay_overlay.json`](../crates/overlay-linux/VkLayer_vosulay_overlay.json) | Injected `libvosulay_overlay.so`: Vulkan layer, EGL/GLX/SDL swap hooks, SDL and Xlib input capture, X11 focus observation. |
 | Linux lookup helper | [`crates/overlay-lookup`](../crates/overlay-lookup) | Leading `libvosulay_lookup.so` that routes explicit `dlsym` lookups to the compositor. |
 | Windows host platform | [`crates/platform-windows`](../crates/platform-windows) | asdf-overlay attachment, D3D11 GPU copies, foreground target selection, tray. |
 | Native build | [`build.rs`](../build.rs), [`Cargo.toml`](../Cargo.toml), [`rust-toolchain.toml`](../rust-toolchain.toml) | Root crate links the retained CEF runtime and embeds retained compositor/lookup paths. |

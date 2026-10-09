@@ -21,7 +21,7 @@ Contributing? Start with [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites an
 - Discover installed counters from a local Vosu or Tosu instance.
 - Add remote or local custom HTML overlays.
 - Use Chromium GPU compositing, WebGL, WebGPU where supported, and overlay audio.
-- Render inside Vulkan, EGL/OpenGL, and GLX/OpenGL games on Linux, including native Wayland and X11/XWayland games.
+- Render inside Vulkan, EGL/OpenGL, and GLX/OpenGL games on Linux, including native Wayland and X11/XWayland games and osu!stable under Wine (for example osu-winello).
 - Render inside osu!stable and osu!lazer on Windows through native asdf-overlay 2.1.0.
 - Serve view-only profile pages to browsers and streaming clients on the local network.
 
@@ -147,16 +147,30 @@ Focus tracking needs neither eBPF/CN_PROC probes nor elevation. It does not
 bypass Linux injection policy; use the preload or Vulkan-layer launch routes
 above when live attachment is restricted.
 
+### osu!stable under Wine
+
+osu!stable running through Wine's X11 driver (osu-winello, Lutris, or plain
+Wine) is supported with the same preload. Launch it through its refreshed
+shortcut or with the `LD_PRELOAD` line above; preloads added later by a launch
+script, such as osu-winello's OBS capture setting, may appear in any order.
+Wine draws into an offscreen window while the visible window holds focus, so
+vosulay treats the game as focused whenever any window of the game process has
+X input focus. Editing reads input from Wine's own X event queue: shortcuts
+work in game, and while editing the overlay receives the keyboard and mouse,
+the game's hidden cursor is replaced by a normal pointer, and raw mouse input
+is held back from the game.
+
 ### OBS game capture
 
 Linux shortcuts use `lookup helper → foreign preloads → compositor` preload order.
 The lookup-only helper catches explicit SDL library lookups even when OBS supplies
 its own `dlsym`; it preserves native caller scope for `RTLD_NEXT` and `RTLD_DEFAULT`.
-OBS's GL capture preload stays before the compositor, and its installed Vulkan
-layer stays before vosulay. OBS copies the game before vosulay draws the overlay.
-SDL2/SDL3 GL swaps defer composition to the native EGL/GLX swap; EGL damage swaps
-use OBS's standard full-buffer swap route so capture still happens before drawing.
-Keep this hook order for manual launches too.
+OBS's installed Vulkan layer stays before vosulay. OBS copies the game before
+vosulay draws the overlay. When OBS's GL capture library is loaded, GLX and EGL
+swaps, including ones Wine resolves through `dlsym` and EGL damage swaps, first
+pass through OBS's swap wrapper, which captures the clean frame and then chains
+back to vosulay for composition. SDL2/SDL3 GL swaps defer composition to the
+native EGL/GLX swap.
 
 **Display Capture includes the overlay.** Exclusion applies to game capture, not
 screen capture. Vosulay does not change OBS scenes, capture sources, or settings.

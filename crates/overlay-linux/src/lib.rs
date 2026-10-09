@@ -14,3 +14,5 @@ mod lookup;
 mod sdl;
 mod sdl3;
 mod vulkan;
+mod x11input;
+mod xfocus;
