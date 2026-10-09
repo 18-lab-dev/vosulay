@@ -1466,21 +1466,37 @@
       : "No loaded overlays to refresh");
   }
 
+  // Commits an in-progress drag, resize or selection at its last known position.
+  function finishPointerOperation() {
+    const operation = state.pointer;
+    if (!operation) return;
+    if (operation.frame) {
+      cancelAnimationFrame(operation.frame);
+      operation.frame = 0;
+      flushPointer(operation);
+    }
+    state.pointer = null;
+    if (operation.root.hasPointerCapture(operation.id)) operation.root.releasePointerCapture(operation.id);
+    if (operation.kind === "selection") selectionBox.hidden = true;
+    else commitHistory(operation.before);
+  }
+
   function flushEditingChanges() {
     if (inspector.contains(document.activeElement)) document.activeElement.blur();
-    const operation = state.pointer;
-    if (operation) {
-      if (operation.frame) {
-        cancelAnimationFrame(operation.frame);
-        operation.frame = 0;
-        flushPointer(operation);
-      }
-      state.pointer = null;
-      if (operation.root.hasPointerCapture(operation.id)) operation.root.releasePointerCapture(operation.id);
-      if (operation.kind === "selection") selectionBox.hidden = true;
-      else commitHistory(operation.before);
-    }
+    finishPointerOperation();
     flushPendingSave();
+  }
+
+  // Ends gestures whose release happened outside this page (input handed to
+  // another window), keeping the last position seen here.
+  function abandonGestures() {
+    const hadPointer = Boolean(state.pointer);
+    finishPointerOperation();
+    endWheelGesture(false);
+    if (hadPointer) scheduleSave(true);
+    requestRender("stageGeometry", "inspector");
+    updateToolbarAvoidance();
+    releaseToolbarHold(NaN, NaN);
   }
 
   function closeUrlModal(restoreFocus = true) {
@@ -1740,6 +1756,11 @@
   function movePointer(event) {
     const operation = state.pointer;
     if (!operation || operation.id !== event.pointerId) return;
+    // A release delivered elsewhere (e.g. after a focus change) leaves no pointerup.
+    if (event.pointerType === "mouse" && event.buttons === 0) {
+      abandonGestures();
+      return;
+    }
     operation.latestX = event.clientX;
     operation.latestY = event.clientY;
     if (!operation.frame) operation.frame = requestAnimationFrame(() => flushPointer(operation));
@@ -3038,6 +3059,8 @@
       } else if (envelope.type === "editing") {
         const value = envelope.editing !== undefined ? envelope.editing : envelope.payload;
         setEditing(Boolean(value), false);
+      } else if (envelope.type === "input-suspended") {
+        abandonGestures();
       } else if (envelope.type === "toggle-interaction") {
         if (state.editing && !menuOrModalOpen() && !isEditableTarget(document.activeElement)) {
           state.interacting = !state.interacting;

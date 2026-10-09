@@ -261,6 +261,17 @@ impl Host<'_> {
         self.platform.set_tray_state(self.editing, self.visible);
         Ok(())
     }
+    /// Keeps edit mode while another window has input. The page must end any
+    /// gesture itself because the matching release goes to that other window.
+    fn suspend_capture(&mut self) -> Result<()> {
+        self.capture_suspended = true;
+        self.consumed.fill(false);
+        self.suppress_character = false;
+        if let Some(browser) = self.browser.as_ref() {
+            browser.set_focus(false);
+        }
+        self.receive(&json!({"type": "input-suspended"}))
+    }
     fn flush(&mut self, action: Closing) -> Result<bool> {
         if self.closing.is_some() || self.flushed.is_some() || self.dialog {
             return Ok(false);
@@ -376,9 +387,7 @@ impl Host<'_> {
                         {
                             // The platform already released input; editing resumes capture on
                             // refocus. A stale renderer fails that recapture and exits editing.
-                            self.capture_suspended = true;
-                            self.consumed.fill(false);
-                            self.suppress_character = false;
+                            self.suspend_capture()?;
                         } else {
                             self.editing(false)?;
                         }
@@ -585,7 +594,7 @@ impl Host<'_> {
                     if self.editing && self.attached && self.platform.game_focused() {
                         self.platform.set_capture(true)?;
                     } else if self.editing && self.attached {
-                        self.capture_suspended = true;
+                        self.suspend_capture()?;
                     }
                 }
             }
@@ -610,13 +619,18 @@ impl Host<'_> {
             }
             if self.capture_suspended && self.platform.game_focused() {
                 self.capture_suspended = false;
-                if self.editing
-                    && self.attached
-                    && !self.dialog
-                    && let Err(error) = self.platform.set_capture(true)
-                {
-                    self.editing(false)?;
-                    self.receive(&json!({"type":"error", "message":format!("{error:#}")}))?;
+                if self.editing && self.attached && !self.dialog {
+                    match self.platform.set_capture(true) {
+                        Ok(()) => {
+                            if let Some(browser) = self.browser.as_ref() {
+                                browser.set_focus(true);
+                            }
+                        }
+                        Err(error) => {
+                            self.editing(false)?;
+                            self.receive(&json!({"type":"error", "message":format!("{error:#}")}))?;
+                        }
+                    }
                 }
             }
             let now = Instant::now();
