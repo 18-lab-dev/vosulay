@@ -1,5 +1,6 @@
 mod editor;
 mod host;
+mod hotkey;
 #[cfg(target_os = "linux")]
 mod launchers;
 mod resources;

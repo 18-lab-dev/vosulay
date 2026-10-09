@@ -183,8 +183,16 @@ toggles counter interaction, Delete removes the selected counter, and Escape
 exits editing. Ctrl+Z undoes and Ctrl+Shift+Z redoes placement and profile
 edits; Ctrl+R refreshes the selected counter and Ctrl+Shift+R refreshes every
 counter in the active profile. These, the profile, and the copy/paste shortcuts
-are configurable. Text fields keep their native undo/redo. Normal mode leaves
-game input alone.
+are configurable. The interaction shortcut is intercepted by vosulay before
+counters see it, so it must include Ctrl, Alt, or Meta. Text fields keep their
+native undo/redo. Normal mode leaves game input alone.
+
+The mouse wheel acts on the counter under the pointer while editing: over its
+middle it changes the layer, over an edge it grows (wheel up) or shrinks (wheel
+down) that side by 10 px, and over a corner it changes the scale by 0.05 while
+the opposite corner stays fixed. Continued scrolling keeps targeting the same
+edge or corner until the wheel pauses, so the pointer can stay in place. Each
+scroll gesture is one undo step. The right-click menu also offers **Refresh**.
 
 The Linux editor shows the native system cursor and temporarily disables
 relative mouse mode. Leaving editing, losing focus, disconnecting, or destroying

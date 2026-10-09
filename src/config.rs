@@ -74,6 +74,7 @@ pub struct HotkeySettings {
     pub redo: String,
     pub refresh_selected_overlay: String,
     pub refresh_all_overlays: String,
+    pub toggle_interaction: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -150,6 +151,7 @@ impl Default for HotkeySettings {
             redo: DEFAULT_REDO_HOTKEY.to_owned(),
             refresh_selected_overlay: DEFAULT_REFRESH_SELECTED_OVERLAY_HOTKEY.to_owned(),
             refresh_all_overlays: DEFAULT_REFRESH_ALL_OVERLAYS_HOTKEY.to_owned(),
+            toggle_interaction: DEFAULT_TOGGLE_INTERACTION_HOTKEY.to_owned(),
         }
     }
 }
@@ -260,6 +262,10 @@ impl HotkeySettings {
         normalize_hotkey(
             &mut self.refresh_all_overlays,
             DEFAULT_REFRESH_ALL_OVERLAYS_HOTKEY,
+        );
+        normalize_hotkey(
+            &mut self.toggle_interaction,
+            DEFAULT_TOGGLE_INTERACTION_HOTKEY,
         );
     }
 }
@@ -381,6 +387,7 @@ const DEFAULT_UNDO_HOTKEY: &str = "Ctrl+Z";
 const DEFAULT_REDO_HOTKEY: &str = "Ctrl+Shift+Z";
 const DEFAULT_REFRESH_SELECTED_OVERLAY_HOTKEY: &str = "Ctrl+R";
 const DEFAULT_REFRESH_ALL_OVERLAYS_HOTKEY: &str = "Ctrl+Shift+R";
+pub(crate) const DEFAULT_TOGGLE_INTERACTION_HOTKEY: &str = "Ctrl+I";
 fn normalized_remote_listen_host(value: &str) -> String {
     let trimmed = value.trim();
     let unbracketed = trimmed
@@ -877,6 +884,7 @@ mod tests {
             redo: String::new(),
             refresh_selected_overlay: "\n".to_owned(),
             refresh_all_overlays: "\t".to_owned(),
+            toggle_interaction: " ".to_owned(),
         };
 
         hotkeys.normalize();

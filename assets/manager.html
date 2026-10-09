@@ -26,58 +26,66 @@
         </svg>
         <strong>vosulay</strong>
       </div>
-      <div class="profile-field">
-        <span id="profile-field-label">Profile</span>
-        <div class="profile-picker">
-          <button id="profile-select" type="button" aria-labelledby="profile-field-label profile-select-label" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
-            <span id="profile-select-label"></span>
-          </button>
-          <div id="profile-menu" role="menu" aria-label="Profiles" hidden></div>
+      <div class="toolbar-center">
+        <div class="profile-field">
+          <span id="profile-field-label">Profile</span>
+          <div class="profile-picker">
+            <button id="profile-select" type="button" aria-labelledby="profile-field-label profile-select-label" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
+              <span id="profile-select-label"></span>
+            </button>
+            <div id="profile-menu" role="menu" aria-label="Profiles" hidden></div>
+          </div>
+        </div>
+        <div id="profile-actions" class="profile-actions" role="group" aria-label="Profile actions">
+          <div class="profile-more">
+            <button id="profile-more" class="icon-button" type="button" title="More profile actions" aria-label="More profile actions" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-more-menu">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2.5 4h11M2.5 8h11M2.5 12h11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </button>
+            <div id="profile-more-menu" class="toolbar-menu" role="menu" aria-label="Profile actions" hidden>
+              <label class="profile-position" for="profile-position" role="none" title="Profile shortcuts and the remote ?profile= number follow this position">
+                <span>Position</span>
+                <input id="profile-position" type="number" min="1" step="1" inputmode="numeric" aria-label="Profile position" aria-describedby="profile-position-total">
+                <span id="profile-position-total"></span>
+              </label>
+              <div class="menu-separator" role="separator"></div>
+              <button id="profile-import" class="menu-item" type="button" role="menuitem" title="Import profile from JSON" disabled>Import…</button>
+              <button id="profile-export" class="menu-item" type="button" role="menuitem" title="Export active profile to JSON" disabled>Export…</button>
+            </div>
+          </div>
+          <button id="profile-add" class="icon-button" type="button" title="Add profile" aria-label="Add profile">+</button>
+          <button id="profile-delete" class="icon-button danger" type="button" title="Delete profile" aria-label="Delete profile">−</button>
+        </div>
+        <form id="profile-create" class="profile-create" hidden>
+          <input id="profile-name" type="text" aria-label="Profile name" autocomplete="off">
+          <button type="submit" class="primary-button">Create</button>
+          <button id="profile-create-cancel" type="button" class="quiet-button">Cancel</button>
+        </form>
+        <div id="profile-delete-confirm" class="profile-confirm" role="group" aria-labelledby="profile-delete-message" hidden>
+          <span id="profile-delete-message"></span>
+          <button id="profile-delete-accept" type="button" class="danger-button">Delete</button>
+          <button id="profile-delete-cancel" type="button" class="quiet-button">Cancel</button>
         </div>
       </div>
-      <div id="profile-actions" class="profile-actions" role="group" aria-label="Profile actions">
-        <button id="profile-add" class="icon-button" type="button" title="Add profile" aria-label="Add profile">+</button>
-        <button id="profile-delete" class="icon-button danger" type="button" title="Delete profile" aria-label="Delete profile">−</button>
-        <label class="profile-position" for="profile-position" title="Profile shortcuts and the remote ?profile= number follow this position">
-          <span>Position</span>
-          <input id="profile-position" type="number" min="1" step="1" inputmode="numeric" aria-label="Profile position" aria-describedby="profile-position-total">
-          <span id="profile-position-total"></span>
-        </label>
-        <button id="profile-import" class="quiet-button profile-file-button" type="button" title="Import profile from JSON" disabled>Import</button>
-        <button id="profile-export" class="quiet-button profile-file-button" type="button" title="Export active profile to JSON" disabled>Export</button>
-      </div>
-      <form id="profile-create" class="profile-create" hidden>
-        <input id="profile-name" type="text" aria-label="Profile name" autocomplete="off">
-        <button type="submit" class="primary-button">Create</button>
-        <button id="profile-create-cancel" type="button" class="quiet-button">Cancel</button>
-      </form>
-      <div id="profile-delete-confirm" class="profile-confirm" role="group" aria-labelledby="profile-delete-message" hidden>
-        <span id="profile-delete-message"></span>
-        <button id="profile-delete-accept" type="button" class="danger-button">Delete</button>
-        <button id="profile-delete-cancel" type="button" class="quiet-button">Cancel</button>
-      </div>
-      <span class="toolbar-spacer"></span>
-      <span id="status" role="status" aria-live="polite"></span>
-      <div class="toolbar-group" role="group" aria-label="Edit history">
-        <button id="undo" class="icon-button" type="button" aria-label="Undo" disabled>
-          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5.5 3 2 6.5 5.5 10M2.5 6.5H10a3.75 3.75 0 0 1 0 7.5H7.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <button id="redo" class="icon-button" type="button" aria-label="Redo" disabled>
-          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10.5 3 14 6.5 10.5 10M13.5 6.5H6a3.75 3.75 0 0 0 0 7.5h2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      </div>
-      <div class="toolbar-group" role="group" aria-label="Refresh overlays">
-        <button id="refresh-selected-overlays" class="quiet-button" type="button" aria-label="Refresh selected overlays" disabled>↻<span class="refresh-label"> Selected</span></button>
+      <div class="toolbar-end">
+        <span id="status" role="status" aria-live="polite"></span>
+        <div class="toolbar-group" role="group" aria-label="Edit history">
+          <button id="undo" class="icon-button" type="button" aria-label="Undo" disabled>
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5.5 3 2 6.5 5.5 10M2.5 6.5H10a3.75 3.75 0 0 1 0 7.5H7.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button id="redo" class="icon-button" type="button" aria-label="Redo" disabled>
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10.5 3 14 6.5 10.5 10M13.5 6.5H6a3.75 3.75 0 0 0 0 7.5h2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
         <button id="refresh-all-overlays" class="quiet-button" type="button" aria-label="Refresh all overlays" disabled>↻<span class="refresh-label"> All</span></button>
+        <button id="open-settings" class="quiet-button" type="button">Settings</button>
+        <button id="done" class="primary-button">Done</button>
       </div>
-      <button id="open-settings" class="quiet-button" type="button">Settings</button>
-      <button id="done" class="primary-button">Done</button>
     </header>
 
     <aside class="sidebar" aria-label="Installed counters">
-      <div class="panel-heading">
-        <div><strong>Installed</strong><small id="catalog-summary">Waiting for vosu…</small></div>
-        <button id="refresh" class="icon-button" title="Refresh counters" aria-label="Refresh counters">↻</button>
+      <div class="panel-heading catalog-heading">
+        <strong id="catalog-title">Counters</strong>
+        <small id="catalog-summary" class="catalog-count">Connecting…</small>
       </div>
       <div class="source-actions" aria-label="Add custom overlay">
         <button id="add-url" class="quiet-button" type="button">Add URL</button>
@@ -110,9 +118,10 @@
       </div>
       <div class="inspector-actions">
         <button id="reset" class="quiet-button">Reset size</button>
+        <button id="refresh-overlay" class="quiet-button" type="button">Refresh</button>
         <button id="settings" class="quiet-button">Settings</button>
       </div>
-      <small class="hint">Drag move · handles resize · wheel changes layer · right-click overlap cycles settings · Ctrl+I interacts</small>
+      <small class="hint">Drag move · handles resize · wheel: middle layer, edges resize, corners scale · right-click overlap cycles settings<span id="interaction-hint"> · Ctrl+I interacts</span></small>
     </aside>
     <div id="url-modal" class="modal-backdrop" hidden>
       <form id="url-form" class="url-dialog" role="dialog" aria-modal="true" aria-labelledby="url-dialog-title" novalidate>
@@ -131,105 +140,140 @@
     <div id="settings-modal" class="modal-backdrop" hidden>
       <form id="settings-form" class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title" novalidate>
         <div class="settings-dialog-header">
-          <div>
-            <strong id="settings-dialog-title">Settings</strong>
-            <small>Customize editor behavior and keyboard shortcuts.</small>
+          <strong id="settings-dialog-title">Settings</strong>
+          <small>Customize editor behavior and keyboard shortcuts.</small>
+        </div>
+
+        <div class="settings-dialog-body">
+          <nav id="settings-nav" class="settings-nav" aria-label="Settings sections">
+            <button type="button" data-section="settings-section-general" aria-current="true">General</button>
+            <button type="button" data-section="settings-section-shortcuts">Shortcuts</button>
+            <button type="button" data-section="settings-section-remote">Remote overlay server</button>
+            <button type="button" data-section="settings-section-tosu">tosu layout</button>
+            <button type="button" data-section="settings-section-advanced">Advanced</button>
+          </nav>
+
+          <div id="settings-content" class="settings-dialog-content">
+            <fieldset id="settings-section-general" class="settings-section" tabindex="-1">
+              <legend>General</legend>
+              <div class="settings-grid">
+                <label class="checkbox-row" for="keep-overlays-in-view">
+                  <span>
+                    <strong>Keep overlays in view</strong>
+                    <small>Keeps the selected overlay inside the game window while you move or resize it.</small>
+                  </span>
+                  <input id="keep-overlays-in-view" type="checkbox">
+                </label>
+                <div class="settings-field" role="group" aria-labelledby="fps-limit-title">
+                  <span><strong id="fps-limit-title">FPS limit</strong><small>Automatic follows the display refresh rate; fixed values cap rendering.</small></span>
+                  <div class="fps-limit-controls">
+                    <div class="segmented" role="radiogroup" aria-label="FPS limit mode">
+                      <label class="segment"><input type="radio" name="fps-limit-mode" value="auto"><span>Automatic</span></label>
+                      <label class="segment"><input type="radio" name="fps-limit-mode" value="fixed"><span>Fixed</span></label>
+                    </div>
+                    <input id="fps-limit" type="number" min="1" max="1000000" step="1" inputmode="numeric" placeholder="e.g. 144" aria-label="Fixed FPS limit">
+                  </div>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset id="settings-section-shortcuts" class="settings-section" tabindex="-1">
+              <legend>Shortcuts</legend>
+              <p class="settings-note">Click a shortcut, then press the new key combination. Esc cancels. Toggle overlay interaction is handled before overlays see the key, so it needs Ctrl, Alt or Meta.</p>
+              <div id="hotkey-list" class="hotkey-list">
+                <div class="hotkey-group" role="group" aria-labelledby="hotkey-group-editing">
+                  <h3 id="hotkey-group-editing" class="settings-subheading">Editing</h3>
+                  <div class="hotkey-grid">
+                    <div class="hotkey-row"><span>Toggle overlay interaction</span><button class="hotkey-input" type="button" data-hotkey="toggle_interaction"></button></div>
+                    <div class="hotkey-row"><span>Undo</span><button class="hotkey-input" type="button" data-hotkey="undo"></button></div>
+                    <div class="hotkey-row"><span>Redo</span><button class="hotkey-input" type="button" data-hotkey="redo"></button></div>
+                    <div class="hotkey-row"><span>Copy overlays</span><button class="hotkey-input" type="button" data-hotkey="copy_overlay"></button></div>
+                    <div class="hotkey-row"><span>Paste overlays</span><button class="hotkey-input" type="button" data-hotkey="paste_overlay"></button></div>
+                    <div class="hotkey-row"><span>Refresh selected overlays</span><button class="hotkey-input" type="button" data-hotkey="refresh_selected_overlay"></button></div>
+                    <div class="hotkey-row"><span>Refresh all overlays</span><button class="hotkey-input" type="button" data-hotkey="refresh_all_overlays"></button></div>
+                  </div>
+                </div>
+                <div class="hotkey-group" role="group" aria-labelledby="hotkey-group-profiles">
+                  <h3 id="hotkey-group-profiles" class="settings-subheading">Switch profile</h3>
+                  <div class="hotkey-grid">
+                    <div class="hotkey-row"><span>Profile 1</span><button class="hotkey-input" type="button" data-hotkey="profile_1"></button></div>
+                    <div class="hotkey-row"><span>Profile 2</span><button class="hotkey-input" type="button" data-hotkey="profile_2"></button></div>
+                    <div class="hotkey-row"><span>Profile 3</span><button class="hotkey-input" type="button" data-hotkey="profile_3"></button></div>
+                    <div class="hotkey-row"><span>Profile 4</span><button class="hotkey-input" type="button" data-hotkey="profile_4"></button></div>
+                    <div class="hotkey-row"><span>Profile 5</span><button class="hotkey-input" type="button" data-hotkey="profile_5"></button></div>
+                    <div class="hotkey-row"><span>Profile 6</span><button class="hotkey-input" type="button" data-hotkey="profile_6"></button></div>
+                    <div class="hotkey-row"><span>Profile 7</span><button class="hotkey-input" type="button" data-hotkey="profile_7"></button></div>
+                    <div class="hotkey-row"><span>Profile 8</span><button class="hotkey-input" type="button" data-hotkey="profile_8"></button></div>
+                    <div class="hotkey-row"><span>Profile 9</span><button class="hotkey-input" type="button" data-hotkey="profile_9"></button></div>
+                    <div class="hotkey-row"><span>Profile 0</span><button class="hotkey-input" type="button" data-hotkey="profile_0"></button></div>
+                  </div>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset id="settings-section-remote" class="settings-section" tabindex="-1">
+              <legend>Remote overlay server</legend>
+              <p class="settings-note">
+                Serves a view-only copy of your overlays to devices allowed by the client IP list.
+                Those devices open <code>http://&lt;this computer&gt;:&lt;port&gt;/overlay</code> for the active profile, or add <code>?profile=N</code> for the profile at position N.
+              </p>
+              <div class="settings-grid">
+                <label class="settings-field" for="remote-listen-host">
+                  <span>
+                    <strong>Listener address</strong>
+                    <small>Network interface the server binds to. The default <code>127.0.0.1</code> only accepts this computer; use <code>0.0.0.0</code> to listen on every interface, or a specific interface IP to restrict access at the network level. Takes effect after restarting vosulay.</small>
+                  </span>
+                  <input id="remote-listen-host" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="127.0.0.1">
+                </label>
+                <label class="settings-field" for="remote-listen-port">
+                  <span>
+                    <strong>Listener port</strong>
+                    <small>TCP port the remote overlay server listens on. Default <code>5050</code>. Takes effect after restarting vosulay.</small>
+                  </span>
+                  <input id="remote-listen-port" type="number" min="1" max="65535" step="1" inputmode="numeric" placeholder="5050">
+                </label>
+                <label class="settings-field settings-grid-wide" for="allowed-ips">
+                  <span>
+                    <strong>Allowed client IPs</strong>
+                    <small>Comma- or space-separated. Only listed devices may open vosulay's remote overlay server, so every remote viewing device must be listed here. This list controls vosulay only, not vosu. Leave empty to allow this computer only.</small>
+                  </span>
+                  <textarea id="allowed-ips" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset id="settings-section-tosu" class="settings-section" tabindex="-1">
+              <legend>tosu layout</legend>
+              <div class="settings-field settings-action-field">
+                <span>
+                  <strong>Import from tosu</strong>
+                  <small>Reads <code>settings/__ingame__.values.json</code> and adds its profiles. Your existing profiles and the tosu file stay unchanged.</small>
+                </span>
+                <button id="import-tosu-layout" class="quiet-button" type="button">Import tosu layout</button>
+              </div>
+            </fieldset>
+
+            <fieldset id="settings-section-advanced" class="settings-section" tabindex="-1">
+              <legend>Advanced</legend>
+              <label class="checkbox-row danger-row" for="allow-unrestricted-shared-array-buffer">
+                <span>
+                  <strong>Allow unrestricted SharedArrayBuffer</strong>
+                  <small><b>Dangerous:</b> disables a Chromium Spectre mitigation and exposes SharedArrayBuffer shared memory to every remote URL and local HTML overlay. Only enable it if you fully trust every overlay you load. Takes effect after restart.</small>
+                </span>
+                <input id="allow-unrestricted-shared-array-buffer" type="checkbox">
+              </label>
+            </fieldset>
           </div>
         </div>
 
-        <div class="settings-dialog-content">
-          <fieldset class="settings-section">
-            <legend>General</legend>
-            <label class="checkbox-row" for="keep-overlays-in-view">
-              <span>
-                <strong>Keep overlays in view</strong>
-                <small>Constrain overlays to the visible viewport.</small>
-              </span>
-              <input id="keep-overlays-in-view" type="checkbox">
-            </label>
-            <label class="checkbox-row" for="allow-unrestricted-shared-array-buffer">
-              <span>
-                <strong>Allow unrestricted SharedArrayBuffer</strong>
-                <small>Dangerous: disables a Chromium Spectre mitigation and exposes SharedArrayBuffer shared memory to every remote URL and local HTML overlay. Only enable it if you fully trust every overlay you load. Takes effect after restart.</small>
-              </span>
-              <input id="allow-unrestricted-shared-array-buffer" type="checkbox">
-            </label>
-            <div class="settings-field" role="group" aria-labelledby="fps-limit-title">
-              <span><strong id="fps-limit-title">FPS limit</strong><small>Automatic follows the display refresh rate; fixed values cap rendering.</small></span>
-              <div class="fps-limit-controls">
-                <div class="segmented" role="radiogroup" aria-label="FPS limit mode">
-                  <label class="segment"><input type="radio" name="fps-limit-mode" value="auto"><span>Automatic</span></label>
-                  <label class="segment"><input type="radio" name="fps-limit-mode" value="fixed"><span>Fixed</span></label>
-                </div>
-                <input id="fps-limit" type="number" min="1" max="1000000" step="1" inputmode="numeric" placeholder="e.g. 144" aria-label="Fixed FPS limit">
-              </div>
-            </div>
-          </fieldset>
-
-          <fieldset class="settings-section">
-            <legend>Tosu layout</legend>
-            <p class="settings-note">Import <code>settings/__ingame__.values.json</code> from tosu. Adds the imported profiles without replacing your existing profiles or changing the tosu file.</p>
-            <button id="import-tosu-layout" class="quiet-button" type="button">Import tosu layout</button>
-          </fieldset>
-
-          <fieldset class="settings-section">
-            <legend>Remote overlay server</legend>
-            <p class="settings-note">
-              Serves a view-only copy of your overlays to devices allowed by the client IP list.
-              Those devices open <code>http://&lt;this computer&gt;:&lt;port&gt;/overlay</code> for the active profile, or add <code>?profile=N</code> for the profile at position N.
-            </p>
-            <label class="settings-field" for="remote-listen-host">
-              <span>
-                <strong>Listener address</strong>
-                <small>Network interface the server binds to. The default <code>127.0.0.1</code> only accepts this computer; use <code>0.0.0.0</code> to listen on every interface, or a specific interface IP to restrict access at the network level. Takes effect after restarting vosulay.</small>
-              </span>
-              <input id="remote-listen-host" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="127.0.0.1">
-            </label>
-            <label class="settings-field" for="remote-listen-port">
-              <span>
-                <strong>Listener port</strong>
-                <small>TCP port the remote overlay server listens on. Default <code>5050</code>. Takes effect after restarting vosulay.</small>
-              </span>
-              <input id="remote-listen-port" type="number" min="1" max="65535" step="1" inputmode="numeric" placeholder="5050">
-            </label>
-            <label class="settings-field" for="allowed-ips">
-              <span>
-                <strong>Allowed client IPs</strong>
-                <small>Comma- or space-separated. Only listed devices may open vosulay's remote overlay server, so every remote viewing device must be listed here. This list controls vosulay only, not vosu. Leave empty to allow this computer only.</small>
-              </span>
-              <textarea id="allowed-ips" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
-            </label>
-          </fieldset>
-
-          <fieldset class="settings-section">
-            <legend>Keyboard shortcuts</legend>
-            <div id="hotkey-list" class="hotkey-list">
-              <div class="hotkey-row"><span>Profile 1</span><button class="hotkey-input" type="button" data-hotkey="profile_1"></button></div>
-              <div class="hotkey-row"><span>Profile 2</span><button class="hotkey-input" type="button" data-hotkey="profile_2"></button></div>
-              <div class="hotkey-row"><span>Profile 3</span><button class="hotkey-input" type="button" data-hotkey="profile_3"></button></div>
-              <div class="hotkey-row"><span>Profile 4</span><button class="hotkey-input" type="button" data-hotkey="profile_4"></button></div>
-              <div class="hotkey-row"><span>Profile 5</span><button class="hotkey-input" type="button" data-hotkey="profile_5"></button></div>
-              <div class="hotkey-row"><span>Profile 6</span><button class="hotkey-input" type="button" data-hotkey="profile_6"></button></div>
-              <div class="hotkey-row"><span>Profile 7</span><button class="hotkey-input" type="button" data-hotkey="profile_7"></button></div>
-              <div class="hotkey-row"><span>Profile 8</span><button class="hotkey-input" type="button" data-hotkey="profile_8"></button></div>
-              <div class="hotkey-row"><span>Profile 9</span><button class="hotkey-input" type="button" data-hotkey="profile_9"></button></div>
-              <div class="hotkey-row"><span>Profile 0</span><button class="hotkey-input" type="button" data-hotkey="profile_0"></button></div>
-              <div class="hotkey-row"><span>Copy overlays</span><button class="hotkey-input" type="button" data-hotkey="copy_overlay"></button></div>
-              <div class="hotkey-row"><span>Paste overlays</span><button class="hotkey-input" type="button" data-hotkey="paste_overlay"></button></div>
-              <div class="hotkey-row"><span>Undo</span><button class="hotkey-input" type="button" data-hotkey="undo"></button></div>
-              <div class="hotkey-row"><span>Redo</span><button class="hotkey-input" type="button" data-hotkey="redo"></button></div>
-              <div class="hotkey-row"><span>Refresh selected overlays</span><button class="hotkey-input" type="button" data-hotkey="refresh_selected_overlay"></button></div>
-              <div class="hotkey-row"><span>Refresh all overlays</span><button class="hotkey-input" type="button" data-hotkey="refresh_all_overlays"></button></div>
-            </div>
-          </fieldset>
-        </div>
-
-        <div id="settings-error" class="settings-error" role="status" aria-live="polite" hidden></div>
-        <div class="settings-dialog-actions">
-          <button id="settings-reset-hotkeys" type="button" class="quiet-button">Reset defaults</button>
-          <span class="settings-actions-spacer"></span>
-          <button id="settings-cancel" type="button" class="quiet-button">Cancel</button>
-          <button type="submit" class="primary-button">Save</button>
+        <div class="settings-dialog-footer">
+          <div id="settings-error" class="settings-error" role="status" aria-live="polite" hidden></div>
+          <div class="settings-dialog-actions">
+            <button id="settings-reset-hotkeys" type="button" class="quiet-button">Reset defaults</button>
+            <span class="settings-actions-spacer"></span>
+            <button id="settings-cancel" type="button" class="quiet-button">Cancel</button>
+            <button type="submit" class="primary-button">Save</button>
+          </div>
         </div>
       </form>
     </div>

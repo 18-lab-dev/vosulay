@@ -15,6 +15,9 @@
   const profileAdd = $("profile-add");
   const profileDelete = $("profile-delete");
   const profileActions = $("profile-actions");
+  const profileMore = $("profile-more");
+  const profileMoreMenu = $("profile-more-menu");
+  const profileMoreWrapper = profileMore.closest(".profile-more");
   const profilePosition = $("profile-position");
   const profilePositionTotal = $("profile-position-total");
   const profileImport = $("profile-import");
@@ -27,10 +30,11 @@
   const profileName = $("profile-name");
   const profileCreateCancel = $("profile-create-cancel");
   const catalog = $("catalog");
+  const catalogSummary = $("catalog-summary");
   const status = $("status");
   const undoButton = $("undo");
   const redoButton = $("redo");
-  const refreshSelectedButton = $("refresh-selected-overlays");
+  const refreshOverlayButton = $("refresh-overlay");
   const refreshAllButton = $("refresh-all-overlays");
   const addUrl = $("add-url");
   const urlModal = $("url-modal");
@@ -70,6 +74,11 @@
   const settingsError = $("settings-error");
   const settingsResetHotkeys = $("settings-reset-hotkeys");
   const settingsCancel = $("settings-cancel");
+  const settingsNav = $("settings-nav");
+  const settingsContent = $("settings-content");
+  const settingsNavButtons = [...settingsNav.querySelectorAll("button[data-section]")];
+  const interactionHint = $("interaction-hint");
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const selectionBox = $("selection-box");
   const HOTKEY_KEYS = [
     ...Array.from({ length: 10 }, (_, index) => `profile_${index}`),
@@ -78,8 +87,12 @@
     "undo",
     "redo",
     "refresh_selected_overlay",
-    "refresh_all_overlays"
+    "refresh_all_overlays",
+    "toggle_interaction"
   ];
+  // The native host intercepts toggle_interaction before the page sees it, so
+  // page dispatch must never act on it too (that would toggle twice).
+  const PAGE_HOTKEY_KEYS = HOTKEY_KEYS.filter((key) => key !== "toggle_interaction");
   const REPEATABLE_HOTKEYS = new Set(["undo", "redo"]);
   const DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute";
   const DEFAULT_REMOTE_LISTEN_HOST = "127.0.0.1";
@@ -99,14 +112,25 @@
     undo: "Ctrl+Z",
     redo: "Ctrl+Shift+Z",
     refresh_selected_overlay: "Ctrl+R",
-    refresh_all_overlays: "Ctrl+Shift+R"
+    refresh_all_overlays: "Ctrl+Shift+R",
+    toggle_interaction: "Ctrl+I"
   });
-  // Ctrl+I is consumed natively to toggle overlay interaction; the rest are
-  // browser zoom and the overlay toggle chord, which never reach page hotkeys.
+  // Browser zoom and the overlay toggle chord never reach page hotkeys.
   const RESERVED_HOTKEYS = new Set([
-    "Ctrl+I", "Ctrl+Shift+Space",
+    "Ctrl+Shift+Space",
     "Ctrl+Plus", "Ctrl+Shift+Plus", "Ctrl+Minus"
   ]);
+  // Keys the native host can map to virtual-key codes for interception.
+  const INTERACTION_HOTKEY_KEY = /^(?:[A-Z0-9]|F(?:[1-9]|1\d|2[0-4])|Space|Enter|Tab|Escape|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Arrow(?:Up|Down|Left|Right)|Plus|Minus|[,./;`[\\\]'])$/;
+  const PUNCTUATION_CODES = Object.freeze({
+    Comma: ",", Period: ".", Slash: "/", Semicolon: ";", Backquote: "`",
+    BracketLeft: "[", Backslash: "\\", BracketRight: "]", Quote: "'"
+  });
+  const STATUS_FADE_MS = 2500;
+  // With x(s) = s this Bézier's y(s) = s³, so opacity follows exactly 1 - (t / 2.5 s)³.
+  const STATUS_FADE_EASING = `cubic-bezier(${1 / 3}, 0, ${2 / 3}, 0)`;
+  let statusFade = null;
+  let statusFadeTimer = 0;
   const HISTORY_LIMIT = 100;
   const HISTORY_COALESCE_MS = 1000;
 
@@ -264,13 +288,15 @@
         const names = {
           esc: "Escape", escape: "Escape", space: "Space", spacebar: "Space",
           return: "Enter", enter: "Enter", del: "Delete", delete: "Delete",
+          ins: "Insert", insert: "Insert",
           backspace: "Backspace", tab: "Tab", home: "Home", end: "End",
           pageup: "PageUp", pagedown: "PageDown", arrowup: "ArrowUp",
           arrowdown: "ArrowDown", arrowleft: "ArrowLeft", arrowright: "ArrowRight",
           plus: "Plus", minus: "Minus"
         };
         key = names[lower] || (/^[a-z0-9]$/i.test(part) ? part.toUpperCase()
-          : (/^f(?:[1-9]|1[0-2])$/i.test(part) ? part.toUpperCase() : ""));
+          : /^f(?:[1-9]|1\d|2[0-4])$/i.test(part) ? part.toUpperCase()
+            : /^[,./;`[\\\]']$/.test(part) ? part : "");
       } else {
         return fallback;
       }
@@ -279,11 +305,24 @@
     return ["Ctrl", "Alt", "Shift", "Meta"].filter((modifier) => modifiers.has(modifier)).concat(key).join("+");
   }
 
+  // Returns why `shortcut` cannot toggle overlay interaction, or "" if it can.
+  function interactionHotkeyError(shortcut) {
+    const parts = shortcut.split("+");
+    const key = parts.pop();
+    if (!INTERACTION_HOTKEY_KEY.test(key)) return `${key} can't be used to toggle overlay interaction.`;
+    if (!parts.some((modifier) => modifier === "Ctrl" || modifier === "Alt" || modifier === "Meta")) {
+      return "Toggle overlay interaction needs Ctrl, Alt or Meta so it doesn't block typing.";
+    }
+    return "";
+  }
+
   function normalizeHotkeys(input) {
     const source = input && typeof input === "object" ? input : {};
     return Object.fromEntries(HOTKEY_KEYS.map((key) => {
       const shortcut = canonicalHotkey(source[key], DEFAULT_HOTKEYS[key]);
-      return [key, RESERVED_HOTKEYS.has(shortcut) ? DEFAULT_HOTKEYS[key] : shortcut];
+      const invalid = RESERVED_HOTKEYS.has(shortcut)
+        || (key === "toggle_interaction" && interactionHotkeyError(shortcut));
+      return [key, invalid ? DEFAULT_HOTKEYS[key] : shortcut];
     }));
   }
 
@@ -420,7 +459,7 @@
   // The toolbar holds Done and every open menu, so it never hides while it is
   // in use; otherwise the user could be locked out of leaving the editor.
   function toolbarPinned() {
-    return !profileMenu.hidden || !profileCreate.hidden || !profileDeleteConfirm.hidden
+    return !profileMenu.hidden || !profileMoreMenu.hidden || !profileCreate.hidden || !profileDeleteConfirm.hidden
       || !settingsModal.hidden || !urlModal.hidden || toolbar.contains(document.activeElement);
   }
 
@@ -611,7 +650,7 @@
     if (invalidSource) setError(`Unsupported custom overlay source: ${invalidSource.url}`);
     else {
       state.error = null;
-      status.textContent = "";
+      setStatus("");
     }
     requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
   }
@@ -622,7 +661,7 @@
     state.latestSaveId = saveId;
     state.pendingSaveId = saveId;
     clearTimeout(state.saveTimer);
-    status.textContent = "Saving…";
+    setStatus("Saving…", { persist: true });
     if (immediate) flushPendingSave();
     else state.saveTimer = window.setTimeout(flushPendingSave, 240);
   }
@@ -706,7 +745,7 @@
     flushEditingChanges();
     const entry = from.pop();
     if (!entry) {
-      status.textContent = `Nothing to ${verb}`;
+      setStatus(`Nothing to ${verb}`);
       requestRender("chrome");
       return;
     }
@@ -755,9 +794,36 @@
     state.inspectorEdit = null;
   }
 
+  // Transient messages fade out; in-progress text ("Saving…") and errors stay
+  // until another message replaces them.
+  function setStatus(text, { persist = false, error = false } = {}) {
+    window.clearTimeout(statusFadeTimer);
+    if (statusFade) {
+      statusFade.cancel();
+      statusFade = null;
+    }
+    status.textContent = text;
+    status.classList.toggle("error", error);
+    if (!text || persist || error) return;
+    if (reducedMotion.matches) {
+      statusFadeTimer = window.setTimeout(() => { status.textContent = ""; }, STATUS_FADE_MS);
+      return;
+    }
+    const fade = status.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: STATUS_FADE_MS, easing: STATUS_FADE_EASING, fill: "forwards"
+    });
+    statusFade = fade;
+    fade.onfinish = () => {
+      if (statusFade !== fade) return;
+      statusFade = null;
+      status.textContent = "";
+      fade.cancel();
+    };
+  }
+
   function setError(message) {
     state.error = message || "Unknown overlay error";
-    status.textContent = state.error;
+    setStatus(state.error, { error: true });
     toast(state.error, true);
   }
 
@@ -917,6 +983,31 @@
     else closeProfileMenu();
   }
 
+  function profileMoreItems() {
+    return [...profileMoreMenu.querySelectorAll("input, button")].filter((item) => !item.disabled);
+  }
+
+  function closeProfileMoreMenu(refocus = false) {
+    if (profileMoreMenu.hidden) return;
+    profileMoreMenu.hidden = true;
+    profileMore.setAttribute("aria-expanded", "false");
+    if (refocus) profileMore.focus();
+    updateToolbarAvoidance();
+  }
+
+  function openProfileMoreMenu(focusTarget = "") {
+    if (!state.config) return;
+    closeProfileMenu();
+    profileMoreMenu.hidden = false;
+    profileMore.setAttribute("aria-expanded", "true");
+    updateToolbarAvoidance();
+    const items = profileMoreItems();
+    const target = focusTarget === "last" ? items[items.length - 1] : focusTarget === "first" ? items[0] : null;
+    if (!target) return;
+    target.focus();
+    if (target === profilePosition) profilePosition.select();
+  }
+
   function activateProfile(id) {
     if (!state.config || !state.config.profiles.some((profile) => profile.id === id)) return;
     flushEditingChanges();
@@ -968,17 +1059,46 @@
     profileExport.disabled = !current;
   }
 
+  // The host already fetches counters for the "ready" message; entering the
+  // editor fetches again so newly installed counters appear without a button.
+  const catalogRequest = { pending: true, error: "" };
+
+  function requestCatalogRefresh() {
+    catalogRequest.pending = true;
+    ipc({ type: "refresh-counters" });
+    requestRender("catalog");
+  }
+
+  function renderCatalogSummary(counters) {
+    const failed = Boolean(catalogRequest.error) && !catalogRequest.pending;
+    const text = failed ? (counters ? "Refresh failed" : "Unavailable")
+      : counters === null ? "Connecting…" : String(counters.length);
+    const title = failed ? catalogRequest.error
+      : counters === null ? "Waiting for vosu" : `${counters.length} installed counter${counters.length === 1 ? "" : "s"}`;
+    catalogSummary.textContent = text;
+    catalogSummary.title = title;
+    catalogSummary.classList.toggle("error", failed);
+    catalog.setAttribute("aria-busy", String(catalogRequest.pending));
+  }
+
   function renderCatalog() {
     catalog.replaceChildren();
     const counters = state.counters;
+    renderCatalogSummary(counters);
     if (counters === null) {
-      catalog.append(makeElement("div", "catalog-empty", "Waiting for installed counters…"));
-      $("catalog-summary").textContent = "Connecting…";
+      if (!catalogRequest.error || catalogRequest.pending) {
+        catalog.append(makeElement("div", "catalog-empty", "Waiting for installed counters…"));
+        return;
+      }
+      const empty = makeElement("div", "catalog-empty", "Installed counters could not be loaded.");
+      const retry = makeElement("button", "quiet-button catalog-retry", "Try again");
+      retry.type = "button";
+      empty.append(makeElement("small", "", catalogRequest.error), retry);
+      catalog.append(empty);
       return;
     }
-    $("catalog-summary").textContent = counters.length === 1 ? "1 counter" : `${counters.length} counters`;
     if (!counters.length) {
-      catalog.append(makeElement("div", "catalog-empty", "No installed counters found. Install counters in vosu, then refresh this list."));
+      catalog.append(makeElement("div", "catalog-empty", "No installed counters found. Install counters in vosu; this list refreshes each time the editor opens."));
       return;
     }
     const profile = activeProfile();
@@ -1068,18 +1188,6 @@
     }
     inspector.hidden = !state.editing || !overlay || !state.inspectorPopup;
     if (inspector.hidden) return;
-    if (state.inspectorPoint) {
-      inspector.style.right = "auto";
-      inspector.style.left = `${state.inspectorPoint.x}px`;
-      inspector.style.top = `${state.inspectorPoint.y}px`;
-      const rect = inspector.getBoundingClientRect();
-      inspector.style.left = `${clamp(state.inspectorPoint.x, 0, Math.max(0, window.innerWidth - rect.width))}px`;
-      inspector.style.top = `${clamp(state.inspectorPoint.y, 0, Math.max(0, window.innerHeight - rect.height))}px`;
-    } else {
-      inspector.style.removeProperty("left");
-      inspector.style.removeProperty("top");
-      inspector.style.removeProperty("right");
-    }
     const counter = findCounter(overlay.counter_id);
     const details = overlayDetails(overlay);
     const custom = Boolean(overlay.url);
@@ -1100,6 +1208,25 @@
     enabledField.checked = overlay.enabled !== false;
     renderInspectorNumbers(overlay);
     $("settings").disabled = custom || !counter || !counter.has_settings;
+    refreshOverlayButton.disabled = overlay.enabled === false || !details.available;
+    if (state.inspectorPoint) {
+      // Opens beside the pointer instead of under it (flipping near viewport
+      // edges) so wheel input at the right-click point still reaches the overlay.
+      const { x, y } = state.inspectorPoint;
+      const offset = 2;
+      inspector.style.right = "auto";
+      inspector.style.left = "0px";
+      inspector.style.top = "0px";
+      const rect = inspector.getBoundingClientRect();
+      const left = x + offset + rect.width <= window.innerWidth ? x + offset : x - offset - rect.width;
+      const top = y + offset + rect.height <= window.innerHeight ? y + offset : y - offset - rect.height;
+      inspector.style.left = `${clamp(left, 0, Math.max(0, window.innerWidth - rect.width))}px`;
+      inspector.style.top = `${clamp(top, 0, Math.max(0, window.innerHeight - rect.height))}px`;
+    } else {
+      inspector.style.removeProperty("left");
+      inspector.style.removeProperty("top");
+      inspector.style.removeProperty("right");
+    }
   }
 
   function describeShortcut(button, label, shortcut) {
@@ -1112,16 +1239,22 @@
     else button.removeAttribute("aria-keyshortcuts");
   }
 
+  function renderInteractionHint() {
+    const shortcut = state.config ? state.config.settings.hotkeys.toggle_interaction : DEFAULT_HOTKEYS.toggle_interaction;
+    const text = !shortcut ? ""
+      : state.interacting ? ` · ${shortcut} returns to editing` : ` · ${shortcut} interacts`;
+    if (interactionHint.textContent !== text) interactionHint.textContent = text;
+  }
+
   function renderToolbarActions() {
     const hotkeys = state.config ? state.config.settings.hotkeys : DEFAULT_HOTKEYS;
     const profile = activeProfile();
     undoButton.disabled = !history.undo.length;
     redoButton.disabled = !history.redo.length;
-    refreshSelectedButton.disabled = !profile || !profile.overlays.some((overlay) => state.selected.has(overlay));
     refreshAllButton.disabled = !profile || !profile.overlays.length;
     describeShortcut(undoButton, "Undo", hotkeys.undo);
     describeShortcut(redoButton, "Redo", hotkeys.redo);
-    describeShortcut(refreshSelectedButton, "Refresh selected overlays", hotkeys.refresh_selected_overlay);
+    describeShortcut(refreshOverlayButton, "Refresh overlay", hotkeys.refresh_selected_overlay);
     describeShortcut(refreshAllButton, "Refresh all overlays", hotkeys.refresh_all_overlays);
   }
 
@@ -1132,6 +1265,7 @@
       document.body.classList.toggle("editing", state.editing);
       document.body.classList.toggle("interacting", state.editing && state.interacting);
       editor.hidden = !state.editing;
+      renderInteractionHint();
     }
     if (regions.stageStructure || regions.stageGeometry) {
       renderStage(regions.stageStructure, regions.stageGeometry);
@@ -1210,7 +1344,7 @@
     commitHistory(before);
     scheduleSave(true);
     requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
-    status.textContent = "Profile imported";
+    setStatus("Profile imported");
     toast(`Imported “${profile.name}”`);
   }
 
@@ -1313,21 +1447,21 @@
     const profile = activeProfile();
     const selected = profile ? profile.overlays.filter((overlay) => state.selected.has(overlay)) : [];
     if (!selected.length) {
-      status.textContent = "Select an overlay to refresh";
+      setStatus("Select an overlay to refresh");
       return;
     }
     const refreshed = refreshOverlayFrames(selected);
-    status.textContent = refreshed
+    setStatus(refreshed
       ? `Refreshed ${refreshed} selected overlay${refreshed === 1 ? "" : "s"}`
-      : "Selected overlays are disabled or unavailable";
+      : "Selected overlays are disabled or unavailable");
   }
 
   function refreshAllOverlays() {
     const profile = activeProfile();
     const refreshed = profile ? refreshOverlayFrames(profile.overlays) : 0;
-    status.textContent = refreshed
+    setStatus(refreshed
       ? `Refreshed ${refreshed} overlay${refreshed === 1 ? "" : "s"}`
-      : "No loaded overlays to refresh";
+      : "No loaded overlays to refresh");
   }
 
   function flushEditingChanges() {
@@ -1467,14 +1601,17 @@
       closeUrlModal();
       closeSettingsModal(false);
       closeProfileMenu();
+      closeProfileMoreMenu();
       closeProfileCreator();
       closeProfileDeleteConfirm();
       closeInspectorPopup();
+      endWheelGesture(false);
     }
     if (!next) flushEditingChanges();
     if (changed) {
       state.editing = next;
       if (!next) replaceSelection([]);
+      else requestCatalogRefresh();
     }
     if (changed || interactionChanged) requestRender("chrome", "stageGeometry", "inspector");
     if (notify && changed) ipc({ type: "set-editing", editing: next });
@@ -1690,23 +1827,254 @@
   editor.addEventListener("contextmenu", (event) => {
     if (inspector.contains(event.target)) showContextInspector(event);
   });
-  stage.addEventListener("wheel", (event) => {
-    if (event.ctrlKey || !state.editing) return;
-    const root = event.target.closest(".overlay");
+  const WHEEL_STICKY_MS = 400;
+  const WHEEL_EDGE_STEP = 10;
+  const WHEEL_SCALE_STEP = 0.05;
+  // Placements have no upper scale bound elsewhere; this only caps the wheel.
+  const WHEEL_SCALE_MAX = 10;
+  const WHEEL_GEOMETRY = ["left", "top", "width", "height", "scale"];
+  let wheelGesture = null;
+  let wheelGestureSerial = 0;
+  let wheelHover = null;
+  let wheelPointer = null;
+
+  // Bands are screen pixels in the overlay's unrotated frame: the "w"/"e" band
+  // follows its on-screen width and the "n"/"s" band its on-screen height.
+  function wheelBands(overlay) {
+    const scale = Math.max(0.0001, finite(overlay.scale, 1));
+    return {
+      x: clamp(overlay.width * scale * 0.2, 8, 20),
+      y: clamp(overlay.height * scale * 0.2, 8, 20)
+    };
+  }
+
+  function wheelZone(overlay, x, y) {
+    const scale = Math.max(0.0001, finite(overlay.scale, 1));
+    const angle = finite(overlay.rotation, 0) * Math.PI / 180;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    const deltaX = x - overlay.left;
+    const deltaY = y - overlay.top;
+    const localX = deltaX * cosine + deltaY * sine;
+    const localY = -deltaX * sine + deltaY * cosine;
+    const width = overlay.width * scale;
+    const height = overlay.height * scale;
+    const bands = wheelBands(overlay);
+    let vertical = "";
+    let horizontal = "";
+    if (Math.min(localY, height - localY) <= bands.y) vertical = localY <= height - localY ? "n" : "s";
+    if (Math.min(localX, width - localX) <= bands.x) horizontal = localX <= width - localX ? "w" : "e";
+    return vertical + horizontal;
+  }
+
+  function wheelTarget(target, x, y) {
+    if (!(target instanceof Element) || !stage.contains(target)) return null;
+    const root = target.closest(".overlay");
+    let overlay = root ? root._vosulayOverlay : null;
+    if (!overlay) return null;
+    const selected = selectedOverlay();
+    // Right-click cycling can open the menu for a lower overlay; the wheel keeps
+    // acting on that overlay while the pointer is over it.
+    if (state.inspectorPopup && selected && selected !== overlay && overlayContainsPoint(selected, x, y)) overlay = selected;
+    const layerOnly = state.pointer || state.interacting
+      || (overlay === root._vosulayOverlay && target.closest(".overlay-tag"));
+    return { overlay, zone: layerOnly ? "" : wheelZone(overlay, x, y) };
+  }
+
+  function setWheelHover(overlay, zone) {
+    const root = overlay && zone ? overlayRoots.get(overlay) : null;
+    if (wheelHover && wheelHover.root !== root) {
+      delete wheelHover.root.dataset.wheelZone;
+      wheelHover = null;
+    }
     if (!root) return;
+    const scale = Math.max(0.0001, finite(overlay.scale, 1));
+    const bands = wheelBands(overlay);
+    const key = `${zone}\n${bands.x / scale}\n${bands.y / scale}\n${scale}`;
+    if (wheelHover && wheelHover.key === key) return;
+    root.style.setProperty("--wheel-band-x", `${bands.x / scale}px`);
+    root.style.setProperty("--wheel-band-y", `${bands.y / scale}px`);
+    root.style.setProperty("--wheel-line", `${3 / scale}px`);
+    root.dataset.wheelZone = zone;
+    wheelHover = { root, key };
+  }
+
+  function updateWheelHover(target = null) {
+    if (wheelGesture) {
+      setWheelHover(wheelGesture.overlay, wheelGesture.zone);
+      return;
+    }
+    if (!state.editing || state.interacting || state.pointer || !wheelPointer) {
+      setWheelHover(null, "");
+      return;
+    }
+    const element = target || document.elementFromPoint(wheelPointer.x, wheelPointer.y);
+    const hit = wheelTarget(element, wheelPointer.x, wheelPointer.y);
+    setWheelHover(hit && hit.overlay, hit ? hit.zone : "");
+  }
+
+  function endWheelGesture(refreshHover = true) {
+    if (wheelGesture) clearTimeout(wheelGesture.timer);
+    wheelGesture = null;
+    if (refreshHover) updateWheelHover();
+    else setWheelHover(null, "");
+  }
+
+  function activeWheelGesture() {
+    const gesture = wheelGesture;
+    if (!gesture) return null;
+    const profile = activeProfile();
+    if (profile && profile.overlays.includes(gesture.overlay) && overlayRoots.has(gesture.overlay)) return gesture;
+    endWheelGesture(false);
+    return null;
+  }
+
+  // Signed steps for one wheel event: a mouse notch arrives as one large pixel
+  // delta (100 from Chromium, 120 from some hosts) and counts once, while
+  // trackpad pixels accumulate to one step per 100px.
+  function wheelSteps(gesture, event) {
+    const direction = Math.sign(event.deltaY);
+    if (!direction) return 0;
+    if (direction !== gesture.direction) {
+      gesture.direction = direction;
+      gesture.remainder = 0;
+    }
+    const magnitude = Math.abs(event.deltaY);
+    let units = magnitude;
+    if (event.deltaMode === WheelEvent.DOM_DELTA_PIXEL) {
+      if (magnitude >= 50) {
+        gesture.remainder = 0;
+        return direction * Math.max(1, Math.round(magnitude / 120));
+      }
+      units = magnitude / 100;
+    }
+    gesture.remainder += units;
+    const steps = Math.floor(gesture.remainder);
+    gesture.remainder -= steps;
+    return direction * steps;
+  }
+
+  function applyWheelGeometry(overlay, base, zone, amount, fraction) {
+    Object.assign(overlay, base);
+    const angle = overlay.rotation * Math.PI / 180;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    if (zone.length === 2) {
+      const target = clamp(Math.round((base.scale + amount * WHEEL_SCALE_STEP) * 10000) / 10000,
+        0.1, Math.max(WHEEL_SCALE_MAX, base.scale));
+      const scale = base.scale + (target - base.scale) * fraction;
+      // Pins the local corner diagonally opposite the hovered one: its screen
+      // point left + scale * R(rotation) * corner must not change.
+      const cornerX = zone.includes("w") ? base.width : 0;
+      const cornerY = zone.includes("n") ? base.height : 0;
+      const change = base.scale - scale;
+      overlay.scale = scale;
+      overlay.left = base.left + (cosine * cornerX - sine * cornerY) * change;
+      overlay.top = base.top + (sine * cornerX + cosine * cornerY) * change;
+      return;
+    }
+    const delta = amount * WHEEL_EDGE_STEP * fraction / base.scale;
+    if (zone === "e") overlay.width = Math.max(10, base.width + delta);
+    else if (zone === "s") overlay.height = Math.max(10, base.height + delta);
+    else if (zone === "w") {
+      overlay.width = Math.max(10, base.width + delta);
+      const shift = (base.width - overlay.width) * base.scale;
+      overlay.left = base.left + cosine * shift;
+      overlay.top = base.top + sine * shift;
+    } else if (zone === "n") {
+      overlay.height = Math.max(10, base.height + delta);
+      const shift = (base.height - overlay.height) * base.scale;
+      overlay.left = base.left - sine * shift;
+      overlay.top = base.top + cosine * shift;
+    }
+  }
+
+  // Applies one wheel resize/scale; returns whether the placement changed.
+  function applyConstrainedWheelGeometry(overlay, zone, amount) {
+    const original = WHEEL_GEOMETRY.map((key) => overlay[key]);
+    clampOverlay(overlay);
+    const base = Object.fromEntries(WHEEL_GEOMETRY.map((key) => [key, overlay[key]]));
+    const fits = (fraction) => {
+      applyWheelGeometry(overlay, base, zone, amount, fraction);
+      const wanted = WHEEL_GEOMETRY.map((key) => overlay[key]);
+      clampOverlay(overlay);
+      return WHEEL_GEOMETRY.every((key, index) => Math.abs(overlay[key] - wanted[index]) < 1e-6);
+    };
+    if (!fits(1)) {
+      // Keep-in-view would move the side or corner that must stay fixed; stop
+      // at the largest part of the step that still fits instead.
+      let low = 0;
+      let high = 1;
+      for (let iteration = 0; iteration < 12; iteration += 1) {
+        const middle = (low + high) / 2;
+        if (fits(middle)) low = middle;
+        else high = middle;
+      }
+      fits(low);
+    }
+    return WHEEL_GEOMETRY.some((key, index) => overlay[key] !== original[index]);
+  }
+
+  document.addEventListener("wheel", (event) => {
+    if (event.ctrlKey || !state.editing || !settingsModal.hidden || !urlModal.hidden) return;
+    wheelPointer = { x: event.clientX, y: event.clientY };
+    let gesture = activeWheelGesture();
+    if (!gesture) {
+      const hit = wheelTarget(event.target, event.clientX, event.clientY);
+      if (!hit) return;
+      gesture = wheelGesture = { ...hit, direction: 0, remainder: 0, before: null, key: "", committed: false, timer: 0 };
+    }
     event.preventDefault();
-    selectOverlay(root._vosulayOverlay);
-    const overlay = selectedOverlay();
-    if (!overlay) return;
-    const before = historySnapshot();
-    overlay.z_index = clamp(overlay.z_index + (event.deltaY < 0 ? 1 : -1), 0, 999);
-    applyOverlayStyle(root, overlay);
-    renderInspectorNumbers(overlay, ["z_index"]);
-    commitHistory(before, `layer:${activeProfile().overlays.indexOf(overlay)}`);
+    clearTimeout(gesture.timer);
+    gesture.timer = window.setTimeout(() => endWheelGesture(), WHEEL_STICKY_MS);
+    updateWheelHover();
+    const steps = wheelSteps(gesture, event);
+    if (!steps) return;
+    const overlay = gesture.overlay;
+    const amount = -steps;
+    if (selectedOverlay() !== overlay) selectOverlay(overlay, { keepPopup: state.inspectorPopup });
+    const root = overlayRoots.get(overlay);
+
+    if (!gesture.zone) {
+      const before = historySnapshot();
+      overlay.z_index = clamp(overlay.z_index + amount, 0, 999);
+      if (root) applyOverlayStyle(root, overlay);
+      renderInspectorNumbers(overlay, ["z_index"]);
+      commitHistory(before, `layer:${activeProfile().overlays.indexOf(overlay)}`);
+      scheduleSave();
+      return;
+    }
+    if (state.pointer) return;
+    // One sticky gesture is one undo step; an undo or another edit made during
+    // it starts a fresh step from the current state.
+    if (!gesture.before || (gesture.committed && history.lastKey !== gesture.key)) {
+      gesture.before = historySnapshot();
+      gesture.key = `wheel:${++wheelGestureSerial}`;
+      gesture.committed = false;
+    }
+    if (!applyConstrainedWheelGeometry(overlay, gesture.zone, amount)) return;
+    if (root) applyOverlayStyle(root, overlay);
+    renderInspectorNumbers(overlay, WHEEL_GEOMETRY);
+    updatePanelAvoidance();
+    updateWheelHover();
+    if (!gesture.committed) gesture.committed = commitHistory(gesture.before, gesture.key);
     scheduleSave();
   }, { passive: false });
+  document.addEventListener("pointermove", (event) => {
+    if (!state.editing) return;
+    wheelPointer = { x: event.clientX, y: event.clientY };
+    updateWheelHover(event.target);
+  }, { passive: true });
+  document.documentElement.addEventListener("pointerleave", () => {
+    wheelPointer = null;
+    updateWheelHover();
+  });
 
   catalog.addEventListener("click", (event) => {
+    if (event.target.closest(".catalog-retry")) {
+      requestCatalogRefresh();
+      return;
+    }
     const button = event.target.closest(".catalog-item");
     if (!button || !state.counters) return;
     const counter = findCounter(button.dataset.counterId);
@@ -1754,6 +2122,7 @@
   document.addEventListener("pointerdown", (event) => {
     if (event.button !== 2) state.inspectorCycle = null;
     if (!profileMenu.hidden && !profilePicker.contains(event.target)) closeProfileMenu();
+    if (!profileMoreMenu.hidden && !profileMoreWrapper.contains(event.target)) closeProfileMoreMenu();
     if (state.inspectorPopup && !inspector.contains(event.target)) {
       const target = event.target;
       const preserveCycle = event.button === 2
@@ -1765,10 +2134,54 @@
   profilePicker.addEventListener("focusout", (event) => {
     if (!profileMenu.hidden && !profilePicker.contains(event.relatedTarget)) closeProfileMenu();
   });
+  profileMore.addEventListener("click", () => {
+    if (profileMoreMenu.hidden) openProfileMoreMenu();
+    else closeProfileMoreMenu();
+  });
+  profileMore.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " " || event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (event.repeat) return;
+      if (!profileMoreMenu.hidden && (event.key === "Enter" || event.key === " ")) closeProfileMoreMenu();
+      else openProfileMoreMenu(event.key === "ArrowUp" ? "last" : "first");
+    } else if (event.key === "Escape" && !profileMoreMenu.hidden) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeProfileMoreMenu();
+    }
+  });
+  profileMoreMenu.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeProfileMoreMenu(true);
+      return;
+    }
+    // Arrow keys keep stepping the position number; Tab leaves the field.
+    if (event.target === profilePosition) return;
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    const items = profileMoreItems();
+    if (!items.length) return;
+    event.preventDefault();
+    const current = items.indexOf(document.activeElement);
+    let next = 0;
+    if (event.key === "End") next = items.length - 1;
+    else if (event.key === "ArrowUp") next = current <= 0 ? items.length - 1 : current - 1;
+    else if (event.key === "ArrowDown") next = current < 0 || current === items.length - 1 ? 0 : current + 1;
+    items[next].focus();
+    if (items[next] === profilePosition) profilePosition.select();
+  });
+  // Clicking the menu's padding or separator must not blur (and so close) it.
+  profileMoreMenu.addEventListener("mousedown", (event) => {
+    if (!event.target.closest("input, button, label")) event.preventDefault();
+  });
+  profileMoreWrapper.addEventListener("focusout", (event) => {
+    if (!profileMoreMenu.hidden && !profileMoreWrapper.contains(event.relatedTarget)) closeProfileMoreMenu();
+  });
   profileAdd.addEventListener("click", openProfileCreator);
   profileImport.addEventListener("click", () => {
     if (!state.config) return;
-    closeProfileMenu();
+    closeProfileMoreMenu(true);
     closeProfileCreator();
     ipc({ type: "import-profile" });
   });
@@ -1776,7 +2189,7 @@
     flushEditingChanges();
     const profile = activeProfile();
     if (!profile) return;
-    closeProfileMenu();
+    closeProfileMoreMenu(true);
     closeProfileCreator();
     ipc({ type: "export-profile", profile });
   });
@@ -1835,12 +2248,12 @@
       const profile = activeProfile();
       profilePosition.value = profile ? String(state.config.profiles.indexOf(profile) + 1) : "";
       profilePosition.removeAttribute("aria-invalid");
-      profilePosition.blur();
+      closeProfileMoreMenu(true);
     }
   });
   undoButton.addEventListener("click", undoEdit);
   redoButton.addEventListener("click", redoEdit);
-  refreshSelectedButton.addEventListener("click", refreshSelectedOverlays);
+  refreshOverlayButton.addEventListener("click", refreshSelectedOverlays);
   refreshAllButton.addEventListener("click", refreshAllOverlays);
 
   function commitTitle() {
@@ -2011,7 +2424,51 @@
       button.textContent = state.settingsDraft.hotkeys[key] || DEFAULT_HOTKEYS[key] || "";
       button.classList.toggle("recording", state.recordingHotkey === key);
       button.setAttribute("aria-pressed", String(state.recordingHotkey === key));
+      button.removeAttribute("aria-invalid");
     }
+  }
+
+  let settingsNavPinned = false;
+  let settingsNavSettle = 0;
+  let settingsScrollFrame = 0;
+
+  function setSettingsSection(id) {
+    for (const button of settingsNavButtons) {
+      const current = button.dataset.section === id;
+      if (!current) {
+        button.removeAttribute("aria-current");
+        continue;
+      }
+      button.setAttribute("aria-current", "true");
+      // Narrow layouts turn the nav into a horizontally scrolling row.
+      if (settingsNav.scrollWidth > settingsNav.clientWidth + 1) {
+        const start = button.offsetLeft - 14;
+        const end = button.offsetLeft + button.offsetWidth + 14 - settingsNav.clientWidth;
+        if (settingsNav.scrollLeft > start) settingsNav.scrollLeft = start;
+        else if (settingsNav.scrollLeft < end) settingsNav.scrollLeft = end;
+      }
+    }
+  }
+
+  function syncSettingsSection() {
+    const top = settingsContent.scrollTop;
+    const reach = top + Math.min(96, settingsContent.clientHeight / 4);
+    let current = settingsNavButtons[0];
+    for (const button of settingsNavButtons) {
+      if ($(button.dataset.section).offsetTop <= reach) current = button;
+    }
+    // Short trailing sections can never reach the top; the end of the scroll
+    // range belongs to the last one.
+    if (top > 0 && top + settingsContent.clientHeight >= settingsContent.scrollHeight - 2) {
+      current = settingsNavButtons[settingsNavButtons.length - 1];
+    }
+    setSettingsSection(current.dataset.section);
+  }
+
+  function pinSettingsSection() {
+    settingsNavPinned = true;
+    window.clearTimeout(settingsNavSettle);
+    settingsNavSettle = window.setTimeout(() => { settingsNavPinned = false; }, 150);
   }
 
   function closeSettingsModal(restoreFocus = true) {
@@ -2046,16 +2503,26 @@
     for (const input of [fpsLimit, remoteListenHost, remoteListenPort]) input.removeAttribute("aria-invalid");
     renderSettingsDraft();
     settingsModal.hidden = false;
+    settingsNavPinned = false;
+    window.clearTimeout(settingsNavSettle);
+    settingsContent.scrollTop = 0;
+    setSettingsSection(settingsNavButtons[0].dataset.section);
     keepOverlaysInView.focus();
   }
 
+  const NON_SHORTCUT_KEYS = new Set([
+    "Control", "Alt", "AltGraph", "Shift", "Meta", "OS", "Super", "Hyper",
+    "Fn", "FnLock", "CapsLock", "NumLock", "ScrollLock"
+  ]);
+
   function eventHotkey(event) {
-    if (["Control", "Alt", "Shift", "Meta"].includes(event.key)) return "";
-    const key = event.key === " " ? "Space"
+    if (NON_SHORTCUT_KEYS.has(event.key)) return "";
+    // Punctuation comes from the physical key so Shift doesn't turn "/" into "?".
+    const key = PUNCTUATION_CODES[event.code] || (event.key === " " ? "Space"
       : event.key === "+" ? "Plus"
         : event.key === "-" ? "Minus"
           : event.key.length === 1 ? event.key.toUpperCase()
-            : event.key;
+            : event.key);
     const parts = [];
     if (event.ctrlKey) parts.push("Ctrl");
     if (event.altKey) parts.push("Alt");
@@ -2087,6 +2554,31 @@
 
   openSettings.addEventListener("click", openSettingsModal);
   settingsCancel.addEventListener("click", () => closeSettingsModal());
+  settingsNav.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-section]");
+    if (!button) return;
+    const section = $(button.dataset.section);
+    pinSettingsSection();
+    setSettingsSection(button.dataset.section);
+    settingsContent.scrollTo({
+      top: Math.max(0, section.offsetTop - 12),
+      behavior: reducedMotion.matches ? "auto" : "smooth"
+    });
+    section.focus({ preventScroll: true });
+  });
+  settingsContent.addEventListener("scroll", () => {
+    // While a nav click scrolls, keep its target highlighted; the pin lapses
+    // once scrolling has been quiet briefly.
+    if (settingsNavPinned) {
+      pinSettingsSection();
+      return;
+    }
+    if (settingsScrollFrame) return;
+    settingsScrollFrame = window.requestAnimationFrame(() => {
+      settingsScrollFrame = 0;
+      if (!settingsModal.hidden) syncSettingsSection();
+    });
+  }, { passive: true });
   keepOverlaysInView.addEventListener("change", () => {
     if (state.settingsDraft) state.settingsDraft.always_keep_overlays_in_view = keepOverlaysInView.checked;
   });
@@ -2126,6 +2618,11 @@
     showSettingsError(message);
     input.focus();
   }
+  function hotkeyLabel(key) {
+    const button = hotkeyList.querySelector(`.hotkey-input[data-hotkey="${key}"]`);
+    const label = button && button.previousElementSibling;
+    return label ? label.textContent.trim() : key;
+  }
   settingsResetHotkeys.addEventListener("click", () => {
     if (!state.settingsDraft) return;
     state.settingsDraft.hotkeys = { ...DEFAULT_HOTKEYS };
@@ -2150,18 +2647,28 @@
       renderSettingsDraft();
       return;
     }
-    const shortcut = eventHotkey(event);
-    if (!shortcut) return;
+    if (NON_SHORTCUT_KEYS.has(event.key)) return;
     event.preventDefault();
     event.stopPropagation();
+    const shortcut = eventHotkey(event);
+    if (!shortcut) {
+      const name = !event.key || event.key === "Dead" || event.key === "Unidentified" ? event.code || "This key" : event.key;
+      showSettingsError(`${name} can't be used in a shortcut.`);
+      return;
+    }
     if (RESERVED_HOTKEYS.has(shortcut)) {
       showSettingsError(`${shortcut} is reserved for built-in overlay controls.`);
+      return;
+    }
+    const problem = state.recordingHotkey === "toggle_interaction" ? interactionHotkeyError(shortcut) : "";
+    if (problem) {
+      showSettingsError(problem);
       return;
     }
     const duplicate = HOTKEY_KEYS.find((key) => key !== state.recordingHotkey
       && state.settingsDraft.hotkeys[key] === shortcut);
     if (duplicate) {
-      showSettingsError(`${shortcut} is already assigned.`);
+      showSettingsError(`${shortcut} is already used by ${hotkeyLabel(duplicate)}.`);
       return;
     }
     state.settingsDraft.hotkeys[state.recordingHotkey] = shortcut;
@@ -2190,6 +2697,11 @@
     const listenPort = normalizedRemoteListenPort(draft.remote_listen_port);
     if (listenPort === null) {
       rejectSettingsField(remoteListenPort, "Listener port must be a whole number from 1 to 65535.");
+      return;
+    }
+    const interactionProblem = interactionHotkeyError(draft.hotkeys.toggle_interaction || "");
+    if (interactionProblem) {
+      rejectSettingsField(hotkeyList.querySelector('.hotkey-input[data-hotkey="toggle_interaction"]'), interactionProblem);
       return;
     }
     const shortcuts = HOTKEY_KEYS.map((key) => draft.hotkeys[key]);
@@ -2276,11 +2788,6 @@
   });
   $("add-html-file").addEventListener("click", () => ipc({ type: "choose-overlay-file" }));
 
-  $("refresh").addEventListener("click", () => {
-    status.textContent = "Refreshing…";
-    ipc({ type: "refresh-counters" });
-  });
-
   $("done").addEventListener("click", () => setEditing(false));
 
   const TEXT_INPUT_TYPES = new Set(["text", "number", "url", "search", "email", "password", "tel"]);
@@ -2295,7 +2802,7 @@
   }
 
   function menuOrModalOpen() {
-    return !settingsModal.hidden || !urlModal.hidden || !profileMenu.hidden
+    return !settingsModal.hidden || !urlModal.hidden || !profileMenu.hidden || !profileMoreMenu.hidden
       || !profileCreate.hidden || !profileDeleteConfirm.hidden || state.inspectorPopup;
   }
 
@@ -2337,7 +2844,7 @@
     const editable = isEditableTarget(event.target);
     if (state.editing && !editable && !menuOrModalOpen() && state.config) {
       const shortcut = eventHotkey(event);
-      const action = shortcut && HOTKEY_KEYS.find((key) => state.config.settings.hotkeys[key] === shortcut);
+      const action = shortcut && PAGE_HOTKEY_KEYS.find((key) => state.config.settings.hotkeys[key] === shortcut);
       if (action) {
         event.preventDefault();
         if (!event.repeat || REPEATABLE_HOTKEYS.has(action)) runHotkeyAction(action);
@@ -2366,6 +2873,9 @@
     } else if (!profileMenu.hidden) {
       event.preventDefault();
       closeProfileMenu(true);
+    } else if (!profileMoreMenu.hidden) {
+      event.preventDefault();
+      closeProfileMoreMenu(true);
     } else if (!profileDeleteConfirm.hidden) {
       event.preventDefault();
       closeProfileDeleteConfirm(true);
@@ -2386,6 +2896,7 @@
       state.resizeFrame = 0;
       updatePanelAvoidance();
       if (!profileMenu.hidden && profilePicker.getClientRects().length === 0) closeProfileMenu();
+      if (!profileMoreMenu.hidden && profileMore.getClientRects().length === 0) closeProfileMoreMenu();
       const overlay = state.editing ? selectedOverlay() : null;
       if (!overlay) return;
       const before = `${overlay.left}\n${overlay.top}\n${overlay.width}\n${overlay.height}\n${overlay.scale}\n${overlay.rotation}`;
@@ -2428,7 +2939,7 @@
             state.saveErrorMessage = "";
             requestRender("chrome");
           }
-          status.textContent = "Saved";
+          setStatus("Saved");
         }
         if (state.pendingSaveId) {
           flushPendingSave();
@@ -2495,10 +3006,13 @@
           if (!counterById.has(counter.id)) counterById.set(counter.id, counter);
         }
         state.error = null;
-        status.textContent = "Catalog refreshed";
+        // Automatic refreshes stay quiet; only replace a reported catalog failure.
+        if (catalogRequest.error) setStatus("Counters loaded");
+        catalogRequest.pending = false;
+        catalogRequest.error = "";
         requestRender("stageStructure", "catalog", "inspector");
       } else if (envelope.type === "profile-exported") {
-        status.textContent = "Profile exported";
+        setStatus("Profile exported");
         toast("Profile exported");
       } else if (envelope.type === "tosu-layout-imported") {
         toast(`Imported ${envelope.profiles} tosu profile${envelope.profiles === 1 ? "" : "s"}`);
@@ -2523,7 +3037,15 @@
         }
       } else if (envelope.type === "error") {
         const value = envelope.message !== undefined ? envelope.message : envelope.error !== undefined ? envelope.error : envelope.payload;
-        setError(typeof value === "string" ? value : "vosu could not refresh counters");
+        const message = typeof value === "string" ? value : "vosu could not refresh counters";
+        // Host errors share one envelope type; one arriving while a catalog
+        // fetch is outstanding is that fetch's failure.
+        if (catalogRequest.pending) {
+          catalogRequest.pending = false;
+          catalogRequest.error = message;
+          requestRender("catalog");
+        }
+        setError(message);
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
