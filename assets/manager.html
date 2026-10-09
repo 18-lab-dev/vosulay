@@ -38,6 +38,11 @@
       <div id="profile-actions" class="profile-actions" role="group" aria-label="Profile actions">
         <button id="profile-add" class="icon-button" type="button" title="Add profile" aria-label="Add profile">+</button>
         <button id="profile-delete" class="icon-button danger" type="button" title="Delete profile" aria-label="Delete profile">−</button>
+        <label class="profile-position" for="profile-position" title="Profile shortcuts and the remote ?profile= number follow this position">
+          <span>Position</span>
+          <input id="profile-position" type="number" min="1" step="1" inputmode="numeric" aria-label="Profile position" aria-describedby="profile-position-total">
+          <span id="profile-position-total"></span>
+        </label>
         <button id="profile-import" class="quiet-button profile-file-button" type="button" title="Import profile from JSON" disabled>Import</button>
         <button id="profile-export" class="quiet-button profile-file-button" type="button" title="Export active profile to JSON" disabled>Export</button>
       </div>
@@ -46,9 +51,25 @@
         <button type="submit" class="primary-button">Create</button>
         <button id="profile-create-cancel" type="button" class="quiet-button">Cancel</button>
       </form>
+      <div id="profile-delete-confirm" class="profile-confirm" role="group" aria-labelledby="profile-delete-message" hidden>
+        <span id="profile-delete-message"></span>
+        <button id="profile-delete-accept" type="button" class="danger-button">Delete</button>
+        <button id="profile-delete-cancel" type="button" class="quiet-button">Cancel</button>
+      </div>
       <span class="toolbar-spacer"></span>
       <span id="status" role="status" aria-live="polite"></span>
-      <button id="open-available" class="quiet-button">Browse counters</button>
+      <div class="toolbar-group" role="group" aria-label="Edit history">
+        <button id="undo" class="icon-button" type="button" aria-label="Undo" disabled>
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5.5 3 2 6.5 5.5 10M2.5 6.5H10a3.75 3.75 0 0 1 0 7.5H7.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button id="redo" class="icon-button" type="button" aria-label="Redo" disabled>
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10.5 3 14 6.5 10.5 10M13.5 6.5H6a3.75 3.75 0 0 0 0 7.5h2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="toolbar-group" role="group" aria-label="Refresh overlays">
+        <button id="refresh-selected-overlays" class="quiet-button" type="button" aria-label="Refresh selected overlays" disabled>↻<span class="refresh-label"> Selected</span></button>
+        <button id="refresh-all-overlays" class="quiet-button" type="button" aria-label="Refresh all overlays" disabled>↻<span class="refresh-label"> All</span></button>
+      </div>
       <button id="open-settings" class="quiet-button" type="button">Settings</button>
       <button id="done" class="primary-button">Done</button>
     </header>
@@ -108,7 +129,7 @@
     </div>
 
     <div id="settings-modal" class="modal-backdrop" hidden>
-      <form id="settings-form" class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
+      <form id="settings-form" class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title" novalidate>
         <div class="settings-dialog-header">
           <div>
             <strong id="settings-dialog-title">Settings</strong>
@@ -133,11 +154,16 @@
               </span>
               <input id="allow-unrestricted-shared-array-buffer" type="checkbox">
             </label>
-            <label class="settings-field" for="fps-limit">
-              <span><strong>FPS limit</strong><small>Automatic follows the display refresh rate; fixed values cap rendering.</small></span>
-              <select id="fps-limit-mode" aria-label="FPS limit mode"><option value="auto">Automatic</option><option value="fixed">Fixed</option></select>
-              <input id="fps-limit" type="number" min="1" max="1000000" step="1" inputmode="numeric" required aria-label="Fixed FPS limit">
-            </label>
+            <div class="settings-field" role="group" aria-labelledby="fps-limit-title">
+              <span><strong id="fps-limit-title">FPS limit</strong><small>Automatic follows the display refresh rate; fixed values cap rendering.</small></span>
+              <div class="fps-limit-controls">
+                <div class="segmented" role="radiogroup" aria-label="FPS limit mode">
+                  <label class="segment"><input type="radio" name="fps-limit-mode" value="auto"><span>Automatic</span></label>
+                  <label class="segment"><input type="radio" name="fps-limit-mode" value="fixed"><span>Fixed</span></label>
+                </div>
+                <input id="fps-limit" type="number" min="1" max="1000000" step="1" inputmode="numeric" placeholder="e.g. 144" aria-label="Fixed FPS limit">
+              </div>
+            </div>
           </fieldset>
 
           <fieldset class="settings-section">
@@ -150,14 +176,14 @@
             <legend>Remote overlay server</legend>
             <p class="settings-note">
               Serves a view-only copy of your overlays to devices allowed by the client IP list.
-              Enter the LAN IP or hostname that those devices use to reach this computer.
+              Those devices open <code>http://&lt;this computer&gt;:&lt;port&gt;/overlay</code> for the active profile, or add <code>?profile=N</code> for the profile at position N.
             </p>
             <label class="settings-field" for="remote-listen-host">
               <span>
                 <strong>Listener address</strong>
-                <small>Network interface the server binds to. Use <code>0.0.0.0</code> to listen on every interface, or a specific interface IP to restrict access at the network level. Takes effect after restarting vosulay.</small>
+                <small>Network interface the server binds to. The default <code>127.0.0.1</code> only accepts this computer; use <code>0.0.0.0</code> to listen on every interface, or a specific interface IP to restrict access at the network level. Takes effect after restarting vosulay.</small>
               </span>
-              <input id="remote-listen-host" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="0.0.0.0">
+              <input id="remote-listen-host" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="127.0.0.1">
             </label>
             <label class="settings-field" for="remote-listen-port">
               <span>
@@ -166,24 +192,10 @@
               </span>
               <input id="remote-listen-port" type="number" min="1" max="65535" step="1" inputmode="numeric" placeholder="5050">
             </label>
-            <label class="settings-field" for="remote-access-url">
-              <span>
-                <strong>Remote access URL</strong>
-                <small>Use this URL to connect remotely. Only available once a remote host is set below.</small>
-              </span>
-              <input id="remote-access-url" type="text" readonly spellcheck="false" autocomplete="off">
-            </label>
-            <label class="settings-field" for="remote-access-host">
-              <span>
-                <strong>Remote host</strong>
-                <small>LAN IP or hostname only; for example <code>192.168.1.20</code> or <code>gaming-pc.local</code>.</small>
-              </span>
-              <input id="remote-access-host" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="192.168.1.20">
-            </label>
             <label class="settings-field" for="allowed-ips">
               <span>
                 <strong>Allowed client IPs</strong>
-                <small>Comma- or space-separated. Every remote viewing device must be listed here. The vosu or tosu-compatible backend must allow this computer, not each viewing device. Leave empty to allow this computer only.</small>
+                <small>Comma- or space-separated. Only listed devices may open vosulay's remote overlay server, so every remote viewing device must be listed here. This list controls vosulay only, not vosu. Leave empty to allow this computer only.</small>
               </span>
               <textarea id="allowed-ips" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
             </label>
@@ -204,6 +216,10 @@
               <div class="hotkey-row"><span>Profile 0</span><button class="hotkey-input" type="button" data-hotkey="profile_0"></button></div>
               <div class="hotkey-row"><span>Copy overlays</span><button class="hotkey-input" type="button" data-hotkey="copy_overlay"></button></div>
               <div class="hotkey-row"><span>Paste overlays</span><button class="hotkey-input" type="button" data-hotkey="paste_overlay"></button></div>
+              <div class="hotkey-row"><span>Undo</span><button class="hotkey-input" type="button" data-hotkey="undo"></button></div>
+              <div class="hotkey-row"><span>Redo</span><button class="hotkey-input" type="button" data-hotkey="redo"></button></div>
+              <div class="hotkey-row"><span>Refresh selected overlays</span><button class="hotkey-input" type="button" data-hotkey="refresh_selected_overlay"></button></div>
+              <div class="hotkey-row"><span>Refresh all overlays</span><button class="hotkey-input" type="button" data-hotkey="refresh_all_overlays"></button></div>
             </div>
           </fieldset>
         </div>

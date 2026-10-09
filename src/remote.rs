@@ -136,7 +136,7 @@ fn listen_address(settings: &AppSettings) -> SocketAddr {
     let host = settings
         .remote_listen_host
         .parse()
-        .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+        .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
     SocketAddr::new(host, settings.remote_listen_port)
 }
 
@@ -235,7 +235,6 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
     if !request_metadata_is_allowed(
         &request,
         local_address,
-        &config.settings.remote_access_host,
         route.starts_with("local/") || request.is_frame_navigation(),
     ) || !peer_is_allowed(stream.peer_addr()?.ip(), &config.settings.allowed_ips)
     {
@@ -526,13 +525,12 @@ fn routed_backend_url(
 fn request_metadata_is_allowed(
     request: &Request,
     local_address: SocketAddr,
-    configured_host: &str,
     allow_opaque_origin: bool,
 ) -> bool {
     let Some(authority) = request
         .host
         .as_deref()
-        .and_then(|host| request_authority(host, local_address, configured_host))
+        .and_then(|host| request_authority(host, local_address))
     else {
         return false;
     };
@@ -557,7 +555,7 @@ fn request_metadata_is_allowed(
     })
 }
 
-fn request_authority(host: &str, local_address: SocketAddr, configured_host: &str) -> Option<Url> {
+fn request_authority(host: &str, local_address: SocketAddr) -> Option<Url> {
     let url = Url::parse(&format!("http://{host}/")).ok()?;
     if !url.username().is_empty()
         || url.password().is_some()
@@ -571,8 +569,7 @@ fn request_authority(host: &str, local_address: SocketAddr, configured_host: &st
     let local_ip = normalize_ip(local_address.ip());
     let matches = match url.host()? {
         url::Host::Domain(domain) => {
-            (domain.eq_ignore_ascii_case("localhost") && local_ip.is_loopback())
-                || (!configured_host.is_empty() && domain.eq_ignore_ascii_case(configured_host))
+            domain.eq_ignore_ascii_case("localhost") && local_ip.is_loopback()
         }
         url::Host::Ipv4(address) => normalize_ip(IpAddr::V4(address)) == local_ip,
         url::Host::Ipv6(address) => normalize_ip(IpAddr::V6(address)) == local_ip,
@@ -1394,7 +1391,7 @@ mod tests {
     }
 
     #[test]
-    fn listen_address_falls_back_to_unspecified_for_unparseable_host() {
+    fn listen_address_falls_back_to_loopback_for_unparseable_host() {
         let settings = AppSettings {
             remote_listen_host: "not-an-ip".to_owned(),
             remote_listen_port: 5050,
@@ -1402,7 +1399,7 @@ mod tests {
         };
         assert_eq!(
             listen_address(&settings),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 5050)
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5050)
         );
     }
 
@@ -1630,13 +1627,18 @@ mod tests {
         drop(server);
     }
     #[test]
-    fn request_authority_accepts_destination_or_configured_host() {
+    fn request_authority_accepts_destination_ip_and_localhost_alias_only() {
         let local = "127.0.0.1:5050".parse().expect("socket address");
 
-        assert!(request_authority("127.0.0.1:5050", local, "").is_some());
-        assert!(request_authority("gaming-pc.local:5050", local, "gaming-pc.local").is_some());
-        assert!(request_authority("attacker.example:5050", local, "gaming-pc.local").is_none());
-        assert!(request_authority("127.0.0.1:5051", local, "").is_none());
+        assert!(request_authority("127.0.0.1:5050", local).is_some());
+        assert!(request_authority("localhost:5050", local).is_some());
+        assert!(request_authority("attacker.example:5050", local).is_none());
+        assert!(request_authority("127.0.0.1:5051", local).is_none());
+
+        let lan = "192.168.1.20:5050".parse().expect("socket address");
+        assert!(request_authority("192.168.1.20:5050", lan).is_some());
+        assert!(request_authority("localhost:5050", lan).is_none());
+        assert!(request_authority("192.168.1.21:5050", lan).is_none());
     }
 
     #[test]

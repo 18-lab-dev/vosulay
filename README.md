@@ -179,17 +179,21 @@ setting disabled still depends on which Present hook runs first. This is
 source-verified for the DXGI path, not native Windows capture verification.
 
 `Ctrl+Shift+Space` toggles edit mode on both platforms. While editing, Ctrl+I
-toggles counter interaction, Ctrl+R refreshes the selected counter, Delete
-removes it, and Escape exits editing. Profile and copy/paste shortcuts remain
-configurable. Normal mode leaves game input alone.
+toggles counter interaction, Delete removes the selected counter, and Escape
+exits editing. Ctrl+Z undoes and Ctrl+Shift+Z redoes placement and profile
+edits; Ctrl+R refreshes the selected counter and Ctrl+Shift+R refreshes every
+counter in the active profile. These, the profile, and the copy/paste shortcuts
+are configurable. Text fields keep their native undo/redo. Normal mode leaves
+game input alone.
 
 The Linux editor shows the native system cursor and temporarily disables
 relative mouse mode. Leaving editing, losing focus, disconnecting, or destroying
 the presentation surface restores the game's latest requested cursor state.
 Game focus events and swap-interval requests still reach the game unchanged.
 
-**Keep overlays in view** constrains placement only while editing. A game-window
-resize in normal mode never clamps or saves new placement coordinates.
+**Keep overlays in view** constrains only the selected counter, and only while
+editing. Unselected counters and game-window resizes in normal mode never clamp
+or save new placement coordinates.
 
 CEF starts lazily when a game is selected. Detaching closes the in-game view
 after pending edits are flushed and releases its telemetry connections and Linux
@@ -269,9 +273,14 @@ through vosulay without changing the counter files. The bootstrap also supplies
 
 There is one upstream telemetry WebSocket per active schema (`/ws`, `/tokens`,
 `/websocket/v2`, or `/websocket/v2/precise`). Consumers share its newest snapshot;
-filters and selected-subscription state remain client-local. Matching HTTP JSON
-requests use that snapshot when available and otherwise retain the backend's
-HTTP behavior. Slow consumers skip stale telemetry instead of building a queue.
+filters remain client-local. Matching HTTP JSON requests use that snapshot when
+available and otherwise retain the backend's HTTP behavior. Slow consumers skip
+stale telemetry instead of building a queue.
+
+Selected-field subscriptions (`/websocket/v2/subscribe`) are relayed per client
+to the backend, which publishes them at its precise cadence. Projecting them from
+the shared `/websocket/v2` stream would delay hit errors and other precise
+fields by up to the backend's regular poll interval.
 
 Settings and other commands retain separate upstream channels with each
 counter's original query/identity. They are not shared: upstream authorization
@@ -283,28 +292,27 @@ server port does not prevent local counters from loading.
 
 ## Remote profile pages
 
-vosulay listens on `0.0.0.0:5050` by default and serves the active profile at
-`http://<vosulay-host>:5050/overlay`. Use `?profile=1` to select a profile by
-its 1-based position. Clients must use the machine's loopback or LAN address,
-not the `0.0.0.0` bind address.
+vosulay listens on `127.0.0.1:5050` by default and serves the active profile at
+`http://<listener address>:<listener port>/overlay` (for example
+`http://127.0.0.1:5050/overlay`). Append `?profile=<index>` to select a profile
+by its 1-based position in the profile list; profiles can be reordered in the
+editor to change their index.
 
 The listener address and port are configurable in **Settings → Remote overlay
-server → Listener address** and **Listener port**. Set the address to a
-specific interface IP to restrict which network the server binds on, or leave
-it at `0.0.0.0` to listen on every interface. Listener changes take effect
-after restarting vosulay.
+server → Listener address** and **Listener port**. Set the address to a LAN
+interface IP, or to `0.0.0.0` to listen on every interface, to reach the pages
+from other devices; clients then use the machine's LAN address, not
+`0.0.0.0`. Listener changes take effect after restarting vosulay. There is no
+access token. Old credential and remote-host fields are ignored when loading
+configuration and are omitted by subsequent saves.
 
-The full remote URL is shown in **Settings → Remote overlay server → Remote
-access URL** after setting **Remote host**. There is no access token or credential
-rotation. Old credential fields are ignored when loading configuration and are
-omitted by subsequent native saves.
-
-Remote access is controlled by **Settings → Remote overlay server → Allowed
-client IPs**. Loopback is always allowed; remote entries can be exact IP
-addresses or four-part IPv4 patterns such as `192.168.*.*`. There is no
-authentication beyond this allowlist: any allowed client can view the profiles
-and access the proxied backend. Restrict the listener and allowlist to trusted
-networks and devices.
+**Settings → Remote overlay server → Allowed client IPs** controls which
+clients may connect to vosulay's listener; it does not change the backend's own
+allowlist. Loopback is always allowed; remote entries can be exact IP addresses
+or four-part IPv4 patterns such as `192.168.*.*`. There is no authentication
+beyond this allowlist: any allowed client can view the profiles and access the
+proxied backend. Restrict the listener and allowlist to trusted networks and
+devices.
 
 Installed counters load through vosulay, so the backend must allow the
 vosulay host rather than every remote viewing device. Custom HTTP(S) overlay
@@ -696,7 +704,7 @@ A private CEF manager run verified two counter API clients using one upstream
 V2 telemetry connection, independent filters/settings identities, shared HTTP
 snapshots through both `fetch(Request)` and XMLHttpRequest, counter metadata,
 and the token-free settings dialog. Real-socket regression tests cover snapshot
-recovery, selected-subscription deltas/removals/errors, proxy responses, and
+recovery, selected-subscription relaying, proxy responses, and
 remote/local-resource authorization.
 
 The native Windows CEF host builds with `cargo build -p vosulay --lib`.

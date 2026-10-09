@@ -6,15 +6,20 @@ use std::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     time::Instant,
 };
-use tokio_tungstenite::tungstenite::{self, Message, accept, client};
+use tokio_tungstenite::tungstenite::{
+    self, Message, accept, accept_hdr, client,
+    handshake::server::{Request, Response},
+};
 
 type Publication = Arc<Mutex<(u64, Option<Utf8Bytes>)>>;
+type Paths = Arc<Mutex<Vec<String>>>;
 
 struct Publisher {
     url: Url,
     connections: Arc<AtomicUsize>,
     publication: Publication,
     peers: Arc<Mutex<Vec<TcpStream>>>,
+    paths: Paths,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -27,11 +32,13 @@ impl Publisher {
         let connections = Arc::new(AtomicUsize::new(0));
         let publication = Arc::new(Mutex::new((0, None)));
         let peers = Arc::new(Mutex::new(Vec::new()));
+        let paths = Paths::default();
         let stop = Arc::new(AtomicBool::new(false));
-        let (count, published, connected, stopped) = (
+        let (count, published, connected, requested, stopped) = (
             connections.clone(),
             publication.clone(),
             peers.clone(),
+            paths.clone(),
             stop.clone(),
         );
         let thread = thread::spawn(move || {
@@ -52,10 +59,14 @@ impl Publisher {
                     .set_write_timeout(Some(Duration::from_secs(3)))
                     .unwrap();
                 connected.lock().unwrap().push(stream.try_clone().unwrap());
-                let (count, published, stopped) =
-                    (count.clone(), published.clone(), stopped.clone());
+                let (count, published, requested, stopped) = (
+                    count.clone(),
+                    published.clone(),
+                    requested.clone(),
+                    stopped.clone(),
+                );
                 workers.push(thread::spawn(move || {
-                    serve_upstream(stream, count, published, stopped)
+                    serve_upstream(stream, count, published, requested, stopped)
                 }));
             }
             for worker in workers {
@@ -67,6 +78,7 @@ impl Publisher {
             connections,
             publication,
             peers,
+            paths,
             stop,
             thread: Some(thread),
         }
@@ -105,13 +117,20 @@ impl Drop for Publisher {
     }
 }
 
+// tungstenite's handshake callback signature fixes the large `ErrorResponse` variant.
+#[allow(clippy::result_large_err)]
 fn serve_upstream(
     stream: TcpStream,
     count: Arc<AtomicUsize>,
     publication: Publication,
+    paths: Paths,
     stop: Arc<AtomicBool>,
 ) {
-    let Ok(mut socket) = accept(stream) else {
+    let record = |request: &Request, response: Response| {
+        paths.lock().unwrap().push(request.uri().to_string());
+        Ok(response)
+    };
+    let Ok(mut socket) = accept_hdr(stream, record) else {
         return;
     };
     socket
@@ -288,58 +307,19 @@ fn disconnect_clears_snapshot_and_later_publication_recovers() {
 }
 
 #[test]
-fn selected_subscription_emits_initial_delta_removal_and_rejects_overlap() {
+fn selected_subscription_relays_vosu_precise_stream_verbatim() {
     let publisher = Publisher::start();
     let broker = Broker::new(publisher.url.clone()).unwrap();
-    let mut client = downstream(&broker, "/websocket/v2/subscribe");
-    let mut full = downstream(&broker, "/websocket/v2");
+    let mut client = downstream(&broker, "/websocket/v2/subscribe?l=overlay");
     publisher.wait_connections(1);
-    client
-        .send(Message::Text(r#"["/beatmap/title","/state"]"#.into()))
-        .unwrap();
-    barrier(&mut client);
-    publisher.publish(r#"{"beatmap":{"title":"Song"},"state":1}"#);
-    let initial: Value = serde_json::from_str(&text(&mut client)).unwrap();
-    assert_eq!(initial[0], 0);
-    assert_eq!(initial[2], json!([[0, "Song"], [1, 1]]));
     assert_eq!(
-        serde_json::from_str::<Value>(&text(&mut full)).unwrap()["state"],
-        1
+        *publisher.paths.lock().unwrap(),
+        ["/websocket/v2/subscribe?l=overlay"]
     );
-    assert_eq!(publisher.connections.load(Ordering::Acquire), 1);
-
-    publisher.publish(r#"{"beatmap":{"title":"Song"},"state":2}"#);
-    let delta: Value = serde_json::from_str(&text(&mut client)).unwrap();
-    assert_eq!(delta[0], 1);
-    assert_eq!(delta[2], json!([[1, 2]]));
-    assert_eq!(delta[3], json!([]));
-    assert_eq!(
-        serde_json::from_str::<Value>(&text(&mut full)).unwrap()["state"],
-        2
-    );
-
-    publisher.publish(r#"{"state":3}"#);
-    let removal: Value = serde_json::from_str(&text(&mut client)).unwrap();
-    assert_eq!(removal[0], 1);
-    assert_eq!(removal[2], json!([[1, 3]]));
-    assert_eq!(removal[3], json!([0]));
-    assert_eq!(
-        serde_json::from_str::<Value>(&text(&mut full)).unwrap()["state"],
-        3
-    );
-
-    let mut overlapping = downstream(&broker, "/websocket/v2/subscribe");
-    overlapping
-        .send(Message::Text(r#"["/beatmap","/beatmap/title"]"#.into()))
-        .unwrap();
-    assert_eq!(
-        serde_json::from_str::<Value>(&text(&mut overlapping)).unwrap(),
-        json!([2, 2, "invalid JSON Pointer"])
-    );
-    match overlapping.read().unwrap() {
-        Message::Close(Some(close)) => assert_eq!(u16::from(close.code), 1008),
-        other => panic!("expected policy close, got {other:?}"),
-    }
+    // The upstream frame is forwarded as-is; a local projection of the regular v2 stream would
+    // have withheld it until a pointer list arrived and then re-encoded it.
+    publisher.publish(r#"[1,7,[[0,12.5]],[]]"#);
+    assert_eq!(text(&mut client), r#"[1,7,[[0,12.5]],[]]"#);
 }
 
 #[test]
@@ -350,7 +330,6 @@ fn legacy_nested_filters_do_not_erase_a_prior_whole_field_null() {
     .unwrap()
     .into();
     let snapshot = Snapshot {
-        revision: 1,
         text: r#"{"beatmap":null}"#.into(),
         document: OnceLock::new(),
         projections: Mutex::new(HashMap::new()),

@@ -16,7 +16,7 @@ pub const CONFIG_VERSION: u32 = 1;
 pub const MAX_FPS_LIMIT: u32 = 1_000_000;
 pub const DEFAULT_ALLOWED_IPS: &str = "127.0.0.1,localhost,absolute";
 
-pub const DEFAULT_REMOTE_LISTEN_HOST: &str = "0.0.0.0";
+pub const DEFAULT_REMOTE_LISTEN_HOST: &str = "127.0.0.1";
 pub const DEFAULT_REMOTE_LISTEN_PORT: u16 = 5050;
 
 const DEFAULT_WIDTH: f64 = 500.0;
@@ -50,7 +50,6 @@ pub struct AppSettings {
     pub allow_unrestricted_shared_array_buffer: bool,
     pub allowed_ips: String,
 
-    pub remote_access_host: String,
     pub remote_listen_host: String,
     pub remote_listen_port: u16,
     pub hotkeys: HotkeySettings,
@@ -71,6 +70,10 @@ pub struct HotkeySettings {
     pub profile_9: String,
     pub copy_overlay: String,
     pub paste_overlay: String,
+    pub undo: String,
+    pub redo: String,
+    pub refresh_selected_overlay: String,
+    pub refresh_all_overlays: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -121,7 +124,6 @@ impl Default for AppSettings {
             allow_unrestricted_shared_array_buffer: false,
             allowed_ips: DEFAULT_ALLOWED_IPS.to_owned(),
 
-            remote_access_host: String::new(),
             remote_listen_host: DEFAULT_REMOTE_LISTEN_HOST.to_owned(),
             remote_listen_port: DEFAULT_REMOTE_LISTEN_PORT,
             hotkeys: HotkeySettings::default(),
@@ -144,6 +146,10 @@ impl Default for HotkeySettings {
             profile_9: DEFAULT_PROFILE_HOTKEYS[9].to_owned(),
             copy_overlay: DEFAULT_COPY_OVERLAY_HOTKEY.to_owned(),
             paste_overlay: DEFAULT_PASTE_OVERLAY_HOTKEY.to_owned(),
+            undo: DEFAULT_UNDO_HOTKEY.to_owned(),
+            redo: DEFAULT_REDO_HOTKEY.to_owned(),
+            refresh_selected_overlay: DEFAULT_REFRESH_SELECTED_OVERLAY_HOTKEY.to_owned(),
+            refresh_all_overlays: DEFAULT_REFRESH_ALL_OVERLAYS_HOTKEY.to_owned(),
         }
     }
 }
@@ -225,7 +231,6 @@ impl AppSettings {
         self.allowed_ips = self.allowed_ips.trim().to_owned();
         self.fps_limit = self.fps_limit.min(MAX_FPS_LIMIT);
 
-        self.remote_access_host = normalized_remote_access_host(&self.remote_access_host);
         self.remote_listen_host = normalized_remote_listen_host(&self.remote_listen_host);
         self.remote_listen_port = normalized_remote_listen_port(self.remote_listen_port);
         self.hotkeys.normalize();
@@ -246,6 +251,16 @@ impl HotkeySettings {
         normalize_hotkey(&mut self.profile_9, DEFAULT_PROFILE_HOTKEYS[9]);
         normalize_hotkey(&mut self.copy_overlay, DEFAULT_COPY_OVERLAY_HOTKEY);
         normalize_hotkey(&mut self.paste_overlay, DEFAULT_PASTE_OVERLAY_HOTKEY);
+        normalize_hotkey(&mut self.undo, DEFAULT_UNDO_HOTKEY);
+        normalize_hotkey(&mut self.redo, DEFAULT_REDO_HOTKEY);
+        normalize_hotkey(
+            &mut self.refresh_selected_overlay,
+            DEFAULT_REFRESH_SELECTED_OVERLAY_HOTKEY,
+        );
+        normalize_hotkey(
+            &mut self.refresh_all_overlays,
+            DEFAULT_REFRESH_ALL_OVERLAYS_HOTKEY,
+        );
     }
 }
 
@@ -362,23 +377,10 @@ fn normalize_hotkey(value: &mut String, default: &str) {
     }
 }
 
-fn normalized_remote_access_host(value: &str) -> String {
-    let trimmed = value.trim().trim_end_matches('.');
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    let unbracketed = trimmed
-        .strip_prefix('[')
-        .and_then(|value| value.strip_suffix(']'))
-        .unwrap_or(trimmed);
-    if let Ok(address) = unbracketed.parse::<IpAddr>() {
-        return address.to_string();
-    }
-    url::Host::parse(trimmed)
-        .map(|host| host.to_string().to_ascii_lowercase())
-        .unwrap_or_default()
-}
-
+const DEFAULT_UNDO_HOTKEY: &str = "Ctrl+Z";
+const DEFAULT_REDO_HOTKEY: &str = "Ctrl+Shift+Z";
+const DEFAULT_REFRESH_SELECTED_OVERLAY_HOTKEY: &str = "Ctrl+R";
+const DEFAULT_REFRESH_ALL_OVERLAYS_HOTKEY: &str = "Ctrl+Shift+R";
 fn normalized_remote_listen_host(value: &str) -> String {
     let trimmed = value.trim();
     let unbracketed = trimmed
@@ -720,28 +722,30 @@ mod tests {
     }
 
     #[test]
-    fn normalize_validates_remote_access_host() {
-        let mut config = AppConfig::default();
-        config.settings.remote_access_host = " My-PC.Local. ".to_owned();
-        config.normalize();
-        assert_eq!(config.settings.remote_access_host, "my-pc.local");
-
-        config.settings.remote_access_host = "[2001:db8::1]".to_owned();
-        config.normalize();
-        assert_eq!(config.settings.remote_access_host, "2001:db8::1");
-
-        config.settings.remote_access_host = "https://attacker.example/path".to_owned();
-        config.normalize();
-        assert!(config.settings.remote_access_host.is_empty());
+    fn removed_remote_host_is_ignored_and_new_hotkeys_roundtrip() {
+        let config: AppConfig = serde_json::from_str(
+            r#"{"version":1,"active_profile":"default","profiles":[],"settings":{
+                "remote_access_host":"old.example",
+                "hotkeys":{"undo":"Alt+Z","redo":"Alt+Shift+Z",
+                    "refresh_selected_overlay":"Alt+R","refresh_all_overlays":"Alt+Shift+R"}
+            }}"#,
+        )
+        .expect("old config should deserialize");
+        let encoded = serde_json::to_value(&config).expect("config should serialize");
+        assert!(encoded["settings"].get("remote_access_host").is_none());
+        assert_eq!(config.settings.hotkeys.undo, "Alt+Z");
+        assert_eq!(config.settings.hotkeys.redo, "Alt+Shift+Z");
+        assert_eq!(config.settings.hotkeys.refresh_selected_overlay, "Alt+R");
+        assert_eq!(config.settings.hotkeys.refresh_all_overlays, "Alt+Shift+R");
     }
 
     #[test]
     fn normalize_defaults_remote_listen_host_and_port() {
         let mut config = AppConfig::default();
-        assert_eq!(config.settings.remote_listen_host, "0.0.0.0");
+        assert_eq!(config.settings.remote_listen_host, "127.0.0.1");
         assert_eq!(config.settings.remote_listen_port, 5050);
         config.normalize();
-        assert_eq!(config.settings.remote_listen_host, "0.0.0.0");
+        assert_eq!(config.settings.remote_listen_host, "127.0.0.1");
         assert_eq!(config.settings.remote_listen_port, 5050);
     }
 
@@ -758,7 +762,11 @@ mod tests {
 
         config.settings.remote_listen_host = "not-an-ip-address".to_owned();
         config.normalize();
-        assert_eq!(config.settings.remote_listen_host, "0.0.0.0");
+        assert_eq!(config.settings.remote_listen_host, "127.0.0.1");
+
+        config.settings.remote_listen_host = " \t ".to_owned();
+        config.normalize();
+        assert_eq!(config.settings.remote_listen_host, "127.0.0.1");
     }
 
     #[test]
@@ -865,6 +873,10 @@ mod tests {
             profile_9: "\t\n".to_owned(),
             copy_overlay: " ".to_owned(),
             paste_overlay: "\t".to_owned(),
+            undo: " ".to_owned(),
+            redo: String::new(),
+            refresh_selected_overlay: "\n".to_owned(),
+            refresh_all_overlays: "\t".to_owned(),
         };
 
         hotkeys.normalize();

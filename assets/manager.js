@@ -5,6 +5,7 @@
   const stage = $("stage");
   const editor = $("editor");
   const inspector = $("inspector");
+  const toolbar = editor.querySelector(".toolbar");
   const sidePanels = document.querySelectorAll(".sidebar, #inspector");
   const sidePanelClearance = 24;
   const profileSelect = $("profile-select");
@@ -12,14 +13,25 @@
   const profileMenu = $("profile-menu");
   const profilePicker = profileSelect.closest(".profile-picker");
   const profileAdd = $("profile-add");
+  const profileDelete = $("profile-delete");
   const profileActions = $("profile-actions");
+  const profilePosition = $("profile-position");
+  const profilePositionTotal = $("profile-position-total");
   const profileImport = $("profile-import");
   const profileExport = $("profile-export");
+  const profileDeleteConfirm = $("profile-delete-confirm");
+  const profileDeleteMessage = $("profile-delete-message");
+  const profileDeleteAccept = $("profile-delete-accept");
+  const profileDeleteCancel = $("profile-delete-cancel");
   const profileCreate = $("profile-create");
   const profileName = $("profile-name");
   const profileCreateCancel = $("profile-create-cancel");
   const catalog = $("catalog");
   const status = $("status");
+  const undoButton = $("undo");
+  const redoButton = $("redo");
+  const refreshSelectedButton = $("refresh-selected-overlays");
+  const refreshAllButton = $("refresh-all-overlays");
   const addUrl = $("add-url");
   const urlModal = $("url-modal");
   const urlForm = $("url-form");
@@ -38,7 +50,9 @@
   enabledField.addEventListener("change", () => {
     const overlay = selectedOverlay();
     if (!overlay) return;
+    const before = historySnapshot();
     overlay.enabled = enabledField.checked;
+    commitHistory(before);
     scheduleSave(true);
     requestRender("stageStructure", "inspector");
   });
@@ -46,14 +60,12 @@
   const settingsModal = $("settings-modal");
   const settingsForm = $("settings-form");
   const keepOverlaysInView = $("keep-overlays-in-view");
-  const fpsLimitMode = $("fps-limit-mode");
+  const fpsLimitModes = settingsForm.querySelectorAll('input[name="fps-limit-mode"]');
   const fpsLimit = $("fps-limit");
   const allowUnrestrictedSharedArrayBuffer = $("allow-unrestricted-shared-array-buffer");
   const allowedIps = $("allowed-ips");
   const remoteListenHost = $("remote-listen-host");
   const remoteListenPort = $("remote-listen-port");
-  const remoteAccessUrl = $("remote-access-url");
-  const remoteAccessHost = $("remote-access-host");
   const hotkeyList = $("hotkey-list");
   const settingsError = $("settings-error");
   const settingsResetHotkeys = $("settings-reset-hotkeys");
@@ -62,11 +74,15 @@
   const HOTKEY_KEYS = [
     ...Array.from({ length: 10 }, (_, index) => `profile_${index}`),
     "copy_overlay",
-    "paste_overlay"
+    "paste_overlay",
+    "undo",
+    "redo",
+    "refresh_selected_overlay",
+    "refresh_all_overlays"
   ];
+  const REPEATABLE_HOTKEYS = new Set(["undo", "redo"]);
   const DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute";
-  const DEFAULT_REMOTE_LISTEN_HOST = "0.0.0.0";
-  const DEFAULT_REMOTE_LISTEN_PORT = 5050;
+  const DEFAULT_REMOTE_LISTEN_HOST = "127.0.0.1";
   const DEFAULT_HOTKEYS = Object.freeze({
     profile_0: "Ctrl+0",
     profile_1: "Ctrl+1",
@@ -79,12 +95,20 @@
     profile_8: "Ctrl+8",
     profile_9: "Ctrl+9",
     copy_overlay: "Ctrl+C",
-    paste_overlay: "Ctrl+V"
+    paste_overlay: "Ctrl+V",
+    undo: "Ctrl+Z",
+    redo: "Ctrl+Shift+Z",
+    refresh_selected_overlay: "Ctrl+R",
+    refresh_all_overlays: "Ctrl+Shift+R"
   });
+  // Ctrl+I is consumed natively to toggle overlay interaction; the rest are
+  // browser zoom and the overlay toggle chord, which never reach page hotkeys.
   const RESERVED_HOTKEYS = new Set([
-    "Ctrl+I", "Ctrl+R", "Ctrl+Shift+Space",
+    "Ctrl+I", "Ctrl+Shift+Space",
     "Ctrl+Plus", "Ctrl+Shift+Plus", "Ctrl+Minus"
   ]);
+  const HISTORY_LIMIT = 100;
+  const HISTORY_COALESCE_MS = 1000;
 
   const dirty = {
     stageGeometry: true,
@@ -121,6 +145,8 @@
     renderPending: false,
     pointer: null,
     resizeFrame: 0,
+    toolbarHold: false,
+    inspectorEdit: null,
     error: null
   };
 
@@ -290,8 +316,6 @@
         always_keep_overlays_in_view: Boolean(sourceSettings.always_keep_overlays_in_view),
         allow_unrestricted_shared_array_buffer: Boolean(sourceSettings.allow_unrestricted_shared_array_buffer),
         allowed_ips: typeof sourceSettings.allowed_ips === "string" ? sourceSettings.allowed_ips : DEFAULT_ALLOWED_IPS,
-        remote_access_host: typeof sourceSettings.remote_access_host === "string"
-          ? sourceSettings.remote_access_host : "",
         remote_listen_host: typeof sourceSettings.remote_listen_host === "string"
           ? sourceSettings.remote_listen_host : DEFAULT_REMOTE_LISTEN_HOST,
         remote_listen_port: Number.isInteger(sourceSettings.remote_listen_port)
@@ -368,8 +392,15 @@
     return overlay;
   }
 
+  function rectsNear(first, second, clearance) {
+    return first.left <= second.right + clearance
+      && first.right >= second.left - clearance
+      && first.top <= second.bottom + clearance
+      && first.bottom >= second.top - clearance;
+  }
 
   function updatePanelAvoidance() {
+    updateToolbarAvoidance();
     const overlay = state.editing ? selectedOverlay() : null;
     const root = overlay && overlayRoots.get(overlay);
     if (!root) {
@@ -382,13 +413,41 @@
         panel.classList.remove("avoids-selected-overlay");
         continue;
       }
-      const panelRect = panel.getBoundingClientRect();
-      const avoids = overlayRect.left <= panelRect.right + sidePanelClearance
-        && overlayRect.right >= panelRect.left - sidePanelClearance
-        && overlayRect.top <= panelRect.bottom + sidePanelClearance
-        && overlayRect.bottom >= panelRect.top - sidePanelClearance;
-      panel.classList.toggle("avoids-selected-overlay", avoids);
+      panel.classList.toggle("avoids-selected-overlay", rectsNear(overlayRect, panel.getBoundingClientRect(), sidePanelClearance));
     }
+  }
+
+  // The toolbar holds Done and every open menu, so it never hides while it is
+  // in use; otherwise the user could be locked out of leaving the editor.
+  function toolbarPinned() {
+    return !profileMenu.hidden || !profileCreate.hidden || !profileDeleteConfirm.hidden
+      || !settingsModal.hidden || !urlModal.hidden || toolbar.contains(document.activeElement);
+  }
+
+  function updateToolbarAvoidance() {
+    const operation = state.pointer;
+    if (!state.editing) {
+      state.toolbarHold = false;
+    } else if (operation && operation.kind === "overlay") {
+      const toolbarRect = toolbar.getBoundingClientRect();
+      state.toolbarHold = operation.placements.some(({ overlay }) => {
+        const root = overlayRoots.get(overlay);
+        return Boolean(root) && rectsNear(root.getBoundingClientRect(), toolbarRect, sidePanelClearance);
+      });
+    }
+    toolbar.classList.toggle("avoids-selected-overlay", state.toolbarHold && !toolbarPinned());
+  }
+
+  // After a drag ends near the toolbar it stays hidden until the pointer leaves
+  // the toolbar area, so releasing an overlay there does not cover it again.
+  function releaseToolbarHold(x, y) {
+    if (!state.toolbarHold || state.pointer) return;
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      const rect = toolbar.getBoundingClientRect();
+      if (rectsNear({ left: x, right: x, top: y, bottom: y }, rect, sidePanelClearance)) return;
+    }
+    state.toolbarHold = false;
+    toolbar.classList.remove("avoids-selected-overlay");
   }
 
   function transformedBounds(overlay) {
@@ -436,8 +495,10 @@
   }
 
   function clampOverlay(overlay) {
-    // Game/display changes must not rewrite placements outside the editor.
-    if (!state.editing) return;
+    // Only the sole selected placement is constrained: entering the editor,
+    // display resizes, and settings changes must never rewrite placements the
+    // user did not pick. Game/display changes outside the editor are ignored too.
+    if (!state.editing || state.selected.size !== 1 || !state.selected.has(overlay)) return;
     overlay.scale = Math.max(0.1, finite(overlay.scale, 1));
     overlay.opacity = clamp(finite(overlay.opacity, 1), 0, 1);
     overlay.rotation = clamp(finite(overlay.rotation, 0), -180, 180);
@@ -540,6 +601,9 @@
     state.retryRequired = false;
     replaceSelection([]);
     state.config = normalizeConfig(envelope.config !== undefined ? envelope.config : envelope.payload);
+    // Snapshots of a replaced configuration would resurrect state the host
+    // rejected or superseded (conflict recovery, tosu import, first load).
+    resetHistory();
     if (Number.isSafeInteger(envelope.revision) && envelope.revision >= 0) state.hostRevision = envelope.revision;
     const invalidSource = state.config.profiles
       .flatMap((item) => item.overlays)
@@ -561,6 +625,134 @@
     status.textContent = "Saving…";
     if (immediate) flushPendingSave();
     else state.saveTimer = window.setTimeout(flushPendingSave, 240);
+  }
+
+  const history = { undo: [], redo: [], lastKey: "", lastAt: 0 };
+
+  function historySnapshot() {
+    if (!state.config) return null;
+    const profile = activeProfile();
+    return {
+      profiles: JSON.stringify(state.config.profiles),
+      active_profile: state.config.active_profile,
+      selected: profile
+        ? profile.overlays.flatMap((overlay, index) => (state.selected.has(overlay) ? [index] : []))
+        : []
+    };
+  }
+
+  function pushHistory(stack, entry) {
+    stack.push(entry);
+    if (stack.length > HISTORY_LIMIT) stack.shift();
+  }
+
+  // Records `before` as one undo step when the edit changed profiles or the
+  // active profile. Repeated edits sharing `coalesceKey` within a short window
+  // (wheel layering, profile position stepping) fold into the first step.
+  function commitHistory(before, coalesceKey = "") {
+    if (!before || !state.config) return false;
+    if (before.active_profile === state.config.active_profile
+        && before.profiles === JSON.stringify(state.config.profiles)) return false;
+    const now = performance.now();
+    const coalesce = Boolean(coalesceKey) && coalesceKey === history.lastKey
+      && now - history.lastAt < HISTORY_COALESCE_MS && history.undo.length > 0;
+    if (!coalesce) pushHistory(history.undo, before);
+    history.redo.length = 0;
+    history.lastKey = coalesceKey;
+    history.lastAt = now;
+    requestRender("chrome");
+    return true;
+  }
+
+  function resetHistory() {
+    history.undo.length = 0;
+    history.redo.length = 0;
+    history.lastKey = "";
+    state.inspectorEdit = null;
+    requestRender("chrome");
+  }
+
+  // Restored snapshots are fresh objects; reusing the live profile and overlay
+  // objects keeps their iframes mounted so undo/redo does not reload every
+  // overlay. Matching is by source, in order, within the same profile.
+  function reconcileProfiles(nextProfiles) {
+    const currentById = new Map(state.config.profiles.map((profile) => [profile.id, profile]));
+    return nextProfiles.map((next) => {
+      const current = currentById.get(next.id);
+      if (!current) return next;
+      const pool = current.overlays.slice();
+      current.name = next.name;
+      current.overlays = next.overlays.map((overlay) => {
+        const index = pool.findIndex((candidate) => candidate
+          && candidate.counter_id === overlay.counter_id && candidate.url === overlay.url);
+        if (index < 0) return overlay;
+        const existing = pool[index];
+        pool[index] = null;
+        for (const key of Object.keys(existing)) if (!(key in overlay)) delete existing[key];
+        return Object.assign(existing, overlay);
+      });
+      return current;
+    });
+  }
+
+  function stepHistory(from, to, verb) {
+    if (!state.config) return;
+    closeProfileMenu();
+    closeProfileCreator();
+    closeProfileDeleteConfirm();
+    closeInspectorPopup();
+    // Ends drags and blurs inspector fields first so their pending edit becomes
+    // its own step (and clears redo) before this one is applied.
+    flushEditingChanges();
+    const entry = from.pop();
+    if (!entry) {
+      status.textContent = `Nothing to ${verb}`;
+      requestRender("chrome");
+      return;
+    }
+    const current = historySnapshot();
+    // Both directions stay in the profile the edit happened in, so redo shows
+    // the change it reapplies even after the user switched profiles.
+    if (current.active_profile !== entry.active_profile
+        && state.config.profiles.some((profile) => profile.id === entry.active_profile)) {
+      current.active_profile = entry.active_profile;
+      current.selected = [];
+    }
+    pushHistory(to, current);
+    history.lastKey = "";
+    replaceSelection([]);
+    const profiles = reconcileProfiles(JSON.parse(entry.profiles));
+    state.config.profiles = profiles;
+    state.config.active_profile = profiles.some((profile) => profile.id === entry.active_profile)
+      ? entry.active_profile : profiles[0].id;
+    const profile = activeProfile();
+    replaceSelection(entry.selected.map((index) => profile.overlays[index]).filter(Boolean));
+    scheduleSave(true);
+    requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
+  }
+
+  function undoEdit() {
+    stepHistory(history.undo, history.redo, "undo");
+  }
+
+  function redoEdit() {
+    stepHistory(history.redo, history.undo, "redo");
+  }
+
+  function beginInspectorEdit() {
+    if (!state.inspectorEdit) state.inspectorEdit = { before: historySnapshot(), committed: false };
+  }
+
+  // Inspector fields mutate live while typing; the whole focus session is one
+  // step, committed on the first real change so Undo is available immediately.
+  function commitInspectorEdit() {
+    const edit = state.inspectorEdit;
+    if (edit && !edit.committed) edit.committed = commitHistory(edit.before);
+  }
+
+  function endInspectorEdit() {
+    commitInspectorEdit();
+    state.inspectorEdit = null;
   }
 
   function setError(message) {
@@ -682,12 +874,17 @@
 
     if (structureDirty || geometryDirty) {
       for (const overlay of overlays) {
-        clampOverlay(overlay);
+        const soleSelected = state.selected.size === 1 && state.selected.has(overlay);
+        if (soleSelected) {
+          const previous = `${overlay.left}\n${overlay.top}\n${overlay.width}\n${overlay.height}\n${overlay.scale}`;
+          clampOverlay(overlay);
+          // Persist the pull-into-view so the saved placement matches the screen.
+          if (previous !== `${overlay.left}\n${overlay.top}\n${overlay.width}\n${overlay.height}\n${overlay.scale}`) scheduleSave();
+        }
         const root = overlayRoots.get(overlay);
         if (!root) continue;
         applyOverlayStyle(root, overlay);
         root.classList.toggle("selected", state.selected.has(overlay));
-        const soleSelected = state.selected.size === 1 && state.selected.has(overlay);
         for (const handle of root.querySelectorAll(".resize-handle")) handle.hidden = !soleSelected;
       }
     }
@@ -737,21 +934,36 @@
       profileSelectLabel.textContent = "";
       profileImport.disabled = true;
       profileExport.disabled = true;
+      profilePosition.disabled = true;
+      profilePosition.value = "";
+      profilePositionTotal.textContent = "";
       return;
     }
     const current = activeProfile();
+    const count = state.config.profiles.length;
     profileSelectLabel.textContent = current ? current.name : "";
-    for (const profile of state.config.profiles) {
-      const option = makeElement("button", "profile-option", profile.name);
+    state.config.profiles.forEach((profile, index) => {
+      const option = makeElement("button", "profile-option");
       const active = profile === current;
       option.type = "button";
       option.dataset.profileId = profile.id;
       option.setAttribute("role", "menuitemradio");
       option.setAttribute("aria-checked", String(active));
       option.tabIndex = active ? 0 : -1;
+      option.append(
+        makeElement("span", "profile-option-index", String(index + 1)),
+        makeElement("span", "profile-option-name", profile.name)
+      );
       profileMenu.append(option);
+    });
+    profilePosition.max = String(count);
+    profilePosition.disabled = !current || count <= 1;
+    profilePosition.removeAttribute("aria-invalid");
+    if (document.activeElement !== profilePosition) {
+      profilePosition.value = current ? String(state.config.profiles.indexOf(current) + 1) : "";
     }
-    $("profile-delete").disabled = state.config.profiles.length <= 1;
+    profilePositionTotal.textContent = `of ${count}`;
+    profileDelete.disabled = !current;
     profileImport.disabled = !current;
     profileExport.disabled = !current;
   }
@@ -766,7 +978,7 @@
     }
     $("catalog-summary").textContent = counters.length === 1 ? "1 counter" : `${counters.length} counters`;
     if (!counters.length) {
-      catalog.append(makeElement("div", "catalog-empty", "No installed counters found. Browse available counters to install one."));
+      catalog.append(makeElement("div", "catalog-empty", "No installed counters found. Install counters in vosu, then refresh this list."));
       return;
     }
     const profile = activeProfile();
@@ -890,6 +1102,29 @@
     $("settings").disabled = custom || !counter || !counter.has_settings;
   }
 
+  function describeShortcut(button, label, shortcut) {
+    const title = shortcut ? `${label} (${shortcut})` : label;
+    if (button.title !== title) button.title = title;
+    const keys = shortcut
+      ? shortcut.split("+").map((part) => (part === "Ctrl" ? "Control" : part === "Plus" ? "+" : part === "Minus" ? "-" : part)).join("+")
+      : "";
+    if (keys) button.setAttribute("aria-keyshortcuts", keys);
+    else button.removeAttribute("aria-keyshortcuts");
+  }
+
+  function renderToolbarActions() {
+    const hotkeys = state.config ? state.config.settings.hotkeys : DEFAULT_HOTKEYS;
+    const profile = activeProfile();
+    undoButton.disabled = !history.undo.length;
+    redoButton.disabled = !history.redo.length;
+    refreshSelectedButton.disabled = !profile || !profile.overlays.some((overlay) => state.selected.has(overlay));
+    refreshAllButton.disabled = !profile || !profile.overlays.length;
+    describeShortcut(undoButton, "Undo", hotkeys.undo);
+    describeShortcut(redoButton, "Redo", hotkeys.redo);
+    describeShortcut(refreshSelectedButton, "Refresh selected overlays", hotkeys.refresh_selected_overlay);
+    describeShortcut(refreshAllButton, "Refresh all overlays", hotkeys.refresh_all_overlays);
+  }
+
   function render() {
     const regions = { ...dirty };
     for (const name of Object.keys(dirty)) dirty[name] = false;
@@ -904,6 +1139,7 @@
     if (regions.profileList) renderProfiles();
     if (regions.catalog) renderCatalog();
     if (regions.inspector) renderInspector();
+    renderToolbarActions();
     updatePanelAvoidance();
   }
 
@@ -967,9 +1203,11 @@
   function commitProfileImport(profile) {
     if (state.config.profiles.some((existing) => existing.id === profile.id)) profile = { ...profile, id: uniqueProfileId() };
     flushEditingChanges();
+    const before = historySnapshot();
     replaceSelection([]);
     state.config.profiles.push(profile);
     state.config.active_profile = profile.id;
+    commitHistory(before);
     scheduleSave(true);
     requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
     status.textContent = "Profile imported";
@@ -979,6 +1217,7 @@
   function addCounter(counter) {
     const profile = activeProfile();
     if (!profile) return;
+    const before = historySnapshot();
     const width = Math.max(10, finite(counter.width, 500));
     const height = Math.max(10, finite(counter.height, 300));
     const highest = profile.overlays.reduce((value, overlay) => Math.max(value, overlay.z_index), -1);
@@ -989,9 +1228,10 @@
       top: (window.innerHeight - height) / 2,
       z_index: clamp(highest + 1, 0, 999)
     });
-    clampOverlay(overlay);
     profile.overlays.push(overlay);
     selectOverlay(overlay);
+    clampOverlay(overlay);
+    commitHistory(before);
     scheduleSave();
     requestRender("stageStructure", "stageGeometry", "catalog", "inspector");
   }
@@ -1019,6 +1259,7 @@
   function addCustomOverlay(url, name) {
     const profile = activeProfile();
     if (!profile) return;
+    const before = historySnapshot();
     const width = 500;
     const height = 300;
     const highest = profile.overlays.reduce((value, overlay) => Math.max(value, overlay.z_index), -1);
@@ -1033,9 +1274,10 @@
       top: (window.innerHeight - height) / 2,
       z_index: clamp(highest + 1, 0, 999)
     });
-    clampOverlay(overlay);
     profile.overlays.push(overlay);
     selectOverlay(overlay);
+    clampOverlay(overlay);
+    commitHistory(before);
     scheduleSave();
     requestRender("stageStructure", "stageGeometry", "catalog", "inspector");
   }
@@ -1046,17 +1288,46 @@
     if (!profile || !overlay) return;
     const index = profile.overlays.indexOf(overlay);
     if (index < 0) return;
+    const before = historySnapshot();
     replaceSelection([]);
     profile.overlays.splice(index, 1);
+    commitHistory(before);
     scheduleSave(true);
     requestRender("stageStructure", "stageGeometry", "catalog", "inspector");
   }
 
-  function refreshSelectedOverlay() {
-    const overlay = selectedOverlay();
-    const frame = overlay && overlayRoots.get(overlay)?.querySelector(".overlay-frame");
-    if (!frame) return;
-    frame.src = frame.src;
+  function refreshOverlayFrames(overlays) {
+    let refreshed = 0;
+    for (const overlay of overlays) {
+      const frame = overlayRoots.get(overlay)?.querySelector(".overlay-frame");
+      if (!frame) continue;
+      // Reassigning the source reloads cross-origin frames, which the page
+      // cannot reach through contentWindow.
+      frame.src = frame.src;
+      refreshed += 1;
+    }
+    return refreshed;
+  }
+
+  function refreshSelectedOverlays() {
+    const profile = activeProfile();
+    const selected = profile ? profile.overlays.filter((overlay) => state.selected.has(overlay)) : [];
+    if (!selected.length) {
+      status.textContent = "Select an overlay to refresh";
+      return;
+    }
+    const refreshed = refreshOverlayFrames(selected);
+    status.textContent = refreshed
+      ? `Refreshed ${refreshed} selected overlay${refreshed === 1 ? "" : "s"}`
+      : "Selected overlays are disabled or unavailable";
+  }
+
+  function refreshAllOverlays() {
+    const profile = activeProfile();
+    const refreshed = profile ? refreshOverlayFrames(profile.overlays) : 0;
+    status.textContent = refreshed
+      ? `Refreshed ${refreshed} overlay${refreshed === 1 ? "" : "s"}`
+      : "No loaded overlays to refresh";
   }
 
   function flushEditingChanges() {
@@ -1071,6 +1342,7 @@
       state.pointer = null;
       if (operation.root.hasPointerCapture(operation.id)) operation.root.releasePointerCapture(operation.id);
       if (operation.kind === "selection") selectionBox.hidden = true;
+      else commitHistory(operation.before);
     }
     flushPendingSave();
   }
@@ -1085,6 +1357,7 @@
     if (!state.config) return;
     closeProfileMenu();
     closeProfileCreator();
+    closeProfileDeleteConfirm();
     urlName.value = "";
     urlInput.value = "https://";
     urlModal.hidden = false;
@@ -1100,11 +1373,89 @@
 
   function openProfileCreator() {
     if (!state.config) return;
+    closeProfileDeleteConfirm();
     profileName.value = `Profile ${state.config.profiles.length + 1}`;
     profileActions.hidden = true;
     profileCreate.hidden = false;
     profileName.focus();
     profileName.select();
+  }
+
+  function closeProfileDeleteConfirm(restoreFocus = false) {
+    if (profileDeleteConfirm.hidden) return;
+    profileDeleteConfirm.hidden = true;
+    delete profileDeleteConfirm.dataset.profileId;
+    profileActions.hidden = false;
+    if (restoreFocus) profileDelete.focus();
+    updateToolbarAvoidance();
+  }
+
+  // window.confirm has no UI in the off-screen browser and returns false, so
+  // deletion is confirmed inline in the toolbar instead.
+  function openProfileDeleteConfirm() {
+    const profile = activeProfile();
+    if (!state.config || !profile) return;
+    closeProfileMenu();
+    closeProfileCreator();
+    profileDeleteMessage.textContent = state.config.profiles.length > 1
+      ? `Delete “${profile.name}”?`
+      : `Delete “${profile.name}”? An empty Default profile replaces it.`;
+    profileDeleteMessage.title = profileDeleteMessage.textContent;
+    profileDeleteConfirm.dataset.profileId = profile.id;
+    profileActions.hidden = true;
+    profileDeleteConfirm.hidden = false;
+    profileDeleteCancel.focus();
+  }
+
+  function deleteConfirmedProfile() {
+    if (!state.config) return;
+    const profiles = state.config.profiles;
+    const profile = profiles.find((item) => item.id === profileDeleteConfirm.dataset.profileId);
+    if (!profile) {
+      closeProfileDeleteConfirm(true);
+      return;
+    }
+    flushEditingChanges();
+    const before = historySnapshot();
+    const wasActive = profile === activeProfile();
+    replaceSelection([]);
+    const index = profiles.indexOf(profile);
+    profiles.splice(index, 1);
+    // A configuration always needs one profile; the sole profile is replaced
+    // by an empty one rather than refusing the deletion.
+    if (!profiles.length) profiles.push({ id: uniqueProfileId(), name: "Default", overlays: [] });
+    if (wasActive || !profiles.some((item) => item.id === state.config.active_profile)) {
+      state.config.active_profile = profiles[Math.min(index, profiles.length - 1)].id;
+    }
+    commitHistory(before);
+    closeProfileDeleteConfirm(true);
+    scheduleSave(true);
+    requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
+    const undo = state.config.settings.hotkeys.undo;
+    toast(`Deleted “${profile.name}”${undo ? `. Press ${undo} to undo.` : ""}`);
+  }
+
+  function commitProfilePosition() {
+    const profile = activeProfile();
+    if (!state.config || !profile) return;
+    const profiles = state.config.profiles;
+    const current = profiles.indexOf(profile) + 1;
+    const raw = profilePosition.value.trim();
+    const requested = Number(raw);
+    if (!raw || !Number.isInteger(requested) || requested < 1 || requested > profiles.length) {
+      profilePosition.value = String(current);
+      profilePosition.removeAttribute("aria-invalid");
+      setError(`Profile position must be a whole number from 1 to ${profiles.length}`);
+      return;
+    }
+    profilePosition.removeAttribute("aria-invalid");
+    if (requested === current) return;
+    const before = historySnapshot();
+    profiles.splice(current - 1, 1);
+    profiles.splice(requested - 1, 0, profile);
+    commitHistory(before, `profile-position:${profile.id}`);
+    scheduleSave(true);
+    requestRender("profileList");
   }
 
   function setEditing(editing, notify = true) {
@@ -1117,6 +1468,7 @@
       closeSettingsModal(false);
       closeProfileMenu();
       closeProfileCreator();
+      closeProfileDeleteConfirm();
       closeInspectorPopup();
     }
     if (!next) flushEditingChanges();
@@ -1135,24 +1487,30 @@
     if (!overlay || !state.selected.has(overlay)) return;
     if (edge && selectedOverlay() !== overlay) return;
     event.preventDefault();
-    if (inspector.contains(document.activeElement)) document.activeElement.blur();
+    if (inspector.contains(document.activeElement) || toolbar.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
     root.setPointerCapture(event.pointerId);
+    const before = historySnapshot();
     const angle = overlay.rotation * Math.PI / 180;
     const placements = [...state.selected].map((placement) => ({
       overlay: placement,
       left: placement.left,
       top: placement.top
     }));
+    // Placements already outside their range (never clamped while unselected)
+    // may not be pushed further out, but the drag must not snap them back.
     const movementBounds = placements.reduce((bounds, placement) => {
       const range = overlayPositionRange(placement.overlay);
-      bounds.minX = Math.max(bounds.minX, range.minLeft - placement.left);
-      bounds.maxX = Math.min(bounds.maxX, range.maxLeft - placement.left);
-      bounds.minY = Math.max(bounds.minY, range.minTop - placement.top);
-      bounds.maxY = Math.min(bounds.maxY, range.maxTop - placement.top);
+      bounds.minX = Math.max(bounds.minX, Math.min(0, range.minLeft - placement.left));
+      bounds.maxX = Math.min(bounds.maxX, Math.max(0, range.maxLeft - placement.left));
+      bounds.minY = Math.max(bounds.minY, Math.min(0, range.minTop - placement.top));
+      bounds.maxY = Math.min(bounds.maxY, Math.max(0, range.maxTop - placement.top));
       return bounds;
     }, { minX: -Infinity, maxX: Infinity, minY: -Infinity, maxY: Infinity });
     state.pointer = {
       kind: "overlay",
+      before,
       id: event.pointerId,
       root,
       overlay,
@@ -1263,9 +1621,12 @@
     if (operation.kind === "selection") {
       selectionBox.hidden = true;
     } else {
+      commitHistory(operation.before);
       scheduleSave(true);
     }
     requestRender("stageGeometry", "inspector");
+    updateToolbarAvoidance();
+    releaseToolbarHold(event.clientX, event.clientY);
   }
 
   stage.addEventListener("pointerdown", (event) => {
@@ -1297,6 +1658,11 @@
   stage.addEventListener("pointermove", movePointer);
   stage.addEventListener("pointerup", endPointer);
   stage.addEventListener("pointercancel", endPointer);
+  document.addEventListener("pointermove", (event) => {
+    if (state.toolbarHold) releaseToolbarHold(event.clientX, event.clientY);
+  }, { passive: true });
+  document.documentElement.addEventListener("pointerleave", () => releaseToolbarHold(NaN, NaN));
+  toolbar.addEventListener("focusin", updateToolbarAvoidance);
   function showContextInspector(event, root = null) {
     if (!state.editing) return;
     const point = root
@@ -1332,9 +1698,11 @@
     selectOverlay(root._vosulayOverlay);
     const overlay = selectedOverlay();
     if (!overlay) return;
+    const before = historySnapshot();
     overlay.z_index = clamp(overlay.z_index + (event.deltaY < 0 ? 1 : -1), 0, 999);
     applyOverlayStyle(root, overlay);
     renderInspectorNumbers(overlay, ["z_index"]);
+    commitHistory(before, `layer:${activeProfile().overlays.indexOf(overlay)}`);
     scheduleSave();
   }, { passive: false });
 
@@ -1431,9 +1799,11 @@
     }
     const profile = { id: uniqueProfileId(), name, overlays: [] };
     flushEditingChanges();
+    const before = historySnapshot();
     replaceSelection([]);
     state.config.profiles.push(profile);
     state.config.active_profile = profile.id;
+    commitHistory(before);
     closeProfileCreator();
     scheduleSave(true);
     requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
@@ -1443,16 +1813,35 @@
     event.preventDefault();
     closeProfileCreator(true);
   });
-  $("profile-delete").addEventListener("click", () => {
-    if (!state.config || state.config.profiles.length <= 1) return;
-    const profile = activeProfile();
-    if (!profile || !window.confirm(`Delete profile “${profile.name}”?`)) return;
-    replaceSelection([]);
-    state.config.profiles = state.config.profiles.filter((item) => item.id !== profile.id);
-    state.config.active_profile = state.config.profiles[0].id;
-    scheduleSave(true);
-    requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
+  profileDelete.addEventListener("click", openProfileDeleteConfirm);
+  profileDeleteAccept.addEventListener("click", deleteConfirmedProfile);
+  profileDeleteCancel.addEventListener("click", () => closeProfileDeleteConfirm(true));
+  profilePosition.addEventListener("input", () => {
+    const value = Number(profilePosition.value);
+    const valid = profilePosition.value.trim() !== "" && Number.isInteger(value)
+      && value >= 1 && value <= (state.config ? state.config.profiles.length : 0);
+    if (valid) profilePosition.removeAttribute("aria-invalid");
+    else profilePosition.setAttribute("aria-invalid", "true");
   });
+  profilePosition.addEventListener("change", commitProfilePosition);
+  profilePosition.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) commitProfilePosition();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      const profile = activeProfile();
+      profilePosition.value = profile ? String(state.config.profiles.indexOf(profile) + 1) : "";
+      profilePosition.removeAttribute("aria-invalid");
+      profilePosition.blur();
+    }
+  });
+  undoButton.addEventListener("click", undoEdit);
+  redoButton.addEventListener("click", redoEdit);
+  refreshSelectedButton.addEventListener("click", refreshSelectedOverlays);
+  refreshAllButton.addEventListener("click", refreshAllOverlays);
 
   function commitTitle() {
     const overlay = selectedOverlay();
@@ -1466,7 +1855,9 @@
     }
     if (!current && next === overlayDetails(overlay).name) return;
     if (next === current) return;
+    beginInspectorEdit();
     overlay.name = next;
+    commitInspectorEdit();
     scheduleSave();
     requestRender("stageStructure", "inspector");
   }
@@ -1483,7 +1874,9 @@
     }
     if (urlField.value !== source.href) urlField.value = source.href;
     if (source.href === overlay.url) return;
+    beginInspectorEdit();
     overlay.url = source.href;
+    commitInspectorEdit();
     scheduleSave(true);
     requestRender("stageStructure", "inspector");
   }
@@ -1495,13 +1888,54 @@
     if (!event.repeat) commit();
   }
 
+  for (const input of [nameField, urlField]) {
+    input.addEventListener("focus", beginInspectorEdit);
+    input.addEventListener("blur", endInspectorEdit);
+  }
   nameField.addEventListener("change", commitTitle);
   nameField.addEventListener("keydown", (event) => commitInspectorOnEnter(event, commitTitle));
   urlField.addEventListener("change", commitUrl);
   urlField.addEventListener("keydown", (event) => commitInspectorOnEnter(event, commitUrl));
 
+  function commitInspectorNumber(name, input) {
+    const overlay = selectedOverlay();
+    if (!overlay) return;
+    const raw = input.value.trim();
+    const value = raw === "" ? NaN : Number(raw);
+    if (!Number.isFinite(value)) {
+      const previousPosition = positionFocusValues.get(input);
+      if (Number.isFinite(previousPosition)) {
+        applyInspectorFieldValue(name, overlay, previousPosition);
+        requestRender("stageGeometry", "inspector");
+      }
+      positionFocusValues.delete(input);
+      input.value = inspectorFieldValue(name, overlay);
+      showFieldWarning(input, "Enter a number.");
+      return;
+    }
+
+    const { minimum, maximum } = inspectorFieldBounds(input);
+    positionFocusValues.delete(input);
+    const adjusted = clamp(value, minimum, maximum);
+    applyInspectorFieldValue(name, overlay, adjusted);
+    const positionAdjusted = (name === "left" || name === "top") && overlay[name] !== value;
+    input.value = inspectorFieldValue(name, overlay);
+    scheduleSave();
+    requestRender("stageGeometry", "inspector");
+    if (value < minimum) {
+      showFieldWarning(input, `Value must be at least ${input.min}. Adjusted to ${input.min}.`);
+    } else if (value > maximum) {
+      showFieldWarning(input, `Value must be at most ${input.max}. Adjusted to ${input.max}.`);
+    } else if (positionAdjusted) {
+      showFieldWarning(input, `Value was adjusted to ${input.value} to keep the overlay in view.`);
+    } else {
+      clearFieldWarning(input);
+    }
+  }
+
   for (const [name, input] of Object.entries(fields)) {
     input.addEventListener("focus", () => {
+      beginInspectorEdit();
       if (name !== "left" && name !== "top") return;
       const overlay = selectedOverlay();
       if (overlay) positionFocusValues.set(input, overlay[name]);
@@ -1513,52 +1947,24 @@
       const value = Number(input.value);
       const { minimum, maximum } = inspectorFieldBounds(input);
       if (!Number.isFinite(value) || value < minimum || value > maximum) return;
+      beginInspectorEdit();
       const positionField = name === "left" || name === "top";
       if (positionField) {
         overlay[name] = value;
         const root = overlayRoots.get(overlay);
         if (root) applyOverlayStyle(root, overlay);
+        commitInspectorEdit();
         updatePanelAvoidance();
         return;
       }
       applyInspectorFieldValue(name, overlay, value);
+      commitInspectorEdit();
       scheduleSave();
       requestRender("stageGeometry", "inspector");
     });
     input.addEventListener("blur", () => {
-      const overlay = selectedOverlay();
-      if (!overlay) return;
-      const raw = input.value.trim();
-      const value = raw === "" ? NaN : Number(raw);
-      if (!Number.isFinite(value)) {
-        const previousPosition = positionFocusValues.get(input);
-        if (Number.isFinite(previousPosition)) {
-          applyInspectorFieldValue(name, overlay, previousPosition);
-          requestRender("stageGeometry", "inspector");
-        }
-        positionFocusValues.delete(input);
-        input.value = inspectorFieldValue(name, overlay);
-        showFieldWarning(input, "Enter a number.");
-        return;
-      }
-
-      const { minimum, maximum } = inspectorFieldBounds(input);
-      positionFocusValues.delete(input);
-      const adjusted = clamp(value, minimum, maximum);
-      applyInspectorFieldValue(name, overlay, adjusted);
-      const positionAdjusted = (name === "left" || name === "top") && overlay[name] !== value;
-      input.value = inspectorFieldValue(name, overlay);
-      scheduleSave();
-      requestRender("stageGeometry", "inspector");
-      if (value < minimum) {
-        showFieldWarning(input, `Value must be at least ${input.min}. Adjusted to ${input.min}.`);
-      } else if (value > maximum) {
-        showFieldWarning(input, `Value must be at most ${input.max}. Adjusted to ${input.max}.`);
-      } else if (positionAdjusted) {
-        showFieldWarning(input, `Value was adjusted to ${input.value} to keep the overlay in view.`);
-      } else {
-        clearFieldWarning(input);
-      }
+      commitInspectorNumber(name, input);
+      endInspectorEdit();
     });
   }
 
@@ -1567,18 +1973,8 @@
     settingsError.hidden = !message;
   }
 
-  function normalizedRemoteAccessHost(value) {
-    const candidate = String(value || "").trim().replace(/\.$/, "");
-    if (!candidate) return "";
-    try {
-      const url = new URL(`http://${candidate}/`);
-      if (url.username || url.password || url.port || url.pathname !== "/" || url.search || url.hash) return "";
-      return url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-    } catch {
-      return "";
-    }
-  }
-
+  // Empty means the default loopback listener; null marks an invalid address
+  // so the dialog reports it instead of silently replacing it.
   function normalizedRemoteListenHost(value) {
     const trimmed = String(value || "").trim();
     const unbracketed = trimmed.startsWith("[") && trimmed.endsWith("]")
@@ -1590,36 +1986,26 @@
       return unbracketed;
     }
     if (unbracketed.includes(":") && /^[0-9a-fA-F:]+$/.test(unbracketed)) return unbracketed;
-    return DEFAULT_REMOTE_LISTEN_HOST;
+    return null;
   }
 
   function normalizedRemoteListenPort(value) {
-    const port = Number(value);
-    return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : DEFAULT_REMOTE_LISTEN_PORT;
-  }
-
-
-  function renderRemoteAccessUrl() {
-    if (!state.settingsDraft) return;
-    const configuredHost = normalizedRemoteAccessHost(state.settingsDraft.remote_access_host);
-    const port = normalizedRemoteListenPort(state.settingsDraft.remote_listen_port);
-    remoteAccessUrl.value = configuredHost
-      ? `http://${configuredHost.includes(":") && !configuredHost.startsWith("[") ? `[${configuredHost}]` : configuredHost}:${port}/overlay`
-      : "Enter a valid remote host below";
+    const raw = String(value ?? "").trim();
+    if (!raw) return DEFAULT_REMOTE_LISTEN_PORT;
+    const port = Number(raw);
+    return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null;
   }
 
   function renderSettingsDraft() {
     if (!state.settingsDraft) return;
     keepOverlaysInView.checked = state.settingsDraft.always_keep_overlays_in_view;
     allowUnrestrictedSharedArrayBuffer.checked = state.settingsDraft.allow_unrestricted_shared_array_buffer;
-    fpsLimitMode.value = state.settingsDraft.fps_limit === 0 ? "auto" : "fixed";
-    fpsLimit.value = state.settingsDraft.fps_limit || "";
-    fpsLimit.disabled = fpsLimitMode.value !== "fixed";
+    for (const radio of fpsLimitModes) radio.checked = radio.value === state.settingsDraft.fps_mode;
+    if (fpsLimit.value !== state.settingsDraft.fps_value) fpsLimit.value = state.settingsDraft.fps_value;
+    fpsLimit.disabled = state.settingsDraft.fps_mode !== "fixed";
     allowedIps.value = state.settingsDraft.allowed_ips;
     remoteListenHost.value = state.settingsDraft.remote_listen_host;
     remoteListenPort.value = state.settingsDraft.remote_listen_port;
-    remoteAccessHost.value = state.settingsDraft.remote_access_host;
-    renderRemoteAccessUrl();
     for (const button of hotkeyList.querySelectorAll(".hotkey-input")) {
       const key = button.dataset.hotkey;
       button.textContent = state.settingsDraft.hotkeys[key] || DEFAULT_HOTKEYS[key] || "";
@@ -1642,21 +2028,22 @@
     closeUrlModal(false);
     closeProfileMenu();
     closeProfileCreator();
+    closeProfileDeleteConfirm();
     closeInspectorPopup();
     const settings = state.config.settings;
     state.settingsDraft = {
       always_keep_overlays_in_view: settings.always_keep_overlays_in_view,
-      fps_limit: settings.fps_limit,
+      fps_mode: settings.fps_limit === 0 ? "auto" : "fixed",
+      fps_value: settings.fps_limit ? String(settings.fps_limit) : "",
       allow_unrestricted_shared_array_buffer: settings.allow_unrestricted_shared_array_buffer,
       allowed_ips: settings.allowed_ips,
       remote_listen_host: settings.remote_listen_host,
-      remote_listen_port: settings.remote_listen_port,
-
-      remote_access_host: settings.remote_access_host,
+      remote_listen_port: String(settings.remote_listen_port),
       hotkeys: { ...settings.hotkeys }
     };
     state.recordingHotkey = "";
     showSettingsError("");
+    for (const input of [fpsLimit, remoteListenHost, remoteListenPort]) input.removeAttribute("aria-invalid");
     renderSettingsDraft();
     settingsModal.hidden = false;
     keepOverlaysInView.focus();
@@ -1689,10 +2076,11 @@
   function pasteCopiedPlacements() {
     const profile = activeProfile();
     if (!profile || !state.copiedPlacements.length) return;
+    const before = historySnapshot();
     const pasted = state.copiedPlacements.map((overlay) => normalizeOverlay({ ...overlay }));
-    for (const overlay of pasted) clampOverlay(overlay);
     profile.overlays.push(...pasted);
     replaceSelection(pasted);
+    commitHistory(before);
     scheduleSave(true);
     requestRender("stageStructure", "stageGeometry", "catalog", "inspector");
   }
@@ -1705,14 +2093,19 @@
   allowUnrestrictedSharedArrayBuffer.addEventListener("change", () => {
     if (state.settingsDraft) state.settingsDraft.allow_unrestricted_shared_array_buffer = allowUnrestrictedSharedArrayBuffer.checked;
   });
-  fpsLimitMode.addEventListener("change", () => {
-    fpsLimit.disabled = fpsLimitMode.value !== "fixed";
-    if (state.settingsDraft && fpsLimitMode.value === "auto") state.settingsDraft.fps_limit = 0;
-  });
+  for (const radio of fpsLimitModes) {
+    radio.addEventListener("change", () => {
+      if (!state.settingsDraft || !radio.checked) return;
+      state.settingsDraft.fps_mode = radio.value;
+      fpsLimit.disabled = radio.value !== "fixed";
+      fpsLimit.removeAttribute("aria-invalid");
+      showSettingsError("");
+    });
+  }
   fpsLimit.addEventListener("input", () => {
     if (!state.settingsDraft) return;
-    const value = Number(fpsLimit.value);
-    if (Number.isInteger(value) && value >= 1 && value <= 1000000) state.settingsDraft.fps_limit = value;
+    state.settingsDraft.fps_value = fpsLimit.value;
+    fpsLimit.removeAttribute("aria-invalid");
   });
   allowedIps.addEventListener("input", () => {
     if (state.settingsDraft) state.settingsDraft.allowed_ips = allowedIps.value;
@@ -1720,22 +2113,19 @@
   remoteListenHost.addEventListener("input", () => {
     if (!state.settingsDraft) return;
     state.settingsDraft.remote_listen_host = remoteListenHost.value;
-    renderRemoteAccessUrl();
+    remoteListenHost.removeAttribute("aria-invalid");
   });
   remoteListenPort.addEventListener("input", () => {
     if (!state.settingsDraft) return;
     state.settingsDraft.remote_listen_port = remoteListenPort.value;
-    renderRemoteAccessUrl();
+    remoteListenPort.removeAttribute("aria-invalid");
   });
-  remoteAccessHost.addEventListener("input", () => {
-    if (!state.settingsDraft) return;
-    state.settingsDraft.remote_access_host = remoteAccessHost.value;
-    const candidate = remoteAccessHost.value.trim();
-    showSettingsError(candidate && !normalizedRemoteAccessHost(candidate)
-      ? "Remote host must be a hostname or IP address without a scheme, port, or path."
-      : "");
-    renderRemoteAccessUrl();
-  });
+
+  function rejectSettingsField(input, message) {
+    input.setAttribute("aria-invalid", "true");
+    showSettingsError(message);
+    input.focus();
+  }
   settingsResetHotkeys.addEventListener("click", () => {
     if (!state.settingsDraft) return;
     state.settingsDraft.hotkeys = { ...DEFAULT_HOTKEYS };
@@ -1782,34 +2172,50 @@
   settingsForm.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!state.settingsDraft) return;
-    const normalizedHost = normalizedRemoteAccessHost(state.settingsDraft.remote_access_host);
-    if (state.settingsDraft.remote_access_host.trim() && !normalizedHost) {
-      showSettingsError("Remote host must be a hostname or IP address without a scheme, port, or path.");
-      remoteAccessHost.focus();
+    const draft = state.settingsDraft;
+    let fpsValue = 0;
+    if (draft.fps_mode === "fixed") {
+      const raw = draft.fps_value.trim();
+      fpsValue = Number(raw);
+      if (!raw || !Number.isInteger(fpsValue) || fpsValue < 1 || fpsValue > 1000000) {
+        rejectSettingsField(fpsLimit, "Fixed FPS limit must be a whole number from 1 to 1000000.");
+        return;
+      }
+    }
+    const listenHost = normalizedRemoteListenHost(draft.remote_listen_host);
+    if (listenHost === null) {
+      rejectSettingsField(remoteListenHost, "Listener address must be an IPv4 or IPv6 address, such as 127.0.0.1 or 0.0.0.0.");
       return;
     }
-    const shortcuts = HOTKEY_KEYS.map((key) => state.settingsDraft.hotkeys[key]);
+    const listenPort = normalizedRemoteListenPort(draft.remote_listen_port);
+    if (listenPort === null) {
+      rejectSettingsField(remoteListenPort, "Listener port must be a whole number from 1 to 65535.");
+      return;
+    }
+    const shortcuts = HOTKEY_KEYS.map((key) => draft.hotkeys[key]);
     if (new Set(shortcuts).size !== shortcuts.length) {
       showSettingsError("Each action must have a unique shortcut.");
       return;
     }
     state.config.settings = {
-      always_keep_overlays_in_view: state.settingsDraft.always_keep_overlays_in_view,
-      fps_limit: fpsLimitMode.value === "auto" ? 0 : Number(fpsLimit.value),
-      allow_unrestricted_shared_array_buffer: state.settingsDraft.allow_unrestricted_shared_array_buffer,
-      allowed_ips: state.settingsDraft.allowed_ips,
-      remote_listen_host: normalizedRemoteListenHost(state.settingsDraft.remote_listen_host),
-      remote_listen_port: normalizedRemoteListenPort(state.settingsDraft.remote_listen_port),
-
-      remote_access_host: normalizedHost,
-      hotkeys: normalizeHotkeys(state.settingsDraft.hotkeys)
+      always_keep_overlays_in_view: draft.always_keep_overlays_in_view,
+      fps_limit: fpsValue,
+      allow_unrestricted_shared_array_buffer: draft.allow_unrestricted_shared_array_buffer,
+      allowed_ips: draft.allowed_ips,
+      remote_listen_host: listenHost,
+      remote_listen_port: listenPort,
+      hotkeys: normalizeHotkeys(draft.hotkeys)
     };
     closeSettingsModal();
     closeInspectorPopup();
-    const profile = activeProfile();
-    if (profile) for (const overlay of profile.overlays) clampOverlay(overlay);
+    const overlay = selectedOverlay();
+    if (overlay) {
+      const before = historySnapshot();
+      clampOverlay(overlay);
+      commitHistory(before);
+    }
     scheduleSave(true);
-    requestRender("stageGeometry", "inspector");
+    requestRender("stageGeometry", "inspector", "chrome");
   });
   settingsModal.addEventListener("keydown", (event) => {
     if (event.key !== "Tab") return;
@@ -1831,11 +2237,13 @@
   $("reset").addEventListener("click", () => {
     const overlay = selectedOverlay();
     if (!overlay) return;
+    const before = historySnapshot();
     const counter = findCounter(overlay.counter_id);
     overlay.width = Math.max(10, finite(counter && counter.width, 500));
     overlay.height = Math.max(10, finite(counter && counter.height, 300));
     overlay.scale = 1;
     clampOverlay(overlay);
+    commitHistory(before);
     scheduleSave(true);
     requestRender("stageGeometry", "inspector");
   });
@@ -1872,24 +2280,52 @@
     status.textContent = "Refreshing…";
     ipc({ type: "refresh-counters" });
   });
-  $("open-available").addEventListener("click", () => ipc({ type: "open-available" }));
 
   $("done").addEventListener("click", () => setEditing(false));
 
+  const TEXT_INPUT_TYPES = new Set(["text", "number", "url", "search", "email", "password", "tel"]);
+
+  // Only text entry keeps native shortcuts (undo/redo, copy/paste); checkboxes,
+  // radios and buttons still let editor hotkeys through.
   function isEditableTarget(target) {
-    return target instanceof Element
-      && (Boolean(target.closest("input, textarea, select")) || target.isContentEditable);
+    if (!(target instanceof Element)) return false;
+    if (target.isContentEditable || target.closest("textarea, select")) return true;
+    const input = target.closest("input");
+    return Boolean(input) && TEXT_INPUT_TYPES.has(input.type);
   }
 
   function menuOrModalOpen() {
     return !settingsModal.hidden || !urlModal.hidden || !profileMenu.hidden
-      || !profileCreate.hidden || state.inspectorPopup;
+      || !profileCreate.hidden || !profileDeleteConfirm.hidden || state.inspectorPopup;
+  }
+
+  function runHotkeyAction(action) {
+    if (action === "copy_overlay") copySelectedPlacements();
+    else if (action === "paste_overlay") pasteCopiedPlacements();
+    else if (action === "undo") undoEdit();
+    else if (action === "redo") redoEdit();
+    else if (action === "refresh_selected_overlay") refreshSelectedOverlays();
+    else if (action === "refresh_all_overlays") refreshAllOverlays();
+    else {
+      const number = Number(action.slice("profile_".length));
+      const profile = state.config.profiles[number === 0 ? 9 : number - 1];
+      if (profile) activateProfile(profile.id);
+    }
   }
 
   document.addEventListener("wheel", (event) => {
     if (event.ctrlKey) event.preventDefault();
   }, { capture: true, passive: false });
   document.addEventListener("keydown", (event) => {
+    // Browser reload would discard the editor page and any unsaved edits; the
+    // refresh actions reload overlay frames instead.
+    const reloadKey = event.key === "F5" || event.code === "F5"
+      || ((event.ctrlKey || event.metaKey) && !event.altKey
+        && (event.code === "KeyR" || event.key.toLowerCase() === "r"));
+    if (reloadKey) {
+      event.preventDefault();
+      return;
+    }
     if (!event.ctrlKey || event.altKey || event.metaKey) return;
     const zoomKey = ["+", "-", "=", "0"].includes(event.key)
       || ["Equal", "Minus", "NumpadAdd", "NumpadSubtract", "Digit0", "Numpad0"].includes(event.code);
@@ -1897,31 +2333,16 @@
   }, true);
 
   window.addEventListener("keydown", (event) => {
+    if (event.key === "Tab") releaseToolbarHold(NaN, NaN);
     const editable = isEditableTarget(event.target);
-    if (state.editing && !event.repeat && !editable && !menuOrModalOpen()) {
+    if (state.editing && !editable && !menuOrModalOpen() && state.config) {
       const shortcut = eventHotkey(event);
-      const action = HOTKEY_KEYS.find((key) => state.config?.settings.hotkeys[key] === shortcut);
+      const action = shortcut && HOTKEY_KEYS.find((key) => state.config.settings.hotkeys[key] === shortcut);
       if (action) {
         event.preventDefault();
-        if (action === "copy_overlay") {
-          copySelectedPlacements();
-        } else if (action === "paste_overlay") {
-          pasteCopiedPlacements();
-        } else {
-          const number = Number(action.slice("profile_".length));
-          const profileIndex = number === 0 ? 9 : number - 1;
-          const profile = state.config.profiles[profileIndex];
-          if (profile) activateProfile(profile.id);
-        }
+        if (!event.repeat || REPEATABLE_HOTKEYS.has(action)) runHotkeyAction(action);
         return;
       }
-    }
-
-    if (state.editing && event.ctrlKey && !event.altKey && !event.metaKey
-        && !event.shiftKey && event.key.toLowerCase() === "r") {
-      event.preventDefault();
-      if (!editable && !event.repeat && !menuOrModalOpen()) refreshSelectedOverlay();
-      return;
     }
 
     if (event.key === "Delete") {
@@ -1945,6 +2366,9 @@
     } else if (!profileMenu.hidden) {
       event.preventDefault();
       closeProfileMenu(true);
+    } else if (!profileDeleteConfirm.hidden) {
+      event.preventDefault();
+      closeProfileDeleteConfirm(true);
     } else if (!profileCreate.hidden) {
       event.preventDefault();
       closeProfileCreator(true);
@@ -1962,17 +2386,13 @@
       state.resizeFrame = 0;
       updatePanelAvoidance();
       if (!profileMenu.hidden && profilePicker.getClientRects().length === 0) closeProfileMenu();
-      const profile = activeProfile();
-      if (!profile || !state.editing) return;
-      let changed = false;
-      for (const overlay of profile.overlays) {
-        const before = `${overlay.left}\n${overlay.top}\n${overlay.width}\n${overlay.height}\n${overlay.scale}\n${overlay.rotation}`;
-        clampOverlay(overlay);
-        const after = `${overlay.left}\n${overlay.top}\n${overlay.width}\n${overlay.height}\n${overlay.scale}\n${overlay.rotation}`;
-        if (before !== after) changed = true;
-      }
+      const overlay = state.editing ? selectedOverlay() : null;
+      if (!overlay) return;
+      const before = `${overlay.left}\n${overlay.top}\n${overlay.width}\n${overlay.height}\n${overlay.scale}\n${overlay.rotation}`;
+      clampOverlay(overlay);
+      const after = `${overlay.left}\n${overlay.top}\n${overlay.width}\n${overlay.height}\n${overlay.scale}\n${overlay.rotation}`;
       if (state.inspectorPopup) requestRender("inspector");
-      if (!changed) return;
+      if (before === after) return;
       scheduleSave();
       requestRender("stageGeometry", "inspector");
     });
@@ -2101,8 +2521,6 @@
           state.interacting = !state.interacting;
           requestRender("chrome");
         }
-      } else if (envelope.type === "refresh-selected-overlay") {
-        if (state.editing && !menuOrModalOpen() && !isEditableTarget(document.activeElement)) refreshSelectedOverlay();
       } else if (envelope.type === "error") {
         const value = envelope.message !== undefined ? envelope.message : envelope.error !== undefined ? envelope.error : envelope.payload;
         setError(typeof value === "string" ? value : "vosu could not refresh counters");

@@ -295,22 +295,17 @@ impl Host<'_> {
                 }
                 return Ok(());
             }
-            if kind == KeyKind::Character
-                && ((self.consumed[0x49] && character == 9)
-                    || (self.consumed[0x52] && character == 18))
-            {
+            if kind == KeyKind::Character && self.consumed[0x49] && character == 9 {
                 return Ok(());
             }
             if kind == KeyKind::RawDown
                 && modifiers.control
                 && !modifiers.shift
                 && !modifiers.alt
-                && matches!(code, 0x49 | 0x52)
+                && code == 0x49
             {
-                self.consumed[code as usize] = true;
-                self.receive(
-                    &json!({"type":if code == 0x49 { "toggle-interaction" } else { "refresh-selected-overlay" }}),
-                )?;
+                self.consumed[0x49] = true;
+                self.receive(&json!({"type": "toggle-interaction"}))?;
                 return Ok(());
             }
         }

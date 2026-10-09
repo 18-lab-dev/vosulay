@@ -417,10 +417,6 @@ impl State {
                 open::that_detached(url.as_str())?;
                 Ok(Vec::new())
             }
-            "open-available" => {
-                open::that_detached(self.backend.join("/available")?.as_str())?;
-                Ok(Vec::new())
-            }
             _ => bail!("unknown manager task: {kind}"),
         }
     }

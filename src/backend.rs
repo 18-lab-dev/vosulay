@@ -14,7 +14,7 @@ use tokio::{
     runtime::Builder,
     sync::{Notify, mpsc, oneshot, watch},
     task::JoinSet,
-    time::{Instant, timeout},
+    time::timeout,
 };
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async_with_config,
@@ -26,9 +26,9 @@ use tokio_tungstenite::{
 use url::Url;
 
 const IO_TIMEOUT: Duration = Duration::from_secs(3);
-const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_MESSAGE: usize = 4 * 1024 * 1024;
 const MAX_CLIENTS: usize = 128;
+const COMMANDS: &str = "/websocket/commands";
 type Upstream = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
 #[derive(Clone, Copy)]
@@ -56,8 +56,9 @@ impl Schema {
 #[derive(Clone, Copy)]
 enum Endpoint {
     Telemetry(Schema),
-    Selected,
-    Commands,
+    // Selected-field subscriptions must follow vosu's precise publication cadence; projecting them
+    // from the shared regular v2 stream delayed every update by up to POLL_RATE.
+    Relay(&'static str),
 }
 
 fn endpoint(target: &str) -> Option<Endpoint> {
@@ -66,8 +67,8 @@ fn endpoint(target: &str) -> Option<Endpoint> {
         "/tokens" => Some(Endpoint::Telemetry(Schema::Sc)),
         "/websocket/v2" => Some(Endpoint::Telemetry(Schema::V2)),
         "/websocket/v2/precise" => Some(Endpoint::Telemetry(Schema::V2Precise)),
-        "/websocket/v2/subscribe" => Some(Endpoint::Selected),
-        "/websocket/commands" => Some(Endpoint::Commands),
+        "/websocket/v2/subscribe" => Some(Endpoint::Relay("/websocket/v2/subscribe")),
+        "/websocket/commands" => Some(Endpoint::Relay(COMMANDS)),
         _ => None,
     }
 }
@@ -77,7 +78,6 @@ pub(crate) fn supports_websocket(target: &str) -> bool {
 }
 
 struct Snapshot {
-    revision: u64,
     text: Utf8Bytes,
     document: OnceLock<Option<Value>>,
     projections: Mutex<HashMap<Arc<[Filter]>, Utf8Bytes>>,
@@ -232,8 +232,7 @@ async fn run(
                 if clients.len() >= MAX_CLIENTS { continue; }
                 let state = match attach.endpoint {
                     Endpoint::Telemetry(schema) => Some(shared[schema.index()].clone()),
-                    Endpoint::Selected => Some(shared[Schema::V2.index()].clone()),
-                    Endpoint::Commands => None,
+                    Endpoint::Relay(_) => None,
                 };
                 // Subscribe before waking the producer, including before the client task is polled.
                 let frames = state.as_ref().map(|state| state.frames.subscribe());
@@ -284,7 +283,6 @@ async fn send<S: AsyncRead + AsyncWrite + Unpin>(
 
 async fn source(base: Url, schema: Schema, shared: Arc<Shared>) {
     let url = upstream_url(&base, schema.path(), None);
-    let mut revision = 0_u64;
     loop {
         while shared.frames.receiver_count() == 0 {
             shared.demand.notified().await;
@@ -301,9 +299,7 @@ async fn source(base: Url, schema: Schema, shared: Arc<Shared>) {
                 };
                 match received {
                     Some(Ok(Message::Text(text))) => {
-                        revision = revision.saturating_add(1);
                         shared.frames.send_replace(Some(Arc::new(Snapshot {
-                            revision,
                             text,
                             document: OnceLock::new(),
                             projections: Mutex::new(HashMap::new()),
@@ -341,62 +337,31 @@ async fn client(
     )
     .await;
     let query = attach.target.split_once('?').map(|(_, query)| query);
-    let commands_url = upstream_url(&base, "/websocket/commands", query);
-    if matches!(attach.endpoint, Endpoint::Commands) {
-        return relay(&mut socket, connect(&commands_url).await?).await;
+    if let Endpoint::Relay(path) = attach.endpoint {
+        return relay(
+            &mut socket,
+            connect(&upstream_url(&base, path, query)).await?,
+        )
+        .await;
     }
+    let commands_url = upstream_url(&base, COMMANDS, query);
     let mut frames = frames.expect("telemetry receiver");
-    let selected = matches!(attach.endpoint, Endpoint::Selected);
     let sc = matches!(attach.endpoint, Endpoint::Telemetry(Schema::Sc));
     let mut filters: Arc<[Filter]> = Arc::from([]);
-    let mut selection: Option<Selection> = None;
     let mut commands: Option<Upstream> = None;
-    let deadline = Instant::now() + SUBSCRIPTION_TIMEOUT;
     let mut ready = true;
     loop {
         if ready {
             ready = false;
             let frame = frames.borrow_and_update().clone();
             if let Some(frame) = frame {
-                let text = if selected {
-                    match selection.as_mut() {
-                        Some(selection) => match selection.frame(frame) {
-                            Ok(text) => text,
-                            Err(_) => {
-                                return application_error(
-                                    &mut socket,
-                                    4,
-                                    "state serialization failed",
-                                )
-                                .await;
-                            }
-                        },
-                        None => None,
-                    }
-                } else {
-                    Some(frame.filtered(&filters)?)
-                };
-                if let Some(text) = text {
-                    send(&mut socket, Message::Text(text)).await?;
-                }
-            } else if let Some(selection) = &mut selection {
-                selection.baseline = None;
+                send(&mut socket, Message::Text(frame.filtered(&filters)?)).await?;
             }
         }
         tokio::select! {
             result = frames.changed() => { result?; ready = true; },
-            _ = tokio::time::sleep_until(deadline), if selected && selection.is_none() => {
-                return application_error(&mut socket, 3, "subscription timed out").await;
-            },
             received = socket.next() => {
                 match received {
-                    Some(Ok(Message::Text(text))) if selected => {
-                        if selection.is_some() { return application_error(&mut socket, 5, "subscription already established").await; }
-                        match Selection::parse(&text) {
-                            Ok(value) => { selection = Some(value); ready = true; }
-                            Err((code, message)) => return application_error(&mut socket, code, message).await,
-                        }
-                    }
                     Some(Ok(Message::Text(text))) => {
                         if let Some(source) = filter_command(&text, sc) {
                             if let Some(value) = parse_filters(source) { filters = value.into(); ready = true; }
@@ -446,120 +411,6 @@ async fn relay(
             }
         }
     }
-}
-
-async fn application_error(
-    socket: &mut WebSocketStream<tokio::net::TcpStream>,
-    code: u16,
-    message: &str,
-) -> Result<()> {
-    send(
-        socket,
-        Message::Text(serde_json::to_string(&(2_u8, code, message))?.into()),
-    )
-    .await?;
-    let close_code = if code == 4 { 1011 } else { 1008 };
-    send(
-        socket,
-        Message::Close(Some(CloseFrame {
-            code: close_code.into(),
-            reason: "".into(),
-        })),
-    )
-    .await
-}
-
-struct Selection {
-    pointers: Vec<Vec<String>>,
-    baseline: Option<Arc<Snapshot>>,
-}
-
-impl Selection {
-    fn parse(text: &str) -> std::result::Result<Self, (u16, &'static str)> {
-        let invalid = (1, "invalid subscription request");
-        let bad_pointer = (2, "invalid JSON Pointer");
-        let pointers: Vec<String> = serde_json::from_str(text).map_err(|_| invalid)?;
-        if !(1..=256).contains(&pointers.len())
-            || pointers.iter().any(|pointer| pointer.len() > 512)
-        {
-            return Err(invalid);
-        }
-        let mut compiled: Vec<Vec<String>> = Vec::with_capacity(pointers.len());
-        for pointer in pointers {
-            let mut tokens = Vec::new();
-            if !pointer.is_empty() {
-                for token in pointer.strip_prefix('/').ok_or(bad_pointer)?.split('/') {
-                    let mut decoded = String::with_capacity(token.len());
-                    let mut chars = token.chars();
-                    while let Some(ch) = chars.next() {
-                        decoded.push(if ch != '~' {
-                            ch
-                        } else {
-                            match chars.next() {
-                                Some('0') => '~',
-                                Some('1') => '/',
-                                _ => return Err(bad_pointer),
-                            }
-                        });
-                    }
-                    tokens.push(decoded);
-                }
-            }
-            if tokens.len() > 32 {
-                return Err(invalid);
-            }
-            if compiled
-                .iter()
-                .any(|old| old.starts_with(&tokens) || tokens.starts_with(old))
-            {
-                return Err(bad_pointer);
-            }
-            compiled.push(tokens);
-        }
-        Ok(Self {
-            pointers: compiled,
-            baseline: None,
-        })
-    }
-
-    fn frame(&mut self, frame: Arc<Snapshot>) -> Result<Option<Utf8Bytes>> {
-        let document = frame.document().context("invalid backend v2 snapshot")?;
-        let baseline = self.baseline.as_ref().and_then(|frame| frame.document());
-        let mut values = Vec::new();
-        let mut removed = Vec::new();
-        for (id, tokens) in self.pointers.iter().enumerate() {
-            let current = traverse(document, tokens);
-            let old = baseline.and_then(|value| traverse(value, tokens));
-            if baseline.is_some() && current == old {
-                continue;
-            }
-            if let Some(value) = current {
-                values.push((id as u16, value));
-            } else if old.is_some() {
-                removed.push(id as u16);
-            }
-        }
-        let text = if baseline.is_none() {
-            Some(serde_json::to_string(&(0_u8, frame.revision, values))?.into())
-        } else if !values.is_empty() || !removed.is_empty() {
-            Some(serde_json::to_string(&(1_u8, frame.revision, values, removed))?.into())
-        } else {
-            None
-        };
-        self.baseline = Some(frame);
-        Ok(text)
-    }
-}
-
-fn traverse<'a>(mut value: &'a Value, tokens: &[String]) -> Option<&'a Value> {
-    for token in tokens {
-        value = match value {
-            Value::Object(object) => object.get(token)?,
-            Value::Array(array) => array.get(array_index(token)?)?,
-            _ => return None,
-        };
-    }
-    Some(value)
 }
 
 fn array_index(key: &str) -> Option<usize> {
