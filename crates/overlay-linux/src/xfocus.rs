@@ -1,7 +1,10 @@
-//! X11 focus observation stays off the application's presentation thread and
-//! uses its own XCB connection: XCB reports errors per request, whereas Xlib
-//! errors on a vanished window would reach the application's global handler.
+//! X11 focus observation and editor cursor control stay off the application's
+//! presentation thread and use their own XCB connection: XCB reports errors per
+//! request, whereas Xlib errors on a vanished window would reach the
+//! application's global handler.
+use parking_lot::Mutex;
 use std::{
+    collections::HashMap,
     ffi::{c_char, c_int, c_void},
     sync::{
         LazyLock,
@@ -70,8 +73,32 @@ struct Xcb {
     get_property_reply:
         unsafe extern "C" fn(*mut c_void, Cookie, *mut *mut c_void) -> *mut PropertyReply,
     property_value: unsafe extern "C" fn(*const PropertyReply) -> *const c_void,
+    generate_id: unsafe extern "C" fn(*mut c_void) -> u32,
+    open_font: unsafe extern "C" fn(*mut c_void, u32, u16, *const c_char) -> Cookie,
+    #[allow(clippy::type_complexity)]
+    create_glyph_cursor: unsafe extern "C" fn(
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        u16,
+        u16,
+        u16,
+        u16,
+        u16,
+        u16,
+        u16,
+        u16,
+    ) -> Cookie,
+    change_window_attributes: unsafe extern "C" fn(*mut c_void, u32, u32, *const u32) -> Cookie,
+    flush: unsafe extern "C" fn(*mut c_void) -> c_int,
+    poll_for_event: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
     pid_atom: u32,
 }
+
+// XCB connections are thread-safe; the observer and cursor hooks share one.
+unsafe impl Send for Xcb {}
+unsafe impl Sync for Xcb {}
 
 impl Xcb {
     unsafe fn open() -> Option<Self> {
@@ -128,6 +155,12 @@ impl Xcb {
             get_property: symbol!(c"xcb_get_property"),
             get_property_reply: symbol!(c"xcb_get_property_reply"),
             property_value: symbol!(c"xcb_get_property_value"),
+            generate_id: symbol!(c"xcb_generate_id"),
+            open_font: symbol!(c"xcb_open_font"),
+            create_glyph_cursor: symbol!(c"xcb_create_glyph_cursor"),
+            change_window_attributes: symbol!(c"xcb_change_window_attributes"),
+            flush: symbol!(c"xcb_flush"),
+            poll_for_event: symbol!(c"xcb_poll_for_event"),
             pid_atom,
         })
     }
@@ -208,13 +241,123 @@ impl Xcb {
         }
         false
     }
+
+    unsafe fn set_cursor(&self, window: u32, cursor: u32) {
+        // XCB_CW_CURSOR
+        unsafe { (self.change_window_attributes)(self.connection, window, 1 << 14, &cursor) };
+    }
+
+    /// The standard pointer from the core cursor font (XC_left_ptr), owned by
+    /// this connection so it outlives any game-side resource.
+    unsafe fn arrow(&self) -> u32 {
+        let font = unsafe { (self.generate_id)(self.connection) };
+        let cursor = unsafe { (self.generate_id)(self.connection) };
+        let name = b"cursor";
+        unsafe {
+            (self.open_font)(
+                self.connection,
+                font,
+                name.len() as u16,
+                name.as_ptr().cast(),
+            );
+            (self.create_glyph_cursor)(
+                self.connection,
+                cursor,
+                font,
+                font,
+                68,
+                69,
+                0,
+                0,
+                0,
+                0xffff,
+                0xffff,
+                0xffff,
+            );
+        }
+        cursor
+    }
+
+    /// Requests are unchecked; drop their errors (for example a window or
+    /// game cursor destroyed meanwhile) so they do not accumulate.
+    unsafe fn discard_events(&self) {
+        loop {
+            let event = unsafe { (self.poll_for_event)(self.connection) };
+            if event.is_null() {
+                return;
+            }
+            unsafe { libc::free(event) };
+        }
+    }
+}
+
+static CONNECTION: LazyLock<Option<Xcb>> = LazyLock::new(|| unsafe { Xcb::open() });
+
+/// Cursors the game set on its windows. Games such as osu! hide the system
+/// cursor, which would leave the editor without a pointer. The game's own
+/// Display cannot be used to swap them: Wine sets cursors on a connection
+/// that never polls events, and other threads' Xlib connections are not
+/// guaranteed to be thread-safe.
+struct Cursors {
+    windows: HashMap<u32, u32>,
+    editor: bool,
+    arrow: u32,
+}
+
+static CURSORS: LazyLock<Mutex<Cursors>> = LazyLock::new(|| {
+    Mutex::new(Cursors {
+        windows: HashMap::new(),
+        editor: false,
+        arrow: 0,
+    })
+});
+
+/// Records a cursor the game set; returns whether the editor's pointer is
+/// shown instead, in which case the game's request must not reach the server.
+pub(crate) fn define_cursor(window: u64, cursor: u64) -> bool {
+    let (Ok(window), Ok(cursor)) = (u32::try_from(window), u32::try_from(cursor)) else {
+        return false;
+    };
+    let mut cursors = CURSORS.lock();
+    cursors.windows.insert(window, cursor);
+    if !cursors.editor {
+        return false;
+    }
+    if let Some(xcb) = CONNECTION.as_ref() {
+        unsafe {
+            xcb.set_cursor(window, cursors.arrow);
+            (xcb.flush)(xcb.connection);
+        }
+    }
+    true
+}
+
+pub(crate) fn forget_window(window: u64) {
+    if let Ok(window) = u32::try_from(window) {
+        CURSORS.lock().windows.remove(&window);
+    }
+}
+
+unsafe fn sync_cursors(xcb: &Xcb, editor: bool) {
+    let mut cursors = CURSORS.lock();
+    if cursors.editor == editor {
+        return;
+    }
+    if editor && cursors.arrow == 0 {
+        cursors.arrow = unsafe { xcb.arrow() };
+    }
+    cursors.editor = editor;
+    for (&window, &cursor) in &cursors.windows {
+        unsafe { xcb.set_cursor(window, if editor { cursors.arrow } else { cursor }) };
+    }
+    unsafe { (xcb.flush)(xcb.connection) };
 }
 
 static OBSERVER: LazyLock<()> = LazyLock::new(|| {
     let _ = std::thread::Builder::new()
         .name("vosulay-xfocus".into())
         .spawn(|| unsafe {
-            let Some(xcb) = Xcb::open() else {
+            let Some(xcb) = CONNECTION.as_ref() else {
                 return;
             };
             let mut last = None;
@@ -230,6 +373,8 @@ static OBSERVER: LazyLock<()> = LazyLock::new(|| {
                     }
                     None => STAMP.store(0, Ordering::Release),
                 }
+                sync_cursors(xcb, crate::hooks::x11_editing());
+                xcb.discard_events();
                 std::thread::sleep(Duration::from_millis(25));
             }
         });

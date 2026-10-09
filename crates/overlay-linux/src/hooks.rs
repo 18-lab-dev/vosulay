@@ -477,18 +477,34 @@ pub(crate) fn focus(window: usize, focused: bool) {
 /// top-level window while rendering into an unrelated offscreen client window,
 /// so events are matched to the process's surface rather than by window id.
 fn x11_surface() -> Option<Arc<Surface>> {
-    let candidates: Vec<_> = SURFACES
-        .lock()
-        .iter()
-        .filter(|s| s.backend != Backend::Sdl && s.active.load(Ordering::Acquire))
-        .cloned()
-        .collect();
+    let candidates: Vec<_> = {
+        let surfaces = SURFACES.lock();
+        // SDL games route input through their SDL event hooks already.
+        if surfaces
+            .iter()
+            .any(|s| s.backend == Backend::Sdl && s.active.load(Ordering::Acquire))
+        {
+            return None;
+        }
+        surfaces
+            .iter()
+            .filter(|s| s.active.load(Ordering::Acquire))
+            .cloned()
+            .collect()
+    };
     // Client locks are never taken while the registry lock is held.
     candidates
         .iter()
         .find(|s| s.client.lock().visible())
         .or_else(|| candidates.first())
         .cloned()
+}
+/// Whether the editor is capturing an Xlib game's input, without servicing
+/// the control connection (safe from the focus observer thread).
+pub(crate) fn x11_editing() -> bool {
+    x11_surface().is_some_and(|surface| {
+        surface.client.lock().capturing() && surface.composed.load(Ordering::Acquire)
+    })
 }
 pub(crate) fn route_x11(input: vosulay_frame::BrowserInput) -> bool {
     let Some(surface) = x11_surface() else {
@@ -1186,7 +1202,7 @@ pub unsafe extern "C" fn eglTerminate(display: *mut c_void) -> c_uint {
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn XDestroyWindow(display: *mut c_void, window: c_ulong) -> c_int {
-    crate::x11input::forget_window(display, window);
+    crate::xfocus::forget_window(window);
     for surface in take_surfaces(|s| s.native == window).into_iter().flatten() {
         retire_surface(&surface);
     }

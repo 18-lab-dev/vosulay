@@ -11,7 +11,6 @@ use std::{
     collections::HashMap,
     ffi::{c_char, c_int, c_uint, c_ulong, c_void},
     sync::LazyLock,
-    time::{Duration, Instant},
 };
 use vosulay_frame::{BrowserInput, InputModifiers, KeyKind, MouseButton};
 
@@ -62,7 +61,6 @@ type LookupKeysym = unsafe extern "C" fn(*mut c_void, c_int) -> c_ulong;
 type QueryExtension =
     unsafe extern "C" fn(*mut c_void, *const c_char, *mut c_int, *mut c_int, *mut c_int) -> c_int;
 type DefineCursor = unsafe extern "C" fn(*mut c_void, c_ulong, c_ulong) -> c_int;
-type CreateFontCursor = unsafe extern "C" fn(*mut c_void, c_uint) -> c_ulong;
 
 static CHECK_IF_EVENT: LazyLock<Option<CheckIfEvent>> =
     LazyLock::new(|| unsafe { original(b"XCheckIfEvent\0") });
@@ -76,8 +74,6 @@ static QUERY_EXTENSION: LazyLock<Option<QueryExtension>> =
     LazyLock::new(|| unsafe { original(b"XQueryExtension\0") });
 static DEFINE_CURSOR: LazyLock<Option<DefineCursor>> =
     LazyLock::new(|| unsafe { original(b"XDefineCursor\0") });
-static CREATE_FONT_CURSOR: LazyLock<Option<CreateFontCursor>> =
-    LazyLock::new(|| unsafe { original(b"XCreateFontCursor\0") });
 
 #[derive(Clone, Copy)]
 enum KeyOwner {
@@ -93,14 +89,6 @@ struct State {
     /// Who received each keycode's press; its release goes to the same side.
     owners: [KeyOwner; 256],
     last_click: Option<(c_uint, c_ulong, i32)>,
-    /// Cursors the game set per (Display, window): games such as osu! hide
-    /// the system cursor, which would leave the editor without a pointer.
-    cursors: HashMap<(usize, c_ulong), c_ulong>,
-    /// Visible editor cursor per Display.
-    arrows: HashMap<usize, c_ulong>,
-    /// Whether each Display currently shows the editor cursor, and when it
-    /// was last checked.
-    cursor_shown: HashMap<usize, (bool, Instant)>,
 }
 
 static STATE: LazyLock<Mutex<State>> = LazyLock::new(|| {
@@ -108,61 +96,8 @@ static STATE: LazyLock<Mutex<State>> = LazyLock::new(|| {
         xinput: HashMap::new(),
         owners: [KeyOwner::None; 256],
         last_click: None,
-        cursors: HashMap::new(),
-        arrows: HashMap::new(),
-        cursor_shown: HashMap::new(),
     })
 });
-
-/// Shows a normal pointer over the game's windows while the editor captures
-/// input and restores the game's own cursors afterwards. Runs on the thread
-/// that owns `display`, from inside its event polling.
-unsafe fn sync_cursor(display: *mut c_void) {
-    let key = display as usize;
-    let now = Instant::now();
-    let shown = {
-        let mut state = STATE.lock();
-        let entry = state.cursor_shown.entry(key).or_insert((false, now));
-        if now.duration_since(entry.1) < Duration::from_millis(50) {
-            return;
-        }
-        entry.1 = now;
-        entry.0
-    };
-    let capturing = capturing_x11();
-    if shown == capturing {
-        return;
-    }
-    let (Some(define), Some(create)) = (*DEFINE_CURSOR, *CREATE_FONT_CURSOR) else {
-        return;
-    };
-    let (windows, arrow) = {
-        let mut state = STATE.lock();
-        state.cursor_shown.insert(key, (capturing, now));
-        let windows: Vec<_> = state
-            .cursors
-            .iter()
-            .filter(|((owner, _), _)| *owner == key)
-            .map(|((_, window), cursor)| (*window, *cursor))
-            .collect();
-        (windows, state.arrows.get(&key).copied())
-    };
-    if capturing {
-        let arrow = arrow.unwrap_or_else(|| {
-            // XC_left_ptr
-            let arrow = unsafe { create(display, 68) };
-            STATE.lock().arrows.insert(key, arrow);
-            arrow
-        });
-        for (window, _) in windows {
-            unsafe { define(display, window, arrow) };
-        }
-    } else {
-        for (window, cursor) in windows {
-            unsafe { define(display, window, cursor) };
-        }
-    }
-}
 
 /// # Safety
 /// Xlib contract for `XDefineCursor`.
@@ -175,17 +110,8 @@ pub unsafe extern "C" fn XDefineCursor(
     let Some(define) = *DEFINE_CURSOR else {
         return 0;
     };
-    let key = display as usize;
-    let shown = {
-        let mut state = STATE.lock();
-        state.cursors.insert((key, window), cursor);
-        state
-            .cursor_shown
-            .get(&key)
-            .is_some_and(|(shown, _)| *shown)
-    };
     // While editing, the game's cursor is applied when editing ends.
-    if shown {
+    if crate::xfocus::define_cursor(window, cursor) {
         1
     } else {
         unsafe { define(display, window, cursor) }
@@ -467,7 +393,6 @@ pub unsafe extern "C" fn XCheckIfEvent(
     let Some(check) = *CHECK_IF_EVENT else {
         return 0;
     };
-    unsafe { sync_cursor(display) };
     loop {
         let found = unsafe { check(display, event, predicate, argument) };
         if found == 0 || !unsafe { consumed(event) } {
@@ -483,7 +408,6 @@ pub unsafe extern "C" fn XNextEvent(display: *mut c_void, event: *mut c_void) ->
     let Some(next) = *NEXT_EVENT else {
         return 0;
     };
-    unsafe { sync_cursor(display) };
     loop {
         let result = unsafe { next(display, event) };
         if !unsafe { consumed(event) } {
@@ -499,11 +423,6 @@ pub(crate) fn hooked(name: &[u8]) -> Option<*const c_void> {
         b"XDefineCursor" => XDefineCursor as _,
         _ => return None,
     })
-}
-
-/// Destroyed windows must not receive restored cursors.
-pub(crate) fn forget_window(display: *mut c_void, window: c_ulong) {
-    STATE.lock().cursors.remove(&(display as usize, window));
 }
 
 #[cfg(test)]
