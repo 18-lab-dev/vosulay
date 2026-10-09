@@ -7,7 +7,7 @@ description: Maintainer environment (optional) only when the private windows-vm 
 
 ## Availability gate — first step
 
-Run `command -v windows-vm` before following this skill. If it fails, do not try to install private tooling or recreate the maintainer workstation. Fall back to the `vosulay-local-ci`/`vosulay-cross-platform-dev` skills and `CONTRIBUTING.md`: Linux can run optional Windows cross-Clippy; request or run a manual GitHub Actions `windows-build` in a fork for its portable package; use an authorized native Windows machine for manual game testing. With only a Linux machine, report native Windows runtime checks as unexercised. No VM is required to contribute.
+Run `command -v windows-vm` before following this skill. If it fails, do not try to install private tooling or recreate the maintainer workstation. Fall back to the `vosulay-local-ci`/`vosulay-cross-platform-dev` skills and `CONTRIBUTING.md`: Linux can run optional Windows cross-Clippy; request or run manual GitHub Actions **Packages** (`.github/workflows/release.yml`) in a fork with `publish=false` for `vosulay-linux-x86_64` and `vosulay-windows-x86_64` artifacts (Linux packages and Windows ZIP/installer); use an authorized native Windows machine for manual game testing. With only a Linux machine, report native Windows runtime checks as unexercised. No VM is required to contribute.
 
 Everything below applies only to the authorized maintainer environment with that command and guest GUI tooling available.
 
@@ -35,6 +35,8 @@ cargo run --locked -p vosulay-cef-tools -- package-windows dist/package
 ```
 
 Record the portable ZIP hash. Extract the complete package: bootstrap `vosulay.exe`, client `vosulay.dll`, CEF runtime/resources/locales, and both asdf-overlay DLLs. Use only an approved task workspace; do not overwrite user installations. Stop task-owned game processes before replacing DLLs, since injected files can remain locked.
+
+For packaging changes, follow `docs/operations.md`: build Linux packages in the Ubuntu 22.04 container and install-test in disposable distro containers (version, libcef dependencies, root-owned `4755` sandbox, sustained startup and no duplicate user launcher). Compile installer changes with Inno Setup 6 and, when authorized, test install/upgrade/uninstall in a task-owned Windows workspace, including tray exit prompts, shortcut options and retained user configuration. Do not overwrite a user installation merely to verify packaging.
 
 ## Interactive launch and evidence
 

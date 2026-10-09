@@ -57,7 +57,9 @@ rustup component add llvm-tools
 env -u C_INCLUDE_PATH cargo xwin clippy --workspace --all-targets --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
 ```
 
-`C_INCLUDE_PATH` must be unset to avoid host-header contamination. Cross-Clippy is not native Windows execution. Native Windows workspace checks use the commands above (the native target is selected by the toolchain). Windows contributors can rely on Linux CI; WSL builds/tests may be attempted with Linux prerequisites but do not establish native game behavior. Linux CI runs on PRs and main pushes; Windows Build is manual dispatch from the Actions tab (maintainer run or a fork) and uploads the portable ZIP. Do not claim that pushing any branch runs both workflows.
+`C_INCLUDE_PATH` must be unset to avoid host-header contamination. Cross-Clippy is not native Windows execution. Native Windows workspace checks use the commands above (the native target is selected by the toolchain). Windows contributors can rely on Linux CI; WSL builds/tests may be attempted with Linux prerequisites but do not establish native game behavior. Linux CI runs on PRs and main pushes; **Packages** (`.github/workflows/release.yml`) is manual dispatch from the Actions tab (maintainer run or a fork, `publish=false`) and uploads `vosulay-linux-x86_64` and `vosulay-windows-x86_64` artifacts containing Linux packages and the Windows ZIP/installer. Do not claim that pushing any branch runs both workflows.
+
+For packaging changes, follow `docs/operations.md`: build in the Ubuntu 22.04 container and install-test in disposable distro containers. Verify version output, libcef dependencies, root-owned mode `4755` sandbox, sustained startup and no duplicate user launcher. Windows installer changes need authorized native install/upgrade/uninstall checks, not only compilation.
 
 ## Chromium editor preview
 

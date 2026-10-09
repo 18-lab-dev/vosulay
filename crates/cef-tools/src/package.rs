@@ -102,6 +102,11 @@ pub fn package_runtime(
             let basename = overlay.file_name().context("overlay has no basename")?;
             copy_tree(overlay, &output.join(basename))?;
         }
+        // The pinned Linux libcef.so carries over 1 GB of debug and static
+        // symbols; shipping them would make every package several times larger.
+        if platform.starts_with("linux") {
+            strip_symbols(output)?;
+        }
 
         let manifest_path = output.join("vosulay-cef.json");
         if manifest_path.exists() {
@@ -198,6 +203,29 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
     for entry in fs::read_dir(source)? {
         let entry = entry?;
         copy_tree(&entry.path(), &destination.join(entry.file_name()))?;
+    }
+    Ok(())
+}
+
+fn strip_symbols(root: &Path) -> Result<()> {
+    use std::io::Read;
+    for file in files(root)? {
+        let mut magic = [0_u8; 4];
+        let is_elf = fs::File::open(&file)
+            .and_then(|mut handle| handle.read_exact(&mut magic))
+            .is_ok()
+            && magic == *b"\x7fELF";
+        if !is_elf {
+            continue;
+        }
+        let status = std::process::Command::new("strip")
+            .arg("--strip-unneeded")
+            .arg(&file)
+            .status()
+            .with_context(|| format!("running strip on {}", file.display()))?;
+        if !status.success() {
+            bail!("strip failed for {}", file.display());
+        }
     }
     Ok(())
 }

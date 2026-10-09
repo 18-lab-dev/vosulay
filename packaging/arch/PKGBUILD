@@ -1,0 +1,79 @@
+# Maintainer: vosulay contributors <https://github.com/shiruviaa/vosulay>
+#
+# Source build for the AUR. After tagging a release, set pkgver and run
+# `updpkgsums`. The pinned CEF archive must match tools/cef/pins.json.
+pkgname=vosulay
+pkgver=0.2.0
+pkgrel=1
+_cef=cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_linux64_minimal.tar.bz2
+pkgdesc='In-game overlay for vosu and tosu-compatible counters'
+arch=('x86_64')
+url='https://github.com/shiruviaa/vosulay'
+license=('MIT' 'BSD-3-Clause')
+depends=(
+  'alsa-lib' 'at-spi2-core' 'cairo' 'dbus' 'expat' 'glib2' 'libcups' 'libx11'
+  'libxcb' 'libxcomposite' 'libxdamage' 'libxext' 'libxfixes' 'libxkbcommon'
+  'libxrandr' 'mesa' 'nspr' 'nss' 'pango' 'systemd-libs' 'wayland'
+)
+makedepends=('rustup')
+# CEF ships prebuilt and stripped; the injected overlay libraries must keep
+# their default link options.
+options=('!lto' '!strip' '!debug')
+source=(
+  "$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+  "https://cef-builds.spotifycdn.com/${_cef//+/%2B}"
+)
+noextract=("${_cef//+/%2B}")
+sha256sums=('SKIP'
+            '7f47eeb1c297099ffb9e12d0dea6a0d4eabd255135d114ff0ace8780bdb3feeb')
+
+_cache() {
+  echo "$srcdir/cache"
+}
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  # The build verifies and extracts the pinned CEF archive from this cache
+  # instead of downloading it.
+  mkdir -p "$(_cache)/vosulay/cef"
+  cp -L "$srcdir/${_cef//+/%2B}" "$(_cache)/vosulay/cef/$_cef"
+  export RUSTUP_TOOLCHAIN="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
+  rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+  cargo fetch --locked --target x86_64-unknown-linux-gnu
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  export XDG_CACHE_HOME="$(_cache)"
+  export RUSTUP_TOOLCHAIN="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
+  export CARGO_TARGET_DIR=target
+  # libcef ships beside the executable; do not embed the build cache RPATH.
+  export VOSULAY_PACKAGE_BUILD=1
+  # The overlay libraries are also build dependencies of vosulay; one invocation
+  # would collide on their output filenames.
+  cargo build --frozen --release -p vosulay
+  cargo build --frozen --release -p vosulay-overlay -p vosulay-lookup
+  local cef
+  cef="$(cargo run --frozen --quiet --release -p vosulay-cef-tools -- acquire --platform linux-x86_64)"
+  rm -rf "$srcdir/stage"
+  cargo run --frozen --quiet --release -p vosulay-cef-tools -- package --platform linux-x86_64 \
+    --cef-path "$cef" --output "$srcdir/stage" \
+    --exe target/release/vosulay \
+    --overlay target/release/libvosulay_overlay.so \
+    --overlay target/release/libvosulay_lookup.so \
+    --overlay crates/overlay-linux/VkLayer_vosulay_overlay.json
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -d "$pkgdir/usr/lib/vosulay" "$pkgdir/usr/bin"
+  cp -a "$srcdir/stage/." "$pkgdir/usr/lib/vosulay/"
+  # Chromium's setuid sandbox, used when unprivileged user namespaces are unavailable.
+  chmod 4755 "$pkgdir/usr/lib/vosulay/chrome-sandbox"
+  ln -s /usr/lib/vosulay/vosulay "$pkgdir/usr/bin/vosulay"
+  install -Dm644 packaging/linux/com.vosu.vosulay.desktop \
+    "$pkgdir/usr/share/applications/com.vosu.vosulay.desktop"
+  install -Dm644 assets/branding/vosulay-app-icon.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/com.vosu.vosulay.svg"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

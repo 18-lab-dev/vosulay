@@ -12,9 +12,11 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo test --workspace --all-features --locked
 ```
 
-Clippy/tests match [Linux CI](../.github/workflows/linux-ci.yml); formatting is a recommended additional local check. Linux CI runs on PRs, pushes to `main`, and manual dispatch. [Windows Build](../.github/workflows/windows-build.yml) is manual-dispatch only and uploads a portable `vosulay-windows-x86_64` artifact. Request a maintainer run or use your fork's Actions tab for native packaging evidence.
+Clippy/tests match [Linux CI](../.github/workflows/linux-ci.yml); formatting is a recommended additional local check. Linux CI runs on PRs, pushes to `main`, and manual dispatch. [Packages](../.github/workflows/release.yml) is manual-dispatch only and uploads `vosulay-linux-x86_64` and `vosulay-windows-x86_64` artifacts (Linux packages; Windows ZIP/installer). Request a maintainer run or use your fork's Actions tab with `publish=false` for packaging evidence; artifact creation is not native runtime verification.
 
 Use the pinned [toolchain](../rust-toolchain.toml). Linux workspace tests need CEF's runtime dependencies and the `libcef.so`-only library-path setup in CONTRIBUTING; both SDL2 and SDL3 development packages are needed for complete SDL fixture coverage. Native Windows needs MSVC and discoverable CEF DLLs. Do not expose the whole Linux CEF Release directory to workspace tests: it can shadow system graphics libraries.
+
+For packaging changes, follow [packaging verification](operations.md#packaging-verification-and-tested-on-list): build in the Ubuntu 22.04 container, install-test in disposable distro containers, and check version output, libcef dependencies, sandbox ownership/mode, sustained startup and no duplicate user launcher. Windows installer changes also need authorized native install/upgrade/uninstall checks; compiler success alone is insufficient.
 
 ## Focused native fixtures
 

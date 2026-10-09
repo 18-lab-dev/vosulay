@@ -1,0 +1,134 @@
+name: Packages
+
+# Manual only, to preserve GitHub Actions minutes. Every run uploads the Linux
+# and Windows packages as artifacts. To publish, create the version tag
+# (v<Cargo version>), then run this workflow on that tag with "publish" set.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Create a GitHub release from the tag this run uses
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  NFPM_VERSION: 2.47.0
+  NFPM_SHA256: 0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    # Built on the oldest supported glibc (2.35) so one binary runs on every
+    # target distribution.
+    container: ubuntu:22.04
+    timeout-minutes: 60
+    steps:
+      - name: Install build prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates
+
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install toolchain and nfpm
+        run: |
+          sh packaging/linux/install-build-deps.sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          curl -sSfLO "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          echo "${NFPM_SHA256}  nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" | sha256sum -c -
+          tar -xzf "nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" -C /usr/local/bin nfpm
+          rm "nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+
+      - name: Build Linux packages
+        run: packaging/linux/build.sh dist
+
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vosulay-linux-x86_64
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+            dist/*.pkg.tar.zst
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.96.1 --profile minimal --target x86_64-pc-windows-msvc
+          rustup default 1.96.1
+
+      - name: Acquire CEF, build client, and package ZIP
+        run: |
+          cargo run --locked -p vosulay-cef-tools -- package-windows dist/package
+          if ($LASTEXITCODE -ne 0) { throw 'Windows packaging failed' }
+
+      - name: Build installer
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages |
+            Where-Object { $_.name -eq "vosulay" } | Select-Object -First 1 -ExpandProperty version
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' }
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+          }
+          $source = (Resolve-Path 'dist/package').Path
+          $output = (Resolve-Path 'dist').Path
+          & $iscc "/DAppVersion=$version" "/DSourceDir=$source" "/DOutputDir=$output" 'packaging/windows/vosulay.iss'
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vosulay-windows-x86_64
+          path: |
+            dist/vosulay-*-windows-x86_64.zip
+            dist/vosulay-*-windows-x86_64-setup.exe
+          if-no-files-found: error
+
+  release:
+    if: inputs.publish
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download packages
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::run this workflow on tag v$version (got $GITHUB_REF_NAME)"
+            exit 1
+          fi
+          (cd dist && sha256sum -- * > SHA256SUMS)
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "vosulay $version" \
+            --generate-notes dist/*

@@ -1,0 +1,128 @@
+# Built by packaging/linux/build.sh, which sets VERSION and substitutes PKGROOT.
+name: vosulay
+arch: amd64
+platform: linux
+version: ${VERSION}
+release: 1
+section: games
+priority: optional
+maintainer: vosulay contributors <https://github.com/shiruviaa/vosulay>
+vendor: vosulay contributors
+homepage: https://github.com/shiruviaa/vosulay
+license: MIT AND BSD-3-Clause
+description: |
+  In-game overlay for vosu and tosu-compatible counters.
+  Renders tosu-compatible counters inside osu! with an in-game editor,
+  profiles, and a remote overlay page.
+
+contents:
+  - src: ${PKGROOT}/lib/
+    dst: /usr/lib/vosulay/
+    type: tree
+  # Chromium's setuid sandbox; required where unprivileged user namespaces are
+  # restricted (Ubuntu 24.04 and later).
+  - src: ${PKGROOT}/chrome-sandbox
+    dst: /usr/lib/vosulay/chrome-sandbox
+    file_info:
+      mode: 04755
+      owner: root
+      group: root
+  - src: /usr/lib/vosulay/vosulay
+    dst: /usr/bin/vosulay
+    type: symlink
+  - src: packaging/linux/com.vosu.vosulay.desktop
+    dst: /usr/share/applications/com.vosu.vosulay.desktop
+  - src: assets/branding/vosulay-app-icon.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/com.vosu.vosulay.svg
+  - src: LICENSE
+    dst: /usr/share/doc/vosulay/copyright
+    packager: deb
+  - src: LICENSE
+    dst: /usr/share/licenses/vosulay/LICENSE
+    packager: rpm
+  - src: LICENSE
+    dst: /usr/share/licenses/vosulay/LICENSE
+    packager: archlinux
+
+# libcef.so's shared-library dependencies, plus wayland-client for file dialogs.
+overrides:
+  deb:
+    depends:
+      - libc6 (>= 2.35)
+      - libasound2t64 | libasound2
+      - libatk-bridge2.0-0t64 | libatk-bridge2.0-0
+      - libatk1.0-0t64 | libatk1.0-0
+      - libatspi2.0-0t64 | libatspi2.0-0
+      - libcairo2
+      - libcups2t64 | libcups2
+      - libdbus-1-3
+      - libexpat1
+      - libgbm1
+      - libglib2.0-0t64 | libglib2.0-0
+      - libnspr4
+      - libnss3
+      - libpango-1.0-0
+      - libudev1
+      - libwayland-client0
+      - libx11-6
+      - libxcb1
+      - libxcomposite1
+      - libxdamage1
+      - libxext6
+      - libxfixes3
+      - libxkbcommon0
+      - libxrandr2
+  rpm:
+    depends:
+      - alsa-lib
+      - at-spi2-atk
+      - at-spi2-core
+      - atk
+      - cairo
+      - cups-libs
+      - dbus-libs
+      - expat
+      - glib2
+      - libX11
+      - libXcomposite
+      - libXdamage
+      - libXext
+      - libXfixes
+      - libXrandr
+      - libwayland-client
+      - libxcb
+      - libxkbcommon
+      - mesa-libgbm
+      - nspr
+      - nss
+      - pango
+      - systemd-libs
+  archlinux:
+    depends:
+      - alsa-lib
+      - at-spi2-core
+      - cairo
+      - dbus
+      - expat
+      - glib2
+      - libcups
+      - libx11
+      - libxcb
+      - libxcomposite
+      - libxdamage
+      - libxext
+      - libxfixes
+      - libxkbcommon
+      - libxrandr
+      - mesa
+      - nspr
+      - nss
+      - pango
+      - systemd-libs
+      - wayland
+
+rpm:
+  group: Amusements/Games
+  summary: In-game overlay for vosu and tosu-compatible counters
+archlinux:
+  packager: vosulay contributors

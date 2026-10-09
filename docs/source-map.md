@@ -31,8 +31,10 @@ together.
 | Linux lookup helper | [`crates/overlay-lookup`](../crates/overlay-lookup) | Leading `libvosulay_lookup.so` that routes explicit `dlsym` lookups to the compositor. |
 | Windows host platform | [`crates/platform-windows`](../crates/platform-windows) | asdf-overlay attachment, D3D11 GPU copies, foreground target selection, tray. |
 | Native build | [`build.rs`](../build.rs), [`Cargo.toml`](../Cargo.toml), [`rust-toolchain.toml`](../rust-toolchain.toml) | Root crate links the retained CEF runtime and embeds retained compositor/lookup paths. |
-| Linux install metadata | [`CMakeLists.txt`](../CMakeLists.txt), [`extra/com.vosu.vosulay.desktop`](../extra/com.vosu.vosulay.desktop) | Desktop entry and icon installation. |
-| CI | [`.github/workflows`](../.github/workflows) | Linux tests/Clippy on pull requests and `main` pushes; manual-dispatch Windows build/release. See [testing guidance](testing.md). |
+| Linux release packaging | [`packaging/linux/`](../packaging/linux/) | Ubuntu 22.04 container/dependencies, runtime build, nfpm DEB/RPM/Arch metadata and system desktop entry. |
+| Arch source packaging | [`packaging/arch/PKGBUILD`](../packaging/arch/PKGBUILD) | AUR source build with pinned CEF and setuid sandbox. |
+| Windows installer | [`packaging/windows/vosulay.iss`](../packaging/windows/vosulay.iss) | Per-user Inno Setup 6 installer for the complete Windows runtime. |
+| CI and releases | [`linux-ci.yml`](../.github/workflows/linux-ci.yml), [`release.yml`](../.github/workflows/release.yml) | Linux tests/Clippy on PRs and `main` pushes; manual-only **Packages** uploads Linux/Windows artifacts and optionally publishes a version-tagged release. See [testing guidance](testing.md). |
 | Tests and fixtures | [`tests/`](../tests), [`crates/overlay-linux/tests`](../crates/overlay-linux/tests) | tosu migration and backend HTML fixtures; C-backed loader and SDL fixtures. |
 | Benchmarks | [`autoresearch.sh`](../autoresearch.sh), [`tools/autoresearch`](../tools/autoresearch) | Maintainer environment (optional): guest-only uncapped CEF performance harness; not a contributor prerequisite. |
 | Documentation | [docs/README.md](README.md), [AGENTS.md](../AGENTS.md), [CLAUDE.md](../CLAUDE.md) | Hand-maintained references; update alongside code. |

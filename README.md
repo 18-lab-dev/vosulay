@@ -25,64 +25,88 @@ Contributing? Start with [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites an
 - Render inside osu!stable and osu!lazer on Windows through native asdf-overlay 2.1.0.
 - Serve view-only profile pages to browsers and streaming clients on the local network.
 
-## Linux
+## Install
 
-Extract the complete Linux runtime package and run `./vosulay`. Keep the CEF
-libraries, resources, locales, sandbox helper, `libvosulay_overlay.so`, and
-`libvosulay_lookup.so` beside the executable. Nothing is downloaded at startup.
+Download an x86_64 package from [GitHub Releases](https://github.com/shiruviaa/vosulay/releases).
+Replace `<v>` below with the release version. Published releases include
+`SHA256SUMS` for checking the downloads.
 
-With Rust 1.96.1 and the native platform toolchain installed, developers can
-build directly:
+### Linux
+
+Choose the package for your distribution:
+
+| Distribution | Install |
+| --- | --- |
+| Ubuntu 22.04+ / Debian 12+ | `sudo apt install ./vosulay_<v>-1_amd64.deb` |
+| Fedora | `sudo dnf install ./vosulay-<v>-1.x86_64.rpm` |
+| Arch Linux | `sudo pacman -U vosulay-<v>-1-x86_64.pkg.tar.zst` |
+
+Then launch **Vosulay** from your applications menu or run `vosulay`.
+Packages install the complete runtime and a system launcher; startup does not
+create a duplicate per-user launcher. Linux release binaries are built on
+Ubuntu 22.04 and require glibc 2.35 or newer.
+
+For other distributions, download `vosulay-<v>-linux-x86_64.tar.gz`, extract it,
+and run `./vosulay` inside the extracted directory. Install your distribution's
+CEF runtime dependencies (see [package metadata](packaging/linux/nfpm.yaml)).
+Keep the executable, CEF resources/locales, sandbox helper, overlay/lookup
+libraries and Vulkan manifest together. Startup registers a user launcher
+pointing at that location; do not move the directory without launching again.
+Nothing is downloaded at startup.
+
+**Tarball sandbox on Ubuntu 24.04+:** if restricted unprivileged user namespaces
+prevent Chromium from starting, install the `.deb` instead, or configure the
+trusted release's helper from inside the extracted directory:
 
 ```sh
-cargo build
+sudo chown root:root chrome-sandbox && sudo chmod 4755 chrome-sandbox
 ```
 
-When `CEF_PATH` is unset, Cargo acquires the pinned **precompiled** CEF
-distribution automatically. It verifies the pinned archive size, SHA1/SHA256,
-and runtime files, then reuses the verified cache on subsequent builds.
-No Chromium or CEF source build is required.
+Distribution packages already install this helper setuid root.
+To uninstall a package, use `sudo apt remove vosulay`, `sudo dnf remove vosulay`,
+or `sudo pacman -R vosulay`.
 
-Install from a checkout with Cargo:
+### Windows
+
+Run `vosulay-<v>-windows-x86_64-setup.exe`. The Inno Setup installer needs no
+administrator privileges and installs to `%LOCALAPPDATA%\Programs\Vosulay`.
+It creates a Start Menu shortcut; desktop and start-with-Windows shortcuts
+are optional and unchecked by default. A final checkbox lets you launch the app.
+The installer is unsigned, so SmartScreen may warn.
+
+Alternatively, unpack `vosulay-<v>-windows-x86_64.zip` and run `vosulay.exe`.
+Keep `vosulay.dll`, CEF runtime files/locales and both injection DLLs beside it.
+The ZIP uses the same user configuration as the installer, not portable config.
+
+Before upgrading or uninstalling, choose **tray → Exit vosulay** when prompted;
+hiding the app is not quitting it. Uninstall from Windows **Apps & features**.
+Uninstall keeps `%APPDATA%\vosulay\config.json`.
+
+### Build from source
+
+Install rustup and the [native prerequisites](CONTRIBUTING.md), then use the
+pinned toolchain from a checkout:
 
 ```sh
 cargo install --path . --locked
 vosulay
 ```
 
-Use `--force` when reinstalling an existing installation. Cargo installs only
-the executable, so the build also retains verified CEF files in
-`$XDG_CACHE_HOME/vosulay/runtime` and both the native compositor and lookup helper
-in `$XDG_CACHE_HOME/vosulay/overlay` (under `~/.cache` when unset). The installed
-launcher runs beside those retained CEF assets; no `LD_LIBRARY_PATH` or
-`--cef-dir` setup is needed. Keep these two caches while using the installation;
-if they are removed, reinstall to recreate them. Nothing is downloaded at
-application startup. `cargo run` uses the same retained runtime.
+Use `--force` to reinstall. When `CEF_PATH` is unset, Cargo acquires and verifies
+the pinned **precompiled** CEF distribution; no Chromium source build is needed.
+The SDK cache is `$XDG_CACHE_HOME/vosulay/cef` (`~/.cache/vosulay/cef` by default).
+An explicit `CEF_PATH` must point to a verified distribution; cached or explicit
+inputs need no acquisition download.
 
-To build and assemble the complete portable package:
+On Linux, Cargo installs only the executable and retains CEF files in
+`$XDG_CACHE_HOME/vosulay/runtime` and compositor/lookup libraries in
+`$XDG_CACHE_HOME/vosulay/overlay` (`~/.cache` when unset). Keep both caches;
+reinstall if removed. No `LD_LIBRARY_PATH` or `--cef-dir` setup is needed;
+`cargo run` uses the same retained runtime. For redistribution, build a complete
+package rather than copying the Cargo-installed executable; see
+[packaging operations](docs/operations.md#installation-and-packaging).
 
-```sh
-cargo build --release --locked
-cargo build --release --locked -p vosulay-overlay -p vosulay-lookup
-CEF_PATH="$(cargo run --quiet --locked -p vosulay-cef-tools -- acquire --platform linux-x86_64)"
-cargo run --quiet --locked -p vosulay-cef-tools -- package --platform linux-x86_64 \
-  --cef-path "$CEF_PATH" --output dist/linux \
-  --exe target/release/vosulay --overlay target/release/libvosulay_overlay.so \
-  --overlay target/release/libvosulay_lookup.so \
-  --overlay crates/overlay-linux/VkLayer_vosulay_overlay.json
-./dist/linux/vosulay
-```
-
-The default CEF cache is `$XDG_CACHE_HOME/vosulay/cef`, or
-`~/.cache/vosulay/cef` when `XDG_CACHE_HOME` is unset. Cargo and packaging share
-the [Rust acquisition helper](crates/cef-tools/src/lib.rs); the first SDK
-download requires internet access. An explicit `CEF_PATH` overrides acquisition
-and must point to a verified distribution; cached and explicit-path builds need
-no network access.
-
-For distribution to another machine, package the complete directory rather
-than copying a Cargo-installed executable alone. Portable packages use their
-adjacent runtime files instead of the build machine's caches.
+## Linux
 
 On Linux startup, vosulay refreshes recognized osu desktop shortcuts with the
 current compositor and lookup helper's absolute preload paths and Vulkan settings.
@@ -141,10 +165,9 @@ An OBS image-export failure is not hidden or repaired by vosulay.
 
 ## Windows
 
-Extract the complete x86_64 portable ZIP and run `vosulay.exe` alongside a vosu
-or tosu-compatible backend. The executable is CEF's pinned sandbox bootstrap;
-keep `vosulay.dll`, CEF runtime files, locales, and both asdf-overlay injection
-DLLs beside it.
+Install the Windows installer or ZIP described [above](#windows), then run
+vosulay alongside a vosu or tosu-compatible backend. The packaged `vosulay.exe`
+is CEF's pinned sandbox bootstrap.
 
 The host follows the last focused supported `osu!.exe` or `osulazer.exe`,
 remains attached when focus leaves the game, switches only when another

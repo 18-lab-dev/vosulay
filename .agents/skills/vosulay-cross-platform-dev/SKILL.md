@@ -30,7 +30,7 @@ Complete Linux package commands are in `docs/operations.md`; Cargo install depen
 cargo run --locked -p vosulay-cef-tools -- package-windows dist/package
 ```
 
-`Cargo.toml` supplies package versioning. Linux CI runs on PRs and pushes to main; Windows build/release workflows are manual-dispatch only. Request a Windows Build run or use the Actions tab in a fork for its portable package artifact; never publish releases as verification.
+`Cargo.toml` supplies workspace package versioning. Linux CI runs on PRs and pushes to main; **Packages** (`.github/workflows/release.yml`) is manual-dispatch only and uploads `vosulay-linux-x86_64` and `vosulay-windows-x86_64` artifacts (Linux packages and Windows ZIP/installer). Request a Packages run or use the Actions tab in a fork with `publish=false`; never publish releases as verification. Inno Setup 6 installer commands and the tagged publication process are in `docs/operations.md`.
 
 ## Verification and safety
 
@@ -38,8 +38,10 @@ Use `vosulay-local-ci` for Tier 1 workspace formatting/Clippy/tests and optional
 
 Runtime claims require actual pixels and game input evidence, not accepted launch/input commands or producer counters. When authorized, Tier 4 can run on the contributor's own machine; no guest tooling is required.
 
+For packaging changes, build in the Ubuntu 22.04 container and install-test DEB/RPM/Arch packages in disposable distro containers as described in `docs/operations.md`. Check version output, libcef dependencies, root-owned `4755` sandbox, sustained startup and no duplicate user launcher. Installer compilation does not replace authorized Windows install/upgrade/uninstall testing.
+
 ### Maintainer environment (optional)
 
-The `vosulay-windows-live-testing` skill applies only when the maintainer's private `windows-vm` host command is available. It is not required for contributor development. Never start/stop/switch a VM without explicit user authorization; fall back to cross-Clippy, a manual Windows Build Actions run, and native Windows manual testing when unavailable.
+The `vosulay-windows-live-testing` skill applies only when the maintainer's private `windows-vm` host command is available. It is not required for contributor development. Never start/stop/switch a VM without explicit user authorization; fall back to cross-Clippy, a manual Packages Actions run with `publish=false`, and native Windows manual testing when unavailable.
 
 Report only exercised checks, exact artifacts, and remaining platform boundaries. Update hand-maintained `docs/` with permanent code changes.

@@ -90,7 +90,9 @@ cargo xwin clippy --workspace --all-targets --all-features --locked --target x86
 
 Windows contributors should use Linux CI for Linux coverage. WSL provides a Linux environment in which the Linux prerequisites and commands can be attempted; this repository does not promise WSL GUI/game attachment support. Windows-native checks alone do not compile Linux-only code.
 
-Hosted safety net: [linux-ci](.github/workflows/linux-ci.yml) runs on pull requests and pushes to `main`, as well as manual dispatch. Pushing a feature branch with an open PR triggers PR checks; pushing a branch alone does not run both workflows. [windows-build](.github/workflows/windows-build.yml) is **manual dispatch only**: ask a maintainer to run it for the branch, or run it in your fork from the Actions tab. It uploads the `vosulay-windows-x86_64` portable package artifact. Linux CI currently uploads no package artifact. Release publication is separate and is not a contributor verification step.
+Hosted safety net: [linux-ci](.github/workflows/linux-ci.yml) runs on pull requests and pushes to `main`, as well as manual dispatch. Pushing a feature branch with an open PR triggers PR checks; pushing a branch alone does not run both workflows. [Packages](.github/workflows/release.yml) is **manual dispatch only**: ask a maintainer to run it for the branch, or run it in your fork from the Actions tab with `publish=false`. It uploads `vosulay-linux-x86_64` and `vosulay-windows-x86_64` artifacts containing Linux packages and the Windows ZIP/installer. Linux CI currently uploads no package artifact. Release publication is not a contributor verification step.
+
+Maintainers changing packaging should follow [operations](docs/operations.md#packaging-verification-and-tested-on-list): build in the Ubuntu 22.04 container and install-test DEB/RPM/Arch packages in disposable distro containers, checking version output, libcef dependencies, setuid sandbox ownership/mode, sustained startup and no duplicate user launcher. Windows installer changes require separate authorized native install/upgrade/uninstall checks.
 
 ### Tier 3 — editor UI without the game
 

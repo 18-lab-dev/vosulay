@@ -1,0 +1,6 @@
+# Linux package build environment; see packaging/linux/build.sh.
+FROM docker.io/library/ubuntu:22.04
+COPY install-build-deps.sh /tmp/install-build-deps.sh
+RUN sh /tmp/install-build-deps.sh && rm /tmp/install-build-deps.sh
+ENV PATH=/root/.cargo/bin:$PATH
+WORKDIR /src

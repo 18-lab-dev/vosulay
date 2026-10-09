@@ -2,7 +2,12 @@ use std::{env, path::PathBuf};
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    for name in ["XDG_CACHE_HOME", "HOME", "USERPROFILE"] {
+    for name in [
+        "XDG_CACHE_HOME",
+        "HOME",
+        "USERPROFILE",
+        "VOSULAY_PACKAGE_BUILD",
+    ] {
         println!("cargo:rerun-if-env-changed={name}");
     }
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
@@ -14,8 +19,12 @@ fn main() {
             println!("cargo:rustc-env=VOSULAY_CEF_RUNTIME={}", runtime.display());
             // Cargo only installs the executable. Portable packages still take
             // precedence; local builds retain the verified runtime search path.
-            println!("cargo:rustc-link-arg=-Xlinker");
-            println!("cargo:rustc-link-arg=--rpath={}", runtime.display());
+            // Distribution packages always ship libcef beside the executable and
+            // must not search the build machine's cache.
+            if env::var_os("VOSULAY_PACKAGE_BUILD").is_none() {
+                println!("cargo:rustc-link-arg=-Xlinker");
+                println!("cargo:rustc-link-arg=--rpath={}", runtime.display());
+            }
             #[cfg(all(target_os = "linux", feature = "cef-host"))]
             for (variable, output, library) in [
                 (

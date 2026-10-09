@@ -14,31 +14,137 @@ Linux caches under `$XDG_CACHE_HOME/vosulay` (`~/.cache/vosulay` by default): `c
 
 ## Installation and packaging
 
+For release installation and removal, see the [README](../README.md#install).
+For a source installation, run `cargo install --path . --locked` (`--force` to
+reinstall). Cargo-installed Linux binaries depend on the retained caches above,
+not a redistributable executable alone.
+
+### Linux release packages
+
+[`packaging/linux/build.sh`](../packaging/linux/build.sh) builds the tarball and
+uses [nfpm metadata](../packaging/linux/nfpm.yaml) to produce DEB, RPM and Arch
+binary packages. Version comes from `Cargo.toml`'s workspace version:
+
+- `vosulay_<v>-1_amd64.deb` — Ubuntu 22.04+ / Debian 12+.
+- `vosulay-<v>-1.x86_64.rpm` — Fedora.
+- `vosulay-<v>-1-x86_64.pkg.tar.zst` — Arch (`pacman -U`).
+- `vosulay-<v>-linux-x86_64.tar.gz` — other distributions with compatible
+  glibc and CEF dependencies; extract and run `./vosulay`.
+
+Packages install the executable, CEF runtime/resources/locales, overlay/lookup
+libraries and Vulkan layer manifest in `/usr/lib/vosulay`, with a
+`/usr/bin/vosulay` symlink. They install
+`/usr/share/applications/com.vosu.vosulay.desktop`, the scalable
+`com.vosu.vosulay.svg` icon and license. `chrome-sandbox` is root-owned mode
+`4755`, allowing Chromium's sandbox where unprivileged user namespaces are
+restricted (Ubuntu 24.04+). With the system launcher installed, startup does not
+write a per-user entry. Tarballs instead register a user entry pointing at the
+extracted location; see the README for their sandbox setup.
+
+The Ubuntu 22.04 build environment preserves a glibc 2.35 floor. The cef-tools
+`package` command strips debug/static symbols from Linux ELF files; compressed
+distro packages are approximately 155 MB. Package builds set
+`VOSULAY_PACKAGE_BUILD=1`, so the executable's only library search path is
+`$ORIGIN` rather than the build machine's CEF cache.
+
+From the repository root, download nfpm v2.47.0 from
+[GoReleaser's nfpm releases](https://github.com/goreleaser/nfpm/releases/tag/v2.47.0),
+verify the Linux x86_64 archive against the checksum pinned in
+[`release.yml`](../.github/workflows/release.yml), and extract its binary:
+
 ```sh
-cargo install --path . --locked
-vosulay
+podman build -t vosulay-package-build -f packaging/linux/Containerfile packaging/linux
+podman run --rm -v "$PWD:/src" \
+  -v /path/to/nfpm:/usr/local/bin/nfpm:ro \
+  -e CARGO_TARGET_DIR=/src/target/package-linux \
+  vosulay-package-build packaging/linux/build.sh target/package-dist
 ```
 
-Use `--force` to reinstall. To distribute Linux builds, assemble the complete runtime rather than copying the installed executable alone:
+Replace `/path/to/nfpm` with the extracted binary's absolute path. The
+[Containerfile](../packaging/linux/Containerfile) uses
+[`install-build-deps.sh`](../packaging/linux/install-build-deps.sh) for build
+prerequisites; nfpm must also be available inside the container. Docker works
+with the same commands in place of Podman. Optional persistent mounts for
+`~/.cache/vosulay/cef` at `/root/.cache/vosulay/cef` and the Cargo registry at
+`/root/.cargo/registry` avoid repeat downloads. Use a fresh output directory
+(or remove only prior task-owned staging directories before rebuilding).
+Running `packaging/linux/build.sh` directly on a newer host works, but raises
+the binaries' glibc floor to that host's version.
 
-```sh
-cargo build --release --locked
-cargo build --release --locked -p vosulay-overlay -p vosulay-lookup
-CEF_PATH="$(cargo run --quiet --locked -p vosulay-cef-tools -- acquire --platform linux-x86_64)"
-cargo run --quiet --locked -p vosulay-cef-tools -- package --platform linux-x86_64 \
-  --cef-path "$CEF_PATH" --output dist/linux \
-  --exe target/release/vosulay --overlay target/release/libvosulay_overlay.so \
-  --overlay target/release/libvosulay_lookup.so \
-  --overlay crates/overlay-linux/VkLayer_vosulay_overlay.json
-```
+### Arch source package / AUR
 
-On native Windows:
+[`packaging/arch/PKGBUILD`](../packaging/arch/PKGBUILD) builds from source, unlike
+the prebuilt Arch release artifact. It uses `rustup` as a make dependency and
+the pinned CEF archive as a source, installs the setuid sandbox, and specifies
+`!lto !strip !debug`. After tagging, bump `pkgver` and run `updpkgsums`; the
+source tarball checksum is `SKIP` until then. Keep the CEF source and checksum
+aligned with `tools/cef/pins.json`.
+
+### Windows packages
+
+On native Windows, stage the complete runtime ZIP and compile the installer
+with Inno Setup 6 (replace `<v>` with the workspace version and use absolute
+source/output paths if required by your installation):
 
 ```powershell
 cargo run --locked -p vosulay-cef-tools -- package-windows dist/package
+ISCC /DAppVersion=<v> /DSourceDir=<dist/package> /DOutputDir=<dist> packaging/windows/vosulay.iss
 ```
 
-This acquires verified CEF/asdf assets before building the client DLL and assembling `dist/vosulay-<version>-windows-x86_64.zip`. Keep the bootstrap `vosulay.exe`, `vosulay.dll`, CEF files/locales, and both injection DLLs together. [CMakeLists.txt](../CMakeLists.txt) installs Linux desktop/icon metadata only; distro packaging must install the application and complete runtime separately. Its desktop ID and icon name are `com.vosu.vosulay`.
+Outputs are `vosulay-<v>-windows-x86_64.zip` and
+`vosulay-<v>-windows-x86_64-setup.exe`. Keep the bootstrap `vosulay.exe`,
+`vosulay.dll`, CEF files/locales and both injection DLLs together.
+The [installer](../packaging/windows/vosulay.iss) is per-user, needs no admin
+rights and defaults to `%LOCALAPPDATA%\Programs\Vosulay`. Its Start Menu
+shortcut matches the app's self-registration path. Desktop and Windows-startup
+shortcuts are unchecked options; the final page offers launch. Exit through
+**tray → Exit vosulay** before upgrade/uninstall; the installer checks for a
+running instance. Uninstall preserves `%APPDATA%\vosulay\config.json`. The ZIP
+uses the same user config, not portable storage. Unsigned installers may
+trigger SmartScreen.
+
+### Release process
+
+1. Bump `[workspace.package].version` in `Cargo.toml` and keep the lockfile's
+   workspace package versions consistent.
+2. Commit the release changes.
+3. Create `v<v>` for that version: `git tag v<v>`.
+4. Push the release commit and tag: `git push` and `git push origin v<v>`.
+5. In Actions, manually run [**Packages**](../.github/workflows/release.yml) on
+   that tag with `publish=true`. The Linux job builds in `ubuntu:22.04`; the
+   Windows job produces the ZIP and installer. Every run uploads
+   `vosulay-linux-x86_64` and `vosulay-windows-x86_64` artifacts.
+6. Publication verifies the tag matches `Cargo.toml`, then creates the GitHub
+   release with all six packages and `SHA256SUMS`. A branch run with
+   `publish=false` builds artifacts only; never publish for routine verification.
+7. Update AUR `pkgver` in `packaging/arch/PKGBUILD`, run `updpkgsums` against the
+   published tag, and update the AUR package metadata.
+
+### Packaging verification and tested-on list
+
+For packaging changes, build in the Ubuntu 22.04 container and install-test the
+DEB/RPM/Arch packages in disposable target distro containers. Check
+`vosulay --version`, all `libcef.so` dependencies, root ownership and mode
+`4755` of `chrome-sandbox`, sustained app startup and absence of a duplicate
+user desktop entry. Runtime launch checks need an isolated display; container
+checks do not establish native game/GPU behavior.
+
+Locally tested on:
+
+- Ubuntu 22.04.
+- Ubuntu 24.04.
+- Debian 12.
+- Fedora latest at test time.
+- Arch Linux latest at test time.
+
+Packages were built in the Ubuntu 22.04 container. On each listed distro,
+`vosulay --version` ran, all libcef dependencies resolved, the sandbox was
+root-owned mode `4755`, the app started and kept running, and no duplicate user
+desktop entry was written.
+
+The Windows installer compiled with Inno Setup 6.7.1 in the
+`amake/innosetup` container against a dummy layout. It has not yet been run on
+Windows; this is compiler evidence, not install/upgrade/uninstall evidence.
 
 ## Launchers and single instance
 
@@ -62,4 +168,4 @@ Input failure releases capture within the five-second safety bound; Windows may 
 
 ## Maintainer environment (optional)
 
-Guest deployments and offline performance caches are additional maintainer tooling, not installation prerequisites. See [testing](testing.md#maintainer-environment-optional) for authorized guest safety and benchmark boundaries. Contributors can package locally and request a manual [Windows Build](../.github/workflows/windows-build.yml) Actions run instead; it uploads the complete portable ZIP. Never publish a release as part of routine verification.
+Guest deployments and offline performance caches are additional maintainer tooling, not installation prerequisites. See [testing](testing.md#maintainer-environment-optional) for authorized guest safety and benchmark boundaries. Contributors can package locally and request a manual [Packages](../.github/workflows/release.yml) Actions run with `publish=false` instead; it uploads Linux packages and the Windows ZIP/installer. Never publish a release as part of routine verification.
