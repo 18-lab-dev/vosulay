@@ -240,6 +240,12 @@ wrap_app! {
                 // or Chrome's periodic stack sampler in the normal runtime.
                 // Site isolation, GPU acceleration, and sandboxing stay enabled.
                 command_line.append_switch(Some(&"disable-stack-profiler".into()));
+                // Network traffic comes only from pages the user configured.
+                // Chromium's background services (variations, component
+                // updates and similar) are off; vosulay updates the pinned
+                // runtime itself.
+                command_line.append_switch(Some(&"disable-background-networking".into()));
+                command_line.append_switch(Some(&"disable-component-update".into()));
                 let disable_features: CefString = "disable-features".into();
                 let current = command_line.switch_value(Some(&disable_features));
                 let mut disabled = CefString::from(&current).to_string();

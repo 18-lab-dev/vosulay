@@ -33,9 +33,13 @@ pub(crate) fn fetch_installed_counters_with_timeout(
     let endpoint = base_url
         .join("/api/counters/search/")
         .with_context(|| format!("failed to construct counter search URL from {base_url}"))?;
+    // No redirects: like the remote proxy, the catalog only talks to the
+    // backend the user configured, never a host that backend points to.
     let mut response = ureq::get(endpoint.as_str())
         .config()
         .http_status_as_error(false)
+        .max_redirects(0)
+        .max_redirects_will_error(false)
         .timeout_global(Some(timeout))
         .build()
         .call()
@@ -530,6 +534,44 @@ mod tests {
         assert!(
             started.elapsed() < Duration::from_secs(1),
             "request exceeded its global deadline: {error:#}"
+        );
+    }
+
+    #[test]
+    fn fetch_does_not_follow_redirects_away_from_the_backend() {
+        let elsewhere = TcpListener::bind("127.0.0.1:0").expect("redirect target should bind");
+        elsewhere
+            .set_nonblocking(true)
+            .expect("redirect target should be non-blocking");
+        let target = elsewhere
+            .local_addr()
+            .expect("redirect target should have an address");
+        let backend = TcpListener::bind("127.0.0.1:0").expect("fixture server should bind");
+        let address = backend
+            .local_addr()
+            .expect("fixture server should have an address");
+        let server = thread::spawn(move || {
+            let (mut stream, _) = backend.accept().expect("fixture request should connect");
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request);
+            let response = format!(
+                "HTTP/1.1 302 Found\r\nLocation: http://{target}/api/counters/search/\r\nContent-Length: 0\r\n\r\n"
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("fixture response should be writable");
+        });
+        let base = Url::parse(&format!("http://{address}")).expect("fixture URL should parse");
+
+        let error = fetch_installed_counters_with_timeout(&base, Duration::from_secs(2))
+            .expect_err("a redirect is not a counter catalog");
+        server.join().expect("fixture server should finish");
+
+        assert!(format!("{error:#}").contains("302"), "{error:#}");
+        assert_eq!(
+            elsewhere.accept().map_err(|error| error.kind()).err(),
+            Some(std::io::ErrorKind::WouldBlock),
+            "the redirect target must never be contacted"
         );
     }
 }

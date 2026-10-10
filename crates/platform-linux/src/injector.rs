@@ -1,4 +1,5 @@
-//! Explicit live attachment. This crate never attaches automatically.
+//! Live attachment into a running process. The platform loop calls it for
+//! each newly discovered game process; this module never searches for targets.
 //! Linux support is deliberately narrow: same-UID native x86_64 processes.
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
