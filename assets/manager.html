@@ -30,7 +30,7 @@
         <div class="profile-field">
           <span id="profile-field-label">Profile</span>
           <div class="profile-picker">
-            <button id="profile-select" type="button" title="Double-click to rename" aria-labelledby="profile-field-label profile-select-label" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
+            <button id="profile-select" type="button" aria-labelledby="profile-field-label profile-select-label" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
               <span id="profile-select-label"></span>
             </button>
             <div id="profile-menu" role="menu" aria-label="Profiles" hidden></div>
@@ -42,6 +42,8 @@
               <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2.5 4h11M2.5 8h11M2.5 12h11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
             </button>
             <div id="profile-more-menu" class="toolbar-menu" role="menu" aria-label="Profile actions" hidden>
+              <button id="profile-rename" class="menu-item" type="button" role="menuitem" title="Rename active profile" disabled>Rename</button>
+              <input id="profile-rename-name" class="menu-rename" type="text" aria-label="Profile name" autocomplete="off" spellcheck="false" hidden>
               <label class="profile-position" for="profile-position" role="none" title="Profile shortcuts and the remote ?profile= number follow this position">
                 <span>Position</span>
                 <input id="profile-position" type="number" min="1" step="1" inputmode="numeric" aria-label="Profile position" aria-describedby="profile-position-total">
@@ -57,7 +59,7 @@
         </div>
         <form id="profile-create" class="profile-create" hidden>
           <input id="profile-name" type="text" aria-label="Profile name" autocomplete="off">
-          <button id="profile-create-submit" type="submit" class="primary-button">Create</button>
+          <button type="submit" class="primary-button">Create</button>
           <button id="profile-create-cancel" type="button" class="quiet-button">Cancel</button>
         </form>
         <div id="profile-delete-confirm" class="profile-confirm" role="group" aria-labelledby="profile-delete-message" hidden>

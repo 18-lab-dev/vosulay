@@ -18,6 +18,8 @@
   const profileMore = $("profile-more");
   const profileMoreMenu = $("profile-more-menu");
   const profileMoreWrapper = profileMore.closest(".profile-more");
+  const profileRename = $("profile-rename");
+  const profileRenameName = $("profile-rename-name");
   const profilePosition = $("profile-position");
   const profilePositionTotal = $("profile-position-total");
   const profileImport = $("profile-import");
@@ -28,7 +30,6 @@
   const profileDeleteCancel = $("profile-delete-cancel");
   const profileCreate = $("profile-create");
   const profileName = $("profile-name");
-  const profileCreateSubmit = $("profile-create-submit");
   const profileCreateCancel = $("profile-create-cancel");
   const catalog = $("catalog");
   const catalogSummary = $("catalog-summary");
@@ -989,15 +990,54 @@
   }
 
   function profileMoreItems() {
-    return [...profileMoreMenu.querySelectorAll("input, button")].filter((item) => !item.disabled);
+    return [...profileMoreMenu.querySelectorAll("input, button")].filter((item) => !item.disabled && !item.hidden);
   }
 
   function closeProfileMoreMenu(refocus = false) {
     if (profileMoreMenu.hidden) return;
+    finishProfileRename(true);
     profileMoreMenu.hidden = true;
     profileMore.setAttribute("aria-expanded", "false");
     if (refocus) profileMore.focus();
     updateToolbarAvoidance();
+  }
+
+  function startProfileRename() {
+    const profile = activeProfile();
+    if (!profile) return;
+    profileRenameName.dataset.profileId = profile.id;
+    profileRenameName.value = profile.name;
+    // Focus moves into the field before the button hides; see finishProfileRename.
+    profileRenameName.hidden = false;
+    profileRenameName.focus();
+    profileRenameName.select();
+    profileRename.hidden = true;
+  }
+
+  // Leaving the field keeps the typed name, like renaming a file; Escape discards it.
+  function finishProfileRename(commit, refocus = false) {
+    if (profileRenameName.hidden) return;
+    const id = profileRenameName.dataset.profileId;
+    const name = profileRenameName.value.trim();
+    delete profileRenameName.dataset.profileId;
+    profileRename.hidden = false;
+    // Hiding a focused field blurs it, and losing focus closes the menu, so
+    // keyboard completion moves focus to the button first.
+    if (refocus) profileRename.focus();
+    profileRenameName.hidden = true;
+    // Rename the profile the field opened for, even if undo changed the active one meanwhile.
+    const profile = state.config && state.config.profiles.find((item) => item.id === id);
+    if (!commit || !profile || name === profile.name) return;
+    if (!name) {
+      toast("Profile name cannot be empty", true);
+      return;
+    }
+    flushEditingChanges();
+    const before = historySnapshot();
+    profile.name = name;
+    commitHistory(before);
+    scheduleSave(true);
+    requestRender("profileList", "chrome");
   }
 
   function openProfileMoreMenu(focusTarget = "") {
@@ -1020,8 +1060,6 @@
     state.config.active_profile = id;
     scheduleSave(true);
     closeProfileMenu(true);
-    // A rename form left open would otherwise read as renaming the newly active profile.
-    if (profileCreate.dataset.mode === "rename") closeProfileCreator();
     requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
   }
 
@@ -1062,6 +1100,7 @@
     }
     profilePositionTotal.textContent = `of ${count}`;
     profileDelete.disabled = !current;
+    profileRename.disabled = !current;
     profileImport.disabled = !current;
     profileExport.disabled = !current;
   }
@@ -1535,36 +1574,15 @@
 
   function closeProfileCreator(restoreFocus = false) {
     if (profileCreate.hidden) return;
-    const renaming = profileCreate.dataset.mode === "rename";
     profileCreate.hidden = true;
-    delete profileCreate.dataset.mode;
-    delete profileCreate.dataset.profileId;
     profileActions.hidden = false;
-    if (restoreFocus) (renaming ? profileSelect : profileAdd).focus();
+    if (restoreFocus) profileAdd.focus();
   }
 
   function openProfileCreator() {
     if (!state.config) return;
-    openProfileNameForm("create", `Profile ${state.config.profiles.length + 1}`);
-  }
-
-  function openProfileRenamer() {
-    const profile = activeProfile();
-    if (!state.config || !profile) return;
-    openProfileNameForm("rename", profile.name);
-    profileCreate.dataset.profileId = profile.id;
-  }
-
-  // Creating and renaming share one inline form, so Escape, toolbar pinning
-  // and menu checks cover both.
-  function openProfileNameForm(mode, name) {
-    closeProfileMenu();
-    closeProfileMoreMenu();
     closeProfileDeleteConfirm();
-    profileCreate.dataset.mode = mode;
-    delete profileCreate.dataset.profileId;
-    profileCreateSubmit.textContent = mode === "rename" ? "Rename" : "Create";
-    profileName.value = name;
+    profileName.value = `Profile ${state.config.profiles.length + 1}`;
     profileActions.hidden = true;
     profileCreate.hidden = false;
     profileName.focus();
@@ -2143,10 +2161,6 @@
   });
 
   profileSelect.addEventListener("click", () => toggleProfileMenu());
-  profileSelect.addEventListener("dblclick", (event) => {
-    event.preventDefault();
-    openProfileRenamer();
-  });
   catalogSearch.addEventListener("input", () => requestRender("catalog"));
   catalogSearch.addEventListener("keydown", (event) => {
     // Escape clears an active search before it can leave the editor.
@@ -2231,8 +2245,8 @@
       closeProfileMoreMenu(true);
       return;
     }
-    // Arrow keys keep stepping the position number; Tab leaves the field.
-    if (event.target === profilePosition) return;
+    // Arrow keys keep stepping the position number and moving the rename caret; Tab leaves the field.
+    if (event.target === profilePosition || event.target === profileRenameName) return;
     if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
     const items = profileMoreItems();
     if (!items.length) return;
@@ -2252,6 +2266,14 @@
   profileMoreWrapper.addEventListener("focusout", (event) => {
     if (!profileMoreMenu.hidden && !profileMoreWrapper.contains(event.relatedTarget)) closeProfileMoreMenu();
   });
+  profileRename.addEventListener("click", startProfileRename);
+  profileRenameName.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.repeat) finishProfileRename(event.key === "Enter", true);
+  });
+  profileRenameName.addEventListener("blur", () => finishProfileRename(true));
   profileAdd.addEventListener("click", openProfileCreator);
   profileImport.addEventListener("click", () => {
     if (!state.config) return;
@@ -2286,19 +2308,6 @@
     }
     flushEditingChanges();
     const before = historySnapshot();
-    if (profileCreate.dataset.mode === "rename") {
-      // Rename the profile the form was opened for, even if undo or another
-      // path changed the active profile meanwhile.
-      const profile = state.config.profiles.find((item) => item.id === profileCreate.dataset.profileId);
-      if (profile && profile.name !== name) {
-        profile.name = name;
-        commitHistory(before);
-        scheduleSave(true);
-      }
-      closeProfileCreator(true);
-      requestRender("profileList", "chrome");
-      return;
-    }
     const profile = { id: uniqueProfileId(), name, overlays: [] };
     replaceSelection([]);
     state.config.profiles.push(profile);

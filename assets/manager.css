@@ -143,6 +143,8 @@ body.editing.interacting .overlay[data-wheel-zone]::before { display: none; }
 .profile-option-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .profile-option:hover, .profile-option:focus-visible, .menu-item:not(:disabled):hover, .menu-item:focus-visible { background: rgba(255,255,255,.1); }
 .menu-separator { height: 1px; margin: 4px 2px; background: var(--line); }
+.menu-rename { display: block; width: 100%; margin: 1px 0; color: var(--text); }
+.menu-rename[hidden], .menu-item[hidden] { display: none; }
 .profile-option[aria-checked="true"] { color: #fff; background: rgba(139,124,255,.24); }
 .profile-option[aria-checked="true"]:hover, .profile-option[aria-checked="true"]:focus-visible { background: rgba(139,124,255,.34); }
 .profile-actions { display: flex; align-items: center; gap: 6px; }

@@ -17,7 +17,7 @@ Contributing? Start with [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites an
 
 - Position, resize, scale, rotate, reorder, and adjust the opacity of overlays.
 - Disable individual overlays without removing their placement; re-enable them in the inspector.
-- Maintain multiple overlay profiles; double-click the profile picker to rename the active one.
+- Maintain multiple overlay profiles; rename the active one from the profile menu (☰ → Rename).
 - Discover installed counters from a local Vosu or Tosu instance, and search them by name, author or folder.
 - Add remote or local custom HTML overlays.
 - Use Chromium GPU compositing, WebGL, WebGPU where supported, and overlay audio.
