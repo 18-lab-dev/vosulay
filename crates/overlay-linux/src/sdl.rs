@@ -747,14 +747,17 @@ pub(crate) fn send(window: usize, input: BrowserInput) -> bool {
         .unwrap_or(false)
 }
 pub(crate) fn capture(window: usize) -> bool {
-    let capturing = focused(window)
-        && (hooks::capturing(window)
-            || native_window(window)
-                .and_then(crate::vulkan::capturing_surface)
-                .unwrap_or(false));
+    let capturing = capturing(window);
     sync_text_capture(window, capturing);
     sync_cursor_capture(API.sdl3, window, capturing);
     capturing
+}
+fn capturing(window: usize) -> bool {
+    focused(window)
+        && (hooks::capturing(window)
+            || native_window(window)
+                .and_then(crate::vulkan::capturing_surface)
+                .unwrap_or(false))
 }
 pub(crate) fn set_focus(window: usize, value: bool) {
     if !value {
@@ -1058,7 +1061,10 @@ pub unsafe extern "C" fn SDL_GL_SwapWindow(window: *mut c_void) -> bool {
         }
     }
     let window = window as usize;
-    capture(window);
+    // Games may swap on a render thread. SDL's text-input calls are main-thread
+    // only and ran concurrently with the game's event pump here, so text input
+    // is synchronized only from event paths, which run on the pumping thread.
+    sync_cursor_capture(API.sdl3, window, capturing(window));
     hooks::with_sdl_present(
         window,
         w.max(0) as u32,
@@ -1154,13 +1160,17 @@ pub unsafe extern "C" fn SDL_GetKeyboardState(count: *mut c_int) -> *const u8 {
     }
     ZERO_KEYS.as_ptr()
 }
+/// For state queries, which games may make from any thread: text input is
+/// left to the event paths (see `SDL_GL_SwapWindow`).
 fn capture_focus() -> bool {
     let w = unsafe {
         function::<GetCurrentWindow>(API.focus)
             .map(|f| f() as usize)
             .unwrap_or(0)
     };
-    capture(w)
+    let capturing = capturing(w);
+    sync_cursor_capture(API.sdl3, w, capturing);
+    capturing
 }
 unsafe fn mouse_call(p: usize, x: *mut c_void, y: *mut c_void, hide: bool) -> u32 {
     if API.sdl3 {
