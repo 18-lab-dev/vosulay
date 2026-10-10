@@ -3,7 +3,7 @@
 # Source build for the AUR. After tagging a release, set pkgver and run
 # `updpkgsums`. The pinned CEF archive must match tools/cef/pins.json.
 pkgname=vosulay
-pkgver=0.2.0
+pkgver=1.0.0
 pkgrel=1
 _cef=cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_linux64_minimal.tar.bz2
 pkgdesc='In-game overlay for vosu and tosu-compatible counters'
