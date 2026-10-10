@@ -505,6 +505,8 @@ struct Api {
     number: usize,
     display: usize,
     mode: usize,
+    /// `SDL_IsMainThread` (SDL 3.2+); zero for SDL2.
+    is_main: usize,
     sdl3: bool,
     logical: usize,
     logical_sdl3: bool,
@@ -563,6 +565,7 @@ static API: LazyLock<Api> = LazyLock::new(|| {
             b"SDL_GetWindowDisplayIndex\0"
         }),
         mode: symbol(b"SDL_GetCurrentDisplayMode\0"),
+        is_main: symbol(b"SDL_IsMainThread\0"),
     }
 });
 unsafe fn function<T: Copy>(p: usize) -> Option<T> {
@@ -571,6 +574,14 @@ unsafe fn function<T: Copy>(p: usize) -> Option<T> {
     } else {
         Some(unsafe { mem::transmute_copy(&p) })
     }
+}
+/// SDL3 documents display, mode and text-input calls as main-thread only, but
+/// games such as osu!lazer present on a render thread and SDL may run event
+/// filters on any thread that pushes events. SDL2 offers no query, so SDL2
+/// games keep calling from where they always have.
+fn on_main_thread() -> bool {
+    unsafe { function::<unsafe extern "C" fn() -> bool>(API.is_main) }
+        .is_none_or(|f| unsafe { f() })
 }
 pub(crate) fn current_window() -> usize {
     if !SDL_ACTIVE.load(std::sync::atomic::Ordering::Acquire) {
@@ -663,7 +674,55 @@ struct DisplayMode3 {
     denominator: i32,
     internal: *mut c_void,
 }
+/// Refresh rates by window, measured on the main thread and read elsewhere.
+static REFRESH: LazyLock<parking_lot::Mutex<[(usize, f64); 16]>> =
+    LazyLock::new(|| parking_lot::Mutex::new([(0, 0.0); 16]));
+static REFRESHED_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static REFRESH_ORIGIN: LazyLock<std::time::Instant> = LazyLock::new(std::time::Instant::now);
+
+/// The display refresh rate for `window`. Off the main thread this returns
+/// the rate last measured on it, or 0 (unknown) before the first measurement.
 pub(crate) fn refresh_hz(window: usize) -> f64 {
+    if window == 0 {
+        return 0.0;
+    }
+    if !on_main_thread() {
+        return REFRESH
+            .lock()
+            .iter()
+            .find(|(cached, _)| *cached == window)
+            .map_or(0.0, |(_, hz)| *hz);
+    }
+    let hz = query_refresh_hz(window);
+    let mut cache = REFRESH.lock();
+    let slot = cache
+        .iter()
+        .position(|(cached, _)| *cached == window)
+        .or_else(|| cache.iter().position(|(cached, _)| *cached == 0));
+    if let Some(slot) = slot {
+        cache[slot] = (window, hz);
+    }
+    hz
+}
+
+/// Remeasures known windows at most twice a second; call from event filters,
+/// which run on the main thread while the game pumps its events.
+fn refresh_known_windows() {
+    let now = REFRESH_ORIGIN.elapsed().as_millis() as u64;
+    let last = REFRESHED_MS.load(std::sync::atomic::Ordering::Relaxed);
+    if (last != 0 && now.saturating_sub(last) < 500) || !on_main_thread() {
+        return;
+    }
+    REFRESHED_MS.store(now.max(1), std::sync::atomic::Ordering::Relaxed);
+    let Some(windows) = WINDOWS.try_lock().map(|windows| *windows) else {
+        return;
+    };
+    for window in windows.into_iter().filter(|window| *window != 0) {
+        refresh_hz(window);
+    }
+}
+
+fn query_refresh_hz(window: usize) -> f64 {
     unsafe {
         let Some(display) = function::<unsafe extern "C" fn(*mut c_void) -> u32>(API.display)
         else {
@@ -1097,6 +1156,11 @@ pub unsafe extern "C" fn SDL_DestroyWindow(window: *mut c_void) {
     sync_text_capture(window as usize, false);
     release_cursor(window as usize);
     clear_window_key_state(window as usize);
+    for slot in REFRESH.lock().iter_mut() {
+        if slot.0 == window as usize {
+            *slot = (0, 0.0);
+        }
+    }
     if let Some(state) = CAPTURED_MOTION
         .lock()
         .iter_mut()
@@ -1305,6 +1369,7 @@ static SET_EVENT_FILTER_SDL3: LazyLock<bool> =
 static FILTER_INSTALLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 unsafe extern "C" fn event_filter2(_userdata: *mut c_void, event: *mut c_void) -> c_int {
+    refresh_known_windows();
     let (filter, userdata) = *FILTER_STATE.lock();
     if !event.is_null() && unsafe { route_event(event) } {
         return 0;
@@ -1319,6 +1384,7 @@ unsafe extern "C" fn event_filter2(_userdata: *mut c_void, event: *mut c_void) -
 }
 
 unsafe extern "C" fn event_filter3(_userdata: *mut c_void, event: *mut c_void) -> bool {
+    refresh_known_windows();
     let (filter, userdata) = *FILTER_STATE.lock();
     if !event.is_null() && unsafe { sdl3::route_event(event) } {
         return false;
@@ -2043,6 +2109,11 @@ static TEXT_API: LazyLock<[usize; 3]> = LazyLock::new(|| {
     ]
 });
 fn sync_text_capture(window: usize, capturing: bool) {
+    // Off the main thread (a filter run by another thread's SDL_PushEvent)
+    // nothing changes; the next main-thread event applies the state.
+    if !on_main_thread() {
+        return;
+    }
     let Some(_guard) = CursorGuard::enter() else {
         return;
     };
