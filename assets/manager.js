@@ -2843,6 +2843,59 @@
     return Boolean(input) && TEXT_INPUT_TYPES.has(input.type);
   }
 
+  // On Linux the host owns the system clipboard for the page: windowless
+  // Chromium cannot reach it while a Wayland game has keyboard focus. Elsewhere
+  // the host reports it unavailable and Chromium's own copy/paste runs.
+  const hostClipboard = { available: false, next: 0, pending: null };
+
+  function textEntry(target, writable) {
+    if (!(target instanceof Element)) return null;
+    const field = target.closest("input, textarea");
+    if (!field || field.disabled || (writable && field.readOnly)) return null;
+    return field.tagName === "TEXTAREA" || TEXT_INPUT_TYPES.has(field.type) ? field : null;
+  }
+
+  function selectedText(field) {
+    // Number and email inputs expose no selection range.
+    if (field && typeof field.selectionStart === "number") {
+      return field.value.slice(field.selectionStart, field.selectionEnd);
+    }
+    return window.getSelection()?.toString() || "";
+  }
+
+  function finishHostPaste(id, text) {
+    const pending = hostClipboard.pending;
+    if (!pending || pending.id !== id) return;
+    hostClipboard.pending = null;
+    if (typeof text !== "string" || !text || document.activeElement !== pending.field) return;
+    // insertText keeps the field's undo history and input events.
+    document.execCommand("insertText", false, text);
+  }
+
+  window.addEventListener("keydown", (event) => {
+    if (!hostClipboard.available || !event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.code !== "KeyV" && event.key.toLowerCase() !== "v") return;
+    const field = textEntry(event.target, true);
+    if (!field) return;
+    event.preventDefault();
+    if (event.repeat && hostClipboard.pending) return;
+    hostClipboard.next += 1;
+    hostClipboard.pending = { id: `paste-${hostClipboard.next}`, field };
+    ipc({ type: "clipboard-read", request_id: hostClipboard.pending.id });
+  }, true);
+
+  for (const kind of ["copy", "cut"]) {
+    document.addEventListener(kind, (event) => {
+      if (!hostClipboard.available) return;
+      const field = textEntry(event.target, false);
+      const text = selectedText(field);
+      if (!text) return;
+      event.preventDefault();
+      ipc({ type: "clipboard-write", text });
+      if (kind === "cut" && field && !field.readOnly) document.execCommand("delete");
+    }, true);
+  }
+
   function menuOrModalOpen() {
     return !settingsModal.hidden || !urlModal.hidden || !profileMenu.hidden || !profileMoreMenu.hidden
       || !profileCreate.hidden || !profileDeleteConfirm.hidden || state.inspectorPopup;
@@ -3062,6 +3115,10 @@
         prepareProfileImport(envelope.profile);
       } else if (envelope.type === "profile-import-authorized") {
         commitProfileImport(envelope.profile);
+      } else if (envelope.type === "clipboard-support") {
+        hostClipboard.available = envelope.available === true;
+      } else if (envelope.type === "clipboard-text") {
+        finishHostPaste(envelope.request_id, envelope.text);
       } else if (envelope.type === "overlay-file") {
         const source = parseSource(envelope.url, ["vosulay-overlay:"]);
         if (!source) {

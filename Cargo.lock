@@ -2878,6 +2878,8 @@ dependencies = [
  "vosulay-lookup",
  "vosulay-overlay",
  "vosulay-windows",
+ "wayland-client",
+ "wayland-protocols-wlr",
  "windows",
 ]
 
@@ -2887,6 +2889,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "cef",
+ "libc",
  "serde_json",
  "url",
  "vosulay-cef-tools",
@@ -3089,6 +3092,19 @@ dependencies = [
  "bitflags",
  "wayland-backend",
  "wayland-client",
+ "wayland-scanner",
+]
+
+[[package]]
+name = "wayland-protocols-wlr"
+version = "0.3.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb04e52f7836d7c7976c78ca0250d61e33873c34156a2a1fc9474828ec268234"
+dependencies = [
+ "bitflags",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
  "wayland-scanner",
 ]
 

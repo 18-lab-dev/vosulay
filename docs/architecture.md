@@ -8,6 +8,8 @@ One Rust host uses the pinned precompiled CEF runtime on Linux and Windows. CEF 
 
 Linux's [entrypoint](../src/main.rs) re-executes Cargo-built binaries beside the retained CEF assets. Windows enters through the pinned CEF sandbox bootstrap and loads the application client DLL.
 
+On Linux, CEF's external message pump runs only Chromium's task queue, so [crates/browser-cef](../crates/browser-cef/src/glib.rs) also dispatches the default GLib main context, where Chromium watches its display connection; a waker thread unparks the host when those descriptors become ready. When an X display exists, CEF uses X11 rather than Wayland: windowless Chromium never holds Wayland keyboard focus, so a Wayland compositor would never give it the clipboard. Xwayland bridges X11 selections only while an X11 window is focused, so with a native Wayland game focused the page's text fields use the host's clipboard instead: [src/runtime/clipboard.rs](../src/runtime/clipboard.rs) reads and owns the selection through wlr data-control, and the page inserts pasted text with `insertText`. Without data-control (X11 sessions, compositors lacking it) and on Windows, Chromium's own clipboard is used.
+
 ## Browser trust boundary
 
 [crates/browser-cef](../crates/browser-cef/) wraps CEF and serves `vosulay://manager/index.html`. Only that exact main-frame URL receives the native manager bridge. The page captures the bridge and removes its global; counter frames never receive it. Bridge strings are limited to 256 KiB, with a bounded 64-message queue.

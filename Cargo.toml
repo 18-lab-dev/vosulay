@@ -24,7 +24,7 @@ required-features = ["cef-host"]
 
 [features]
 default = ["cef-host"]
-cef-host = ["dep:vosulay-browser", "dep:vosulay-frame", "dep:vosulay-windows", "dep:vosulay-linux", "dep:vosulay-overlay", "dep:vosulay-lookup", "dep:vosulay-cef-tools", "dep:rfd", "dep:open"]
+cef-host = ["dep:vosulay-browser", "dep:vosulay-frame", "dep:vosulay-windows", "dep:vosulay-linux", "dep:vosulay-overlay", "dep:vosulay-lookup", "dep:vosulay-cef-tools", "dep:rfd", "dep:open", "dep:wayland-client", "dep:wayland-protocols-wlr"]
 
 [dependencies]
 base64 = "0.22"
@@ -49,6 +49,8 @@ open = { version = "5.3", optional = true }
 libc = "0.2"
 vosulay-linux = { path = "crates/platform-linux", optional = true }
 vosulay-cef-tools = { path = "crates/cef-tools", optional = true }
+wayland-client = { version = "0.31", optional = true }
+wayland-protocols-wlr = { version = "0.3", features = ["client"], optional = true }
 
 [target.'cfg(windows)'.dependencies]
 vosulay-windows = { path = "crates/platform-windows", optional = true }

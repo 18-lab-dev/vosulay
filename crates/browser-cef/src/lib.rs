@@ -1,4 +1,6 @@
 pub mod bridge;
+#[cfg(target_os = "linux")]
+mod glib;
 pub mod scheme;
 mod strings;
 
@@ -222,6 +224,16 @@ wrap_app! {
                     command_line.append_switch(Some(&"disable-gpu-vsync".into()));
                 }
                 command_line.append_switch(Some(&"no-startup-window".into()));
+                // Windowless Chromium never holds Wayland keyboard focus, so a
+                // Wayland compositor never offers it the clipboard and rejects
+                // its selections. X11 lets any client read and own selections,
+                // and Xwayland bridges them to Wayland clients.
+                #[cfg(target_os = "linux")]
+                if std::env::var_os("DISPLAY").is_some_and(|display| !display.is_empty())
+                    && command_line.has_switch(Some(&"ozone-platform".into())) == 0
+                {
+                    command_line.append_switch_with_value(Some(&"ozone-platform".into()), Some(&"x11".into()));
+                }
                 #[cfg(windows)]
                 {
                     // Native attachment uses the host's selected privileges.
@@ -442,10 +454,40 @@ pub unsafe fn execute_subprocess(sandbox_info: *mut u8) -> Option<i32> {
 
 struct RuntimeState {
     schedule: Arc<PumpSchedule>,
+    #[cfg(target_os = "linux")]
+    glib: RefCell<Option<glib::GlibPump>>,
     shared_array_buffer: Arc<AtomicBool>,
     active: Cell<bool>,
     poisoned: Cell<bool>,
     _app: App,
+}
+
+impl RuntimeState {
+    fn pump(&self) {
+        self.schedule.pump();
+        #[cfg(target_os = "linux")]
+        if let Ok(mut glib) = self.glib.try_borrow_mut()
+            && let Some(glib) = glib.as_mut()
+        {
+            glib.pump();
+        }
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        let deadline = self.schedule.deadline();
+        #[cfg(target_os = "linux")]
+        let deadline = match (
+            deadline,
+            self.glib
+                .borrow()
+                .as_ref()
+                .and_then(glib::GlibPump::deadline),
+        ) {
+            (Some(cef), Some(glib)) => Some(cef.min(glib)),
+            (cef, glib) => cef.or(glib),
+        };
+        deadline
+    }
 }
 
 impl Drop for RuntimeState {
@@ -523,6 +565,8 @@ impl CefRuntime {
         }
         Ok(Self {
             state: Shared::new(RuntimeState {
+                #[cfg(target_os = "linux")]
+                glib: RefCell::new(glib::GlibPump::new(schedule.host.clone())),
                 schedule,
                 shared_array_buffer,
                 active: Cell::new(false),
@@ -533,11 +577,11 @@ impl CefRuntime {
     }
 
     pub fn next_pump_deadline(&self) -> Option<Instant> {
-        self.state.schedule.deadline()
+        self.state.deadline()
     }
 
     pub fn pump(&self) {
-        self.state.schedule.pump();
+        self.state.pump();
     }
 
     /// Open a fresh view on this runtime's main thread, without reinitializing CEF.
@@ -762,11 +806,11 @@ impl OsrBrowser {
     }
 
     pub fn next_pump_deadline(&self) -> Option<Instant> {
-        self.runtime.schedule.deadline()
+        self.runtime.deadline()
     }
 
     pub fn pump(&self) -> Result<()> {
-        self.runtime.schedule.pump();
+        self.runtime.pump();
         let state = self.state.borrow();
         if let Some(error) = state.error.as_ref() {
             bail!("CEF: {error}");
@@ -839,7 +883,7 @@ impl OsrBrowser {
         host.close_browser(1);
         let deadline = Instant::now() + Duration::from_secs(5);
         while !self.state.borrow().closed {
-            self.runtime.schedule.pump();
+            self.runtime.pump();
             if self.state.borrow().closed {
                 break;
             }
@@ -850,12 +894,7 @@ impl OsrBrowser {
                 self.runtime.poisoned.set(true);
                 bail!("CEF browser did not close within five seconds");
             }
-            let next = self
-                .runtime
-                .schedule
-                .deadline()
-                .unwrap_or(deadline)
-                .min(deadline);
+            let next = self.runtime.deadline().unwrap_or(deadline).min(deadline);
             thread::park_timeout(next.saturating_duration_since(Instant::now()));
         }
         drop(browser);

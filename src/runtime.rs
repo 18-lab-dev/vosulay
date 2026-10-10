@@ -1,3 +1,5 @@
+#[cfg(target_os = "linux")]
+mod clipboard;
 mod desktop_entry;
 mod editor;
 mod host;

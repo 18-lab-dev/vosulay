@@ -2022,7 +2022,12 @@ static TEXT_CAPTURES: LazyLock<parking_lot::Mutex<[Option<TextCapture>; 16]>> =
     LazyLock::new(|| parking_lot::Mutex::new([None; 16]));
 static TEXT_API: LazyLock<[usize; 3]> = LazyLock::new(|| {
     [
-        symbol(b"SDL_IsTextInputActive\0"),
+        // SDL3 renamed SDL2's `SDL_IsTextInputActive(void)`.
+        symbol(if API.sdl3 {
+            b"SDL_TextInputActive\0"
+        } else {
+            b"SDL_IsTextInputActive\0"
+        }),
         symbol(b"SDL_StartTextInput\0"),
         symbol(b"SDL_StopTextInput\0"),
     ]

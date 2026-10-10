@@ -10,7 +10,7 @@ together.
 |---|---|---|
 | Process entrypoint | [`src/main.rs`](../src/main.rs), [`src/runtime.rs`](../src/runtime.rs) | Linux re-executes from the retained CEF runtime directory, then enters the shared CEF host; Windows enters through CEF's sandbox bootstrap. |
 | CEF host loop | [`src/runtime/host.rs`](../src/runtime/host.rs) | Lazy CEF initialization, browser lifetime, attach/detach, input heartbeat, pump scheduling. |
-| Editor and settings | [`src/runtime/editor.rs`](../src/runtime/editor.rs), [`assets/manager.js`](../assets/manager.js), [`assets/manager.html`](../assets/manager.html), [`assets/manager.css`](../assets/manager.css), [`src/ui.rs`](../src/ui.rs) | Manager page, profile/overlay editing, saves, backend discovery; `ui.rs` embeds the assets with safe encoding. |
+| Editor and settings | [`src/runtime/editor.rs`](../src/runtime/editor.rs), [`src/runtime/clipboard.rs`](../src/runtime/clipboard.rs), [`assets/manager.js`](../assets/manager.js), [`assets/manager.html`](../assets/manager.html), [`assets/manager.css`](../assets/manager.css), [`src/ui.rs`](../src/ui.rs) | Manager page, profile/overlay editing, saves, backend discovery, Linux text-field clipboard; `ui.rs` embeds the assets with safe encoding. |
 | Configuration | [`src/config.rs`](../src/config.rs) | Versioned profiles/placements/settings, normalization, config path, atomic persistence. |
 | tosu import | [`src/migration.rs`](../src/migration.rs), [`src/runtime/tosu.rs`](../src/runtime/tosu.rs) | Parse tosu 4.26.x layouts; discover and import them without calling tosu's API. |
 | Counter catalog | [`src/api.rs`](../src/api.rs) | Fetch and parse the backend's counter-search HTML. |
@@ -20,7 +20,7 @@ together.
 | Linux game launchers | [`src/runtime/launchers.rs`](../src/runtime/launchers.rs) | Rewrite osu desktop shortcuts with preload order and Vulkan layer settings. |
 | App launchers and single instance | [`src/runtime/desktop_entry.rs`](../src/runtime/desktop_entry.rs), [`src/runtime/instance.rs`](../src/runtime/instance.rs) | XDG desktop/icon and Windows Start Menu registration; per-user instance ownership. |
 | Native hotkeys | [`crates/frame/src/hotkey.rs`](../crates/frame/src/hotkey.rs) | Shared parser and matching used by the host and platform input paths. |
-| CEF wrapper | [`crates/browser-cef`](../crates/browser-cef) (`src/lib.rs`, `bridge.rs`, `scheme.rs`) | OSR browser, native manager bridge, `vosulay://` scheme, permission policy; build script links the pinned CEF. |
+| CEF wrapper | [`crates/browser-cef`](../crates/browser-cef) (`src/lib.rs`, `bridge.rs`, `scheme.rs`, `glib.rs`) | OSR browser, native manager bridge, `vosulay://` scheme, permission policy, Linux GLib dispatch beside the external pump; build script links the pinned CEF. |
 | CEF smoke | [`crates/cef-smoke`](../crates/cef-smoke), [`tools/cef/private-smoke.py`](../tools/cef/private-smoke.py) | Standalone OSR/WebGL/bridge smoke binary and its private-Xvfb runner. |
 | Editor preview | [`tools/manager-preview.py`](../tools/manager-preview.py) | Builds the editor page with a stub host for any Chromium; no CEF or game needed. |
 | CEF acquisition and packaging | [`crates/cef-tools`](../crates/cef-tools), [`tools/cef/pins.json`](../tools/cef/pins.json) | Pinned download/verification, runtime retention, Linux/Windows packaging. |

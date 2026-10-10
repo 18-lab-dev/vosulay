@@ -127,7 +127,15 @@ impl EditorWorker {
             .spawn(move || counter_worker(counter_queue, counter_backend))
             .context("could not start counter worker")?;
         let thread = thread::Builder::new().name("vosulay-manager-tasks".into()).spawn(move || {
-            let mut state = State { config, path, backend, resources, revision: 0 };
+            let mut state = State {
+                config,
+                path,
+                backend,
+                resources,
+                revision: 0,
+                #[cfg(target_os = "linux")]
+                clipboard: super::clipboard::Clipboard::connect(),
+            };
             while let Ok(work) = requests.recv() {
                 let kind = work.message.get("type").and_then(Value::as_str).unwrap_or("");
                 let dialog_closed = matches!(kind, "choose-overlay-file" | "import-profile" | "export-profile" | "import-tosu-layout");
@@ -254,9 +262,19 @@ struct State {
     backend: Url,
     resources: Arc<ProductResources>,
     revision: u64,
+    #[cfg(target_os = "linux")]
+    clipboard: Option<super::clipboard::Clipboard>,
 }
 
 impl State {
+    /// Whether vosulay serves the page's clipboard instead of Chromium.
+    fn host_clipboard(&self) -> bool {
+        #[cfg(target_os = "linux")]
+        return self.clipboard.is_some();
+        #[cfg(not(target_os = "linux"))]
+        false
+    }
+
     fn dispatch(&mut self, message: &Value) -> Result<Vec<Value>> {
         ensure!(message.is_object(), "invalid manager message");
         let kind = message
@@ -266,7 +284,38 @@ impl State {
         match kind {
             "ready" => Ok(vec![
                 json!({"type": "config", "config": self.config, "revision": self.revision}),
+                // Elsewhere Chromium's own clipboard works for the page.
+                json!({"type": "clipboard-support", "available": self.host_clipboard()}),
             ]),
+            #[cfg(target_os = "linux")]
+            "clipboard-read" => {
+                let request = message
+                    .get("request_id")
+                    .and_then(Value::as_str)
+                    .filter(|id| !id.is_empty() && id.len() <= 64)
+                    .context("invalid clipboard request")?;
+                let text = self
+                    .clipboard
+                    .as_ref()
+                    .context("system clipboard unavailable")?
+                    .read()?;
+                Ok(vec![
+                    json!({"type": "clipboard-text", "request_id": request, "text": text}),
+                ])
+            }
+            #[cfg(target_os = "linux")]
+            "clipboard-write" => {
+                let text = message
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .filter(|text| text.len() <= 1 << 20)
+                    .context("invalid clipboard text")?;
+                self.clipboard
+                    .as_ref()
+                    .context("system clipboard unavailable")?
+                    .write(text)?;
+                Ok(Vec::new())
+            }
             "save-config" => {
                 let save_id = message
                     .get("save_id")
