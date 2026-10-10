@@ -66,6 +66,13 @@ Distribution packages already install this helper setuid root.
 To uninstall a package, use `sudo apt remove vosulay`, `sudo dnf remove vosulay`,
 or `sudo pacman -R vosulay`.
 
+No apt, dnf, or pacman repository is configured, so a system upgrade does not
+pick up new versions. To upgrade, quit vosulay from the tray, download the newer
+release package, and install it with the same command; the package manager
+replaces the old version. Arch users can alternatively build
+`packaging/arch/PKGBUILD` from source, or the `vosulay` AUR package once it is
+published, and rebuild it after each release.
+
 ### Windows
 
 Run `vosulay-<v>-windows-x86_64-setup.exe`. The Inno Setup installer needs no
@@ -79,7 +86,9 @@ Keep `vosulay.dll`, CEF runtime files/locales and both injection DLLs beside it.
 The ZIP uses the same user configuration as the installer, not portable config.
 
 Before upgrading or uninstalling, choose **tray → Exit vosulay** when prompted;
-hiding the app is not quitting it. Uninstall from Windows **Apps & features**.
+hiding the app is not quitting it. To upgrade, run the newer release's installer
+over the existing installation, or replace the unpacked ZIP directory.
+Uninstall from Windows **Apps & features**.
 Uninstall keeps `%APPDATA%\vosulay\config.json`.
 
 ### Build from source

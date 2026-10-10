@@ -1,4 +1,4 @@
-# Maintainer: vosulay contributors <https://github.com/shiruviaa/vosulay>
+# Maintainer: sxlvia <qt715 at proton dot me>
 #
 # Source build for the AUR. After tagging a release, set pkgver and run
 # `updpkgsums`. The pinned CEF archive must match tools/cef/pins.json.

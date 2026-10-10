@@ -6,7 +6,7 @@ version: ${VERSION}
 release: 1
 section: games
 priority: optional
-maintainer: vosulay contributors <https://github.com/shiruviaa/vosulay>
+maintainer: sxlvia <qt715@proton.me>
 vendor: vosulay contributors
 homepage: https://github.com/shiruviaa/vosulay
 license: MIT AND BSD-3-Clause
@@ -125,4 +125,4 @@ rpm:
   group: Amusements/Games
   summary: In-game overlay for vosu and tosu-compatible counters
 archlinux:
-  packager: vosulay contributors
+  packager: sxlvia <qt715@proton.me>

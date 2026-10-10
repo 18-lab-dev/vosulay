@@ -13,6 +13,7 @@
 [Setup]
 AppId={{D1A97E8C-F65B-44D8-8E1B-25BC7A83E294}
 AppName=Vosulay
+AppPublisher=sxlvia
 AppVersion={#AppVersion}
 DefaultDirName={localappdata}\Programs\Vosulay
 PrivilegesRequired=lowest
