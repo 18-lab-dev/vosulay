@@ -33,6 +33,9 @@ const GL_DRAW_FRAMEBUFFER: c_uint = 0x8ca9;
 const GL_DRAW_BUFFER0: c_uint = 0x8825;
 const GL_BACK: c_uint = 0x0405;
 const GL_PIXEL_UNPACK_BUFFER: c_uint = 0x88ec;
+const GL_STREAM_DRAW: c_uint = 0x88e0;
+const GL_MAP_WRITE_BIT: c_uint = 0x0002;
+const GL_MAP_INVALIDATE_BUFFER_BIT: c_uint = 0x0008;
 const GL_VIEWPORT: c_uint = 0x0ba2;
 const GL_BLEND: c_uint = 0x0be2;
 const GL_DEPTH_TEST: c_uint = 0x0b71;
@@ -105,6 +108,11 @@ type BindFramebuffer = unsafe extern "C" fn(c_uint, c_uint);
 type BindSampler = unsafe extern "C" fn(c_uint, c_uint);
 type DrawBuffers = unsafe extern "C" fn(c_int, *const c_uint);
 type PixelStorei = unsafe extern "C" fn(c_uint, c_int);
+type GenBuffers = unsafe extern "C" fn(c_int, *mut c_uint);
+type DeleteBuffers = unsafe extern "C" fn(c_int, *const c_uint);
+type BufferData = unsafe extern "C" fn(c_uint, isize, *const c_void, c_uint);
+type MapBufferRange = unsafe extern "C" fn(c_uint, isize, isize, c_uint) -> *mut c_void;
+type UnmapBuffer = unsafe extern "C" fn(c_uint) -> u8;
 type BlendFuncSeparate = unsafe extern "C" fn(c_uint, c_uint, c_uint, c_uint);
 type BlendEquationSeparate = unsafe extern "C" fn(c_uint, c_uint);
 type ColorMask = unsafe extern "C" fn(u8, u8, u8, u8);
@@ -166,6 +174,11 @@ struct Gl {
     bind_sampler: Option<BindSampler>,
     draw_buffers: DrawBuffers,
     pixel_store: PixelStorei,
+    gen_buffers: GenBuffers,
+    delete_buffers: DeleteBuffers,
+    buffer_data: BufferData,
+    map_buffer_range: MapBufferRange,
+    unmap_buffer: UnmapBuffer,
     blend_func_separate: BlendFuncSeparate,
     blend_equation_separate: BlendEquationSeparate,
     color_mask: ColorMask,
@@ -251,6 +264,11 @@ impl Gl {
             bind_framebuffer: symbol!("glBindFramebuffer", BindFramebuffer),
             draw_buffers: symbol!("glDrawBuffers", DrawBuffers),
             pixel_store: symbol!("glPixelStorei", PixelStorei),
+            gen_buffers: symbol!("glGenBuffers", GenBuffers),
+            delete_buffers: symbol!("glDeleteBuffers", DeleteBuffers),
+            buffer_data: symbol!("glBufferData", BufferData),
+            map_buffer_range: symbol!("glMapBufferRange", MapBufferRange),
+            unmap_buffer: symbol!("glUnmapBuffer", UnmapBuffer),
             blend_func_separate: symbol!("glBlendFuncSeparate", BlendFuncSeparate),
             blend_equation_separate: symbol!("glBlendEquationSeparate", BlendEquationSeparate),
             color_mask: symbol!("glColorMask", ColorMask),
@@ -273,6 +291,8 @@ pub(crate) struct Renderer {
     texture: c_uint,
     program: c_uint,
     vao: c_uint,
+    /// Pixel unpack buffer that changed overlay rows are staged in.
+    staging: c_uint,
     width: u32,
     height: u32,
     has_frame: bool,
@@ -390,10 +410,16 @@ impl Renderer {
             state.restore(&gl, is_es);
         }
         let (texture, program, vao) = resources?;
+        let mut staging = 0;
+        // SAFETY: the loader's context is current; zero means no buffer.
+        unsafe {
+            (gl.gen_buffers)(1, &mut staging);
+        }
         Some(Self {
             context,
             gl,
             texture,
+            staging,
             program,
             vao,
             width,
@@ -522,9 +548,12 @@ impl Renderer {
             // frame per present costs milliseconds at 1440p.
             unsafe {
                 set_unpack_defaults(gl);
-                (gl.pixel_store)(GL_UNPACK_ROW_LENGTH, self.width as c_int);
-                (gl.pixel_store)(GL_UNPACK_SKIP_PIXELS, region.x as c_int);
-                (gl.pixel_store)(GL_UNPACK_SKIP_ROWS, region.y as c_int);
+                let source = stage_rows(gl, self.staging, bytes, self.width, region);
+                if source.is_none() {
+                    (gl.pixel_store)(GL_UNPACK_ROW_LENGTH, self.width as c_int);
+                    (gl.pixel_store)(GL_UNPACK_SKIP_PIXELS, region.x as c_int);
+                    (gl.pixel_store)(GL_UNPACK_SKIP_ROWS, region.y as c_int);
+                }
                 (gl.tex_sub_image)(
                     GL_TEXTURE_2D,
                     0,
@@ -534,7 +563,7 @@ impl Renderer {
                     region.height as c_int,
                     GL_RGBA,
                     GL_UNSIGNED_BYTE,
-                    bytes.as_ptr().cast(),
+                    source.unwrap_or(bytes.as_ptr().cast()),
                 );
             }
             self.has_frame = true;
@@ -611,10 +640,14 @@ impl Renderer {
         // SAFETY: the matching owning context is current.
         unsafe {
             (self.gl.delete_textures)(1, &self.texture);
+            if self.staging != 0 {
+                (self.gl.delete_buffers)(1, &self.staging);
+            }
             (self.gl.delete_program)(self.program);
             (self.gl.delete_vertex_arrays)(1, &self.vao);
         }
         self.texture = 0;
+        self.staging = 0;
         self.program = 0;
         self.vao = 0;
         self.has_frame = false;
@@ -988,6 +1021,64 @@ unsafe fn compile_shader(gl: &Gl, kind: c_uint, source: &[u8]) -> Option<c_uint>
     } else {
         Some(shader)
     }
+}
+
+/// Copies `region` of a tightly packed frame into `staging` and leaves it
+/// bound as the unpack buffer, returning the upload source (offset 0).
+/// Uploading from process memory made NVIDIA serialize each large copy into
+/// the game's frame; a GL-owned buffer lets the GPU fetch the rows itself.
+/// None leaves no buffer bound, for a direct upload from `bytes`.
+///
+/// # Safety
+/// The renderer's context is current, `staging` is zero or its buffer,
+/// `bytes` holds `width`-wide rows, and `region` lies within them.
+unsafe fn stage_rows(
+    gl: &Gl,
+    staging: c_uint,
+    bytes: &[u8],
+    width: u32,
+    region: DamageRect,
+) -> Option<*const c_void> {
+    if staging == 0 {
+        return None;
+    }
+    let length = region.width as usize * 4;
+    let size = length * region.height as usize;
+    let stride = width as usize * 4;
+    unsafe {
+        (gl.bind_buffer)(GL_PIXEL_UNPACK_BUFFER, staging);
+        // Fresh storage, so an upload still reading the previous rows is never waited on.
+        (gl.buffer_data)(
+            GL_PIXEL_UNPACK_BUFFER,
+            size as isize,
+            ptr::null(),
+            GL_STREAM_DRAW,
+        );
+        let mapped = (gl.map_buffer_range)(
+            GL_PIXEL_UNPACK_BUFFER,
+            0,
+            size as isize,
+            GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT,
+        );
+        if mapped.is_null() {
+            (gl.bind_buffer)(GL_PIXEL_UNPACK_BUFFER, 0);
+            return None;
+        }
+        for row in 0..region.height as usize {
+            let offset = (region.y as usize + row) * stride + region.x as usize * 4;
+            ptr::copy_nonoverlapping(
+                bytes.as_ptr().add(offset),
+                mapped.cast::<u8>().add(row * length),
+                length,
+            );
+        }
+        // A lost mapping (rare) leaves undefined contents; upload directly instead.
+        if (gl.unmap_buffer)(GL_PIXEL_UNPACK_BUFFER) == 0 {
+            (gl.bind_buffer)(GL_PIXEL_UNPACK_BUFFER, 0);
+            return None;
+        }
+    }
+    Some(ptr::null())
 }
 
 unsafe fn set_unpack_defaults(gl: &Gl) {
