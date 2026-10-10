@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{files, pins, verify_runtime};
+use crate::{PRODUCT_VERSION, files, pins, verify_runtime};
 
 #[path = "zip.rs"]
 mod zip;
@@ -126,7 +126,7 @@ pub fn package_runtime(
             hashes.insert(name, crate::sha256(&file)?);
         }
         let manifest = Manifest {
-            product_version: &receipt.product_version,
+            product_version: PRODUCT_VERSION,
             cef_version: &receipt.cef_version,
             platform,
             archive: &receipt.archive,

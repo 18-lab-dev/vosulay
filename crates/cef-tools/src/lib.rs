@@ -54,13 +54,16 @@ pub struct AssetPin {
     pub sha256: String,
 }
 
+/// Verification record for an extracted CEF SDK. The tree depends only on the
+/// pinned archive, so it records no vosulay version: binding it to one made
+/// every version bump reject an intact cached SDK. Receipts written before
+/// this change carry an extra `product_version` field that is ignored.
 #[derive(Deserialize, Serialize)]
 pub struct Receipt {
     pub platform: String,
     pub cef_version: String,
     pub archive: String,
     pub archive_sha256: String,
-    pub product_version: String,
     pub runtime_sha256: BTreeMap<String, String>,
 }
 
@@ -208,9 +211,8 @@ fn verify_runtime_with_pin(
         receipt.platform == platform
             && receipt.cef_version == pins.cef_version
             && receipt.archive == pin.archive
-            && receipt.archive_sha256 == pin.sha256
-            && receipt.product_version == PRODUCT_VERSION,
-        "verified CEF receipt does not match this platform/pin/product"
+            && receipt.archive_sha256 == pin.sha256,
+        "verified CEF receipt does not match this platform/pin"
     );
     ensure!(
         receipt.runtime_sha256 == manifest(root)?,
@@ -225,7 +227,6 @@ fn make_receipt(root: &Path, platform: &str, pins: &Pins, pin: &PlatformPin) -> 
         cef_version: pins.cef_version.clone(),
         archive: pin.archive.clone(),
         archive_sha256: pin.sha256.clone(),
-        product_version: PRODUCT_VERSION.to_owned(),
         runtime_sha256: manifest(root)?,
     })
 }
@@ -245,10 +246,7 @@ fn cache_lock(cache: &Path) -> Result<File> {
 /// Retain the verified runtime in CEF's executable-adjacent layout.
 pub fn cache_runtime(cef: &Path, receipt: &Receipt, cache: &Path) -> Result<PathBuf> {
     let _lock = cache_lock(cache)?;
-    let output = cache.join(format!(
-        "{}-{}",
-        receipt.product_version, receipt.archive_sha256
-    ));
+    let output = cache.join(format!("{PRODUCT_VERSION}-{}", receipt.archive_sha256));
     let temporary = if output.exists() {
         None
     } else {

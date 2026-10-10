@@ -198,3 +198,22 @@ fn verified_receipts_reject_changed_added_and_missing_runtime_files() {
     fs::remove_file(root.join("Resources/data")).unwrap();
     assert!(verify_runtime_with_pin(&root, "linux-x86_64", &pins, &pin).is_err());
 }
+
+#[test]
+fn cached_sdk_receipt_from_another_vosulay_version_still_verifies() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("sdk");
+    fs::create_dir_all(root.join("Release")).unwrap();
+    fs::create_dir_all(root.join("Resources")).unwrap();
+    fs::write(root.join("Release/library"), b"library").unwrap();
+    fs::write(root.join("Resources/data"), b"resource").unwrap();
+    let pins = pins().unwrap();
+    let pin = fixture_pin();
+    // Receipts used to record the vosulay version, so a version bump rejected
+    // an intact cached SDK and every build failed until the cache was cleared.
+    let mut receipt =
+        serde_json::to_value(make_receipt(&root, "linux-x86_64", &pins, &pin).unwrap()).unwrap();
+    receipt["product_version"] = serde_json::json!("0.0.1");
+    serde_json::to_writer(File::create(root.join(RECEIPT)).unwrap(), &receipt).unwrap();
+    verify_runtime_with_pin(&root, "linux-x86_64", &pins, &pin).unwrap();
+}
