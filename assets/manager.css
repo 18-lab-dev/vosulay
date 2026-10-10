@@ -149,7 +149,8 @@ body.editing.interacting .overlay[data-wheel-zone]::before { display: none; }
 .profile-option[aria-checked="true"]:hover, .profile-option[aria-checked="true"]:focus-visible { background: rgba(139,124,255,.34); }
 .profile-actions { display: flex; align-items: center; gap: 6px; }
 .profile-actions[hidden] { display: none; }
-.profile-more { position: relative; }
+/* Flex drops the line box a block wrapper adds under its inline button, which lifted ☰ about 2px. */
+.profile-more { position: relative; display: flex; }
 #profile-more[aria-expanded="true"] { background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 1px rgba(169,159,255,.58); }
 .profile-position { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 4px 2px 8px; color: var(--muted); white-space: nowrap; }
 .profile-position > span:first-child { flex: 1; color: var(--text); }
@@ -327,12 +328,8 @@ button:disabled { opacity: .42; cursor: default; }
 .panel-heading { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 11px 9px 13px; border-bottom: 1px solid var(--line); }
 .panel-heading strong, .panel-heading small { display: block; }
 .panel-heading small { margin-top: 2px; color: var(--muted); font-size: 11px; }
-.catalog-heading { justify-content: flex-start; gap: 8px; }
-.panel-heading .catalog-count {
-  display: inline-block; min-width: 0; margin: 0; padding: 1px 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  border-radius: 999px; background: rgba(255,255,255,.07); line-height: 16px; font-variant-numeric: tabular-nums;
-}
-.panel-heading .catalog-count.error { color: #ffb3bf; background: rgba(255,111,132,.14); }
+.catalog-notice { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; padding: 6px 6px 6px 9px; border-radius: 8px; color: #ffb3bf; background: rgba(255,111,132,.14); font-size: 12px; }
+.catalog-notice span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .source-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 7px; border-bottom: 1px solid var(--line); }
 .source-actions button { width: 100%; }
 .catalog-search { padding: 7px; border-bottom: 1px solid var(--line); }

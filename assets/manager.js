@@ -32,7 +32,6 @@
   const profileName = $("profile-name");
   const profileCreateCancel = $("profile-create-cancel");
   const catalog = $("catalog");
-  const catalogSummary = $("catalog-summary");
   const catalogSearch = $("catalog-search");
   const status = $("status");
   const undoButton = $("undo");
@@ -1120,16 +1119,8 @@
     return terms.every((term) => text.includes(term));
   }
 
-  function renderCatalogSummary(counters, shown) {
-    const failed = Boolean(catalogRequest.error) && !catalogRequest.pending;
-    const filtered = counters !== null && shown !== counters.length;
-    const text = failed ? (counters ? "Refresh failed" : "Unavailable")
-      : counters === null ? "Connecting…" : filtered ? `${shown} of ${counters.length}` : String(counters.length);
-    const title = failed ? catalogRequest.error
-      : counters === null ? "Waiting for vosu" : `${counters.length} installed counter${counters.length === 1 ? "" : "s"}`;
-    catalogSummary.textContent = text;
-    catalogSummary.title = title;
-    catalogSummary.classList.toggle("error", failed);
+  function renderCatalogSearch(counters) {
+    catalogSearch.placeholder = counters ? `Search counters (${counters.length})` : "Search counters";
     catalog.setAttribute("aria-busy", String(catalogRequest.pending));
   }
 
@@ -1138,7 +1129,7 @@
     const counters = state.counters;
     const terms = catalogSearch.value.toLowerCase().split(/\s+/).filter(Boolean);
     const matching = counters && counters.filter((counter) => catalogMatches(counter, terms));
-    renderCatalogSummary(counters, matching ? matching.length : 0);
+    renderCatalogSearch(counters);
     if (counters === null) {
       if (!catalogRequest.error || catalogRequest.pending) {
         catalog.append(makeElement("div", "catalog-empty", "Waiting for installed counters…"));
@@ -1150,6 +1141,15 @@
       empty.append(makeElement("small", "", catalogRequest.error), retry);
       catalog.append(empty);
       return;
+    }
+    if (catalogRequest.error && !catalogRequest.pending) {
+      // The previous list stays usable; only the refresh failed.
+      const notice = makeElement("div", "catalog-notice");
+      notice.title = catalogRequest.error;
+      const retry = makeElement("button", "quiet-button catalog-retry", "Retry");
+      retry.type = "button";
+      notice.append(makeElement("span", "", "Refresh failed"), retry);
+      catalog.append(notice);
     }
     if (!counters.length) {
       catalog.append(makeElement("div", "catalog-empty", "No installed counters found. Install counters in vosu; this list refreshes each time the editor opens."));
