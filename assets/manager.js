@@ -1020,6 +1020,8 @@
     state.config.active_profile = id;
     scheduleSave(true);
     closeProfileMenu(true);
+    // A rename form left open would otherwise read as renaming the newly active profile.
+    if (profileCreate.dataset.mode === "rename") closeProfileCreator();
     requestRender("stageStructure", "stageGeometry", "profileList", "catalog", "inspector", "chrome");
   }
 
@@ -1536,6 +1538,7 @@
     const renaming = profileCreate.dataset.mode === "rename";
     profileCreate.hidden = true;
     delete profileCreate.dataset.mode;
+    delete profileCreate.dataset.profileId;
     profileActions.hidden = false;
     if (restoreFocus) (renaming ? profileSelect : profileAdd).focus();
   }
@@ -1549,6 +1552,7 @@
     const profile = activeProfile();
     if (!state.config || !profile) return;
     openProfileNameForm("rename", profile.name);
+    profileCreate.dataset.profileId = profile.id;
   }
 
   // Creating and renaming share one inline form, so Escape, toolbar pinning
@@ -1558,6 +1562,7 @@
     closeProfileMoreMenu();
     closeProfileDeleteConfirm();
     profileCreate.dataset.mode = mode;
+    delete profileCreate.dataset.profileId;
     profileCreateSubmit.textContent = mode === "rename" ? "Rename" : "Create";
     profileName.value = name;
     profileActions.hidden = true;
@@ -2282,7 +2287,9 @@
     flushEditingChanges();
     const before = historySnapshot();
     if (profileCreate.dataset.mode === "rename") {
-      const profile = activeProfile();
+      // Rename the profile the form was opened for, even if undo or another
+      // path changed the active profile meanwhile.
+      const profile = state.config.profiles.find((item) => item.id === profileCreate.dataset.profileId);
       if (profile && profile.name !== name) {
         profile.name = name;
         commitHistory(before);
