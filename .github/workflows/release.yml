@@ -22,6 +22,8 @@ env:
   CARGO_TERM_COLOR: always
   NFPM_VERSION: 2.47.0
   NFPM_SHA256: 0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783
+  INNO_SETUP_VERSION: 7.1.0
+  INNO_SETUP_SHA256: 0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f
 
 jobs:
   linux:
@@ -74,9 +76,51 @@ jobs:
           rustup toolchain install 1.96.1 --profile minimal --target x86_64-pc-windows-msvc
           rustup default 1.96.1
 
-      - name: Acquire CEF, build client, and package ZIP
+      # Signing stays off until SignPath approves the project and the
+      # SIGNPATH_ORGANIZATION_ID variable and SIGNPATH_API_TOKEN secret exist;
+      # until then this job builds the same unsigned packages. Only tags are
+      # signed. See docs/code-signing.md.
+      - name: Select signing
+        id: signing
         run: |
-          cargo run --locked -p vosulay-cef-tools -- package-windows dist/package
+          $enabled = '${{ vars.SIGNPATH_ORGANIZATION_ID != '' && startsWith(github.ref, 'refs/tags/v') }}'
+          "enabled=$enabled" >> $env:GITHUB_OUTPUT
+
+      - name: Build client DLL
+        run: |
+          cargo build --release --lib --locked --target x86_64-pc-windows-msvc -p vosulay
+          if ($LASTEXITCODE -ne 0) { throw 'Windows client build failed' }
+          New-Item -ItemType Directory -Force dist/client | Out-Null
+          Copy-Item target/x86_64-pc-windows-msvc/release/vosulay.dll dist/client/
+
+      - name: Upload unsigned client DLL for SignPath
+        id: upload-unsigned-client
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unsigned-vosulay-client-${{ github.ref_name }}
+          path: dist/client/vosulay.dll
+          if-no-files-found: error
+
+      # The DLL is signed before packaging: the installer embeds it and the
+      # package manifest records its digest.
+      - name: Sign client DLL
+        if: steps.signing.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: vosulay
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: client-dll
+          github-artifact-id: ${{ steps.upload-unsigned-client.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist/signed-client
+
+      - name: Acquire CEF and package ZIP
+        run: |
+          $client = if ('${{ steps.signing.outputs.enabled }}' -eq 'true') { 'dist/signed-client/vosulay.dll' } else { 'dist/client/vosulay.dll' }
+          cargo run --locked -p vosulay-cef-tools -- package-windows dist/package --client $client
           if ($LASTEXITCODE -ne 0) { throw 'Windows packaging failed' }
 
       - name: Build installer
@@ -84,16 +128,53 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $version = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages |
             Where-Object { $_.name -eq "vosulay" } | Select-Object -First 1 -ExpandProperty version
-          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
-          if (-not $iscc) { $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' }
-          if (-not (Test-Path $iscc)) {
-            choco install innosetup --no-progress -y
-            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+          # A pinned compiler, unpacked without installing (no registry or
+          # uninstaller), so every release is built by the same Inno Setup.
+          $tag = 'is-' + ($env:INNO_SETUP_VERSION -replace '\.', '_')
+          $setup = Join-Path $env:RUNNER_TEMP "innosetup-$env:INNO_SETUP_VERSION-x64.exe"
+          Invoke-WebRequest "https://github.com/jrsoftware/issrc/releases/download/$tag/innosetup-$env:INNO_SETUP_VERSION-x64.exe" -OutFile $setup
+          if ((Get-FileHash -Algorithm SHA256 $setup).Hash -ne $env:INNO_SETUP_SHA256) {
+            throw 'Inno Setup download does not match its pinned SHA-256'
           }
+          $inno = Join-Path $env:RUNNER_TEMP 'inno-setup'
+          $unpack = Start-Process -Wait -PassThru $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/PORTABLE=1', '/CURRENTUSER', "/DIR=$inno"
+          if ($unpack.ExitCode -ne 0) { throw "Inno Setup unpack failed: $($unpack.ExitCode)" }
+          $iscc = Join-Path $inno 'ISCC.exe'
           $source = (Resolve-Path 'dist/package').Path
-          $output = (Resolve-Path 'dist').Path
+          $output = (New-Item -ItemType Directory -Force 'dist/installer').FullName
           & $iscc "/DAppVersion=$version" "/DSourceDir=$source" "/DOutputDir=$output" 'packaging/windows/vosulay.iss'
           if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+
+      - name: Upload unsigned installer for SignPath
+        id: upload-unsigned-installer
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unsigned-vosulay-installer-${{ github.ref_name }}
+          path: dist/installer/vosulay-*-windows-x86_64-setup.exe
+          if-no-files-found: error
+
+      - name: Sign installer
+        if: steps.signing.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: vosulay
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.upload-unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist/signed-installer
+
+      - name: Verify Windows packages
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $signed = '${{ steps.signing.outputs.enabled }}' -eq 'true'
+          $directory = if ($signed) { 'dist/signed-installer' } else { 'dist/installer' }
+          $installer = Get-ChildItem "$directory/vosulay-*-windows-x86_64-setup.exe" | Select-Object -First 1
+          Copy-Item $installer.FullName dist/
+          ./packaging/windows/verify-release.ps1 -Package dist/package -Installer $installer.FullName -RequireSignature:$signed
 
       - name: Upload Windows packages
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

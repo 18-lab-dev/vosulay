@@ -1,0 +1,94 @@
+# Distribution provenance and licensing
+
+This is the release inventory, not an assertion that every upstream prebuilt has a reproducible build attestation. Open maintainer items below must be settled before describing the project as fully eligible for a signing programme. System effects are disclosed in [security.md](security.md).
+
+## Distributed artifact inventory
+
+The exact CEF file lists, versions, sizes and digests are in [tools/cef/pins.json](../tools/cef/pins.json). The following table covers the portable Linux tarball, DEB/RPM/Arch packages, Windows ZIP and Inno Setup installer.
+
+| Artifact | Origin / transformation | License and notice | Signing ownership |
+| --- | --- | --- | --- |
+| Linux `vosulay` | Built from this checkout and locked Cargo dependencies; release build in CI | Repository MIT (`LICENSE-vosulay.txt`) plus Rust dependency notices | vosulay source-built binary |
+| Windows `vosulay.dll` | Root crate's `cdylib`, built for `x86_64-pc-windows-msvc` from this checkout | MIT plus Rust dependency notices | vosulay source-built binary; signing target |
+| Linux `libvosulay_overlay.so`, `libvosulay_lookup.so` | `crates/overlay-linux` and `crates/overlay-lookup`, built from this checkout | MIT plus Rust dependency notices | vosulay source-built injected libraries |
+| `VkLayer_vosulay_overlay.json` | Repository layer manifest, copied unchanged | MIT | Data, not a binary |
+| Windows `vosulay.exe` | Official pinned CEF `Release/bootstrap.exe`, renamed to the client basename; icon/version resources edited, CEF copyright retained | CEF BSD-style terms in `LICENSE.txt`; Chromium terms in `CREDITS.html` | **Upstream prebuilt, not vosulay code; ships unsigned** |
+| Linux CEF `chrome-sandbox`, `libcef.so`, `libEGL.so`, `libGLESv2.so`, `libvk_swiftshader.so`, `libvulkan.so.1` | Official minimal CEF archive; Linux packager strips ELF debug/unneeded symbols | CEF `LICENSE.txt` and Chromium component `CREDITS.html` | Third-party prebuilt; not an own-binary signing target |
+| Windows CEF `libcef.dll`, `chrome_elf.dll`, `d3dcompiler_47.dll`, `dxcompiler.dll`, `dxil.dll`, `libEGL.dll`, `libGLESv2.dll`, `vk_swiftshader.dll`, `vulkan-1.dll` | Official minimal CEF archive | `LICENSE.txt` and `CREDITS.html` (not all component code is CEF's BSD license) | Upstream DLLs ship unsigned by vosulay; preserve upstream signatures if any |
+| CEF `v8_context_snapshot.bin`, `vk_swiftshader_icd.json`, `chrome_100_percent.pak`, `chrome_200_percent.pak`, `icudtl.dat`, `resources.pak`, entire `locales/` tree | Copied from pinned archive | `LICENSE.txt` and `CREDITS.html` | Third-party runtime data |
+| Windows `asdf_overlay-x64.dll`, `asdf_overlay-x86.dll` | GitHub release v2.1.0 prebuilts, not built by vosulay CI | Upstream `MIT OR Apache-2.0`; MIT option reproduced in `THIRD_PARTY_NOTICES.md`; embedded dependencies need upstream attestation (below) | Third-party prebuilt DLLs ship unsigned by vosulay |
+| Embedded `assets/manager.html`, `.css`, `.js`, `assets/backend.js` | Repository frontend/broker source compiled into host | Repository MIT, retaining original copyright (see history below) | Part of source-built host |
+| `assets/branding/*` (SVG/PNG/ICO), inline UI SVG/glyphs | Repository branding; first-party UI commit `0164a66`, Windows ICO commit `53d83db`; icon embedded in Windows bootstrap and Linux desktop integration | Repository MIT; no separately declared asset license | Artwork, not independently signed code |
+| Fonts | **No font files bundled**. CSS names Inter/system fonts; uses fonts installed on the user's system | No redistributed font license needed | Not shipped |
+| Linux desktop entry and scalable application icon | `packaging/linux/com.vosu.vosulay.desktop`, `assets/branding/vosulay-app-icon.svg` | Repository MIT | Integration data |
+| Windows setup executable | Inno Setup 7.1.0, pinned by SHA-256 in the release workflow, compiles `packaging/windows/vosulay.iss`, embedding the complete staged package | vosulay MIT plus payload notices; [Inno Setup license](https://github.com/jrsoftware/issrc/blob/is-7_1_0/license.txt), reproduced in notices, permits binary redistribution retaining copyright/site notices | Installer signing target; embedded upstream binaries remain unsigned |
+| `vosulay-cef.json` | Generated package receipt; SHA-256 of staged files, including notices | Repository-generated metadata | Records packaged bytes, not source-build attestation |
+| `LICENSE-vosulay.txt`, `THIRD_PARTY_NOTICES.md`, CEF `LICENSE.txt`, `CREDITS.html` | Repository license, generated Cargo/upstream notices and original CEF attribution files | Preserve with every distribution | Distribution obligations |
+
+There is no separate vendored production-source tree in this checkout. Registry crate sources may themselves contain vendored C/assembly, certificates or other data: the generator includes nested license/notice files, not only top-level SPDX labels. CEF and asdf-overlay contain additional upstream components; do not describe their complete licenses as simply MIT. The tosu/vosu backend and user-selected local/remote counter HTML are not bundled or licensed by vosulay. Qt/WebEngine legacy sources were removed in CEF cutover `9e17828`; Qt is not shipped by current packages.
+
+## Pins and integrity
+
+CEF is pinned to `152.0.8+g1ce985c+chromium-152.0.7977.134`. Official [Spotify-hosted CEF catalog](https://cef-builds.spotifycdn.com/index.json) size and SHA-1 were matched before calculating archive SHA-256:
+
+| Download | Pinned SHA-256 |
+| --- | --- |
+| Linux minimal CEF archive | `7f47eeb1c297099ffb9e12d0dea6a0d4eabd255135d114ff0ace8780bdb3feeb` |
+| Windows minimal CEF archive | `c78fd85d4c604007e199d1abf749bf2ca6d10c1e81d32d22ea0c8f9dfcf7ea92` |
+| asdf-overlay 2.1.0 x64 DLL | `f65507608cb7a9b5d371c3ce03e9157527eb467e7ea598ac34cd3363249ff118` |
+| asdf-overlay 2.1.0 x86 DLL | `a846dd6583cf40c93df2c91b683380fe87c3d11f9522d908e62391ef970008d2` |
+
+The asdf digests originate from GitHub release asset metadata, release ID `398736731`. Acquisition validates expected sizes and SHA-256 before use. CEF cache receipts bind the platform/version/archive digest and retained file digests; `package_runtime` verifies the runtime before copying. The package manifest hashes the resulting files after branding/stripping, so transformed binaries need not equal archive members. Hashes detect different bytes; they do **not** establish which source/dependencies produced a prebuilt. Cargo uses `Cargo.lock` registry checksums for source archives.
+
+## Reproducing notices
+
+From the repository root, with Python 3.11+ and the pinned Rust toolchain:
+
+```sh
+python3 tools/notices/generate.py
+```
+
+For a non-writing freshness check:
+
+```sh
+python3 tools/notices/generate.py --check
+```
+
+Cargo metadata may fetch locked sources on first use; no CEF archive or full compilation is needed. The generator follows default-feature metadata graphs for `x86_64-unknown-linux-gnu` (`vosulay`, `vosulay-overlay`, `vosulay-lookup`) and `x86_64-pc-windows-msvc` (`vosulay` host/client DLL). It traverses normal and build dependency edges, excludes dev-only edges, includes proc macros/build tooling conservatively and sorts package names, versions and relative paths. This is deliberately a superset of linked crate code, not a compiler/linker reachability claim. Current inventory: **333 registry crate versions**, plus the pinned Rust standard-library attribution document and asdf-overlay's own MIT notice.
+
+All discovered license/notice text is read from Cargo's registry source cache, including nested vendored notices. A crate without license text fails generation before replacing the output. Fifteen crates omit license texts from their published tarballs: version-specific, digest-checked exceptions in `tools/notices/overrides.json` identify the preserved upstream text and source URL. Most are fetched at the `.cargo_vcs_info.json` source commit. `fxhash` and `mac` lack VCS metadata and upstream license files: their explicit source-header/README grants are retained as attributions, and their offered Apache-2.0 option uses the canonical Apache text. `selectors`' MPL-2.0 text comes from Mozilla's canonical license. These are explicit reviewed exceptions, not an SPDX-to-template fallback. New crate versions require new source evidence. The standard-library notice is copied from the pinned toolchain's `share/doc/rust/COPYRIGHT-library.html`; a toolchain change fails until it is refreshed.
+
+`package_runtime` copies the repository `LICENSE` as `LICENSE-vosulay.txt` and the generated notices next to binaries for both platforms. Linux `build.sh` and the AUR recipe use this shared staging function; all Linux formats copy the whole tree. Windows ZIP creation and Inno Setup's recursive `[Files]` entry preserve both files. Existing distro-specific copyright/license locations remain in addition to the executable-adjacent copies. CEF's `LICENSE.txt` is not overwritten.
+
+## License findings and obligations
+
+The repository MIT license is OSI-approved. Dependency declarations include MIT, Apache-2.0, BSD, ISC, Zlib, Unicode-3.0, Unlicense and MPL-2.0; there is no identified requirement to relicense vosulay itself. This is an engineering inventory, not legal advice. Keep attribution, copyright, Apache notices and bundled component terms intact.
+
+The following MPL-2.0 crates ship **unmodified from crates.io**. Their complete source archives are publicly available at the linked version-specific URLs, also included in the shipped notices. This supplies the source-availability reference for the covered files; if modified later, publish the corresponding modified source, not only these links.
+
+| Crate | Version | Unmodified source |
+| --- | --- | --- |
+| cssparser | 0.35.0 | https://crates.io/api/v1/crates/cssparser/0.35.0/download |
+| cssparser-macros | 0.6.1 | https://crates.io/api/v1/crates/cssparser-macros/0.6.1/download |
+| dtoa-short | 0.3.5 | https://crates.io/api/v1/crates/dtoa-short/0.3.5/download |
+| option-ext | 0.2.0 | https://crates.io/api/v1/crates/option-ext/0.2.0/download |
+| selectors | 0.31.0 | https://crates.io/api/v1/crates/selectors/0.31.0/download |
+
+## K4zoku copyright and source history
+
+`LICENSE` already contains `Copyright © 2025 K4zoku` in vosulay's root commit `e438c3c` (2026-07-19, author qt715), together with the 2026 contributor line. It was not introduced by recent packaging work. That root commit already contains the Rust API/configuration/UI and a C++ Qt shell; there is **no earlier imported upstream history or merge ancestry** establishing copied-file boundaries.
+
+[K4zoku/tosu-overlay-qt](https://github.com/K4zoku/tosu-overlay-qt) is a relevant predecessor candidate: its [MIT license at commit `72c55b7`](https://github.com/K4zoku/tosu-overlay-qt/blob/72c55b7a60239cb008803eed69bb5cc187228e0f/LICENSE) has the same 2025 K4zoku copyright and license wording (minus vosulay's additional contributor line). Its source is C++/Qt, whereas vosulay's initial application logic is Rust plus a Qt wrapper. Shared product behavior/license wording is not proof of particular copied code. The archived [tosu-overlay-gtk](https://github.com/K4zoku/tosu-overlay-gtk) is another project by the same author, not established ancestry here.
+
+The initial `src/api.rs`, `src/config.rs`, `src/ui.rs`, `assets/manager.*` belong to the historical application lineage; this is **not** a claim each descends from K4zoku-authored code. The Qt wrapper was retired in `9e17828`, and the frontend branding/UI changed in `0164a66`. Keep K4zoku's notice across all distributions rather than deleting it based on a rewrite. Exact original copied/adapted portions and source revision require the maintainer's statement below.
+
+## Signing boundary and open maintainer items
+
+[SignPath's terms, “Sign your own binaries only”](https://signpath.org/terms.html), distinguish own builds from upstream binaries. The signing policy is **`vosulay.dll` and the Inno Setup installer only** on Windows. `vosulay.exe` is CEF's prebuilt bootstrap with resource-only edits and ships unsigned; renaming/rebranding does not make it an own-source binary. CEF/asdf upstream DLLs ship unsigned by vosulay inside the signed installer, as permitted for embedded third-party binaries. This policy does not claim that an upstream file never carried its upstream publisher's signature. The full policy is in [code signing](code-signing.md).
+
+Before applying with a claim that *all* distributed provenance/licensing is resolved, maintainers must:
+
+1. Obtain asdf-overlay v2.1.0 prebuilt build/source/dependency attribution evidence (or build the DLLs from audited source). The source tag resolves to `c925244c8d14ca36d82585834cdfebf13d6ce86b` and offers MIT OR Apache-2.0, but release digests alone cannot enumerate/attest embedded transitive components or establish source-to-binary equivalence. Its own license is included; complete prebuilt dependency licensing is still open.
+2. Confirm the K4zoku predecessor, original revision and which source/assets were copied or adapted. The existing MIT grant permits derivatives with notices, but local history cannot prove the attribution boundary. Confirm first-party ownership/licensing of branding assets as part of that source/asset attestation.
+
+Do not interpret this document, notice generation success or archive checksums as approval from SignPath Foundation.

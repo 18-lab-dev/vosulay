@@ -83,13 +83,18 @@ aligned with `tools/cef/pins.json`.
 ### Windows packages
 
 On native Windows, stage the complete runtime ZIP and compile the installer
-with Inno Setup 6 (replace `<v>` with the workspace version and use absolute
+with Inno Setup 7.1.0, the version the release workflow pins (replace `<v>` with
+the workspace version and use absolute
 source/output paths if required by your installation):
 
 ```powershell
 cargo run --locked -p vosulay-cef-tools -- package-windows dist/package
 ISCC /DAppVersion=<v> /DSourceDir=<dist/package> /DOutputDir=<dist> packaging/windows/vosulay.iss
 ```
+
+`package-windows` builds `vosulay.dll` itself; pass `--client <path>` to package
+an already built (for example, signed) DLL instead. See the
+[code signing policy](code-signing.md) for the release signing flow.
 
 Outputs are `vosulay-<v>-windows-x86_64.zip` and
 `vosulay-<v>-windows-x86_64-setup.exe`. Keep the bootstrap `vosulay.exe`,
@@ -119,6 +124,13 @@ trigger SmartScreen.
    `publish=false` builds artifacts only; never publish for routine verification.
 7. Update AUR `pkgver` in `packaging/arch/PKGBUILD`, run `updpkgsums` against the
    published tag, and update the AUR package metadata.
+8. Update the Windows package-manager manifests with the new version, release
+   date and the hashes from `SHA256SUMS`:
+   [`packaging/winget/`](../packaging/winget/) (`PackageVersion`, `ReleaseDate`,
+   `InstallerUrl`, `InstallerSha256`, `ReleaseNotesUrl`) and
+   [`packaging/scoop/vosulay.json`](../packaging/scoop/vosulay.json) (`version`,
+   `url`, `hash`). They are prepared but not yet submitted to winget-pkgs or a
+   Scoop bucket: both need publicly downloadable release assets.
 
 ### Packaging verification and tested-on list
 
@@ -142,9 +154,11 @@ Packages were built in the Ubuntu 22.04 container. On each listed distro,
 root-owned mode `4755`, the app started and kept running, and no duplicate user
 desktop entry was written.
 
-The Windows installer compiled with Inno Setup 6.7.1 in the
-`amake/innosetup` container against a dummy layout. It has not yet been run on
-Windows; this is compiler evidence, not install/upgrade/uninstall evidence.
+On 2026-10-10 the release workflow's Windows steps ran natively on Windows 11
+with Inno Setup 7.1.0 and the real 1.1.0 runtime: client DLL build, packaging
+with `--client`, installer compilation and
+[`verify-release.ps1`](../packaging/windows/verify-release.ps1). The installer
+has not been run; this is build evidence, not install/upgrade/uninstall evidence.
 
 ## Launchers and single instance
 

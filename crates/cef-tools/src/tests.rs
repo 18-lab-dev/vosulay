@@ -217,3 +217,30 @@ fn cached_sdk_receipt_from_another_vosulay_version_still_verifies() {
     serde_json::to_writer(File::create(root.join(RECEIPT)).unwrap(), &receipt).unwrap();
     verify_runtime_with_pin(&root, "linux-x86_64", &pins, &pin).unwrap();
 }
+
+#[test]
+fn dll_version_resource_is_a_res_file_with_signing_metadata() {
+    let resource = package::windows_dll_version_resource("vosulay.dll").unwrap();
+    let u32_at =
+        |offset: usize| u32::from_le_bytes(resource[offset..offset + 4].try_into().unwrap());
+    // The format-identifying empty entry, then RT_VERSION #1.
+    assert_eq!((u32_at(0), u32_at(4)), (0, 32));
+    assert_eq!(
+        &resource[32 + 8..32 + 16],
+        &[0xff, 0xff, 16, 0, 0xff, 0xff, 1, 0]
+    );
+    let size = u32_at(32) as usize;
+    assert_eq!(resource.len(), 64 + size.next_multiple_of(4));
+
+    let version = editpe::VersionInfo::parse(&resource[64..64 + size]).unwrap();
+    let strings = &version.strings[0].strings;
+    for (key, value) in [
+        ("ProductName", "Vosulay"),
+        ("ProductVersion", PRODUCT_VERSION),
+        ("FileVersion", PRODUCT_VERSION),
+        ("OriginalFilename", "vosulay.dll"),
+    ] {
+        assert_eq!(strings.get(key).map(String::as_str), Some(value), "{key}");
+    }
+    assert_eq!(version.info.file_type, 2, "VFT_DLL");
+}

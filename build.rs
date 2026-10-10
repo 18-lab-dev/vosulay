@@ -10,6 +10,19 @@ fn main() {
     ] {
         println!("cargo:rerun-if-env-changed={name}");
     }
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        // Packaging and code signing need the DLL's own version metadata;
+        // it must be present before signing, so it is linked in here.
+        let resource = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo OUT_DIR"))
+            .join("vosulay-version.res");
+        std::fs::write(
+            &resource,
+            vosulay_cef_tools::package::windows_dll_version_resource("vosulay.dll")
+                .expect("vosulay.dll version resource"),
+        )
+        .expect("write vosulay.dll version resource");
+        println!("cargo:rustc-link-arg-cdylib={}", resource.display());
+    }
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
         println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
         if env::var_os("CARGO_FEATURE_CEF_HOST").is_some() {

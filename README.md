@@ -415,14 +415,10 @@ Successful smoke/tests do not establish cleared 1.0 performance or release gates
 
 ## Security
 
-`vosulay-overlay` local HTML overlays run in a secure context, but overlay pages are not cross-origin isolated. As a result, `SharedArrayBuffer` is unavailable by default.
-
-The embedded CEF manager is allowed Chromium local/loopback-network access so
-it can load configured counters from the backend. This grant is restricted to
-`vosulay://manager`; counter origins and unrelated browser permissions retain
-Chromium's default policy. It does not disable web security or certificate checks.
-
-The **Allow unrestricted SharedArrayBuffer** setting is a compatibility opt-in. Enabling it requires a restart and affects every remote URL and local HTML overlay. It bypasses a Chromium Spectre mitigation, so use it only when every overlay is fully trusted.
+Read the [security and installation disclosure](docs/security.md) before installing:
+it covers game-process injection, Linux shortcut changes and the setuid sandbox
+helper, clipboard/input access, network exposure, and unresolved third-party behavior.
+Use only trusted overlays, especially with unrestricted SharedArrayBuffer enabled.
 
 ## Configuration
 
@@ -453,3 +449,4 @@ conversion, malformed/unsafe input, persistence, idempotence, and no-overwrite.
 ## License
 
 [MIT](LICENSE)
+Third-party terms and artifact origins: [notices](THIRD_PARTY_NOTICES.md) and [provenance](docs/provenance.md).

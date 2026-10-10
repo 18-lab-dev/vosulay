@@ -1,0 +1,132 @@
+{
+  "asdf-overlay-client@2.1.0": [
+    {
+      "file": "asdf-overlay-2.1.0-LICENSE-MIT.txt",
+      "sha256": "9b6f1c28850c107565baae488bfe7d48375b926ec05fc808ed9d985014040843",
+      "url": "https://raw.githubusercontent.com/storycraft/asdf-overlay/c925244c8d14ca36d82585834cdfebf13d6ce86b/LICENSE-MIT"
+    }
+  ],
+  "asdf-overlay-common@2.1.0": [
+    {
+      "file": "asdf-overlay-2.1.0-LICENSE-MIT.txt",
+      "sha256": "9b6f1c28850c107565baae488bfe7d48375b926ec05fc808ed9d985014040843",
+      "url": "https://raw.githubusercontent.com/storycraft/asdf-overlay/c925244c8d14ca36d82585834cdfebf13d6ce86b/LICENSE-MIT"
+    }
+  ],
+  "asdf-overlay-event@2.1.0": [
+    {
+      "file": "asdf-overlay-2.1.0-LICENSE-MIT.txt",
+      "sha256": "9b6f1c28850c107565baae488bfe7d48375b926ec05fc808ed9d985014040843",
+      "url": "https://raw.githubusercontent.com/storycraft/asdf-overlay/c925244c8d14ca36d82585834cdfebf13d6ce86b/LICENSE-MIT"
+    }
+  ],
+  "asdf-overlay-window-event@2.1.0": [
+    {
+      "file": "asdf-overlay-2.1.0-LICENSE-MIT.txt",
+      "sha256": "9b6f1c28850c107565baae488bfe7d48375b926ec05fc808ed9d985014040843",
+      "url": "https://raw.githubusercontent.com/storycraft/asdf-overlay/c925244c8d14ca36d82585834cdfebf13d6ce86b/LICENSE-MIT"
+    }
+  ],
+  "cef-dll-sys@152.4.0+152.0.8": [
+    {
+      "file": "licenses/cef-dll-sys-152.4.0+152.0.8/LICENSE-MIT",
+      "sha256": "968a067d2458015543add393bbde51ef3f330ea122cf7b3380ea62e5a8945aee",
+      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-MIT"
+    },
+    {
+      "file": "licenses/cef-dll-sys-152.4.0+152.0.8/LICENSE-APACHE",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-APACHE"
+    }
+  ],
+  "cef@152.4.0+152.0.8": [
+    {
+      "file": "licenses/cef-152.4.0+152.0.8/LICENSE-MIT",
+      "sha256": "968a067d2458015543add393bbde51ef3f330ea122cf7b3380ea62e5a8945aee",
+      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-MIT"
+    },
+    {
+      "file": "licenses/cef-152.4.0+152.0.8/LICENSE-APACHE",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-APACHE"
+    }
+  ],
+  "codespan-reporting@0.11.1": [
+    {
+      "file": "licenses/codespan-reporting-0.11.1/LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "url": "https://raw.githubusercontent.com/brendanzab/codespan/fd389a13f5bb6d625b71e2e4694b26e127f393f9/LICENSE"
+    }
+  ],
+  "download-cef@3.0.0": [
+    {
+      "file": "licenses/download-cef-3.0.0/LICENSE-MIT",
+      "sha256": "968a067d2458015543add393bbde51ef3f330ea122cf7b3380ea62e5a8945aee",
+      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/207bdd2917c038283635022ffcf7767496bcc7e6/LICENSE-MIT"
+    },
+    {
+      "file": "licenses/download-cef-3.0.0/LICENSE-APACHE",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/207bdd2917c038283635022ffcf7767496bcc7e6/LICENSE-APACHE"
+    }
+  ],
+  "fxhash@0.2.1": [
+    {
+      "file": "licenses/fxhash-0.2.1/LICENSE-APACHE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "url": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+    }
+  ],
+  "ksni@0.3.6": [
+    {
+      "file": "licenses/ksni-0.3.6/UNLICENSE",
+      "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+      "url": "https://raw.githubusercontent.com/iovxw/ksni/4e31ee48d91b0babb472d05936b9b68bca736b06/UNLICENSE"
+    }
+  ],
+  "mac@0.1.1": [
+    {
+      "file": "licenses/mac-0.1.1/LICENSE-APACHE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "url": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+    }
+  ],
+  "match_token@0.35.0": [
+    {
+      "file": "licenses/match_token-0.35.0/LICENSE-MIT",
+      "sha256": "86dd7f026f916daf7511e39951ad8ea8cf55a8db67ae64060dacf829761c18f3",
+      "url": "https://raw.githubusercontent.com/servo/html5ever/6db7bbf1c4dfaecd28731950d427e40c8b911bef/LICENSE-MIT"
+    },
+    {
+      "file": "licenses/match_token-0.35.0/LICENSE-APACHE",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+      "url": "https://raw.githubusercontent.com/servo/html5ever/6db7bbf1c4dfaecd28731950d427e40c8b911bef/LICENSE-APACHE"
+    }
+  ],
+  "naga@23.1.0": [
+    {
+      "file": "licenses/naga-23.1.0/LICENSE.MIT",
+      "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4",
+      "url": "https://raw.githubusercontent.com/gfx-rs/wgpu/9993f5c9eceb91f9bb6b9c5c6994f35f50e5f378/LICENSE.MIT"
+    },
+    {
+      "file": "licenses/naga-23.1.0/LICENSE.APACHE",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
+      "url": "https://raw.githubusercontent.com/gfx-rs/wgpu/9993f5c9eceb91f9bb6b9c5c6994f35f50e5f378/LICENSE.APACHE"
+    }
+  ],
+  "selectors@0.31.0": [
+    {
+      "file": "licenses/selectors-0.31.0/LICENSE-MPL-2.0",
+      "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+      "url": "https://www.mozilla.org/media/MPL/2.0/index.txt"
+    }
+  ],
+  "spirv@0.3.0+sdk-1.3.268.0": [
+    {
+      "file": "licenses/spirv-0.3.0+sdk-1.3.268.0/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "url": "https://raw.githubusercontent.com/gfx-rs/rspirv/e91a5debc10c395b36db7721dfff6326d697a1e2/LICENSE"
+    }
+  ]
+}

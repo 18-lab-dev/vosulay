@@ -70,9 +70,10 @@ Run the tiers relevant to your change and report what you actually exercised. So
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo test --workspace --all-features --locked
+python3 tools/notices/generate.py --check
 ```
 
-Use `--workspace`; Cargo's root-only default misses browser, transport, compositor, and tooling tests. Clippy and tests are exactly the commands in Linux CI. Formatting is a recommended local check, not currently a workflow step. On Windows these commands check native Windows code; on Linux they check native Linux code and shared platform-independent tests.
+Use `--workspace`; Cargo's root-only default misses browser, transport, compositor, and tooling tests. Clippy, tests and the notices check are exactly the commands in Linux CI. After changing dependencies, regenerate the shipped `THIRD_PARTY_NOTICES.md` with `python3 tools/notices/generate.py`. Formatting is a recommended local check, not currently a workflow step. On Windows these commands check native Windows code; on Linux they check native Linux code and shared platform-independent tests.
 
 ### Tier 2 — another platform without another machine
 

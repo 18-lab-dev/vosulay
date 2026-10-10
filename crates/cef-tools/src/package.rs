@@ -42,6 +42,18 @@ pub(crate) fn brand_windows_bootstrap(path: &Path) -> Result<()> {
     let mut version = resources
         .get_version_info()?
         .context("bootstrap has no version resource")?;
+    apply_version_metadata(&mut version, file_name)?;
+    resources.set_version_info(&version)?;
+    resources.set_main_icon(WINDOWS_ICON)?;
+    image.set_resource_directory(resources)?;
+    let mut branded = Vec::new();
+    image.write_writer(&mut branded)?;
+    fs::write(path, branded).with_context(|| format!("writing {}", path.display()))
+}
+
+/// Version fields Windows shows for every binary vosulay builds or brands.
+/// SignPath requires the product name and version on each signed file.
+fn apply_version_metadata(version: &mut editpe::VersionInfo, file_name: &str) -> Result<()> {
     let numeric = |index: usize| -> Result<u32> {
         let part = PRODUCT_VERSION
             .split(['.', '-', '+'])
@@ -72,12 +84,74 @@ pub(crate) fn brand_windows_bootstrap(path: &Path) -> Result<()> {
             table.strings.insert(key.to_owned(), value.to_owned());
         }
     }
-    resources.set_version_info(&version)?;
-    resources.set_main_icon(WINDOWS_ICON)?;
-    image.set_resource_directory(resources)?;
-    let mut branded = Vec::new();
-    image.write_writer(&mut branded)?;
-    fs::write(path, branded).with_context(|| format!("writing {}", path.display()))
+    Ok(())
+}
+
+/// A compiled resource file (`.res`) with the version block of a DLL that
+/// vosulay builds; `link.exe` and `lld-link` embed `.res` inputs directly.
+/// Writing it here rather than through a `.rc` script avoids requiring a
+/// resource compiler (`rc.exe` or `llvm-rc`) on every build machine.
+pub fn windows_dll_version_resource(file_name: &str) -> Result<Vec<u8>> {
+    const VFT_DLL: u32 = 2;
+    const RT_VERSION: u16 = 16;
+    const LANG_EN_US: u16 = 0x0409;
+    const UTF16: u16 = 1200;
+    const MOVEABLE_PURE: u16 = 0x0030;
+
+    let mut version = editpe::VersionInfo {
+        info: editpe::types::FixedFileInfo {
+            file_type: VFT_DLL,
+            ..Default::default()
+        },
+        strings: vec![editpe::VersionStringTable {
+            key: format!("{LANG_EN_US:04X}{UTF16:04X}"),
+            strings: Default::default(),
+        }],
+        vars: vec![editpe::types::VersionU16 {
+            major: LANG_EN_US,
+            minor: UTF16,
+        }],
+    };
+    apply_version_metadata(&mut version, file_name)?;
+    let data = version.try_build()?;
+
+    let mut resource = Vec::with_capacity(64 + data.len());
+    // Every .res file opens with an empty entry that identifies the format.
+    push_resource_entry(&mut resource, 0, 0, 0, 0, &[])?;
+    push_resource_entry(
+        &mut resource,
+        RT_VERSION,
+        1,
+        LANG_EN_US,
+        MOVEABLE_PURE,
+        &data,
+    )?;
+    Ok(resource)
+}
+
+fn push_resource_entry(
+    output: &mut Vec<u8>,
+    kind: u16,
+    name: u16,
+    language: u16,
+    flags: u16,
+    data: &[u8],
+) -> Result<()> {
+    const HEADER_SIZE: u32 = 32;
+    output.extend(u32::try_from(data.len())?.to_le_bytes());
+    output.extend(HEADER_SIZE.to_le_bytes());
+    for ordinal in [kind, name] {
+        output.extend(0xffff_u16.to_le_bytes());
+        output.extend(ordinal.to_le_bytes());
+    }
+    output.extend(0_u32.to_le_bytes()); // DataVersion
+    output.extend(flags.to_le_bytes());
+    output.extend(language.to_le_bytes());
+    output.extend(0_u32.to_le_bytes()); // Version
+    output.extend(0_u32.to_le_bytes()); // Characteristics
+    output.extend(data);
+    output.resize(output.len().next_multiple_of(4), 0);
+    Ok(())
 }
 
 pub fn package_runtime(
@@ -127,6 +201,13 @@ pub fn package_runtime(
         }
         for name in ["LICENSE.txt", "CREDITS.html"] {
             copy_file(&cef.join(name), &output.join(name))?;
+        }
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        for (source, name) in [
+            ("LICENSE", "LICENSE-vosulay.txt"),
+            ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
+        ] {
+            copy_file(&repository.join(source), &output.join(name))?;
         }
 
         for executable in executables {

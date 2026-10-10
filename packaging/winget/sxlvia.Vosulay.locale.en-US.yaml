@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+PackageIdentifier: sxlvia.Vosulay
+PackageVersion: 1.1.0
+PackageLocale: en-US
+Publisher: sxlvia
+PublisherUrl: https://github.com/shiruviaa
+PackageName: Vosulay
+PackageUrl: https://github.com/shiruviaa/vosulay
+License: MIT
+LicenseUrl: https://github.com/shiruviaa/vosulay/blob/main/LICENSE
+PrivacyUrl: https://github.com/shiruviaa/vosulay/blob/main/docs/code-signing.md#privacy-policy
+ShortDescription: Cross-platform in-game overlay manager for vosu or tosu-compatible backends
+Tags:
+  - osu
+  - overlay
+  - tosu
+  - vosu
+ReleaseNotesUrl: https://github.com/shiruviaa/vosulay/releases/tag/v1.1.0
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

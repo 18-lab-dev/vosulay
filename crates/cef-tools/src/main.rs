@@ -28,13 +28,17 @@ fn run() -> Result<()> {
     }
     let command = command.to_str().context("command must be valid UTF-8")?;
     if command == "package-windows" {
-        let output = args
-            .next()
-            .context("usage: vosulay-cef package-windows OUTPUT_DIRECTORY")?;
-        if args.next().is_some() {
-            bail!("usage: vosulay-cef package-windows OUTPUT_DIRECTORY");
-        }
-        return package_windows(PathBuf::from(output));
+        const USAGE: &str =
+            "usage: vosulay-cef package-windows OUTPUT_DIRECTORY [--client vosulay.dll]";
+        let output = args.next().context(USAGE)?;
+        let client = match (args.next(), args.next(), args.next()) {
+            (None, _, _) => None,
+            (Some(flag), Some(path), None) if flag == OsStr::new("--client") => {
+                Some(PathBuf::from(path))
+            }
+            _ => bail!(USAGE),
+        };
+        return package_windows(PathBuf::from(output), client);
     }
 
     let mut options: Vec<(OsString, OsString)> = Vec::new();
@@ -157,17 +161,21 @@ fn usage() {
         vosulay-cef acquire-asdf [--cache PATH]\n\
         vosulay-cef verify --platform PLATFORM --cef-path PATH\n\
         vosulay-cef package --platform PLATFORM --cef-path PATH --output PATH [--exe PATH]* [--overlay PATH]* [--client PATH]\n\
-        vosulay-cef package-windows OUTPUT_DIRECTORY"
+        vosulay-cef package-windows OUTPUT_DIRECTORY [--client vosulay.dll]"
     );
 }
 
 #[cfg(not(target_os = "windows"))]
-fn package_windows(_output: PathBuf) -> Result<()> {
+fn package_windows(_output: PathBuf, _client: Option<PathBuf>) -> Result<()> {
     bail!("package-windows can only run on native Windows");
 }
 
+/// `client` packages an already built `vosulay.dll`, such as the copy
+/// returned by code signing, instead of building one. Signing must happen
+/// before packaging: the installer embeds the DLL and the package manifest
+/// records its digest.
 #[cfg(target_os = "windows")]
-fn package_windows(output: PathBuf) -> Result<()> {
+fn package_windows(output: PathBuf, client: Option<PathBuf>) -> Result<()> {
     use std::{fs, io::Write};
 
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -196,37 +204,48 @@ fn package_windows(output: PathBuf) -> Result<()> {
         writeln!(file, "CEF_PATH={}", cef.display())?;
     }
 
-    let target_dir = env::var_os("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| root.join("target"));
-    let target_dir = if target_dir.is_absolute() {
-        target_dir
+    let client = if let Some(client) = client {
+        if client.file_name() != Some(OsStr::new("vosulay.dll")) || !client.is_file() {
+            bail!(
+                "--client must be an existing file named vosulay.dll: {}",
+                client.display()
+            );
+        }
+        client
     } else {
-        root.join(target_dir)
+        let target_dir = env::var_os("CARGO_TARGET_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| root.join("target"));
+        let target_dir = if target_dir.is_absolute() {
+            target_dir
+        } else {
+            root.join(target_dir)
+        };
+        let status = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+            .args([
+                "build",
+                "--release",
+                "--lib",
+                "--locked",
+                "--target",
+                "x86_64-pc-windows-msvc",
+                "-p",
+                "vosulay",
+            ])
+            .current_dir(root)
+            .env("CEF_PATH", &cef)
+            .stdout(std::io::stderr())
+            .status()
+            .context("running cargo build for Windows client")?;
+        if !status.success() {
+            bail!("Windows client cargo build failed with {status}");
+        }
+        let client = target_dir.join("x86_64-pc-windows-msvc/release/vosulay.dll");
+        if !client.is_file() {
+            bail!("Windows client DLL not found: {}", client.display());
+        }
+        client
     };
-    let status = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
-        .args([
-            "build",
-            "--release",
-            "--lib",
-            "--locked",
-            "--target",
-            "x86_64-pc-windows-msvc",
-            "-p",
-            "vosulay",
-        ])
-        .current_dir(root)
-        .env("CEF_PATH", &cef)
-        .stdout(std::io::stderr())
-        .status()
-        .context("running cargo build for Windows client")?;
-    if !status.success() {
-        bail!("Windows client cargo build failed with {status}");
-    }
-    let client = target_dir.join("x86_64-pc-windows-msvc/release/vosulay.dll");
-    if !client.is_file() {
-        bail!("Windows client DLL not found: {}", client.display());
-    }
 
     let pins = vosulay_cef_tools::pins()?;
     let overlays = pins

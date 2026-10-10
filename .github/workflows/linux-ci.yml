@@ -111,3 +111,6 @@ jobs:
 
       - name: Workspace tests, including C-backed loader fixtures
         run: cargo test --workspace --all-features --locked
+
+      - name: Third-party notices match the locked dependency graph
+        run: python3 tools/notices/generate.py --check

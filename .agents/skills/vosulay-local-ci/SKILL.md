@@ -42,9 +42,10 @@ An empty cache is supported. Native packaging uses `cargo run --locked -p vosula
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo test --workspace --all-features --locked
+python3 tools/notices/generate.py --check
 ```
 
-Always use `--workspace`; root-only defaults miss compositor, transport, browser, and tooling coverage. Formatting is a recommended local check, not currently a Linux CI step; Clippy/tests match CI exactly. Loader/SDL fixture details and skip semantics are in `docs/testing.md`.
+Always use `--workspace`; root-only defaults miss compositor, transport, browser, and tooling coverage. Formatting is a recommended local check, not currently a Linux CI step; Clippy, tests and the notices check match CI exactly. Loader/SDL fixture details and skip semantics are in `docs/testing.md`.
 
 ## Windows source check from Linux
 
