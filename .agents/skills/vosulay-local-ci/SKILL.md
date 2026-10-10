@@ -70,10 +70,13 @@ Run `python3 tools/manager-preview.py --serve 8765` and open `http://127.0.0.1:8
 Linux only. Requires Python 3, bubblewrap and Xvfb (`bubblewrap`/`xvfb` on Ubuntu), with namespace creation permitted. Use a new output directory:
 
 ```sh
-cef="$(cargo run --quiet --locked -p vosulay-cef-tools -- acquire --platform linux-x86_64)"
 cargo build --locked -p vosulay-cef-smoke
+# The build retains CEF in the executable-adjacent runtime layout the smoke needs;
+# the raw SDK splits icudtl.dat from libcef.so and CEF's children then fail.
+version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
+runtime="$(echo "${XDG_CACHE_HOME:-$HOME/.cache}/vosulay/runtime/$version"-*)"
 python3 tools/cef/private-smoke.py \
-  --binary target/debug/vosulay-cef-smoke --cef-dir "$cef" \
+  --binary target/debug/vosulay-cef-smoke --cef-dir "$runtime" \
   --xvfb /usr/bin/Xvfb --output target/private-cef-smoke
 ```
 
