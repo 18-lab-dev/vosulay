@@ -17,6 +17,7 @@ A placement identifies an installed `counter_id` or custom `url`, with optional 
 | `allowed_ips` | `127.0.0.1,localhost,absolute` | Remote client allowlist; loopback is always allowed. |
 | `remote_listen_host` | `127.0.0.1` | Listener IP, not a public hostname. |
 | `remote_listen_port` | `5050` | Listener port. |
+| `vosu_url` | `http://127.0.0.1:24050/` | vosu or tosu-compatible backend origin (scheme, host and port; API paths are absolute, so no path prefix); restart required. `--vosu-url` overrides it for one run. Invalid values fall back to the default. |
 | `hotkeys` | below | Settings → Shortcuts. |
 
 Hotkey fields are snake_case; serialized chords use strings such as `Ctrl+Shift+Z`.

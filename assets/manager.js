@@ -73,6 +73,7 @@
   const allowedIps = $("allowed-ips");
   const remoteListenHost = $("remote-listen-host");
   const remoteListenPort = $("remote-listen-port");
+  const vosuUrl = $("vosu-url");
   const hotkeyList = $("hotkey-list");
   const settingsError = $("settings-error");
   const settingsResetHotkeys = $("settings-reset-hotkeys");
@@ -99,6 +100,7 @@
   const DEFAULT_ALLOWED_IPS = "127.0.0.1,localhost,absolute";
   const DEFAULT_REMOTE_LISTEN_HOST = "127.0.0.1";
   const DEFAULT_REMOTE_LISTEN_PORT = 5050;
+  const DEFAULT_VOSU_URL = "http://127.0.0.1:24050/";
   const DEFAULT_HOTKEYS = Object.freeze({
     profile_0: "Ctrl+0",
     profile_1: "Ctrl+1",
@@ -365,6 +367,7 @@
         remote_listen_port: Number.isInteger(sourceSettings.remote_listen_port)
           && sourceSettings.remote_listen_port >= 1 && sourceSettings.remote_listen_port <= 65535
           ? sourceSettings.remote_listen_port : DEFAULT_REMOTE_LISTEN_PORT,
+        vosu_url: normalizedVosuUrl(sourceSettings.vosu_url) || DEFAULT_VOSU_URL,
         hotkeys: normalizeHotkeys(sourceSettings.hotkeys)
       }
     };
@@ -2525,6 +2528,23 @@
     return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null;
   }
 
+  // Mirrors config.rs parse_vosu_url: an HTTP(S) origin only, because API
+  // paths are absolute and a path prefix would be dropped. Empty means the
+  // default; null marks an invalid URL so the dialog reports it.
+  function normalizedVosuUrl(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw) return DEFAULT_VOSU_URL;
+    let url;
+    try {
+      url = new URL(raw);
+    } catch {
+      return null;
+    }
+    if (!["http:", "https:"].includes(url.protocol) || !url.hostname || url.username || url.password
+      || url.pathname !== "/" || raw.includes("?") || raw.includes("#")) return null;
+    return url.href;
+  }
+
   function renderSettingsDraft() {
     if (!state.settingsDraft) return;
     keepOverlaysInView.checked = state.settingsDraft.always_keep_overlays_in_view;
@@ -2536,6 +2556,7 @@
     allowedIps.value = state.settingsDraft.allowed_ips;
     remoteListenHost.value = state.settingsDraft.remote_listen_host;
     remoteListenPort.value = state.settingsDraft.remote_listen_port;
+    vosuUrl.value = state.settingsDraft.vosu_url;
     for (const button of hotkeyList.querySelectorAll(".hotkey-input")) {
       const key = button.dataset.hotkey;
       button.textContent = state.settingsDraft.hotkeys[key] || "Not set";
@@ -2614,11 +2635,12 @@
       allowed_ips: settings.allowed_ips,
       remote_listen_host: settings.remote_listen_host,
       remote_listen_port: String(settings.remote_listen_port),
+      vosu_url: settings.vosu_url,
       hotkeys: { ...settings.hotkeys }
     };
     state.recordingHotkey = "";
     showSettingsError("");
-    for (const input of [fpsLimit, remoteListenHost, remoteListenPort]) input.removeAttribute("aria-invalid");
+    for (const input of [fpsLimit, remoteListenHost, remoteListenPort, vosuUrl]) input.removeAttribute("aria-invalid");
     renderSettingsDraft();
     settingsModal.hidden = false;
     settingsNavPinned = false;
@@ -2733,6 +2755,11 @@
     state.settingsDraft.remote_listen_port = remoteListenPort.value;
     remoteListenPort.removeAttribute("aria-invalid");
   });
+  vosuUrl.addEventListener("input", () => {
+    if (!state.settingsDraft) return;
+    state.settingsDraft.vosu_url = vosuUrl.value;
+    vosuUrl.removeAttribute("aria-invalid");
+  });
 
   function rejectSettingsField(input, message) {
     input.setAttribute("aria-invalid", "true");
@@ -2830,6 +2857,11 @@
       rejectSettingsField(remoteListenPort, "Listener port must be a whole number from 1 to 65535.");
       return;
     }
+    const backendUrl = normalizedVosuUrl(draft.vosu_url);
+    if (backendUrl === null) {
+      rejectSettingsField(vosuUrl, "vosu URL must be an http:// or https:// address with only a host and port, such as http://127.0.0.1:24050/.");
+      return;
+    }
     for (const key of NATIVE_HOTKEY_KEYS) {
       const problem = nativeHotkeyError(draft.hotkeys[key] || "", key);
       if (problem) {
@@ -2850,6 +2882,7 @@
       allowed_ips: draft.allowed_ips,
       remote_listen_host: listenHost,
       remote_listen_port: listenPort,
+      vosu_url: backendUrl,
       hotkeys: normalizeHotkeys(draft.hotkeys)
     };
     closeSettingsModal();

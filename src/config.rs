@@ -18,6 +18,7 @@ pub const DEFAULT_ALLOWED_IPS: &str = "127.0.0.1,localhost,absolute";
 
 pub const DEFAULT_REMOTE_LISTEN_HOST: &str = "127.0.0.1";
 pub const DEFAULT_REMOTE_LISTEN_PORT: u16 = 5050;
+pub const DEFAULT_VOSU_URL: &str = "http://127.0.0.1:24050/";
 
 const DEFAULT_WIDTH: f64 = 500.0;
 const DEFAULT_HEIGHT: f64 = 300.0;
@@ -53,6 +54,8 @@ pub struct AppSettings {
 
     pub remote_listen_host: String,
     pub remote_listen_port: u16,
+    /// vosu or tosu-compatible backend; `--vosu-url` overrides it for one run.
+    pub vosu_url: String,
     pub hotkeys: HotkeySettings,
 }
 
@@ -131,6 +134,7 @@ impl Default for AppSettings {
 
             remote_listen_host: DEFAULT_REMOTE_LISTEN_HOST.to_owned(),
             remote_listen_port: DEFAULT_REMOTE_LISTEN_PORT,
+            vosu_url: DEFAULT_VOSU_URL.to_owned(),
             hotkeys: HotkeySettings::default(),
         }
     }
@@ -241,7 +245,15 @@ impl AppSettings {
 
         self.remote_listen_host = normalized_remote_listen_host(&self.remote_listen_host);
         self.remote_listen_port = normalized_remote_listen_port(self.remote_listen_port);
+        self.vosu_url = parse_vosu_url(&self.vosu_url)
+            .map_or_else(|_| DEFAULT_VOSU_URL.to_owned(), String::from);
         self.hotkeys.normalize();
+    }
+
+    /// The configured backend; normalization guarantees it parses.
+    pub fn vosu_url(&self) -> url::Url {
+        parse_vosu_url(&self.vosu_url)
+            .unwrap_or_else(|_| url::Url::parse(DEFAULT_VOSU_URL).expect("default vosu URL"))
     }
 }
 
@@ -416,6 +428,24 @@ fn normalized_remote_listen_port(value: u16) -> u16 {
     } else {
         value
     }
+}
+
+/// A vosu or tosu-compatible backend: an HTTP(S) origin. vosulay requests
+/// absolute API paths (`/json/v2`, `/api/counters/...`, `/settings`) on that
+/// origin, so a path prefix would be silently dropped; it is rejected instead.
+pub fn parse_vosu_url(value: &str) -> Result<url::Url> {
+    let url = url::Url::parse(value.trim()).context("invalid vosu URL")?;
+    anyhow::ensure!(
+        matches!(url.scheme(), "http" | "https")
+            && url.host_str().is_some()
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.path() == "/"
+            && url.query().is_none()
+            && url.fragment().is_none(),
+        "vosu URL must be an HTTP(S) address with only a host and port, such as http://127.0.0.1:24050/"
+    );
+    Ok(url)
 }
 
 fn is_false(value: &bool) -> bool {
@@ -791,6 +821,31 @@ mod tests {
         )
         .expect("config should deserialize");
         assert!(!kept.settings.exit_edit_mode_on_focus_loss);
+    }
+
+    #[test]
+    fn normalize_validates_vosu_url_as_an_origin() {
+        let mut config = AppConfig::default();
+        assert_eq!(
+            config.settings.vosu_url(),
+            url::Url::parse(DEFAULT_VOSU_URL).unwrap()
+        );
+        config.settings.vosu_url = " https://192.168.1.20:24050 ".to_owned();
+        config.normalize();
+        assert_eq!(config.settings.vosu_url, "https://192.168.1.20:24050/");
+        // API paths are absolute, so a prefix would be silently dropped.
+        for invalid in [
+            "http://host/vosu",
+            "ftp://host/",
+            "http://user:pass@host/",
+            "http://host/?x=1",
+            "not a url",
+            "",
+        ] {
+            config.settings.vosu_url = invalid.to_owned();
+            config.normalize();
+            assert_eq!(config.settings.vosu_url, DEFAULT_VOSU_URL, "{invalid:?}");
+        }
     }
 
     #[test]

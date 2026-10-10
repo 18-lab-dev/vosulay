@@ -23,7 +23,8 @@ struct Options {
     #[cfg(target_os = "linux")]
     lookup: PathBuf,
     config: PathBuf,
-    backend: Url,
+    /// `--vosu-url` for this run; otherwise the configured setting applies.
+    vosu_url: Option<Url>,
     fps_limit: Option<u32>,
     pids: Vec<u32>,
     process_names: Vec<String>,
@@ -67,7 +68,7 @@ impl Options {
             } else {
                 crate::config::config_path()?
             },
-            backend: Url::parse("http://127.0.0.1:24050/").expect("default backend URL is valid"),
+            vosu_url: None,
             fps_limit: None,
             pids: Vec::new(),
             process_names: Vec::new(),
@@ -78,7 +79,7 @@ impl Options {
             match argument.as_str() {
                 "--help" | "-h" => {
                     println!(
-                        "vosulay {}\n\nUsage: vosulay [options]\n  --vosu-url, -t URL    vosu or tosu-compatible backend (default http://127.0.0.1:24050/)\n  --fps-limit, -f FPS   auto/0 or a positive cap (default display refresh)\n  --benchmark-uncapped  Disable Chromium pacing; use minimum positive OSR interval\n  --pid PID            Additional supported game process; repeatable\n  --process-name NAME  Additional supported game executable; repeatable\n  --config PATH        Configuration file (default user configuration directory)\n  --cef-dir PATH       Runtime package directory (default beside executable or build-time cache)\n  --version            Product version\n\nToggle editing in game with Ctrl+Shift+Space by default; configure it in Settings → Shortcuts. Escape leaves edit mode.",
+                        "vosulay {}\n\nUsage: vosulay [options]\n  --vosu-url, -t URL    vosu or tosu-compatible backend for this run (default: Settings → Advanced → vosu URL)\n  --fps-limit, -f FPS   auto/0 or a positive cap (default display refresh)\n  --benchmark-uncapped  Disable Chromium pacing; use minimum positive OSR interval\n  --pid PID            Additional supported game process; repeatable\n  --process-name NAME  Additional supported game executable; repeatable\n  --config PATH        Configuration file (default user configuration directory)\n  --cef-dir PATH       Runtime package directory (default beside executable or build-time cache)\n  --version            Product version\n\nToggle editing in game with Ctrl+Shift+Space by default; configure it in Settings → Shortcuts. Escape leaves edit mode.",
                         env!("CARGO_PKG_VERSION")
                     );
                     return Ok(None);
@@ -88,23 +89,9 @@ impl Options {
                     return Ok(None);
                 }
                 "--vosu-url" | "-t" => {
-                    options.backend =
-                        Url::parse(&arguments.next().context("backend URL is required")?)
-                            .context("invalid backend URL")?;
-                    ensure!(
-                        matches!(options.backend.scheme(), "http" | "https")
-                            && options.backend.host_str().is_some()
-                            && options.backend.username().is_empty()
-                            && options.backend.password().is_none()
-                            && options.backend.query().is_none()
-                            && options.backend.fragment().is_none(),
-                        "backend must be an HTTP(S) URL without credentials, query, or fragment"
-                    );
-                    if !options.backend.path().ends_with('/') {
-                        options
-                            .backend
-                            .set_path(&format!("{}/", options.backend.path()));
-                    }
+                    options.vosu_url = Some(crate::config::parse_vosu_url(
+                        &arguments.next().context("vosu URL is required")?,
+                    )?);
                 }
                 "--benchmark-uncapped" => benchmark_uncapped = true,
                 "--fps-limit" | "-f" => {

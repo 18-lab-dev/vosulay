@@ -265,6 +265,13 @@
 
             <fieldset id="settings-section-advanced" class="settings-section" tabindex="-1">
               <legend>Advanced</legend>
+              <label class="settings-field" for="vosu-url">
+                <span>
+                  <strong>vosu URL</strong>
+                  <small>Address of the vosu or tosu-compatible server that supplies game data and installed counters. Default <code>http://127.0.0.1:24050/</code>; the <code>--vosu-url</code> command-line option overrides it. Takes effect after restarting vosulay.</small>
+                </span>
+                <input id="vosu-url" type="text" inputmode="url" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="http://127.0.0.1:24050/">
+              </label>
               <label class="checkbox-row danger-row" for="allow-unrestricted-shared-array-buffer">
                 <span>
                   <strong>Allow unrestricted SharedArrayBuffer</strong>

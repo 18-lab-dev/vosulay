@@ -51,11 +51,15 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
     super::launchers::refresh(&options.overlay, &options.lookup);
     super::tosu::migrate(&mut config, &options.config);
     let resources = Arc::new(ProductResources::new(&config)?);
-    let remote = crate::remote::RemoteServer::start_from_path(
-        options.backend.clone(),
-        options.config.clone(),
-    )
-    .context("could not start overlay backend broker")?;
+    // The URL is read once: the broker, catalog worker and browser views all
+    // bind it at startup, so a changed setting applies on the next start.
+    let backend = options
+        .vosu_url
+        .clone()
+        .unwrap_or_else(|| config.settings.vosu_url());
+    let remote =
+        crate::remote::RemoteServer::start_from_path(backend.clone(), options.config.clone())
+            .context("could not start overlay backend broker")?;
     #[cfg(windows)]
     let mut platform = PlatformController::start(
         WindowsOptions {
@@ -79,7 +83,7 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
     let mut worker = EditorWorker::start(
         config.clone(),
         options.config.clone(),
-        options.backend.clone(),
+        backend.clone(),
         resources.clone(),
     )?;
     let initial_fps = super::frame_rate(options.fps_limit, config.settings.fps_limit, 60.0);
@@ -89,6 +93,7 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         sandbox_info,
         resources,
         broker_url: remote.browser_url().to_string(),
+        backend,
         platform: &mut platform,
         worker: &mut worker,
         options: &options,
@@ -158,6 +163,7 @@ struct Host<'a> {
     sandbox_info: *mut u8,
     resources: Arc<ProductResources>,
     broker_url: String,
+    backend: url::Url,
     platform: &'a mut PlatformController,
     worker: &'a mut EditorWorker,
     options: &'a Options,
@@ -216,7 +222,7 @@ impl Host<'_> {
         let browser = self.runtime.as_ref().unwrap().open(
             BrowserOptions {
                 url: MANAGER_URL,
-                backend_url: self.options.backend.as_str(),
+                backend_url: self.backend.as_str(),
                 broker_url: Some(&self.broker_url),
                 width: self.viewport.width,
                 height: self.viewport.height,
