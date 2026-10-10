@@ -67,6 +67,14 @@ impl Api {
 /// Bounds one pump so a source that is always ready cannot starve the host.
 const MAX_DISPATCHES: usize = 16;
 
+/// Re-check delay when GLib reports work due now, yet no source is ready.
+/// Chromium's GLib work source does this whenever Chromium is not inside its
+/// own run loop, as under CEF's external pump; honoring that zero timeout
+/// kept the host and waker threads spinning at full CPU, and the delayed CEF
+/// work arrived in bursts. Descriptors still wake the host through the waker,
+/// and CEF schedules its own work separately.
+const UNREADY_RECHECK: Duration = Duration::from_millis(10);
+
 pub(crate) struct GlibPump {
     api: Api,
     context: Context,
@@ -139,9 +147,11 @@ impl GlibPump {
                 unsafe { (api.dispatch)(self.context) };
                 continue;
             }
-            self.deadline = u64::try_from(timeout)
-                .ok()
-                .map(|timeout| Instant::now() + Duration::from_millis(timeout));
+            self.deadline = match u64::try_from(timeout) {
+                Ok(0) => Some(Instant::now() + UNREADY_RECHECK),
+                Ok(timeout) => Some(Instant::now() + Duration::from_millis(timeout)),
+                Err(_) => None,
+            };
             self.waker.arm(ready);
             break;
         }
@@ -184,6 +194,17 @@ impl Waker {
 
     fn arm(&self, fds: &[pollfd]) {
         let mut armed = self.armed.lock().unwrap_or_else(|e| e.into_inner());
+        // Re-arming the same set would only interrupt the waker's poll and
+        // restart it on identical descriptors.
+        if armed.as_ref().is_some_and(|current| {
+            current.len() == fds.len()
+                && current
+                    .iter()
+                    .zip(fds)
+                    .all(|(a, b)| a.fd == b.fd && a.events == b.events)
+        }) {
+            return;
+        }
         *armed = Some(
             fds.iter()
                 .map(|fd| pollfd {
