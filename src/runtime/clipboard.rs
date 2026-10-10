@@ -185,6 +185,9 @@ impl Service {
             } else {
                 drop(guard);
             }
+            if self.queue.dispatch_pending(&mut self.state).is_err() || self.state.finished {
+                return;
+            }
             if fds[1].revents != 0 {
                 drain(&wake);
                 loop {
@@ -201,6 +204,11 @@ impl Service {
     fn handle(&mut self, command: Command) {
         match command {
             Command::Read(reply) => {
+                // Process every event the compositor sent before this read, so a
+                // newer owner replaces our cached text and offer first.
+                if self.queue.roundtrip(&mut self.state).is_err() {
+                    return;
+                }
                 let _ = reply.send(self.selection());
             }
             Command::Write(text, reply) => {

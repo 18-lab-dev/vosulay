@@ -142,6 +142,14 @@ impl Service {
             if fds[0].revents & (libc::POLLERR | libc::POLLHUP) != 0 {
                 return;
             }
+            // Apply ownership changes that arrived with this wake before reads.
+            loop {
+                match self.connection.poll_for_event() {
+                    Ok(Some(event)) => self.event(event),
+                    Ok(None) => break,
+                    Err(_) => return,
+                }
+            }
             if fds[1].revents != 0 {
                 drain(&wake);
                 loop {
@@ -158,17 +166,21 @@ impl Service {
     fn handle(&mut self, command: Command) {
         match command {
             Command::Read(reply) => {
-                if let Some(text) = &self.owned {
-                    let _ = reply.send(Selection::Owned(text.clone()));
-                    return;
-                }
+                // The server's owner is authoritative; a SelectionClear for
+                // our cached text may still be in flight.
                 let owner = self
                     .connection
                     .get_selection_owner(self.atoms.clipboard)
                     .ok()
                     .and_then(|cookie| cookie.reply().ok())
                     .map_or(NONE, |reply| reply.owner);
-                if owner == NONE {
+                if owner != self.window {
+                    self.owned = None;
+                } else if let Some(text) = &self.owned {
+                    let _ = reply.send(Selection::Owned(text.clone()));
+                    return;
+                }
+                if owner == NONE || owner == self.window {
                     let _ = reply.send(Selection::Empty);
                     return;
                 }
