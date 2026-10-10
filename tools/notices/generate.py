@@ -11,6 +11,7 @@ import io
 import os
 import tarfile
 import tempfile
+import tomllib
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -221,6 +222,18 @@ def render():
                   "alone. XZ GPL scripts/build tooling and GLib test/documentation terms "
                   "are preserved conservatively, not asserted to be shipped runtime code.\n\n")
     chunks.append(f"Pinned dependency manifest: {native_pin['manifest_url']}\n\n")
+    version = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["package"]["version"]
+    source_asset = f"vosulay-{version}-third-party-sources.tar"
+    chunks.append("Corresponding source for the LGPL components and the application's "
+                  f"rebuild/relink route: [{source_asset}]"
+                  f"(https://github.com/shiruviaa/vosulay/releases/download/v{version}/{source_asset}), "
+                  "published alongside every GitHub release. Extract the plain tar and read "
+                  "its README.md and SHA256SUMS before rebuilding. It preserves original "
+                  "pinned source archives for asdf-overlay, Gum, releng, native components "
+                  "and non-system build tooling. Rust crates resolve via the bundled "
+                  "Cargo.lock checksums. Source-to-upstream-prebuilt correspondence and "
+                  "the native-source devkit rebuild remain unverified; the source bundle "
+                  "is not a compliance attestation.\n\n")
     for package in native_packages:
         links = ", ".join(f"[Text {text_ids[text]}](#license-text-{text_ids[text]})"
                           for text in sorted(package_texts[package["id"]], key=text_ids.get))
@@ -243,7 +256,6 @@ def render():
                           f"[source]({source_url(package)}); repository: "
                           f"{package.get('repository') or '(not declared)'}; files: {paths}\n")
         chunks.append("\n````text\n" + text + "````\n\n")
-    import tomllib
     toolchain = tomllib.loads((ROOT / "rust-toolchain.toml").read_text())
     if toolchain["toolchain"]["channel"] != "1.96.1":
         raise ValueError("Rust toolchain changed; refresh standard-library copyright notices")

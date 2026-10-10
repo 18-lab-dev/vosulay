@@ -120,8 +120,13 @@ trigger SmartScreen.
    Windows job produces the ZIP and installer. Every run uploads
    `vosulay-linux-x86_64` and `vosulay-windows-x86_64` artifacts.
 6. Publication verifies the tag matches `Cargo.toml`, then creates the GitHub
-   release with all six packages and `SHA256SUMS`. A branch run with
-   `publish=false` builds artifacts only; never publish for routine verification.
+   release with all six packages, `vosulay-<v>-third-party-sources.tar` and
+   `SHA256SUMS`. The source archive is the corresponding source for the LGPL
+   components inside the asdf-overlay DLLs
+   ([provenance](provenance.md)); it is assembled from pinned, hash-checked
+   upstream archives, and a changed upstream archive fails publication. A
+   branch run with `publish=false` builds artifacts only; never publish for
+   routine verification.
 7. Update AUR `pkgver` in `packaging/arch/PKGBUILD`, run `updpkgsums` against the
    published tag, and update the AUR package metadata.
 8. Update the Windows package-manager manifests with the new version, release

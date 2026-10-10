@@ -211,6 +211,9 @@ jobs:
             echo "::error::run this workflow on tag v$version (got $GITHUB_REF_NAME)"
             exit 1
           fi
+          # Corresponding source for the LGPL components statically linked into
+          # the shipped asdf-overlay DLLs; see docs/provenance.md.
+          python3 tools/notices/source_bundle.py "dist/vosulay-$version-third-party-sources.tar"
           (cd dist && sha256sum -- * > SHA256SUMS)
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "vosulay $version" \
             --generate-notes dist/*

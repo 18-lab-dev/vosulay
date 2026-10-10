@@ -1,4 +1,20 @@
 {
+  "_source_bundle": [
+    {"name":"asdf-overlay","repository":"https://github.com/storycraft/asdf-overlay","commit":"c925244c8d14ca36d82585834cdfebf13d6ce86b","sha256":"ae413f0ed484f268a9237573a7eb1bafdde4e1d5a6cabd600ebd986818c6573b"},
+    {"name":"glib","repository":"https://github.com/frida/glib","commit":"790ffa82e80d99fba8a3db494e46f907d560893c","sha256":"1ee3dff64e72f844284687bf909db29155157665a3bee85f027350f00495aa93"},
+    {"name":"capstone","repository":"https://github.com/frida/capstone","commit":"d536b1577fd033a31d75f48fd183aa425256cc18","sha256":"56b4910b0ddfbd954e281db3e652f91162265c939f69a2370964ad14a6ffc0d2"},
+    {"name":"libffi","repository":"https://github.com/frida/libffi","commit":"4b75d8a1d9cf401d8a2fa16619938637ea7e7afa","sha256":"e11e1016482a22a856a28fd9197f8de2f909d228c9aafa030fce604c4b96bb16"},
+    {"name":"pcre2","repository":"https://github.com/frida/pcre2","commit":"b47486922fdc3486499b310dc9cf903449700474","sha256":"6dfae668d6e887a552358270cd215bfa13ab3864a4304f7cd7026474c48d36c5"},
+    {"name":"zlib","repository":"https://github.com/frida/zlib","commit":"171a3eacaea8b731ef1fc586e7777b77742e2a1d","sha256":"3d9fec0b58e66e0733c6276edd2ea52f7a1c12ead56b2be78506ccaffc2d9fa2"},
+    {"name":"xz","repository":"https://github.com/frida/xz","commit":"e70f5800ab5001c9509d374dbf3e7e6b866c43fe","sha256":"1bea42439c243d72fca1b5f9782e809f43d2f9722d24c399325d641a369f03a0"},
+    {"name":"frida-gum","repository":"https://github.com/frida/frida-gum","commit":"ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c","sha256":"d5b6a51e935e59532e0ead1e415c5ba2b6b4c6e3a0eaf121e5b323dc64384415"},
+    {"name":"releng","repository":"https://github.com/frida/releng","commit":"c9cc18138b364f691573c695e1fe47ddc4c56f26","sha256":"ff532c23b87127d39f6b52da3613ec5b28f5dee3540615a43025b2109f073900"},
+    {"name":"meson","repository":"https://github.com/frida/meson","commit":"6620128a0fc86218dd8d2843c7e9a3513772448e","sha256":"0a3aea10ead38789287804ac1aba25e43a78cc17e193f51bbdcc65cd7cfbdc29"},
+    {"name":"tomlkit","repository":"https://github.com/python-poetry/tomlkit","commit":"911cccd630965ff423316e25b4685ecf7df0ec0a","sha256":"2f9e579cb4f88c4425554e74451e0cedefe39b3f8e9fc04407f196c62a8eff74"},
+    {"name":"ninja","repository":"https://github.com/frida/ninja","commit":"516800b093d1a2e5589ee1cdd7393dffdf9c702e","sha256":"02bdd8a1077847dea7738a9f271f33b7ba5d4497b616e70763df966b317c91f7"},
+    {"name":"pkg-config","repository":"https://github.com/frida/pkg-config","commit":"4696795673d1d3dec46b663df48f8cbf66461d14","sha256":"a7199634c06369e811c0b7fbc1cf0ef7d52e36724359f4ea538eaac0d66b3713"},
+    {"name":"vala","repository":"https://github.com/frida/vala","commit":"172348fa9123ff4a95d541c5f9e56837434c4b6e","sha256":"008057c29f5504ebd3d5d46f889d62625a57935e982a69c0d886bc8a759d7b7e"}
+  ],
   "_asdf_source": {
     "commit": "c925244c8d14ca36d82585834cdfebf13d6ce86b",
     "sha256": "ae413f0ed484f268a9237573a7eb1bafdde4e1d5a6cabd600ebd986818c6573b",

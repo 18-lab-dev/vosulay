@@ -90,7 +90,75 @@ The initial `src/api.rs`, `src/config.rs`, `src/ui.rs`, `assets/manager.*` belon
 
 Before applying with a claim that *all* distributed provenance/licensing is resolved, maintainers must:
 
-1. The asdf-overlay DLL dependency licenses are now enumerated from `Cargo.lock` at source commit `c925244c8d14ca36d82585834cdfebf13d6ce86b`: `deploy.yml` → recursive package build → `cargo xtask build-dll -- --release` → `asdf-overlay-dll`, default features, targets `x86_64-pc-windows-msvc` and `i686-pc-windows-msvc` (205 crates each, including 8 upstream workspace crates and 197 external crates). `.gitmodules` is empty. The generator downloads the exact source archive, verifies its SHA-256 pinned in `tools/notices/overrides.json`, walks both non-dev metadata graphs and deduplicates all license texts with vosulay's notices. Source-to-binary equivalence of the GitHub prebuilts remains unproven; building both DLLs from this audited source is the alternative. **A separate native licensing obligation remains:** `crates/hook/build.rs` statically links Frida Gum devkit 17.17.0 outside Cargo. Its Gum source is `ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c`; [releng `deps.toml`](https://github.com/frida/releng/blob/c9cc18138b364f691573c695e1fe47ddc4c56f26/deps.toml) pins GLib, Capstone, libffi, PCRE2, zlib and SDK liblzma sources. The pinned manifest, component revisions/source links and license texts are preserved under `tools/notices/` and shipped in notices. Gum's wxWindows-3.1 LGPL-based binary exception does **not** replace GLib's plain LGPL-2.1-or-later terms. For static-linked redistribution, LGPL-2.1 §6 requires an applicable compliance route, normally complete corresponding library source (including modifications) and the application's object/source material and build/link instructions permitting the recipient to modify the library and relink the executable, together with required license notices and terms permitting debugging those modifications; a compliant written offer is an alternative under the section's conditions. The corresponding library source is Frida's pinned GLib/dependency source, not generic upstream GLib at an arbitrary version. Maintainers must arrange/provide the required source and relinkable materials for the actual distributed DLLs or obtain verified upstream compliance materials; **notices and source links alone do not establish compliance**. The Cargo graph itself has no GPL/LGPL/MPL declarations; `frida-build` carries wxWindows terms. Native GLib is LGPL; XZ GPL scripts/build-system files and LGPL command-line helpers are not asserted to be linked into the public-domain liblzma runtime. Native notices conservatively preserve ancillary component terms without proving archive-level reachability.
+1. **asdf-overlay prebuilt correspondence and static-linked GLib compliance remain open.**
+
+   DLL dependency licenses are enumerated from `Cargo.lock` at source commit
+   `c925244c8d14ca36d82585834cdfebf13d6ce86b`: upstream `deploy.yml` → recursive
+   package build → `cargo xtask build-dll -- --release` → `asdf-overlay-dll`,
+   default features, targets `x86_64-pc-windows-msvc` and `i686-pc-windows-msvc`.
+   Each graph contains 205 crates (8 upstream workspace and 197 external);
+   `.gitmodules` is empty. The notices generator verifies the source archive's
+   pinned SHA-256, walks both non-dev graphs and deduplicates their license texts
+   with vosulay's notices. Source-to-binary equivalence of the GitHub prebuilts
+   remains unproven; rebuilding both DLLs from the audited source is an alternative.
+
+   `crates/hook/build.rs` statically links Frida Gum devkit 17.17.0 outside Cargo.
+   Gum source is `ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c`; the pinned
+   [releng dependency manifest](https://github.com/frida/releng/blob/c9cc18138b364f691573c695e1fe47ddc4c56f26/deps.toml)
+   specifies GLib, Capstone, libffi, PCRE2, zlib and SDK liblzma sources.
+   Component revisions/source links and license texts are preserved under
+   `tools/notices/` and shipped in notices. Gum's wxWindows-3.1 binary exception
+   does **not** replace GLib's plain LGPL-2.1-or-later terms. LGPL-2.1 §6 requires
+   an applicable static-link compliance route: normally complete corresponding
+   library source (including modifications), application object/source material
+   and build/link instructions allowing library modification and relinking,
+   notices, and terms permitting debugging those modifications; a compliant
+   written offer is an alternative under the section's conditions.
+
+   Generate the corresponding-source release asset with:
+
+   ```sh
+   python3 tools/notices/source_bundle.py dist/vosulay-1.1.0-third-party-sources.tar
+   ```
+
+   The versioned asset is linked in shipped notices and published alongside
+   release packages. It contains 14 original source archives pinned by commit
+   and SHA-256, a README with offline source-tree preparation, native-devkit
+   build and DLL relink commands, and SHA256SUMS. Native/system compilers, SDKs
+   and Rust dependencies are not embedded; Cargo uses the bundled upstream
+   lockfile's registry checksums. Repeating bundle generation produced identical
+   bytes. The documented source-tree preparation was exercised successfully on
+   Linux, including preservation of GLib's symbolic license aliases.
+
+   **Verified x64 replacement-devkit route:** unmodified bundled asdf source
+   built natively on Windows with Rust/Cargo 1.96.1 and MSVC BuildTools using
+   `cargo build --release --locked -p asdf-overlay-dll --target x86_64-pc-windows-msvc`.
+   A fresh target directory and `FRIDA_DOWNLOAD_CDN=http://127.0.0.1:18765`
+   forced a stock Frida 17.17.0 devkit download through a PowerShell HttpListener,
+   which recorded `/17.17.0/frida-gum-devkit-17.17.0-windows-x86_64.tar.xz`.
+   Cargo exited 0 and produced a 3,734,528-byte DLL (SHA-256
+   `a49a3b06e9c1b918bcdc5ea54593e78a6a1d3ea6e809fb32b6244bd24d081706`).
+   Its exported names matched the pinned x64 DLL exactly: `DllMain` and
+   `vkNegotiateLoaderLayerInterfaceVersion` (dumpbin 14.44.35228.0).
+   The task-owned VM workspace was removed. An earlier Linux cargo-xwin attempt
+   failed before downloading a devkit because upstream winres selected the
+   nonexistent `/bin\x64\rc.exe` resource compiler; no upstream patch or bypass
+   was used.
+
+   **Unverified:** building the native Frida devkit from the bundled sources,
+   the x86 relink route, behavior with a modified library, and correspondence
+   between supplied source inputs and upstream's actual prebuilt release inputs.
+   The successful stock-devkit build proves the x64 download/relink mechanism,
+   not full LGPL compliance or byte equivalence. Maintainers must ensure the
+   source/relink materials correspond to the actual distributed DLLs or obtain
+   verified upstream compliance materials. **Notices and source links alone
+   do not establish compliance.**
+
+   The Cargo graph has no GPL/LGPL/MPL declarations; `frida-build` carries
+   wxWindows terms. Native GLib is LGPL. XZ GPL scripts/build-system files and
+   LGPL command-line helpers are not asserted to be linked into the public-domain
+   liblzma runtime. Native notices conservatively preserve ancillary component
+   terms without proving archive-level reachability.
 2. Resolved by the maintainer statement in [K4zoku copyright and source history](#k4zoku-copyright-and-source-history): K4zoku's prototypes are the acknowledged origin, the MIT notice is kept, and the branding assets are first-party.
 
 Do not interpret this document, notice generation success or archive checksums as approval from SignPath Foundation.
