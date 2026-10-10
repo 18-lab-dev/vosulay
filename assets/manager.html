@@ -30,7 +30,7 @@
         <div class="profile-field">
           <span id="profile-field-label">Profile</span>
           <div class="profile-picker">
-            <button id="profile-select" type="button" aria-labelledby="profile-field-label profile-select-label" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
+            <button id="profile-select" type="button" title="Double-click to rename" aria-labelledby="profile-field-label profile-select-label" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
               <span id="profile-select-label"></span>
             </button>
             <div id="profile-menu" role="menu" aria-label="Profiles" hidden></div>
@@ -57,7 +57,7 @@
         </div>
         <form id="profile-create" class="profile-create" hidden>
           <input id="profile-name" type="text" aria-label="Profile name" autocomplete="off">
-          <button type="submit" class="primary-button">Create</button>
+          <button id="profile-create-submit" type="submit" class="primary-button">Create</button>
           <button id="profile-create-cancel" type="button" class="quiet-button">Cancel</button>
         </form>
         <div id="profile-delete-confirm" class="profile-confirm" role="group" aria-labelledby="profile-delete-message" hidden>
@@ -90,6 +90,9 @@
       <div class="source-actions" aria-label="Add custom overlay">
         <button id="add-url" class="quiet-button" type="button">Add URL</button>
         <button id="add-html-file" class="quiet-button" type="button">HTML file</button>
+      </div>
+      <div class="catalog-search">
+        <input id="catalog-search" type="search" placeholder="Search counters" aria-label="Search installed counters" aria-controls="catalog" autocomplete="off" spellcheck="false">
       </div>
       <div id="catalog" class="catalog"></div>
     </aside>

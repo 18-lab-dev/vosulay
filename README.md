@@ -17,8 +17,8 @@ Contributing? Start with [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites an
 
 - Position, resize, scale, rotate, reorder, and adjust the opacity of overlays.
 - Disable individual overlays without removing their placement; re-enable them in the inspector.
-- Maintain multiple overlay profiles.
-- Discover installed counters from a local Vosu or Tosu instance.
+- Maintain multiple overlay profiles; double-click the profile picker to rename the active one.
+- Discover installed counters from a local Vosu or Tosu instance, and search them by name, author or folder.
 - Add remote or local custom HTML overlays.
 - Use Chromium GPU compositing, WebGL, WebGPU where supported, and overlay audio.
 - Render inside Vulkan, EGL/OpenGL, and GLX/OpenGL games on Linux, including native Wayland and X11/XWayland games and osu!stable under Wine (for example osu-winello).

@@ -333,6 +333,8 @@ button:disabled { opacity: .42; cursor: default; }
 .panel-heading .catalog-count.error { color: #ffb3bf; background: rgba(255,111,132,.14); }
 .source-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 7px; border-bottom: 1px solid var(--line); }
 .source-actions button { width: 100%; }
+.catalog-search { padding: 7px; border-bottom: 1px solid var(--line); }
+.catalog-search input { width: 100%; }
 .catalog { min-height: 0; flex: 1; padding: 7px; overflow: auto; scrollbar-width: thin; }
 .catalog-empty { padding: 24px 12px; color: var(--muted); text-align: center; overflow-wrap: anywhere; }
 .catalog-empty small { display: block; margin-top: 6px; font-size: 11px; }

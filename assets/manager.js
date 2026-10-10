@@ -28,9 +28,11 @@
   const profileDeleteCancel = $("profile-delete-cancel");
   const profileCreate = $("profile-create");
   const profileName = $("profile-name");
+  const profileCreateSubmit = $("profile-create-submit");
   const profileCreateCancel = $("profile-create-cancel");
   const catalog = $("catalog");
   const catalogSummary = $("catalog-summary");
+  const catalogSearch = $("catalog-search");
   const status = $("status");
   const undoButton = $("undo");
   const redoButton = $("redo");
@@ -1072,10 +1074,16 @@
     requestRender("catalog");
   }
 
-  function renderCatalogSummary(counters) {
+  function catalogMatches(counter, terms) {
+    const text = [counter.name, counter.author, counter.version, counter.id].filter(Boolean).join(" ").toLowerCase();
+    return terms.every((term) => text.includes(term));
+  }
+
+  function renderCatalogSummary(counters, shown) {
     const failed = Boolean(catalogRequest.error) && !catalogRequest.pending;
+    const filtered = counters !== null && shown !== counters.length;
     const text = failed ? (counters ? "Refresh failed" : "Unavailable")
-      : counters === null ? "Connecting…" : String(counters.length);
+      : counters === null ? "Connecting…" : filtered ? `${shown} of ${counters.length}` : String(counters.length);
     const title = failed ? catalogRequest.error
       : counters === null ? "Waiting for vosu" : `${counters.length} installed counter${counters.length === 1 ? "" : "s"}`;
     catalogSummary.textContent = text;
@@ -1087,7 +1095,9 @@
   function renderCatalog() {
     catalog.replaceChildren();
     const counters = state.counters;
-    renderCatalogSummary(counters);
+    const terms = catalogSearch.value.toLowerCase().split(/\s+/).filter(Boolean);
+    const matching = counters && counters.filter((counter) => catalogMatches(counter, terms));
+    renderCatalogSummary(counters, matching ? matching.length : 0);
     if (counters === null) {
       if (!catalogRequest.error || catalogRequest.pending) {
         catalog.append(makeElement("div", "catalog-empty", "Waiting for installed counters…"));
@@ -1104,9 +1114,13 @@
       catalog.append(makeElement("div", "catalog-empty", "No installed counters found. Install counters in vosu; this list refreshes each time the editor opens."));
       return;
     }
+    if (!matching.length) {
+      catalog.append(makeElement("div", "catalog-empty", "No installed counters match this search."));
+      return;
+    }
     const profile = activeProfile();
     const used = new Set(profile ? profile.overlays.map((overlay) => overlay.counter_id) : []);
-    for (const counter of counters) {
+    for (const counter of matching) {
       const exists = used.has(counter.id);
       const button = makeElement("button", `catalog-item${exists ? " used" : ""}`);
       button.type = "button";
@@ -1519,15 +1533,33 @@
 
   function closeProfileCreator(restoreFocus = false) {
     if (profileCreate.hidden) return;
+    const renaming = profileCreate.dataset.mode === "rename";
     profileCreate.hidden = true;
+    delete profileCreate.dataset.mode;
     profileActions.hidden = false;
-    if (restoreFocus) profileAdd.focus();
+    if (restoreFocus) (renaming ? profileSelect : profileAdd).focus();
   }
 
   function openProfileCreator() {
     if (!state.config) return;
+    openProfileNameForm("create", `Profile ${state.config.profiles.length + 1}`);
+  }
+
+  function openProfileRenamer() {
+    const profile = activeProfile();
+    if (!state.config || !profile) return;
+    openProfileNameForm("rename", profile.name);
+  }
+
+  // Creating and renaming share one inline form, so Escape, toolbar pinning
+  // and menu checks cover both.
+  function openProfileNameForm(mode, name) {
+    closeProfileMenu();
+    closeProfileMoreMenu();
     closeProfileDeleteConfirm();
-    profileName.value = `Profile ${state.config.profiles.length + 1}`;
+    profileCreate.dataset.mode = mode;
+    profileCreateSubmit.textContent = mode === "rename" ? "Rename" : "Create";
+    profileName.value = name;
     profileActions.hidden = true;
     profileCreate.hidden = false;
     profileName.focus();
@@ -2106,6 +2138,19 @@
   });
 
   profileSelect.addEventListener("click", () => toggleProfileMenu());
+  profileSelect.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    openProfileRenamer();
+  });
+  catalogSearch.addEventListener("input", () => requestRender("catalog"));
+  catalogSearch.addEventListener("keydown", (event) => {
+    // Escape clears an active search before it can leave the editor.
+    if (event.key !== "Escape" || !catalogSearch.value) return;
+    event.preventDefault();
+    event.stopPropagation();
+    catalogSearch.value = "";
+    requestRender("catalog");
+  });
   profileSelect.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
@@ -2234,9 +2279,20 @@
       profileName.select();
       return;
     }
-    const profile = { id: uniqueProfileId(), name, overlays: [] };
     flushEditingChanges();
     const before = historySnapshot();
+    if (profileCreate.dataset.mode === "rename") {
+      const profile = activeProfile();
+      if (profile && profile.name !== name) {
+        profile.name = name;
+        commitHistory(before);
+        scheduleSave(true);
+      }
+      closeProfileCreator(true);
+      requestRender("profileList", "chrome");
+      return;
+    }
+    const profile = { id: uniqueProfileId(), name, overlays: [] };
     replaceSelection([]);
     state.config.profiles.push(profile);
     state.config.active_profile = profile.id;
