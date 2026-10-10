@@ -103,6 +103,10 @@ body.editing.interacting .overlay[data-wheel-zone]::before { display: none; }
 .overlay[data-wheel-zone="ne"]::before { right: 0; top: 0; border-right-width: var(--wheel-line); border-top-width: var(--wheel-line); background: radial-gradient(farthest-corner at top right, var(--wheel-fill), transparent 70%); }
 .overlay[data-wheel-zone="sw"]::before { left: 0; bottom: 0; border-left-width: var(--wheel-line); border-bottom-width: var(--wheel-line); background: radial-gradient(farthest-corner at bottom left, var(--wheel-fill), transparent 70%); }
 .overlay[data-wheel-zone="se"]::before { right: 0; bottom: 0; border-right-width: var(--wheel-line); border-bottom-width: var(--wheel-line); background: radial-gradient(farthest-corner at bottom right, var(--wheel-fill), transparent 70%); }
+body.editing:not(.interacting) .overlay.selected:is([data-wheel-zone="n"], [data-wheel-zone="s"]) { cursor: ns-resize; }
+body.editing:not(.interacting) .overlay.selected:is([data-wheel-zone="e"], [data-wheel-zone="w"]) { cursor: ew-resize; }
+body.editing:not(.interacting) .overlay.selected:is([data-wheel-zone="nw"], [data-wheel-zone="se"]) { cursor: nwse-resize; }
+body.editing:not(.interacting) .overlay.selected:is([data-wheel-zone="ne"], [data-wheel-zone="sw"]) { cursor: nesw-resize; }
 
 #editor { position: fixed; inset: 0; z-index: 10000; pointer-events: none; }
 .toolbar, .sidebar, .inspector { pointer-events: auto; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); backdrop-filter: blur(18px); }

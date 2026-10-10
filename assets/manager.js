@@ -1867,8 +1867,15 @@
       return;
     }
     const overlay = root._vosulayOverlay;
+    const wasSoleSelected = selectedOverlay() === overlay;
     if (!state.selected.has(overlay)) selectOverlay(overlay);
-    const edge = event.target.closest(".resize-handle")?.dataset.edge || null;
+    let edge = event.target.closest(".resize-handle")?.dataset.edge || null;
+    // Corner handles sit on the corners, so an overlay flush with the screen
+    // edge has handles off-screen. The border bands of an already selected
+    // overlay resize too; a first click still only selects and moves.
+    if (!edge && wasSoleSelected && !event.target.closest(".overlay-tag")) {
+      edge = wheelZone(overlay, event.clientX, event.clientY) || null;
+    }
     startPointer(event, root, edge);
   });
   stage.addEventListener("pointermove", movePointer);
@@ -2475,6 +2482,19 @@
       commitInspectorNumber(name, input);
       endInspectorEdit();
     });
+    // Like the native wheel stepping this replaces, only the focused field
+    // reacts, so scrolling past the panel never edits a value. Chromium turns
+    // Shift+wheel into horizontal scrolling, which number fields ignore.
+    input.addEventListener("wheel", (event) => {
+      if (document.activeElement !== input || event.ctrlKey) return;
+      const delta = event.deltaY || event.deltaX;
+      if (!delta) return;
+      event.preventDefault();
+      const steps = event.shiftKey ? 10 : 1;
+      if (delta < 0) input.stepUp(steps);
+      else input.stepDown(steps);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }, { passive: false });
   }
 
   function showSettingsError(message) {

@@ -250,6 +250,12 @@ the opposite corner stays fixed. Continued scrolling keeps targeting the same
 edge or corner until the wheel pauses, so the pointer can stay in place. Each
 scroll gesture is one undo step. The right-click menu also offers **Refresh**.
 
+Drag a selected counter's corner handles, or the edge and corner bands just
+inside its border, to resize it; the bands also work for counters flush with
+the screen edge, whose handles fall off-screen. The first press on an
+unselected counter only selects and moves it. In the properties panel, the
+wheel steps the focused field by its step; hold Shift for ten steps.
+
 The Linux editor shows the native system cursor and temporarily disables
 relative mouse mode. Leaving editing, losing focus, disconnecting, or destroying
 the presentation surface restores the game's latest requested cursor state.
@@ -279,8 +285,7 @@ cargo run --locked -p vosulay-cef-tools -- package-windows dist/package
 
 The helper acquires and verifies cached pinned CEF/asdf assets **before** building
 the native client DLL and writes `dist/vosulay-<version>-windows-x86_64.zip`.
-Both platform packages use the version in `Cargo.toml`; it remains `0.2.0`
-until all 1.0 release gates pass.
+Both platform packages use the version in `Cargo.toml`.
 
 Configuration defaults to `%APPDATA%\vosulay\config.json`. To use portable
 storage, create a file named `portable` beside `vosulay.exe`; configuration then
