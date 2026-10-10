@@ -1,12 +1,12 @@
-//! Linux system clipboard for the editor's text fields, through the wlr
-//! data-control protocol.
+//! Linux system clipboard for the editor's text fields.
 //!
 //! Windowless Chromium cannot use the clipboard while a native Wayland game
 //! has keyboard focus: a Wayland compositor offers selections only to the
-//! focused client, and Xwayland bridges X11 selections only while an X11
-//! window is focused. Data control works without focus, so vosulay reads and
-//! owns the clipboard itself. Without it (X11 sessions, compositors lacking
-//! the protocol) the page keeps Chromium's own clipboard.
+//! focused client. vosulay therefore reads and owns the clipboard itself,
+//! through the wlr data-control protocol, which works without focus, or else
+//! as an X11 client (see [`x11`]) where no data-control exists, as on GNOME.
+
+mod x11;
 
 use anyhow::{Context, Result, bail, ensure};
 use std::{
@@ -49,6 +49,7 @@ enum Selection {
     Empty,
     Owned(Arc<str>),
     Pipe(OwnedFd),
+    Text(String),
 }
 
 pub(crate) struct Clipboard {
@@ -57,28 +58,20 @@ pub(crate) struct Clipboard {
 }
 
 impl Clipboard {
-    /// `None` when there is no Wayland session or no data-control support.
+    /// `None` when neither data-control nor an X display is available.
     pub(crate) fn connect() -> Option<Self> {
-        let connection = Connection::connect_to_env().ok()?;
-        let (globals, queue) = registry_queue_init::<State>(&connection).ok()?;
-        let handle = queue.handle();
-        let seat: WlSeat = globals.bind(&handle, 1..=1, ()).ok()?;
-        let manager: ZwlrDataControlManagerV1 = globals.bind(&handle, 1..=2, ()).ok()?;
-        let device = manager.get_data_device(&seat, &handle, ());
         let (wake_read, wake) = pipe()?;
         let (commands, receiver) = mpsc::channel();
-        let service = Service {
-            connection,
-            queue,
-            manager,
-            device,
-            wake: wake_read,
-            commands: receiver,
-            state: State::default(),
+        let run: Box<dyn FnOnce() + Send> = match Service::connect() {
+            Some(service) => Box::new(move || service.run(wake_read, receiver)),
+            None => {
+                let service = x11::Service::connect()?;
+                Box::new(move || service.run(wake_read, receiver))
+            }
         };
         thread::Builder::new()
             .name("vosulay-clipboard".into())
-            .spawn(move || service.run())
+            .spawn(run)
             .ok()?;
         Some(Self { commands, wake })
     }
@@ -93,6 +86,7 @@ impl Clipboard {
             Selection::Empty => String::new(),
             Selection::Owned(text) => text.to_string(),
             Selection::Pipe(fd) => read_pipe(fd)?,
+            Selection::Text(text) => text,
         })
     }
 
@@ -137,13 +131,27 @@ struct Service {
     queue: EventQueue<State>,
     manager: ZwlrDataControlManagerV1,
     device: ZwlrDataControlDeviceV1,
-    wake: OwnedFd,
-    commands: mpsc::Receiver<Command>,
     state: State,
 }
 
 impl Service {
-    fn run(mut self) {
+    fn connect() -> Option<Self> {
+        let connection = Connection::connect_to_env().ok()?;
+        let (globals, queue) = registry_queue_init::<State>(&connection).ok()?;
+        let handle = queue.handle();
+        let seat: WlSeat = globals.bind(&handle, 1..=1, ()).ok()?;
+        let manager: ZwlrDataControlManagerV1 = globals.bind(&handle, 1..=2, ()).ok()?;
+        let device = manager.get_data_device(&seat, &handle, ());
+        Some(Self {
+            connection,
+            queue,
+            manager,
+            device,
+            state: State::default(),
+        })
+    }
+
+    fn run(mut self, wake: OwnedFd, commands: mpsc::Receiver<Command>) {
         loop {
             if self.queue.dispatch_pending(&mut self.state).is_err() || self.state.finished {
                 return;
@@ -161,7 +169,7 @@ impl Service {
                     revents: 0,
                 },
                 libc::pollfd {
-                    fd: self.wake.as_raw_fd(),
+                    fd: wake.as_raw_fd(),
                     events: libc::POLLIN,
                     revents: 0,
                 },
@@ -178,9 +186,9 @@ impl Service {
                 drop(guard);
             }
             if fds[1].revents != 0 {
-                drain(&self.wake);
+                drain(&wake);
                 loop {
-                    match self.commands.try_recv() {
+                    match commands.try_recv() {
                         Ok(command) => self.handle(command),
                         Err(mpsc::TryRecvError::Empty) => break,
                         Err(mpsc::TryRecvError::Disconnected) => return,
