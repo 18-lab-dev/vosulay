@@ -83,7 +83,7 @@ aligned with `tools/cef/pins.json`.
 ### Windows packages
 
 On native Windows, stage the complete runtime ZIP and compile the installer
-with Inno Setup 7.1.0, the version the release workflow pins (replace `<v>` with
+with Inno Setup 6.7.3, the version the release workflow pins (replace `<v>` with
 the workspace version and use absolute
 source/output paths if required by your installation):
 
@@ -155,10 +155,13 @@ root-owned mode `4755`, the app started and kept running, and no duplicate user
 desktop entry was written.
 
 On 2026-10-10 the release workflow's Windows steps ran natively on Windows 11
-with Inno Setup 7.1.0 and the real 1.1.0 runtime: client DLL build, packaging
-with `--client`, installer compilation and
-[`verify-release.ps1`](../packaging/windows/verify-release.ps1). The installer
-has not been run; this is build evidence, not install/upgrade/uninstall evidence.
+with the real 1.1.0 runtime: client DLL build, packaging with `--client`,
+installer compilation (Inno Setup 7.1.0) and
+[`verify-release.ps1`](../packaging/windows/verify-release.ps1). The pinned
+Inno Setup 6.7.3 then compiled `vosulay.iss` against a dummy layout with the
+expected version metadata; the 1.0.0 and 1.1.0 installers came from the 6.7
+line. No installer was run for this check; it is build evidence, not
+install/upgrade/uninstall evidence.
 
 ## Launchers and single instance
 

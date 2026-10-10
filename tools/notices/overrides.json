@@ -1,4 +1,86 @@
 {
+  "_asdf_source": {
+    "commit": "c925244c8d14ca36d82585834cdfebf13d6ce86b",
+    "sha256": "ae413f0ed484f268a9237573a7eb1bafdde4e1d5a6cabd600ebd986818c6573b",
+    "url": "https://codeload.github.com/storycraft/asdf-overlay/tar.gz/c925244c8d14ca36d82585834cdfebf13d6ce86b"
+  },
+  "_frida_native": {
+    "components": [
+      {
+        "id": "native:glib@790ffa82e80d99fba8a3db494e46f907d560893c",
+        "license": "LGPL-2.1-or-later (plus per-file permissive terms)",
+        "license_file": null,
+        "name": "glib",
+        "repository": "https://github.com/frida/glib",
+        "source": "git+https://github.com/frida/glib#790ffa82e80d99fba8a3db494e46f907d560893c",
+        "version": "790ffa82e80d99fba8a3db494e46f907d560893c"
+      },
+      {
+        "id": "native:capstone@d536b1577fd033a31d75f48fd183aa425256cc18",
+        "license": "BSD-3-Clause and LLVM legacy license",
+        "license_file": null,
+        "name": "capstone",
+        "repository": "https://github.com/frida/capstone",
+        "source": "git+https://github.com/frida/capstone#d536b1577fd033a31d75f48fd183aa425256cc18",
+        "version": "d536b1577fd033a31d75f48fd183aa425256cc18"
+      },
+      {
+        "id": "native:libffi@4b75d8a1d9cf401d8a2fa16619938637ea7e7afa",
+        "license": "MIT (build tools separately licensed)",
+        "license_file": null,
+        "name": "libffi",
+        "repository": "https://github.com/frida/libffi",
+        "source": "git+https://github.com/frida/libffi#4b75d8a1d9cf401d8a2fa16619938637ea7e7afa",
+        "version": "4b75d8a1d9cf401d8a2fa16619938637ea7e7afa"
+      },
+      {
+        "id": "native:pcre2@b47486922fdc3486499b310dc9cf903449700474",
+        "license": "BSD-3-Clause with PCRE2 exception",
+        "license_file": null,
+        "name": "pcre2",
+        "repository": "https://github.com/frida/pcre2",
+        "source": "git+https://github.com/frida/pcre2#b47486922fdc3486499b310dc9cf903449700474",
+        "version": "b47486922fdc3486499b310dc9cf903449700474"
+      },
+      {
+        "id": "native:zlib@171a3eacaea8b731ef1fc586e7777b77742e2a1d",
+        "license": "Zlib",
+        "license_file": null,
+        "name": "zlib",
+        "repository": "https://github.com/frida/zlib",
+        "source": "git+https://github.com/frida/zlib#171a3eacaea8b731ef1fc586e7777b77742e2a1d",
+        "version": "171a3eacaea8b731ef1fc586e7777b77742e2a1d"
+      },
+      {
+        "id": "native:xz@e70f5800ab5001c9509d374dbf3e7e6b866c43fe",
+        "license": "Public-domain liblzma; GPL/LGPL scripts/tools not shipped",
+        "license_file": null,
+        "name": "xz",
+        "repository": "https://github.com/frida/xz",
+        "source": "git+https://github.com/frida/xz#e70f5800ab5001c9509d374dbf3e7e6b866c43fe",
+        "version": "e70f5800ab5001c9509d374dbf3e7e6b866c43fe"
+      },
+      {
+        "id": "native:frida-gum@ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c",
+        "license": "wxWindows-3.1 (LGPL-2.0-or-later with binary exception)",
+        "license_file": null,
+        "name": "frida-gum",
+        "repository": "https://github.com/frida/frida-gum",
+        "source": "git+https://github.com/frida/frida-gum#ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c",
+        "version": "ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c"
+      }
+    ],
+    "manifest_sha256": "82a0bdb3f21c307d11ab7afbb675ac829f429e278ef6ad2f0bf64ec993b9a696",
+    "manifest_url": "https://raw.githubusercontent.com/frida/releng/c9cc18138b364f691573c695e1fe47ddc4c56f26/deps.toml",
+    "version": "17.17.0"
+  },
+  "array-util@1.0.2": [
+    {
+      "file": "licenses/array-util-1.0.2/LICENESE",
+      "sha256": "3fc43b3720cecfeedbf1fa55751b5c35bb6598a5ea74b00f063bad53ac375c28",
+      "url": "https://raw.githubusercontent.com/Daniel-Aaron-Bloom/array-util/8c4b15760f83883808f45fa4620d97ef5bccf4a2/LICENESE"
+    }
+  ],
   "asdf-overlay-client@2.1.0": [
     {
       "file": "asdf-overlay-2.1.0-LICENSE-MIT.txt",
@@ -25,6 +107,28 @@
       "file": "asdf-overlay-2.1.0-LICENSE-MIT.txt",
       "sha256": "9b6f1c28850c107565baae488bfe7d48375b926ec05fc808ed9d985014040843",
       "url": "https://raw.githubusercontent.com/storycraft/asdf-overlay/c925244c8d14ca36d82585834cdfebf13d6ce86b/LICENSE-MIT"
+    }
+  ],
+  "capstone@d536b1577fd033a31d75f48fd183aa425256cc18": [
+    {
+      "file": "native/capstone/LICENSE.TXT",
+      "sha256": "65e9ed46a59976eda8f5bd1ea79a680dea38dd299c760bc9a8d87a764ef5029b",
+      "url": "https://github.com/frida/capstone/blob/d536b1577fd033a31d75f48fd183aa425256cc18/LICENSE.TXT"
+    },
+    {
+      "file": "native/capstone/LICENSE_LLVM.TXT",
+      "sha256": "dfdca2d7fdbabfd937f9dc41b7f61647b0e6cb1f9ee767ecb4520f979ebe91da",
+      "url": "https://github.com/frida/capstone/blob/d536b1577fd033a31d75f48fd183aa425256cc18/LICENSE_LLVM.TXT"
+    },
+    {
+      "file": "native/capstone/bindings/python/LICENSE.TXT",
+      "sha256": "65e9ed46a59976eda8f5bd1ea79a680dea38dd299c760bc9a8d87a764ef5029b",
+      "url": "https://github.com/frida/capstone/blob/d536b1577fd033a31d75f48fd183aa425256cc18/bindings/python/LICENSE.TXT"
+    },
+    {
+      "file": "native/capstone/suite/regress/LICENSE",
+      "sha256": "2b16ef2d08597fccc3ffa8a8872e387e4b08e333e11b29c0bbb24f9d2167ac41",
+      "url": "https://github.com/frida/capstone/blob/d536b1577fd033a31d75f48fd183aa425256cc18/suite/regress/LICENSE"
     }
   ],
   "cef-dll-sys@152.4.0+152.0.8": [
@@ -70,6 +174,20 @@
       "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/207bdd2917c038283635022ffcf7767496bcc7e6/LICENSE-APACHE"
     }
   ],
+  "frida-build@0.17.2": [
+    {
+      "file": "licenses/frida-build-0.17.2/COPYING",
+      "sha256": "5ea1544b51a28bc823b03159190d4108f9fb4f4ef912389f5137c6d295e175b2",
+      "url": "https://raw.githubusercontent.com/frida/frida-rust/117728945e04d3eb44442e19d0e0311e56863f1e/COPYING"
+    }
+  ],
+  "frida-gum@ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c": [
+    {
+      "file": "native/frida-gum/COPYING",
+      "sha256": "00764fcc23f0f2ac6d2619a1f9192e55176ecaaa525e76a47aaabc5d87fb087f",
+      "url": "https://github.com/frida/frida-gum/blob/ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c/COPYING"
+    }
+  ],
   "fxhash@0.2.1": [
     {
       "file": "licenses/fxhash-0.2.1/LICENSE-APACHE",
@@ -77,11 +195,79 @@
       "url": "https://www.apache.org/licenses/LICENSE-2.0.txt"
     }
   ],
+  "gl_generator@0.14.0": [
+    {
+      "file": "licenses/gl_generator-0.14.0/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "url": "https://raw.githubusercontent.com/brendanzab/gl-rs/ea503e8d5fb6d73c6030e6191ce738cd3bf3433e/LICENSE"
+    }
+  ],
+  "glib@790ffa82e80d99fba8a3db494e46f907d560893c": [
+    {
+      "file": "native/glib/LICENSES/LicenseRef-old-glib-tests.txt",
+      "sha256": "fb261b2d5dbe76c4850f90da763210bc385e52428df6bbfd7b06295ac8a32914",
+      "url": "https://github.com/frida/glib/blob/790ffa82e80d99fba8a3db494e46f907d560893c/LICENSES/LicenseRef-old-glib-tests.txt"
+    },
+    {
+      "file": "native/glib/docs/reference/COPYING",
+      "sha256": "b1ec1d0e5947f81e815d8771f7d4d90671a94bb10a42dc687fb566de461a57aa",
+      "url": "https://github.com/frida/glib/blob/790ffa82e80d99fba8a3db494e46f907d560893c/docs/reference/COPYING"
+    },
+    {
+      "file": "native/glib/proxy-libintl-static/COPYING.LIB.txt",
+      "sha256": "d245807f90032872d1438d741ed21e2490e1175dc8aa3afa5ddb6c8e529b58e5",
+      "url": "https://github.com/frida/glib/blob/790ffa82e80d99fba8a3db494e46f907d560893c/proxy-libintl-static/COPYING.LIB.txt"
+    },
+    {
+      "file": "native/glib/LICENSES/LGPL-2.1-or-later.txt",
+      "sha256": "fa6f36630bb1e0c571d34b2bbdf188d08495c9dbf58f28cac112f303fc1f58fb",
+      "url": "https://github.com/frida/glib/blob/790ffa82e80d99fba8a3db494e46f907d560893c/LICENSES/LGPL-2.1-or-later.txt"
+    },
+    {
+      "file": "native/glib/LICENSES/MIT.txt",
+      "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0",
+      "url": "https://github.com/frida/glib/blob/790ffa82e80d99fba8a3db494e46f907d560893c/LICENSES/MIT.txt"
+    },
+    {
+      "file": "native/glib/LICENSES/Apache-2.0.txt",
+      "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+      "url": "https://github.com/frida/glib/blob/790ffa82e80d99fba8a3db494e46f907d560893c/LICENSES/Apache-2.0.txt"
+    },
+    {
+      "file": "native/glib/LICENSES/LLVM-exception.txt",
+      "sha256": "e34c58338bd89d43e709e226610d8f32b3e3c47f4ad9a99a8dc1d4ac7842488e",
+      "url": "https://github.com/frida/glib/blob/790ffa82e80d99fba8a3db494e46f907d560893c/LICENSES/LLVM-exception.txt"
+    },
+    {
+      "file": "native/glib/LICENSES/CC0-1.0.txt",
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "url": "https://github.com/frida/glib/blob/790ffa82e80d99fba8a3db494e46f907d560893c/LICENSES/CC0-1.0.txt"
+    }
+  ],
+  "khronos_api@3.1.0": [
+    {
+      "file": "licenses/khronos_api-3.1.0/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "url": "https://raw.githubusercontent.com/brendanzab/gl-rs/f150967b1c44ae888e6676f93f639ebc82771bdc/LICENSE"
+    }
+  ],
   "ksni@0.3.6": [
     {
       "file": "licenses/ksni-0.3.6/UNLICENSE",
       "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
       "url": "https://raw.githubusercontent.com/iovxw/ksni/4e31ee48d91b0babb472d05936b9b68bca736b06/UNLICENSE"
+    }
+  ],
+  "libffi@4b75d8a1d9cf401d8a2fa16619938637ea7e7afa": [
+    {
+      "file": "native/libffi/LICENSE",
+      "sha256": "2c9c2acb9743e6b007b91350475308aee44691d96aa20eacef8e199988c8c388",
+      "url": "https://github.com/frida/libffi/blob/4b75d8a1d9cf401d8a2fa16619938637ea7e7afa/LICENSE"
+    },
+    {
+      "file": "native/libffi/LICENSE-BUILDTOOLS",
+      "sha256": "e67978cd18816c0cb7d29aaaacde7b7447402c2fb321a051698890a8eaedda94",
+      "url": "https://github.com/frida/libffi/blob/4b75d8a1d9cf401d8a2fa16619938637ea7e7afa/LICENSE-BUILDTOOLS"
     }
   ],
   "mac@0.1.1": [
@@ -115,6 +301,28 @@
       "url": "https://raw.githubusercontent.com/gfx-rs/wgpu/9993f5c9eceb91f9bb6b9c5c6994f35f50e5f378/LICENSE.APACHE"
     }
   ],
+  "pcre2@b47486922fdc3486499b310dc9cf903449700474": [
+    {
+      "file": "native/pcre2/COPYING",
+      "sha256": "99272c55f3dcfa07a8a7e15a5c1a33096e4727de74241d65fa049fccfdd59507",
+      "url": "https://github.com/frida/pcre2/blob/b47486922fdc3486499b310dc9cf903449700474/COPYING"
+    },
+    {
+      "file": "native/pcre2/LICENCE",
+      "sha256": "87d884eceb7fc54611470ce9f74280d28612b0c877adfc767e9676892a638987",
+      "url": "https://github.com/frida/pcre2/blob/b47486922fdc3486499b310dc9cf903449700474/LICENCE"
+    },
+    {
+      "file": "native/pcre2/LICENSE.build",
+      "sha256": "7939f4c45423cec4a18236ad0a88570e33508dd7462e07b1038001f90ece65fb",
+      "url": "https://github.com/frida/pcre2/blob/b47486922fdc3486499b310dc9cf903449700474/LICENSE.build"
+    },
+    {
+      "file": "native/pcre2/cmake/COPYING-CMAKE-SCRIPTS",
+      "sha256": "46cde7dc11e64c78d650b4851b88f6704b4665ff60f22a1caf68ceb15e217e5b",
+      "url": "https://github.com/frida/pcre2/blob/b47486922fdc3486499b310dc9cf903449700474/cmake/COPYING-CMAKE-SCRIPTS"
+    }
+  ],
   "selectors@0.31.0": [
     {
       "file": "licenses/selectors-0.31.0/LICENSE-MPL-2.0",
@@ -127,6 +335,50 @@
       "file": "licenses/spirv-0.3.0+sdk-1.3.268.0/LICENSE",
       "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
       "url": "https://raw.githubusercontent.com/gfx-rs/rspirv/e91a5debc10c395b36db7721dfff6326d697a1e2/LICENSE"
+    }
+  ],
+  "xz@e70f5800ab5001c9509d374dbf3e7e6b866c43fe": [
+    {
+      "file": "native/xz/COPYING",
+      "sha256": "bcb02973ef6e87ea73d331b3a80df7748407f17efdb784b61b47e0e610d3bb5c",
+      "url": "https://github.com/frida/xz/blob/e70f5800ab5001c9509d374dbf3e7e6b866c43fe/COPYING"
+    },
+    {
+      "file": "native/xz/COPYING.GPLv2",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "url": "https://github.com/frida/xz/blob/e70f5800ab5001c9509d374dbf3e7e6b866c43fe/COPYING.GPLv2"
+    },
+    {
+      "file": "native/xz/COPYING.GPLv3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "url": "https://github.com/frida/xz/blob/e70f5800ab5001c9509d374dbf3e7e6b866c43fe/COPYING.GPLv3"
+    },
+    {
+      "file": "native/xz/COPYING.LGPLv2.1",
+      "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
+      "url": "https://github.com/frida/xz/blob/e70f5800ab5001c9509d374dbf3e7e6b866c43fe/COPYING.LGPLv2.1"
+    },
+    {
+      "file": "native/xz/LICENSE.build",
+      "sha256": "7939f4c45423cec4a18236ad0a88570e33508dd7462e07b1038001f90ece65fb",
+      "url": "https://github.com/frida/xz/blob/e70f5800ab5001c9509d374dbf3e7e6b866c43fe/LICENSE.build"
+    }
+  ],
+  "zlib@171a3eacaea8b731ef1fc586e7777b77742e2a1d": [
+    {
+      "file": "native/zlib/LICENSE",
+      "sha256": "0f854f426019c475697e17f1b0fa638270f6e700bc756d9bfe50d17268bd3281",
+      "url": "https://github.com/frida/zlib/blob/171a3eacaea8b731ef1fc586e7777b77742e2a1d/LICENSE"
+    },
+    {
+      "file": "native/zlib/LICENSE.build",
+      "sha256": "cb3101cb814ef48ae95cdbdb74ef44a335484f4e190837fc8df38e3c3c1f9361",
+      "url": "https://github.com/frida/zlib/blob/171a3eacaea8b731ef1fc586e7777b77742e2a1d/LICENSE.build"
+    },
+    {
+      "file": "native/zlib/contrib/dotzlib/LICENSE_1_0.txt",
+      "sha256": "36266a8fd073568394cb81cdb2b124f7fdae2c64c1a7ed09db34b4d22efa2951",
+      "url": "https://github.com/frida/zlib/blob/171a3eacaea8b731ef1fc586e7777b77742e2a1d/contrib/dotzlib/LICENSE_1_0.txt"
     }
   ]
 }

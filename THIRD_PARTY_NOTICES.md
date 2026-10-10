@@ -12,7 +12,7 @@ Pinned CEF: `152.0.8+g1ce985c+chromium-152.0.7977.134`. The accompanying `LICENS
 
 Source: https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b
 
-Upstream offers MIT OR Apache-2.0; the MIT option is reproduced below. This covers asdf-overlay's own code, not an attestation of all dependencies embedded in the prebuilt DLLs; see `docs/provenance.md` for that release blocker.
+Upstream offers MIT OR Apache-2.0; the MIT option is reproduced below. DLL dependency licenses below are enumerated from the pinned upstream lockfile; this is not proof of source-to-prebuilt equivalence. Native Frida devkit obligations are recorded separately in docs/provenance.md.
 
 ```text
 MIT License
@@ -38,9 +38,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## Rust dependencies (333 crates)
+## Rust dependencies (432 crates)
 
-Each crate has one inventory entry below, referencing its license/notice texts. The 206 distinct normalized texts are reproduced once; per-text usage lists retain every crate and contributing file.
+Each crate has one inventory entry below, referencing its license/notice texts. The 281 distinct normalized texts are reproduced once; per-text usage lists retain every crate and contributing file.
 
 ### adler2 2.0.1
 
@@ -52,7 +52,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/adler2/2.0.1/download
 
 Repository: https://github.com/oyvindln/adler2
 
-License/notice texts: [Text 33](#license-text-33), [Text 111](#license-text-111), [Text 116](#license-text-116)
+License/notice texts: [Text 43](#license-text-43), [Text 149](#license-text-149), [Text 156](#license-text-156)
 
 ### aho-corasick 1.1.5
 
@@ -64,7 +64,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/aho-corasick/1.1.5/down
 
 Repository: https://github.com/BurntSushi/aho-corasick
 
-License/notice texts: [Text 2](#license-text-2), [Text 15](#license-text-15)
+License/notice texts: [Text 3](#license-text-3), [Text 21](#license-text-21)
 
 ### anstream 1.0.0
 
@@ -76,7 +76,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/anstream/1.0.0/download
 
 Repository: https://github.com/rust-cli/anstyle.git
 
-License/notice texts: [Text 92](#license-text-92), [Text 151](#license-text-151)
+License/notice texts: [Text 124](#license-text-124), [Text 199](#license-text-199)
 
 ### anstyle 1.0.14
 
@@ -88,7 +88,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/anstyle/1.0.14/download
 
 Repository: https://github.com/rust-cli/anstyle.git
 
-License/notice texts: [Text 92](#license-text-92), [Text 151](#license-text-151)
+License/notice texts: [Text 124](#license-text-124), [Text 199](#license-text-199)
 
 ### anstyle-parse 1.0.0
 
@@ -100,7 +100,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/anstyle-parse/1.0.0/dow
 
 Repository: https://github.com/rust-cli/anstyle.git
 
-License/notice texts: [Text 92](#license-text-92), [Text 151](#license-text-151)
+License/notice texts: [Text 124](#license-text-124), [Text 199](#license-text-199)
 
 ### anstyle-query 1.1.5
 
@@ -112,7 +112,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/anstyle-query/1.1.5/dow
 
 Repository: https://github.com/rust-cli/anstyle.git
 
-License/notice texts: [Text 92](#license-text-92), [Text 151](#license-text-151)
+License/notice texts: [Text 124](#license-text-124), [Text 199](#license-text-199)
 
 ### anstyle-wincon 3.0.11
 
@@ -124,7 +124,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/anstyle-wincon/3.0.11/d
 
 Repository: https://github.com/rust-cli/anstyle.git
 
-License/notice texts: [Text 92](#license-text-92), [Text 151](#license-text-151)
+License/notice texts: [Text 124](#license-text-124), [Text 199](#license-text-199)
 
 ### anyhow 1.0.104
 
@@ -136,7 +136,33 @@ Unmodified crate source: https://crates.io/api/v1/crates/anyhow/1.0.104/download
 
 Repository: https://github.com/dtolnay/anyhow
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
+
+### arc-swap 1.9.2
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/arc-swap/1.9.2/download
+
+Repository: https://github.com/vorner/arc-swap
+
+License/notice texts: [Text 181](#license-text-181), [Text 280](#license-text-280)
+
+### array-util 1.0.2
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/array-util/1.0.2/download
+
+Repository: https://github.com/Daniel-Aaron-Bloom/array-util
+
+License/notice texts: [Text 79](#license-text-79)
+
+License text provenance: https://raw.githubusercontent.com/Daniel-Aaron-Bloom/array-util/8c4b15760f83883808f45fa4620d97ef5bccf4a2/LICENESE
 
 ### arrayvec 0.7.8
 
@@ -148,7 +174,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/arrayvec/0.7.8/download
 
 Repository: https://github.com/bluss/arrayvec
 
-License/notice texts: [Text 66](#license-text-66), [Text 133](#license-text-133)
+License/notice texts: [Text 91](#license-text-91), [Text 181](#license-text-181)
+
+### asdf-overlay 2.1.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `git+https://github.com/storycraft/asdf-overlay#c925244c8d14ca36d82585834cdfebf13d6ce86b`
+
+Unmodified crate source: https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b
+
+Repository: https://github.com/storycraft/asdf-overlay
+
+License/notice texts: [Text 17](#license-text-17), [Text 174](#license-text-174)
 
 ### asdf-overlay-client 2.1.0
 
@@ -160,7 +198,21 @@ Unmodified crate source: https://crates.io/api/v1/crates/asdf-overlay-client/2.1
 
 Repository: https://github.com/storycraft/asdf-overlay
 
-License/notice texts: [Text 128](#license-text-128)
+License/notice texts: [Text 174](#license-text-174)
+
+License text provenance: https://raw.githubusercontent.com/storycraft/asdf-overlay/c925244c8d14ca36d82585834cdfebf13d6ce86b/LICENSE-MIT
+
+### asdf-overlay-common 2.1.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `git+https://github.com/storycraft/asdf-overlay#c925244c8d14ca36d82585834cdfebf13d6ce86b`
+
+Unmodified crate source: https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b
+
+Repository: https://github.com/storycraft/asdf-overlay
+
+License/notice texts: [Text 17](#license-text-17), [Text 174](#license-text-174)
 
 License text provenance: https://raw.githubusercontent.com/storycraft/asdf-overlay/c925244c8d14ca36d82585834cdfebf13d6ce86b/LICENSE-MIT
 
@@ -174,7 +226,33 @@ Unmodified crate source: https://crates.io/api/v1/crates/asdf-overlay-common/2.1
 
 Repository: https://github.com/storycraft/asdf-overlay
 
-License/notice texts: [Text 128](#license-text-128)
+License/notice texts: [Text 174](#license-text-174)
+
+License text provenance: https://raw.githubusercontent.com/storycraft/asdf-overlay/c925244c8d14ca36d82585834cdfebf13d6ce86b/LICENSE-MIT
+
+### asdf-overlay-dll 2.1.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `git+https://github.com/storycraft/asdf-overlay#c925244c8d14ca36d82585834cdfebf13d6ce86b`
+
+Unmodified crate source: https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b
+
+Repository: https://github.com/storycraft/asdf-overlay
+
+License/notice texts: [Text 17](#license-text-17), [Text 174](#license-text-174)
+
+### asdf-overlay-event 2.1.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `git+https://github.com/storycraft/asdf-overlay#c925244c8d14ca36d82585834cdfebf13d6ce86b`
+
+Unmodified crate source: https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b
+
+Repository: https://github.com/storycraft/asdf-overlay
+
+License/notice texts: [Text 17](#license-text-17), [Text 174](#license-text-174)
 
 License text provenance: https://raw.githubusercontent.com/storycraft/asdf-overlay/c925244c8d14ca36d82585834cdfebf13d6ce86b/LICENSE-MIT
 
@@ -188,7 +266,57 @@ Unmodified crate source: https://crates.io/api/v1/crates/asdf-overlay-event/2.1.
 
 Repository: https://github.com/storycraft/asdf-overlay
 
-License/notice texts: [Text 128](#license-text-128)
+License/notice texts: [Text 174](#license-text-174)
+
+License text provenance: https://raw.githubusercontent.com/storycraft/asdf-overlay/c925244c8d14ca36d82585834cdfebf13d6ce86b/LICENSE-MIT
+
+### asdf-overlay-hook 2.1.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `git+https://github.com/storycraft/asdf-overlay#c925244c8d14ca36d82585834cdfebf13d6ce86b`
+
+Unmodified crate source: https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b
+
+Repository: https://github.com/storycraft/asdf-overlay
+
+License/notice texts: [Text 17](#license-text-17), [Text 174](#license-text-174)
+
+### asdf-overlay-vulkan-layer 2.1.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `git+https://github.com/storycraft/asdf-overlay#c925244c8d14ca36d82585834cdfebf13d6ce86b`
+
+Unmodified crate source: https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b
+
+Repository: https://github.com/storycraft/asdf-overlay
+
+License/notice texts: [Text 17](#license-text-17), [Text 174](#license-text-174)
+
+### asdf-overlay-window 2.1.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `git+https://github.com/storycraft/asdf-overlay#c925244c8d14ca36d82585834cdfebf13d6ce86b`
+
+Unmodified crate source: https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b
+
+Repository: https://github.com/storycraft/asdf-overlay
+
+License/notice texts: [Text 17](#license-text-17), [Text 174](#license-text-174)
+
+### asdf-overlay-window-event 2.1.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `git+https://github.com/storycraft/asdf-overlay#c925244c8d14ca36d82585834cdfebf13d6ce86b`
+
+Unmodified crate source: https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b
+
+Repository: https://github.com/storycraft/asdf-overlay
+
+License/notice texts: [Text 17](#license-text-17), [Text 174](#license-text-174)
 
 License text provenance: https://raw.githubusercontent.com/storycraft/asdf-overlay/c925244c8d14ca36d82585834cdfebf13d6ce86b/LICENSE-MIT
 
@@ -202,7 +330,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/asdf-overlay-window-eve
 
 Repository: https://github.com/storycraft/asdf-overlay
 
-License/notice texts: [Text 128](#license-text-128)
+License/notice texts: [Text 174](#license-text-174)
 
 License text provenance: https://raw.githubusercontent.com/storycraft/asdf-overlay/c925244c8d14ca36d82585834cdfebf13d6ce86b/LICENSE-MIT
 
@@ -216,7 +344,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/ash/0.38.0+1.3.281/down
 
 Repository: https://github.com/ash-rs/ash
 
-License/notice texts: [Text 77](#license-text-77), [Text 163](#license-text-163)
+License/notice texts: [Text 105](#license-text-105), [Text 222](#license-text-222)
 
 ### ashpd 0.11.1
 
@@ -228,7 +356,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/ashpd/0.11.1/download
 
 Repository: https://github.com/bilelmoussaoui/ashpd
 
-License/notice texts: [Text 143](#license-text-143)
+License/notice texts: [Text 191](#license-text-191)
 
 ### async-broadcast 0.7.2
 
@@ -240,7 +368,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-broadcast/0.7.2/d
 
 Repository: https://github.com/smol-rs/async-broadcast
 
-License/notice texts: [Text 34](#license-text-34), [Text 184](#license-text-184)
+License/notice texts: [Text 45](#license-text-45), [Text 251](#license-text-251)
 
 ### async-channel 2.5.0
 
@@ -252,7 +380,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-channel/2.5.0/dow
 
 Repository: https://github.com/smol-rs/async-channel
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### async-executor 1.14.0
 
@@ -264,7 +392,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-executor/1.14.0/d
 
 Repository: https://github.com/smol-rs/async-executor
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### async-fs 2.2.0
 
@@ -276,7 +404,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-fs/2.2.0/download
 
 Repository: https://github.com/smol-rs/async-fs
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### async-io 2.6.0
 
@@ -288,7 +416,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-io/2.6.0/download
 
 Repository: https://github.com/smol-rs/async-io
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### async-lock 3.4.2
 
@@ -300,7 +428,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-lock/3.4.2/downlo
 
 Repository: https://github.com/smol-rs/async-lock
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### async-net 2.0.0
 
@@ -312,7 +440,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-net/2.0.0/downloa
 
 Repository: https://github.com/smol-rs/async-net
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### async-process 2.5.0
 
@@ -324,7 +452,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-process/2.5.0/dow
 
 Repository: https://github.com/smol-rs/async-process
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### async-recursion 1.2.0
 
@@ -336,7 +464,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-recursion/1.2.0/d
 
 Repository: https://github.com/dcchut/async-recursion
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### async-signal 0.2.14
 
@@ -348,7 +476,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-signal/0.2.14/dow
 
 Repository: https://github.com/smol-rs/async-signal
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### async-stream 0.3.6
 
@@ -360,7 +488,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-stream/0.3.6/down
 
 Repository: https://github.com/tokio-rs/async-stream
 
-License/notice texts: [Text 20](#license-text-20)
+License/notice texts: [Text 27](#license-text-27)
 
 ### async-stream-impl 0.3.6
 
@@ -372,7 +500,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-stream-impl/0.3.6
 
 Repository: https://github.com/tokio-rs/async-stream
 
-License/notice texts: [Text 20](#license-text-20)
+License/notice texts: [Text 27](#license-text-27)
 
 ### async-task 4.7.1
 
@@ -384,7 +512,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-task/4.7.1/downlo
 
 Repository: https://github.com/smol-rs/async-task
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### async-trait 0.1.92
 
@@ -396,7 +524,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/async-trait/0.1.92/down
 
 Repository: https://github.com/dtolnay/async-trait
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### atomic-waker 1.1.2
 
@@ -408,7 +536,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/atomic-waker/1.1.2/down
 
 Repository: https://github.com/smol-rs/atomic-waker
 
-License/notice texts: [Text 33](#license-text-33), [Text 82](#license-text-82), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 111](#license-text-111), [Text 181](#license-text-181)
 
 ### autocfg 1.5.1
 
@@ -420,7 +548,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/autocfg/1.5.1/download
 
 Repository: https://github.com/cuviper/autocfg
 
-License/notice texts: [Text 41](#license-text-41), [Text 133](#license-text-133)
+License/notice texts: [Text 53](#license-text-53), [Text 181](#license-text-181)
 
 ### base64 0.22.1
 
@@ -432,7 +560,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/base64/0.22.1/download
 
 Repository: https://github.com/marshallpierce/rust-base64
 
-License/notice texts: [Text 14](#license-text-14), [Text 133](#license-text-133)
+License/notice texts: [Text 19](#license-text-19), [Text 181](#license-text-181)
 
 ### base64 0.23.1
 
@@ -444,7 +572,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/base64/0.23.1/download
 
 Repository: https://github.com/marshallpierce/rust-base64
 
-License/notice texts: [Text 133](#license-text-133), [Text 141](#license-text-141)
+License/notice texts: [Text 181](#license-text-181), [Text 189](#license-text-189)
+
+### bindgen 0.72.1
+
+Declared license: `BSD-3-Clause`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/bindgen/0.72.1/download
+
+Repository: https://github.com/rust-lang/rust-bindgen
+
+License/notice texts: [Text 216](#license-text-216)
 
 ### bit-set 0.8.0
 
@@ -456,7 +596,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/bit-set/0.8.0/download
 
 Repository: https://github.com/contain-rs/bit-set
 
-License/notice texts: [Text 108](#license-text-108), [Text 198](#license-text-198)
+License/notice texts: [Text 145](#license-text-145), [Text 269](#license-text-269)
 
 ### bit-vec 0.8.0
 
@@ -468,7 +608,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/bit-vec/0.8.0/download
 
 Repository: https://github.com/contain-rs/bit-vec
 
-License/notice texts: [Text 108](#license-text-108), [Text 198](#license-text-198)
+License/notice texts: [Text 145](#license-text-145), [Text 269](#license-text-269)
+
+### bitflags 2.13.1
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/bitflags/2.13.1/download
+
+Repository: https://github.com/bitflags/bitflags
+
+License/notice texts: [Text 113](#license-text-113), [Text 181](#license-text-181)
 
 ### bitflags 2.13.2
 
@@ -480,7 +632,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/bitflags/2.13.2/downloa
 
 Repository: https://github.com/bitflags/bitflags
 
-License/notice texts: [Text 84](#license-text-84), [Text 133](#license-text-133)
+License/notice texts: [Text 113](#license-text-113), [Text 181](#license-text-181)
 
 ### block-buffer 0.10.4
 
@@ -492,7 +644,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/block-buffer/0.10.4/dow
 
 Repository: https://github.com/RustCrypto/utils
 
-License/notice texts: [Text 138](#license-text-138), [Text 177](#license-text-177)
+License/notice texts: [Text 186](#license-text-186), [Text 239](#license-text-239)
 
 ### blocking 1.7.0
 
@@ -504,7 +656,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/blocking/1.7.0/download
 
 Repository: https://github.com/smol-rs/blocking
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
+
+### build-target 0.8.0
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/build-target/0.8.0/download
+
+Repository: https://github.com/OpenByteDev/build-target
+
+License/notice texts: [Text 201](#license-text-201)
 
 ### bytemuck 1.25.2
 
@@ -516,7 +680,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/bytemuck/1.25.2/downloa
 
 Repository: https://github.com/Lokathor/bytemuck
 
-License/notice texts: [Text 110](#license-text-110), [Text 130](#license-text-130), [Text 183](#license-text-183)
+License/notice texts: [Text 148](#license-text-148), [Text 176](#license-text-176), [Text 250](#license-text-250)
+
+### bytemuck_derive 1.12.0
+
+Declared license: `Zlib OR Apache-2.0 OR MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/bytemuck_derive/1.12.0/download
+
+Repository: https://github.com/Lokathor/bytemuck
+
+License/notice texts: [Text 148](#license-text-148), [Text 176](#license-text-176), [Text 250](#license-text-250)
 
 ### byteorder 1.5.0
 
@@ -528,7 +704,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/byteorder/1.5.0/downloa
 
 Repository: https://github.com/BurntSushi/byteorder
 
-License/notice texts: [Text 2](#license-text-2), [Text 15](#license-text-15)
+License/notice texts: [Text 3](#license-text-3), [Text 21](#license-text-21)
 
 ### bytes 1.12.1
 
@@ -540,7 +716,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/bytes/1.12.1/download
 
 Repository: https://github.com/tokio-rs/bytes
 
-License/notice texts: [Text 63](#license-text-63)
+License/notice texts: [Text 86](#license-text-86)
 
 ### bzip2 0.6.1
 
@@ -552,7 +728,31 @@ Unmodified crate source: https://crates.io/api/v1/crates/bzip2/0.6.1/download
 
 Repository: https://github.com/trifectatechfoundation/bzip2-rs
 
-License/notice texts: [Text 133](#license-text-133), [Text 166](#license-text-166)
+License/notice texts: [Text 181](#license-text-181), [Text 225](#license-text-225)
+
+### cargo-emit 0.2.1
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/cargo-emit/0.2.1/download
+
+Repository: https://github.com/nvzqz/cargo-emit
+
+License/notice texts: [Text 206](#license-text-206), [Text 235](#license-text-235)
+
+### cc 1.4.4
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/cc/1.4.4/download
+
+Repository: https://github.com/rust-lang/cc-rs
+
+License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
 
 ### cc 1.5.1
 
@@ -564,7 +764,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/cc/1.5.1/download
 
 Repository: https://github.com/rust-lang/cc-rs
 
-License/notice texts: [Text 52](#license-text-52), [Text 133](#license-text-133)
+License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
 
 ### cef 152.4.0+152.0.8
 
@@ -576,7 +776,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/cef/152.4.0+152.0.8/dow
 
 Repository: https://github.com/tauri-apps/cef-rs
 
-License/notice texts: [Text 125](#license-text-125), [Text 133](#license-text-133)
+License/notice texts: [Text 169](#license-text-169), [Text 181](#license-text-181)
 
 License text provenance: https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-MIT
 
@@ -592,11 +792,35 @@ Unmodified crate source: https://crates.io/api/v1/crates/cef-dll-sys/152.4.0+152
 
 Repository: https://github.com/tauri-apps/cef-rs
 
-License/notice texts: [Text 125](#license-text-125), [Text 133](#license-text-133)
+License/notice texts: [Text 169](#license-text-169), [Text 181](#license-text-181)
 
 License text provenance: https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-MIT
 
 License text provenance: https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-APACHE
+
+### cexpr 0.6.0
+
+Declared license: `Apache-2.0/MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/cexpr/0.6.0/download
+
+Repository: https://github.com/jethrogb/rust-cexpr
+
+License/notice texts: [Text 181](#license-text-181), [Text 240](#license-text-240)
+
+### cfg-if 1.0.4
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/cfg-if/1.0.4/download
+
+Repository: https://github.com/rust-lang/cfg-if
+
+License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
 
 ### cfg-if 1.0.5
 
@@ -608,7 +832,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/cfg-if/1.0.5/download
 
 Repository: https://github.com/rust-lang/cfg-if
 
-License/notice texts: [Text 52](#license-text-52), [Text 133](#license-text-133)
+License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
+
+### cfg-tt 0.4.0
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/cfg-tt/0.4.0/download
+
+Repository: https://github.com/OpenByteDev/cfg-tt
+
+License/notice texts: [Text 201](#license-text-201)
 
 ### cfg_aliases 0.1.1
 
@@ -620,7 +856,43 @@ Unmodified crate source: https://crates.io/api/v1/crates/cfg_aliases/0.1.1/downl
 
 Repository: https://github.com/katharostech/cfg_aliases
 
-License/notice texts: [Text 46](#license-text-46)
+License/notice texts: [Text 63](#license-text-63)
+
+### cfg_aliases 0.2.2
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/cfg_aliases/0.2.2/download
+
+Repository: https://github.com/katharostech/cfg_aliases
+
+License/notice texts: [Text 63](#license-text-63)
+
+### chacha20 0.10.1
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/chacha20/0.10.1/download
+
+Repository: https://github.com/RustCrypto/stream-ciphers
+
+License/notice texts: [Text 186](#license-text-186), [Text 209](#license-text-209)
+
+### clang-sys 1.9.1
+
+Declared license: `Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/clang-sys/1.9.1/download
+
+Repository: https://github.com/KyleMayes/clang-sys
+
+License/notice texts: [Text 235](#license-text-235)
 
 ### clap 4.6.7
 
@@ -632,7 +904,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/clap/4.6.7/download
 
 Repository: https://github.com/clap-rs/clap
 
-License/notice texts: [Text 5](#license-text-5), [Text 92](#license-text-92)
+License/notice texts: [Text 6](#license-text-6), [Text 124](#license-text-124)
 
 ### clap_builder 4.6.7
 
@@ -644,7 +916,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/clap_builder/4.6.7/down
 
 Repository: https://github.com/clap-rs/clap
 
-License/notice texts: [Text 5](#license-text-5), [Text 92](#license-text-92)
+License/notice texts: [Text 6](#license-text-6), [Text 124](#license-text-124)
 
 ### clap_derive 4.6.7
 
@@ -656,7 +928,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/clap_derive/4.6.7/downl
 
 Repository: https://github.com/clap-rs/clap
 
-License/notice texts: [Text 5](#license-text-5), [Text 92](#license-text-92)
+License/notice texts: [Text 6](#license-text-6), [Text 124](#license-text-124)
 
 ### clap_lex 1.1.1
 
@@ -668,7 +940,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/clap_lex/1.1.1/download
 
 Repository: https://github.com/clap-rs/clap
 
-License/notice texts: [Text 5](#license-text-5), [Text 92](#license-text-92)
+License/notice texts: [Text 6](#license-text-6), [Text 124](#license-text-124)
 
 ### cmake 0.1.58
 
@@ -680,7 +952,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/cmake/0.1.58/download
 
 Repository: https://github.com/rust-lang/cmake-rs
 
-License/notice texts: [Text 52](#license-text-52), [Text 133](#license-text-133)
+License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
 
 ### codespan-reporting 0.11.1
 
@@ -692,7 +964,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/codespan-reporting/0.11
 
 Repository: https://github.com/brendanzab/codespan
 
-License/notice texts: [Text 162](#license-text-162)
+License/notice texts: [Text 221](#license-text-221)
 
 License text provenance: https://raw.githubusercontent.com/brendanzab/codespan/fd389a13f5bb6d625b71e2e4694b26e127f393f9/LICENSE
 
@@ -706,7 +978,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/colorchoice/1.0.5/downl
 
 Repository: https://github.com/rust-cli/anstyle.git
 
-License/notice texts: [Text 92](#license-text-92), [Text 151](#license-text-151)
+License/notice texts: [Text 124](#license-text-124), [Text 199](#license-text-199)
 
 ### concurrent-queue 2.5.0
 
@@ -718,7 +990,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/concurrent-queue/2.5.0/
 
 Repository: https://github.com/smol-rs/concurrent-queue
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### console 0.16.6
 
@@ -730,7 +1002,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/console/0.16.6/download
 
 Repository: https://github.com/console-rs/console
 
-License/notice texts: [Text 55](#license-text-55)
+License/notice texts: [Text 76](#license-text-76)
+
+### const_panic 0.2.17
+
+Declared license: `Zlib`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/const_panic/0.2.17/download
+
+Repository: https://github.com/rodrimati1992/const_panic/
+
+License/notice texts: [Text 126](#license-text-126)
 
 ### cookie 0.18.2
 
@@ -742,7 +1026,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/cookie/0.18.2/download
 
 Repository: https://github.com/SergioBenitez/cookie-rs
 
-License/notice texts: [Text 40](#license-text-40), [Text 195](#license-text-195)
+License/notice texts: [Text 52](#license-text-52), [Text 266](#license-text-266)
 
 ### cookie_store 0.22.1
 
@@ -754,7 +1038,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/cookie_store/0.22.1/dow
 
 Repository: https://github.com/pfernie/cookie_store
 
-License/notice texts: [Text 147](#license-text-147), [Text 151](#license-text-151)
+License/notice texts: [Text 195](#license-text-195), [Text 199](#license-text-199)
 
 ### cpufeatures 0.2.17
 
@@ -766,7 +1050,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/cpufeatures/0.2.17/down
 
 Repository: https://github.com/RustCrypto/utils
 
-License/notice texts: [Text 138](#license-text-138), [Text 145](#license-text-145)
+License/notice texts: [Text 186](#license-text-186), [Text 193](#license-text-193)
+
+### cpufeatures 0.3.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/cpufeatures/0.3.0/download
+
+Repository: https://github.com/RustCrypto/utils
+
+License/notice texts: [Text 186](#license-text-186), [Text 193](#license-text-193)
 
 ### crc32fast 1.5.2
 
@@ -778,7 +1074,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/crc32fast/1.5.2/downloa
 
 Repository: https://github.com/srijs/rust-crc32fast
 
-License/notice texts: [Text 80](#license-text-80), [Text 151](#license-text-151)
+License/notice texts: [Text 109](#license-text-109), [Text 199](#license-text-199)
+
+### crossbeam-utils 0.8.22
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/crossbeam-utils/0.8.22/download
+
+Repository: https://github.com/crossbeam-rs/crossbeam
+
+License/notice texts: [Text 98](#license-text-98), [Text 181](#license-text-181)
 
 ### crossbeam-utils 0.8.23
 
@@ -790,7 +1098,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/crossbeam-utils/0.8.23/
 
 Repository: https://github.com/crossbeam-rs/crossbeam
 
-License/notice texts: [Text 71](#license-text-71), [Text 133](#license-text-133)
+License/notice texts: [Text 98](#license-text-98), [Text 181](#license-text-181)
 
 ### crypto-common 0.1.7
 
@@ -802,7 +1110,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/crypto-common/0.1.7/dow
 
 Repository: https://github.com/RustCrypto/traits
 
-License/notice texts: [Text 48](#license-text-48), [Text 138](#license-text-138)
+License/notice texts: [Text 66](#license-text-66), [Text 186](#license-text-186)
 
 ### cssparser 0.35.0
 
@@ -814,7 +1122,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/cssparser/0.35.0/downlo
 
 Repository: https://github.com/servo/rust-cssparser
 
-License/notice texts: [Text 26](#license-text-26)
+License/notice texts: [Text 35](#license-text-35)
 
 ### cssparser-macros 0.6.1
 
@@ -826,7 +1134,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/cssparser-macros/0.6.1/
 
 Repository: https://github.com/servo/rust-cssparser
 
-License/notice texts: [Text 26](#license-text-26)
+License/notice texts: [Text 35](#license-text-35)
 
 ### dashmap 6.2.1
 
@@ -838,7 +1146,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/dashmap/6.2.1/download
 
 Repository: https://github.com/xacrimon/dashmap
 
-License/notice texts: [Text 22](#license-text-22)
+License/notice texts: [Text 29](#license-text-29)
 
 ### data-encoding 2.11.1
 
@@ -850,7 +1158,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/data-encoding/2.11.1/do
 
 Repository: https://github.com/ia0/data-encoding
 
-License/notice texts: [Text 154](#license-text-154)
+License/notice texts: [Text 204](#license-text-204)
 
 ### debug-ignore 1.0.5
 
@@ -862,7 +1170,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/debug-ignore/1.0.5/down
 
 Repository: https://github.com/sunshowers-code/debug-ignore
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### deranged 0.5.8
 
@@ -874,7 +1182,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/deranged/0.5.8/download
 
 Repository: https://github.com/jhpratt/deranged
 
-License/notice texts: [Text 31](#license-text-31), [Text 190](#license-text-190)
+License/notice texts: [Text 41](#license-text-41), [Text 260](#license-text-260)
 
 ### derive_more 2.1.1
 
@@ -886,7 +1194,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/derive_more/2.1.1/downl
 
 Repository: https://github.com/JelteF/derive_more
 
-License/notice texts: [Text 115](#license-text-115)
+License/notice texts: [Text 155](#license-text-155)
 
 ### derive_more-impl 2.1.1
 
@@ -898,7 +1206,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/derive_more-impl/2.1.1/
 
 Repository: https://github.com/JelteF/derive_more
 
-License/notice texts: [Text 115](#license-text-115)
+License/notice texts: [Text 155](#license-text-155)
 
 ### digest 0.10.7
 
@@ -910,7 +1218,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/digest/0.10.7/download
 
 Repository: https://github.com/RustCrypto/traits
 
-License/notice texts: [Text 131](#license-text-131), [Text 138](#license-text-138)
+License/notice texts: [Text 178](#license-text-178), [Text 186](#license-text-186)
 
 ### directories 6.0.0
 
@@ -922,7 +1230,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/directories/6.0.0/downl
 
 Repository: https://github.com/soc/directories-rs
 
-License/notice texts: [Text 16](#license-text-16), [Text 176](#license-text-176)
+License/notice texts: [Text 22](#license-text-22), [Text 238](#license-text-238)
 
 ### dirs-sys 0.5.0
 
@@ -934,7 +1242,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/dirs-sys/0.5.0/download
 
 Repository: https://github.com/dirs-dev/dirs-sys-rs
 
-License/notice texts: [Text 88](#license-text-88), [Text 176](#license-text-176)
+License/notice texts: [Text 119](#license-text-119), [Text 238](#license-text-238)
 
 ### displaydoc 0.2.7
 
@@ -946,7 +1254,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/displaydoc/0.2.7/downlo
 
 Repository: https://github.com/yaahc/displaydoc
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### dlib 0.5.3
 
@@ -958,7 +1266,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/dlib/0.5.3/download
 
 Repository: https://github.com/elinorbgr/dlib
 
-License/notice texts: [Text 101](#license-text-101)
+License/notice texts: [Text 138](#license-text-138)
 
 ### document-features 0.2.12
 
@@ -970,7 +1278,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/document-features/0.2.1
 
 Repository: https://github.com/slint-ui/document-features
 
-License/notice texts: [Text 7](#license-text-7), [Text 139](#license-text-139)
+License/notice texts: [Text 10](#license-text-10), [Text 187](#license-text-187)
 
 ### downcast-rs 1.2.1
 
@@ -982,7 +1290,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/downcast-rs/1.2.1/downl
 
 Repository: https://github.com/marcianx/downcast-rs
 
-License/notice texts: [Text 108](#license-text-108), [Text 203](#license-text-203)
+License/notice texts: [Text 145](#license-text-145), [Text 275](#license-text-275)
 
 ### download-cef 3.0.0
 
@@ -994,7 +1302,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/download-cef/3.0.0/down
 
 Repository: https://github.com/tauri-apps/cef-rs
 
-License/notice texts: [Text 125](#license-text-125), [Text 133](#license-text-133)
+License/notice texts: [Text 169](#license-text-169), [Text 181](#license-text-181)
 
 License text provenance: https://raw.githubusercontent.com/tauri-apps/cef-rs/207bdd2917c038283635022ffcf7767496bcc7e6/LICENSE-MIT
 
@@ -1010,7 +1318,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/dtoa/1.0.11/download
 
 Repository: https://github.com/dtolnay/dtoa
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### dtoa-short 0.3.5
 
@@ -1022,7 +1330,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/dtoa-short/0.3.5/downlo
 
 Repository: https://github.com/upsuper/dtoa-short
 
-License/notice texts: [Text 26](#license-text-26)
+License/notice texts: [Text 35](#license-text-35)
 
 ### editpe 0.2.4
 
@@ -1034,7 +1342,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/editpe/0.2.4/download
 
 Repository: https://github.com/Systemcluster/editpe
 
-License/notice texts: [Text 153](#license-text-153)
+License/notice texts: [Text 203](#license-text-203)
 
 ### ego-tree 0.10.0
 
@@ -1046,7 +1354,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/ego-tree/0.10.0/downloa
 
 Repository: https://github.com/rust-scraper/ego-tree
 
-License/notice texts: [Text 161](#license-text-161)
+License/notice texts: [Text 220](#license-text-220)
+
+### either 1.17.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/either/1.17.0/download
+
+Repository: https://github.com/rayon-rs/either
+
+License/notice texts: [Text 133](#license-text-133), [Text 181](#license-text-181)
 
 ### encode_unicode 1.0.0
 
@@ -1058,7 +1378,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/encode_unicode/1.0.0/do
 
 Repository: https://github.com/tormol/encode_unicode
 
-License/notice texts: [Text 174](#license-text-174), [Text 178](#license-text-178)
+License/notice texts: [Text 235](#license-text-235), [Text 241](#license-text-241)
 
 ### endi 1.1.1
 
@@ -1070,7 +1390,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/endi/1.1.1/download
 
 Repository: https://github.com/zeenix/endi
 
-License/notice texts: [Text 33](#license-text-33)
+License/notice texts: [Text 43](#license-text-43)
 
 ### enumflags2 0.7.12
 
@@ -1082,7 +1402,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/enumflags2/0.7.12/downl
 
 Repository: https://github.com/meithecatte/enumflags2
 
-License/notice texts: [Text 45](#license-text-45), [Text 78](#license-text-78)
+License/notice texts: [Text 61](#license-text-61), [Text 106](#license-text-106)
 
 ### enumflags2_derive 0.7.12
 
@@ -1094,7 +1414,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/enumflags2_derive/0.7.1
 
 Repository: https://github.com/meithecatte/enumflags2
 
-License/notice texts: [Text 95](#license-text-95), [Text 175](#license-text-175)
+License/notice texts: [Text 128](#license-text-128), [Text 237](#license-text-237)
 
 ### equivalent 1.0.2
 
@@ -1106,7 +1426,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/equivalent/1.0.2/downlo
 
 Repository: https://github.com/indexmap-rs/equivalent
 
-License/notice texts: [Text 94](#license-text-94), [Text 133](#license-text-133)
+License/notice texts: [Text 127](#license-text-127), [Text 181](#license-text-181)
 
 ### errno 0.3.14
 
@@ -1118,7 +1438,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/errno/0.3.14/download
 
 Repository: https://github.com/lambda-fairy/rust-errno
 
-License/notice texts: [Text 113](#license-text-113), [Text 133](#license-text-133)
+License/notice texts: [Text 151](#license-text-151), [Text 181](#license-text-181)
 
 ### event-listener 5.4.2
 
@@ -1130,7 +1450,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/event-listener/5.4.2/do
 
 Repository: https://github.com/smol-rs/event-listener
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### event-listener-strategy 0.5.4
 
@@ -1142,7 +1462,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/event-listener-strategy
 
 Repository: https://github.com/smol-rs/event-listener-strategy
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### fastrand 2.5.0
 
@@ -1154,7 +1474,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/fastrand/2.5.0/download
 
 Repository: https://github.com/smol-rs/fastrand
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### fdeflate 0.3.7
 
@@ -1166,7 +1486,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/fdeflate/0.3.7/download
 
 Repository: https://github.com/image-rs/fdeflate
 
-License/notice texts: [Text 13](#license-text-13), [Text 164](#license-text-164)
+License/notice texts: [Text 17](#license-text-17), [Text 223](#license-text-223)
+
+### ffi-opaque 2.0.1
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/ffi-opaque/2.0.1/download
+
+Repository: (not declared)
+
+License/notice texts: [Text 69](#license-text-69)
 
 ### filetime 0.2.29
 
@@ -1178,7 +1510,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/filetime/0.2.29/downloa
 
 Repository: https://github.com/alexcrichton/filetime
 
-License/notice texts: [Text 52](#license-text-52), [Text 133](#license-text-133)
+License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
+
+### find-msvc-tools 0.1.11
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/find-msvc-tools/0.1.11/download
+
+Repository: https://github.com/rust-lang/cc-rs
+
+License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
 
 ### find-msvc-tools 0.1.14
 
@@ -1190,7 +1534,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/find-msvc-tools/0.1.14/
 
 Repository: https://github.com/rust-lang/cc-rs
 
-License/notice texts: [Text 52](#license-text-52), [Text 133](#license-text-133)
+License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
 
 ### flate2 1.1.10
 
@@ -1202,7 +1546,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/flate2/1.1.10/download
 
 Repository: https://github.com/rust-lang/flate2-rs
 
-License/notice texts: [Text 4](#license-text-4), [Text 133](#license-text-133)
+License/notice texts: [Text 5](#license-text-5), [Text 181](#license-text-181)
+
+### fn-ptr 0.9.3
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/fn-ptr/0.9.3/download
+
+Repository: https://github.com/OpenByteDev/fn-ptr
+
+License/notice texts: [Text 243](#license-text-243)
 
 ### foldhash 0.2.0
 
@@ -1214,7 +1570,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/foldhash/0.2.0/download
 
 Repository: https://github.com/orlp/foldhash
 
-License/notice texts: [Text 24](#license-text-24)
+License/notice texts: [Text 32](#license-text-32)
 
 ### form_urlencoded 1.2.2
 
@@ -1226,7 +1582,21 @@ Unmodified crate source: https://crates.io/api/v1/crates/form_urlencoded/1.2.2/d
 
 Repository: https://github.com/servo/rust-url
 
-License/notice texts: [Text 29](#license-text-29), [Text 133](#license-text-133)
+License/notice texts: [Text 38](#license-text-38), [Text 181](#license-text-181)
+
+### frida-build 0.17.2
+
+Declared license: `wxWindows`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/frida-build/0.17.2/download
+
+Repository: https://github.com/frida/frida-rust
+
+License/notice texts: [Text 107](#license-text-107)
+
+License text provenance: https://raw.githubusercontent.com/frida/frida-rust/117728945e04d3eb44442e19d0e0311e56863f1e/COPYING
 
 ### fs-err 3.3.2
 
@@ -1238,7 +1608,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/fs-err/3.3.2/download
 
 Repository: https://github.com/andrewhickman/fs-err
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### futf 0.1.5
 
@@ -1250,7 +1620,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/futf/0.1.5/download
 
 Repository: https://github.com/servo/futf
 
-License/notice texts: [Text 79](#license-text-79), [Text 133](#license-text-133)
+License/notice texts: [Text 108](#license-text-108), [Text 181](#license-text-181)
 
 ### futures-channel 0.3.34
 
@@ -1262,7 +1632,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/futures-channel/0.3.34/
 
 Repository: https://github.com/rust-lang/futures-rs
 
-License/notice texts: [Text 39](#license-text-39), [Text 87](#license-text-87)
+License/notice texts: [Text 51](#license-text-51), [Text 117](#license-text-117)
 
 ### futures-core 0.3.34
 
@@ -1274,7 +1644,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/futures-core/0.3.34/dow
 
 Repository: https://github.com/rust-lang/futures-rs
 
-License/notice texts: [Text 39](#license-text-39), [Text 87](#license-text-87)
+License/notice texts: [Text 51](#license-text-51), [Text 117](#license-text-117)
 
 ### futures-io 0.3.34
 
@@ -1286,7 +1656,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/futures-io/0.3.34/downl
 
 Repository: https://github.com/rust-lang/futures-rs
 
-License/notice texts: [Text 39](#license-text-39), [Text 87](#license-text-87)
+License/notice texts: [Text 51](#license-text-51), [Text 117](#license-text-117)
 
 ### futures-lite 2.6.1
 
@@ -1298,7 +1668,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/futures-lite/2.6.1/down
 
 Repository: https://github.com/smol-rs/futures-lite
 
-License/notice texts: [Text 33](#license-text-33), [Text 82](#license-text-82), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 111](#license-text-111), [Text 181](#license-text-181)
 
 ### futures-macro 0.3.34
 
@@ -1310,7 +1680,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/futures-macro/0.3.34/do
 
 Repository: https://github.com/rust-lang/futures-rs
 
-License/notice texts: [Text 39](#license-text-39), [Text 87](#license-text-87)
+License/notice texts: [Text 51](#license-text-51), [Text 117](#license-text-117)
 
 ### futures-sink 0.3.34
 
@@ -1322,7 +1692,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/futures-sink/0.3.34/dow
 
 Repository: https://github.com/rust-lang/futures-rs
 
-License/notice texts: [Text 39](#license-text-39), [Text 87](#license-text-87)
+License/notice texts: [Text 51](#license-text-51), [Text 117](#license-text-117)
 
 ### futures-task 0.3.34
 
@@ -1334,7 +1704,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/futures-task/0.3.34/dow
 
 Repository: https://github.com/rust-lang/futures-rs
 
-License/notice texts: [Text 39](#license-text-39), [Text 87](#license-text-87)
+License/notice texts: [Text 51](#license-text-51), [Text 117](#license-text-117)
 
 ### futures-util 0.3.34
 
@@ -1346,7 +1716,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/futures-util/0.3.34/dow
 
 Repository: https://github.com/rust-lang/futures-rs
 
-License/notice texts: [Text 39](#license-text-39), [Text 87](#license-text-87)
+License/notice texts: [Text 51](#license-text-51), [Text 117](#license-text-117)
 
 ### fxhash 0.2.1
 
@@ -1358,7 +1728,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/fxhash/0.2.1/download
 
 Repository: https://github.com/cbreeden/fxhash
 
-License/notice texts: [Text 174](#license-text-174)
+License/notice texts: [Text 235](#license-text-235)
 
 License text provenance: https://www.apache.org/licenses/LICENSE-2.0.txt
 
@@ -1374,7 +1744,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/generic-array/0.14.7/do
 
 Repository: https://github.com/fizyk20/generic-array.git
 
-License/notice texts: [Text 188](#license-text-188)
+License/notice texts: [Text 257](#license-text-257)
 
 ### gethostname 1.1.0
 
@@ -1386,7 +1756,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/gethostname/1.1.0/downl
 
 Repository: https://codeberg.org/swsnr/gethostname.rs.git
 
-License/notice texts: [Text 133](#license-text-133)
+License/notice texts: [Text 181](#license-text-181)
 
 ### getrandom 0.2.17
 
@@ -1398,7 +1768,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/getrandom/0.2.17/downlo
 
 Repository: https://github.com/rust-random/getrandom
 
-License/notice texts: [Text 60](#license-text-60), [Text 140](#license-text-140)
+License/notice texts: [Text 83](#license-text-83), [Text 188](#license-text-188)
 
 ### getrandom 0.3.4
 
@@ -1410,7 +1780,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/getrandom/0.3.4/downloa
 
 Repository: https://github.com/rust-random/getrandom
 
-License/notice texts: [Text 43](#license-text-43), [Text 140](#license-text-140)
+License/notice texts: [Text 55](#license-text-55), [Text 188](#license-text-188)
 
 ### getrandom 0.4.3
 
@@ -1422,7 +1792,33 @@ Unmodified crate source: https://crates.io/api/v1/crates/getrandom/0.4.3/downloa
 
 Repository: https://github.com/rust-random/getrandom
 
-License/notice texts: [Text 68](#license-text-68), [Text 140](#license-text-140)
+License/notice texts: [Text 95](#license-text-95), [Text 188](#license-text-188)
+
+### gl_generator 0.14.0
+
+Declared license: `Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/gl_generator/0.14.0/download
+
+Repository: https://github.com/brendanzab/gl-rs/
+
+License/notice texts: [Text 235](#license-text-235)
+
+License text provenance: https://raw.githubusercontent.com/brendanzab/gl-rs/ea503e8d5fb6d73c6030e6191ce738cd3bf3433e/LICENSE
+
+### glob 0.3.4
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/glob/0.3.4/download
+
+Repository: https://github.com/rust-lang/glob
+
+License/notice texts: [Text 113](#license-text-113), [Text 181](#license-text-181)
 
 ### goblin 0.10.7
 
@@ -1434,7 +1830,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/goblin/0.10.7/download
 
 Repository: https://github.com/m4b/goblin
 
-License/notice texts: [Text 85](#license-text-85)
+License/notice texts: [Text 114](#license-text-114)
 
 ### hashbrown 0.14.5
 
@@ -1446,7 +1842,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/hashbrown/0.14.5/downlo
 
 Repository: https://github.com/rust-lang/hashbrown
 
-License/notice texts: [Text 133](#license-text-133), [Text 206](#license-text-206)
+License/notice texts: [Text 181](#license-text-181), [Text 281](#license-text-281)
 
 ### hashbrown 0.17.1
 
@@ -1458,7 +1854,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/hashbrown/0.17.1/downlo
 
 Repository: https://github.com/rust-lang/hashbrown
 
-License/notice texts: [Text 133](#license-text-133), [Text 206](#license-text-206)
+License/notice texts: [Text 181](#license-text-181), [Text 281](#license-text-281)
 
 ### heck 0.5.0
 
@@ -1470,7 +1866,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/heck/0.5.0/download
 
 Repository: https://github.com/withoutboats/heck
 
-License/notice texts: [Text 100](#license-text-100), [Text 133](#license-text-133)
+License/notice texts: [Text 137](#license-text-137), [Text 181](#license-text-181)
 
 ### hex 0.4.3
 
@@ -1482,7 +1878,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/hex/0.4.3/download
 
 Repository: https://github.com/KokaKiwi/rust-hex
 
-License/notice texts: [Text 151](#license-text-151), [Text 200](#license-text-200)
+License/notice texts: [Text 199](#license-text-199), [Text 271](#license-text-271)
 
 ### html5ever 0.35.0
 
@@ -1494,7 +1890,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/html5ever/0.35.0/downlo
 
 Repository: https://github.com/servo/html5ever
 
-License/notice texts: [Text 112](#license-text-112), [Text 133](#license-text-133)
+License/notice texts: [Text 150](#license-text-150), [Text 181](#license-text-181)
 
 ### http 1.5.0
 
@@ -1506,7 +1902,31 @@ Unmodified crate source: https://crates.io/api/v1/crates/http/1.5.0/download
 
 Repository: https://github.com/hyperium/http
 
-License/notice texts: [Text 119](#license-text-119), [Text 179](#license-text-179)
+License/notice texts: [Text 161](#license-text-161), [Text 244](#license-text-244)
+
+### http-body 1.1.0
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/http-body/1.1.0/download
+
+Repository: https://github.com/hyperium/http-body
+
+License/notice texts: [Text 44](#license-text-44)
+
+### http-body-util 0.1.5
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/http-body-util/0.1.5/download
+
+Repository: https://github.com/hyperium/http-body
+
+License/notice texts: [Text 44](#license-text-44)
 
 ### httparse 1.10.1
 
@@ -1518,7 +1938,43 @@ Unmodified crate source: https://crates.io/api/v1/crates/httparse/1.10.1/downloa
 
 Repository: https://github.com/seanmonstar/httparse
 
-License/notice texts: [Text 21](#license-text-21), [Text 133](#license-text-133)
+License/notice texts: [Text 28](#license-text-28), [Text 181](#license-text-181)
+
+### hyper 1.11.0
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/hyper/1.11.0/download
+
+Repository: https://github.com/hyperium/hyper
+
+License/notice texts: [Text 60](#license-text-60)
+
+### hyper-rustls 0.27.9
+
+Declared license: `Apache-2.0 OR ISC OR MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/hyper-rustls/0.27.9/download
+
+Repository: https://github.com/rustls/hyper-rustls
+
+License/notice texts: [Text 125](#license-text-125), [Text 140](#license-text-140), [Text 181](#license-text-181)
+
+### hyper-util 0.1.20
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/hyper-util/0.1.20/download
+
+Repository: https://github.com/hyperium/hyper-util
+
+License/notice texts: [Text 177](#license-text-177)
 
 ### icu_collections 2.3.0
 
@@ -1530,7 +1986,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/icu_collections/2.3.0/d
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
 
 ### icu_locale_core 2.3.0
 
@@ -1542,7 +1998,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/icu_locale_core/2.3.0/d
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
 
 ### icu_normalizer 2.3.0
 
@@ -1554,7 +2010,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/icu_normalizer/2.3.0/do
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
 
 ### icu_normalizer_data 2.3.0
 
@@ -1566,7 +2022,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/icu_normalizer_data/2.3
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
 
 ### icu_properties 2.3.0
 
@@ -1578,7 +2034,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/icu_properties/2.3.0/do
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
 
 ### icu_properties_data 2.3.0
 
@@ -1590,7 +2046,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/icu_properties_data/2.3
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
+
+### icu_provider 2.3.0
+
+Declared license: `Unicode-3.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/icu_provider/2.3.0/download
+
+Repository: https://github.com/unicode-org/icu4x
+
+License/notice texts: [Text 267](#license-text-267)
 
 ### icu_provider 2.3.1
 
@@ -1602,7 +2070,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/icu_provider/2.3.1/down
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
 
 ### idna 1.1.0
 
@@ -1614,7 +2082,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/idna/1.1.0/download
 
 Repository: https://github.com/servo/rust-url/
 
-License/notice texts: [Text 133](#license-text-133), [Text 148](#license-text-148)
+License/notice texts: [Text 181](#license-text-181), [Text 196](#license-text-196)
 
 ### idna_adapter 1.2.2
 
@@ -1626,7 +2094,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/idna_adapter/1.2.2/down
 
 Repository: https://github.com/hsivonen/idna_adapter
 
-License/notice texts: [Text 118](#license-text-118), [Text 133](#license-text-133)
+License/notice texts: [Text 158](#license-text-158), [Text 181](#license-text-181)
 
 ### indexmap 2.14.2
 
@@ -1638,7 +2106,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/indexmap/2.14.2/downloa
 
 Repository: https://github.com/indexmap-rs/indexmap
 
-License/notice texts: [Text 133](#license-text-133), [Text 189](#license-text-189)
+License/notice texts: [Text 181](#license-text-181), [Text 259](#license-text-259)
 
 ### indicatif 0.18.6
 
@@ -1650,7 +2118,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/indicatif/0.18.6/downlo
 
 Repository: https://github.com/console-rs/indicatif
 
-License/notice texts: [Text 55](#license-text-55)
+License/notice texts: [Text 76](#license-text-76)
+
+### ipnet 2.12.1
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/ipnet/2.12.1/download
+
+Repository: https://github.com/krisprice/ipnet
+
+License/notice texts: [Text 88](#license-text-88), [Text 153](#license-text-153)
 
 ### is-docker 0.2.0
 
@@ -1662,7 +2142,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/is-docker/0.2.0/downloa
 
 Repository: https://github.com/TheLarkInn/is-docker
 
-License/notice texts: [Text 96](#license-text-96)
+License/notice texts: [Text 129](#license-text-129)
 
 ### is-wsl 0.4.0
 
@@ -1674,7 +2154,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/is-wsl/0.4.0/download
 
 Repository: https://github.com/TheLarkInn/is-wsl
 
-License/notice texts: [Text 96](#license-text-96)
+License/notice texts: [Text 129](#license-text-129)
 
 ### is_terminal_polyfill 1.70.2
 
@@ -1686,7 +2166,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/is_terminal_polyfill/1.
 
 Repository: https://github.com/polyfill-rs/is_terminal_polyfill
 
-License/notice texts: [Text 92](#license-text-92), [Text 151](#license-text-151)
+License/notice texts: [Text 124](#license-text-124), [Text 199](#license-text-199)
+
+### itertools 0.13.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/itertools/0.13.0/download
+
+Repository: https://github.com/rust-itertools/itertools
+
+License/notice texts: [Text 133](#license-text-133), [Text 181](#license-text-181)
 
 ### itoa 1.0.18
 
@@ -1698,7 +2190,45 @@ Unmodified crate source: https://crates.io/api/v1/crates/itoa/1.0.18/download
 
 Repository: https://github.com/dtolnay/itoa
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
+
+### jobserver 0.1.35
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/jobserver/0.1.35/download
+
+Repository: https://github.com/rust-lang/jobserver-rs
+
+License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
+
+### khronos_api 3.1.0
+
+Declared license: `Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/khronos_api/3.1.0/download
+
+Repository: https://github.com/brendanzab/gl-rs/
+
+License/notice texts: [Text 235](#license-text-235)
+
+License text provenance: https://raw.githubusercontent.com/brendanzab/gl-rs/f150967b1c44ae888e6676f93f639ebc82771bdc/LICENSE
+
+### konst 0.4.3
+
+Declared license: `Zlib`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/konst/0.4.3/download
+
+Repository: https://github.com/rodrimati1992/konst/
+
+License/notice texts: [Text 126](#license-text-126)
 
 ### ksni 0.3.6
 
@@ -1710,9 +2240,21 @@ Unmodified crate source: https://crates.io/api/v1/crates/ksni/0.3.6/download
 
 Repository: https://github.com/iovxw/ksni
 
-License/notice texts: [Text 105](#license-text-105)
+License/notice texts: [Text 142](#license-text-142)
 
 License text provenance: https://raw.githubusercontent.com/iovxw/ksni/4e31ee48d91b0babb472d05936b9b68bca736b06/UNLICENSE
+
+### lazy_static 1.5.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/lazy_static/1.5.0/download
+
+Repository: https://github.com/rust-lang-nursery/lazy-static.rs
+
+License/notice texts: [Text 7](#license-text-7), [Text 181](#license-text-181)
 
 ### libbz2-rs-sys 0.2.5
 
@@ -1724,7 +2266,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/libbz2-rs-sys/0.2.5/dow
 
 Repository: https://github.com/trifectatechfoundation/libbzip2-rs
 
-License/notice texts: [Text 69](#license-text-69)
+License/notice texts: [Text 96](#license-text-96)
+
+### libc 0.2.189
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/libc/0.2.189/download
+
+Repository: https://github.com/rust-lang/libc
+
+License/notice texts: [Text 23](#license-text-23), [Text 112](#license-text-112)
 
 ### libc 0.2.190
 
@@ -1736,7 +2290,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/libc/0.2.190/download
 
 Repository: https://github.com/rust-lang/libc
 
-License/notice texts: [Text 17](#license-text-17), [Text 83](#license-text-83)
+License/notice texts: [Text 23](#license-text-23), [Text 112](#license-text-112)
 
 ### libloading 0.8.9
 
@@ -1748,7 +2302,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/libloading/0.8.9/downlo
 
 Repository: https://github.com/nagisa/rust_libloading/
 
-License/notice texts: [Text 146](#license-text-146)
+License/notice texts: [Text 194](#license-text-194)
+
+### libm 0.2.16
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/libm/0.2.16/download
+
+Repository: https://github.com/rust-lang/compiler-builtins
+
+License/notice texts: [Text 73](#license-text-73)
 
 ### linux-raw-sys 0.12.1
 
@@ -1760,7 +2326,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/linux-raw-sys/0.12.1/do
 
 Repository: https://github.com/sunfishcode/linux-raw-sys
 
-License/notice texts: [Text 33](#license-text-33), [Text 47](#license-text-47), [Text 133](#license-text-133), [Text 134](#license-text-134)
+License/notice texts: [Text 43](#license-text-43), [Text 64](#license-text-64), [Text 181](#license-text-181), [Text 182](#license-text-182)
 
 ### litemap 0.8.3
 
@@ -1772,7 +2338,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/litemap/0.8.3/download
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
 
 ### litrs 1.0.0
 
@@ -1784,7 +2350,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/litrs/1.0.0/download
 
 Repository: https://github.com/LukasKalbertodt/litrs
 
-License/notice texts: [Text 83](#license-text-83), [Text 104](#license-text-104)
+License/notice texts: [Text 112](#license-text-112), [Text 141](#license-text-141)
 
 ### lock_api 0.4.14
 
@@ -1796,7 +2362,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/lock_api/0.4.14/downloa
 
 Repository: https://github.com/Amanieu/parking_lot
 
-License/notice texts: [Text 133](#license-text-133), [Text 168](#license-text-168)
+License/notice texts: [Text 181](#license-text-181), [Text 227](#license-text-227)
+
+### log 0.4.33
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/log/0.4.33/download
+
+Repository: https://github.com/rust-lang/log
+
+License/notice texts: [Text 113](#license-text-113), [Text 181](#license-text-181)
 
 ### log 0.4.34
 
@@ -1808,7 +2386,31 @@ Unmodified crate source: https://crates.io/api/v1/crates/log/0.4.34/download
 
 Repository: https://github.com/rust-lang/log
 
-License/notice texts: [Text 84](#license-text-84), [Text 133](#license-text-133)
+License/notice texts: [Text 113](#license-text-113), [Text 181](#license-text-181)
+
+### lru-slab 0.1.2
+
+Declared license: `MIT OR Apache-2.0 OR Zlib`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/lru-slab/0.1.2/download
+
+Repository: https://github.com/Ralith/lru-slab
+
+License/notice texts: [Text 12](#license-text-12), [Text 24](#license-text-24), [Text 235](#license-text-235)
+
+### lzma-sys 0.1.20
+
+Declared license: `MIT/Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/lzma-sys/0.1.20/download
+
+Repository: https://github.com/alexcrichton/xz2-rs
+
+License/notice texts: [Text 9](#license-text-9), [Text 100](#license-text-100), [Text 118](#license-text-118), [Text 146](#license-text-146), [Text 165](#license-text-165), [Text 181](#license-text-181)
 
 ### mac 0.1.1
 
@@ -1820,7 +2422,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/mac/0.1.1/download
 
 Repository: https://github.com/reem/rust-mac.git
 
-License/notice texts: [Text 174](#license-text-174)
+License/notice texts: [Text 235](#license-text-235)
 
 License text provenance: https://www.apache.org/licenses/LICENSE-2.0.txt
 
@@ -1836,7 +2438,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/markup5ever/0.35.0/down
 
 Repository: https://github.com/servo/html5ever
 
-License/notice texts: [Text 112](#license-text-112), [Text 133](#license-text-133)
+License/notice texts: [Text 150](#license-text-150), [Text 181](#license-text-181)
 
 ### match_token 0.35.0
 
@@ -1848,7 +2450,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/match_token/0.35.0/down
 
 Repository: https://github.com/servo/html5ever
 
-License/notice texts: [Text 112](#license-text-112), [Text 133](#license-text-133)
+License/notice texts: [Text 150](#license-text-150), [Text 181](#license-text-181)
 
 License text provenance: https://raw.githubusercontent.com/servo/html5ever/6db7bbf1c4dfaecd28731950d427e40c8b911bef/LICENSE-MIT
 
@@ -1864,7 +2466,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/memchr/2.8.3/download
 
 Repository: https://github.com/BurntSushi/memchr
 
-License/notice texts: [Text 2](#license-text-2), [Text 15](#license-text-15)
+License/notice texts: [Text 3](#license-text-3), [Text 21](#license-text-21)
+
+### minimal-lexical 0.2.1
+
+Declared license: `MIT/Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/minimal-lexical/0.2.1/download
+
+Repository: https://github.com/Alexhuszagh/minimal-lexical
+
+License/notice texts: [Text 43](#license-text-43), [Text 145](#license-text-145), [Text 242](#license-text-242)
 
 ### miniz_oxide 0.8.9
 
@@ -1876,7 +2490,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/miniz_oxide/0.8.9/downl
 
 Repository: https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide
 
-License/notice texts: [Text 9](#license-text-9), [Text 13](#license-text-13), [Text 58](#license-text-58), [Text 98](#license-text-98)
+License/notice texts: [Text 13](#license-text-13), [Text 17](#license-text-17), [Text 80](#license-text-80), [Text 135](#license-text-135)
 
 ### miniz_oxide 0.9.1
 
@@ -1888,7 +2502,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/miniz_oxide/0.9.1/downl
 
 Repository: https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide
 
-License/notice texts: [Text 9](#license-text-9), [Text 13](#license-text-13), [Text 58](#license-text-58), [Text 98](#license-text-98)
+License/notice texts: [Text 13](#license-text-13), [Text 17](#license-text-17), [Text 80](#license-text-80), [Text 135](#license-text-135)
+
+### mio 1.2.2
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/mio/1.2.2/download
+
+Repository: https://github.com/tokio-rs/mio
+
+License/notice texts: [Text 11](#license-text-11)
 
 ### mio 1.2.4
 
@@ -1900,7 +2526,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/mio/1.2.4/download
 
 Repository: https://github.com/tokio-rs/mio
 
-License/notice texts: [Text 8](#license-text-8)
+License/notice texts: [Text 11](#license-text-11)
 
 ### naga 23.1.0
 
@@ -1912,7 +2538,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/naga/23.1.0/download
 
 Repository: https://github.com/gfx-rs/wgpu/tree/trunk/naga
 
-License/notice texts: [Text 135](#license-text-135), [Text 165](#license-text-165)
+License/notice texts: [Text 183](#license-text-183), [Text 224](#license-text-224)
 
 License text provenance: https://raw.githubusercontent.com/gfx-rs/wgpu/9993f5c9eceb91f9bb6b9c5c6994f35f50e5f378/LICENSE.MIT
 
@@ -1928,7 +2554,31 @@ Unmodified crate source: https://crates.io/api/v1/crates/new_debug_unreachable/1
 
 Repository: https://github.com/mbrubeck/rust-debug-unreachable
 
-License/notice texts: [Text 199](#license-text-199)
+License/notice texts: [Text 270](#license-text-270)
+
+### nohash-hasher 0.2.0
+
+Declared license: `Apache-2.0 OR MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/nohash-hasher/0.2.0/download
+
+Repository: https://github.com/paritytech/nohash-hasher
+
+License/notice texts: [Text 235](#license-text-235), [Text 258](#license-text-258)
+
+### nom 7.1.3
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/nom/7.1.3/download
+
+Repository: https://github.com/Geal/nom
+
+License/notice texts: [Text 92](#license-text-92)
 
 ### ntapi 0.4.3
 
@@ -1940,7 +2590,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/ntapi/0.4.3/download
 
 Repository: https://github.com/MSxDOS/ntapi
 
-License/notice texts: [Text 162](#license-text-162), [Text 197](#license-text-197)
+License/notice texts: [Text 221](#license-text-221), [Text 268](#license-text-268)
+
+### nu-ansi-term 0.50.3
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/nu-ansi-term/0.50.3/download
+
+Repository: https://github.com/nushell/nu-ansi-term
+
+License/notice texts: [Text 236](#license-text-236)
 
 ### num-conv 0.2.2
 
@@ -1952,7 +2614,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/num-conv/0.2.2/download
 
 Repository: https://github.com/jhpratt/num-conv
 
-License/notice texts: [Text 13](#license-text-13), [Text 182](#license-text-182)
+License/notice texts: [Text 17](#license-text-17), [Text 248](#license-text-248)
 
 ### num-derive 0.4.2
 
@@ -1964,7 +2626,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/num-derive/0.4.2/downlo
 
 Repository: https://github.com/rust-num/num-derive
 
-License/notice texts: [Text 84](#license-text-84), [Text 133](#license-text-133)
+License/notice texts: [Text 113](#license-text-113), [Text 181](#license-text-181)
 
 ### num-traits 0.2.19
 
@@ -1976,7 +2638,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/num-traits/0.2.19/downl
 
 Repository: https://github.com/rust-num/num-traits
 
-License/notice texts: [Text 84](#license-text-84), [Text 133](#license-text-133)
+License/notice texts: [Text 113](#license-text-113), [Text 181](#license-text-181)
 
 ### once_cell 1.21.4
 
@@ -1988,7 +2650,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/once_cell/1.21.4/downlo
 
 Repository: https://github.com/matklad/once_cell
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### once_cell_polyfill 1.70.2
 
@@ -2000,7 +2662,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/once_cell_polyfill/1.70
 
 Repository: https://github.com/polyfill-rs/once_cell_polyfill
 
-License/notice texts: [Text 92](#license-text-92), [Text 151](#license-text-151)
+License/notice texts: [Text 124](#license-text-124), [Text 199](#license-text-199)
 
 ### open 5.4.4
 
@@ -2012,7 +2674,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/open/5.4.4/download
 
 Repository: https://github.com/Byron/open-rs
 
-License/notice texts: [Text 186](#license-text-186)
+License/notice texts: [Text 253](#license-text-253)
 
 ### option-ext 0.2.0
 
@@ -2024,7 +2686,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/option-ext/0.2.0/downlo
 
 Repository: https://github.com/soc/option-ext.git
 
-License/notice texts: [Text 56](#license-text-56)
+License/notice texts: [Text 77](#license-text-77)
 
 ### ordered-stream 0.2.0
 
@@ -2036,7 +2698,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/ordered-stream/0.2.0/do
 
 Repository: https://github.com/danieldg/ordered-stream
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### parking 2.2.1
 
@@ -2048,7 +2710,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/parking/2.2.1/download
 
 Repository: https://github.com/smol-rs/parking
 
-License/notice texts: [Text 33](#license-text-33), [Text 127](#license-text-127), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 173](#license-text-173), [Text 181](#license-text-181)
 
 ### parking_lot 0.12.5
 
@@ -2060,7 +2722,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/parking_lot/0.12.5/down
 
 Repository: https://github.com/Amanieu/parking_lot
 
-License/notice texts: [Text 133](#license-text-133), [Text 168](#license-text-168)
+License/notice texts: [Text 181](#license-text-181), [Text 227](#license-text-227)
 
 ### parking_lot_core 0.9.12
 
@@ -2072,7 +2734,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/parking_lot_core/0.9.12
 
 Repository: https://github.com/Amanieu/parking_lot
 
-License/notice texts: [Text 133](#license-text-133), [Text 168](#license-text-168)
+License/notice texts: [Text 181](#license-text-181), [Text 227](#license-text-227)
 
 ### pastey 0.2.3
 
@@ -2084,7 +2746,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/pastey/0.2.3/download
 
 Repository: https://github.com/as1100k/pastey
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### percent-encoding 2.3.2
 
@@ -2096,7 +2758,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/percent-encoding/2.3.2/
 
 Repository: https://github.com/servo/rust-url/
 
-License/notice texts: [Text 133](#license-text-133), [Text 148](#license-text-148)
+License/notice texts: [Text 181](#license-text-181), [Text 196](#license-text-196)
 
 ### phf 0.11.3
 
@@ -2108,7 +2770,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/phf/0.11.3/download
 
 Repository: https://github.com/rust-phf/rust-phf
 
-License/notice texts: [Text 10](#license-text-10)
+License/notice texts: [Text 14](#license-text-14)
 
 ### phf_codegen 0.11.3
 
@@ -2120,7 +2782,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/phf_codegen/0.11.3/down
 
 Repository: https://github.com/rust-phf/rust-phf
 
-License/notice texts: [Text 10](#license-text-10)
+License/notice texts: [Text 14](#license-text-14)
 
 ### phf_generator 0.11.3
 
@@ -2132,7 +2794,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/phf_generator/0.11.3/do
 
 Repository: https://github.com/rust-phf/rust-phf
 
-License/notice texts: [Text 10](#license-text-10)
+License/notice texts: [Text 14](#license-text-14)
 
 ### phf_macros 0.11.3
 
@@ -2144,7 +2806,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/phf_macros/0.11.3/downl
 
 Repository: https://github.com/rust-phf/rust-phf
 
-License/notice texts: [Text 10](#license-text-10)
+License/notice texts: [Text 14](#license-text-14)
 
 ### phf_shared 0.11.3
 
@@ -2156,7 +2818,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/phf_shared/0.11.3/downl
 
 Repository: https://github.com/rust-phf/rust-phf
 
-License/notice texts: [Text 10](#license-text-10)
+License/notice texts: [Text 14](#license-text-14)
 
 ### pin-project-lite 0.2.17
 
@@ -2168,7 +2830,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/pin-project-lite/0.2.17
 
 Repository: https://github.com/taiki-e/pin-project-lite
 
-License/notice texts: [Text 13](#license-text-13), [Text 33](#license-text-33)
+License/notice texts: [Text 17](#license-text-17), [Text 43](#license-text-43)
 
 ### piper 0.2.5
 
@@ -2180,7 +2842,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/piper/0.2.5/download
 
 Repository: https://github.com/smol-rs/piper
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### pkg-config 0.3.34
 
@@ -2192,7 +2854,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/pkg-config/0.3.34/downl
 
 Repository: https://github.com/rust-lang/pkg-config-rs
 
-License/notice texts: [Text 52](#license-text-52), [Text 133](#license-text-133)
+License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
 
 ### plain 0.2.3
 
@@ -2204,7 +2866,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/plain/0.2.3/download
 
 Repository: https://github.com/randomites/plain
 
-License/notice texts: [Text 133](#license-text-133), [Text 157](#license-text-157)
+License/notice texts: [Text 181](#license-text-181), [Text 212](#license-text-212)
 
 ### png 0.18.1
 
@@ -2216,7 +2878,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/png/0.18.1/download
 
 Repository: https://github.com/image-rs/image-png
 
-License/notice texts: [Text 133](#license-text-133), [Text 187](#license-text-187)
+License/notice texts: [Text 181](#license-text-181), [Text 255](#license-text-255)
 
 ### polling 3.11.0
 
@@ -2228,7 +2890,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/polling/3.11.0/download
 
 Repository: https://github.com/smol-rs/polling
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### pollster 0.4.0
 
@@ -2240,7 +2902,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/pollster/0.4.0/download
 
 Repository: https://github.com/zesterer/pollster
 
-License/notice texts: [Text 133](#license-text-133), [Text 170](#license-text-170)
+License/notice texts: [Text 181](#license-text-181), [Text 231](#license-text-231)
 
 ### portable-atomic 1.15.0
 
@@ -2252,7 +2914,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/portable-atomic/1.15.0/
 
 Repository: https://github.com/taiki-e/portable-atomic
 
-License/notice texts: [Text 13](#license-text-13), [Text 33](#license-text-33)
+License/notice texts: [Text 17](#license-text-17), [Text 43](#license-text-43)
 
 ### potential_utf 0.1.6
 
@@ -2264,7 +2926,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/potential_utf/0.1.6/dow
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
 
 ### powerfmt 0.2.0
 
@@ -2276,7 +2938,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/powerfmt/0.2.0/download
 
 Repository: https://github.com/jhpratt/powerfmt
 
-License/notice texts: [Text 6](#license-text-6), [Text 19](#license-text-19)
+License/notice texts: [Text 8](#license-text-8), [Text 26](#license-text-26)
 
 ### pp-rs 0.2.1
 
@@ -2288,7 +2950,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/pp-rs/0.2.1/download
 
 Repository: https://github.com/Kangz/glslpp-rs
 
-License/notice texts: [Text 194](#license-text-194)
+License/notice texts: [Text 265](#license-text-265)
 
 ### ppv-lite86 0.2.21
 
@@ -2300,7 +2962,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/ppv-lite86/0.2.21/downl
 
 Repository: https://github.com/cryptocorrosion/cryptocorrosion
 
-License/notice texts: [Text 3](#license-text-3), [Text 65](#license-text-65)
+License/notice texts: [Text 4](#license-text-4), [Text 90](#license-text-90)
 
 ### precomputed-hash 0.1.1
 
@@ -2312,7 +2974,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/precomputed-hash/0.1.1/
 
 Repository: https://github.com/emilio/precomputed-hash
 
-License/notice texts: [Text 102](#license-text-102)
+License/notice texts: [Text 139](#license-text-139)
+
+### prettyplease 0.2.37
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/prettyplease/0.2.37/download
+
+Repository: https://github.com/dtolnay/prettyplease
+
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### proc-macro-crate 3.5.0
 
@@ -2324,7 +2998,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/proc-macro-crate/3.5.0/
 
 Repository: https://github.com/bkchr/proc-macro-crate
 
-License/notice texts: [Text 33](#license-text-33), [Text 116](#license-text-116)
+License/notice texts: [Text 43](#license-text-43), [Text 156](#license-text-156)
 
 ### proc-macro2 1.0.107
 
@@ -2336,7 +3010,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/proc-macro2/1.0.107/dow
 
 Repository: https://github.com/dtolnay/proc-macro2
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### quick-xml 0.41.0
 
@@ -2348,7 +3022,43 @@ Unmodified crate source: https://crates.io/api/v1/crates/quick-xml/0.41.0/downlo
 
 Repository: https://github.com/tafia/quick-xml
 
-License/notice texts: [Text 192](#license-text-192)
+License/notice texts: [Text 263](#license-text-263)
+
+### quinn 0.11.11
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/quinn/0.11.11/download
+
+Repository: https://github.com/quinn-rs/quinn
+
+License/notice texts: [Text 89](#license-text-89), [Text 221](#license-text-221)
+
+### quinn-proto 0.11.17
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/quinn-proto/0.11.17/download
+
+Repository: https://github.com/quinn-rs/quinn
+
+License/notice texts: [Text 89](#license-text-89), [Text 221](#license-text-221)
+
+### quinn-udp 0.5.15
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/quinn-udp/0.5.15/download
+
+Repository: https://github.com/quinn-rs/quinn
+
+License/notice texts: [Text 89](#license-text-89), [Text 221](#license-text-221)
 
 ### quote 1.0.47
 
@@ -2360,7 +3070,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/quote/1.0.47/download
 
 Repository: https://github.com/dtolnay/quote
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
+
+### rand 0.10.2
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/rand/0.10.2/download
+
+Repository: https://github.com/rust-random/rand
+
+License/notice texts: [Text 37](#license-text-37), [Text 67](#license-text-67), [Text 166](#license-text-166)
 
 ### rand 0.8.8
 
@@ -2372,7 +3094,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/rand/0.8.8/download
 
 Repository: https://github.com/rust-random/rand
 
-License/notice texts: [Text 28](#license-text-28), [Text 49](#license-text-49), [Text 123](#license-text-123)
+License/notice texts: [Text 37](#license-text-37), [Text 67](#license-text-67), [Text 166](#license-text-166)
 
 ### rand 0.9.5
 
@@ -2384,7 +3106,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/rand/0.9.5/download
 
 Repository: https://github.com/rust-random/rand
 
-License/notice texts: [Text 28](#license-text-28), [Text 49](#license-text-49), [Text 123](#license-text-123)
+License/notice texts: [Text 37](#license-text-37), [Text 67](#license-text-67), [Text 166](#license-text-166)
 
 ### rand_chacha 0.9.0
 
@@ -2396,7 +3118,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/rand_chacha/0.9.0/downl
 
 Repository: https://github.com/rust-random/rand
 
-License/notice texts: [Text 28](#license-text-28), [Text 49](#license-text-49), [Text 123](#license-text-123)
+License/notice texts: [Text 37](#license-text-37), [Text 67](#license-text-67), [Text 166](#license-text-166)
+
+### rand_core 0.10.1
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/rand_core/0.10.1/download
+
+Repository: https://github.com/rust-random/rand_core
+
+License/notice texts: [Text 121](#license-text-121), [Text 160](#license-text-160), [Text 168](#license-text-168)
 
 ### rand_core 0.6.4
 
@@ -2408,7 +3142,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/rand_core/0.6.4/downloa
 
 Repository: https://github.com/rust-random/rand
 
-License/notice texts: [Text 28](#license-text-28), [Text 89](#license-text-89), [Text 123](#license-text-123)
+License/notice texts: [Text 37](#license-text-37), [Text 121](#license-text-121), [Text 166](#license-text-166)
 
 ### rand_core 0.9.5
 
@@ -2420,7 +3154,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/rand_core/0.9.5/downloa
 
 Repository: https://github.com/rust-random/rand
 
-License/notice texts: [Text 28](#license-text-28), [Text 89](#license-text-89), [Text 123](#license-text-123)
+License/notice texts: [Text 37](#license-text-37), [Text 121](#license-text-121), [Text 166](#license-text-166)
+
+### rand_pcg 0.10.2
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/rand_pcg/0.10.2/download
+
+Repository: https://github.com/rust-random/rngs
+
+License/notice texts: [Text 40](#license-text-40), [Text 121](#license-text-121), [Text 166](#license-text-166)
 
 ### raw-window-handle 0.6.2
 
@@ -2432,7 +3178,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/raw-window-handle/0.6.2
 
 Repository: https://github.com/rust-windowing/raw-window-handle
 
-License/notice texts: [Text 13](#license-text-13), [Text 129](#license-text-129), [Text 144](#license-text-144)
+License/notice texts: [Text 17](#license-text-17), [Text 175](#license-text-175), [Text 192](#license-text-192)
 
 ### regex 1.13.1
 
@@ -2444,7 +3190,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/regex/1.13.1/download
 
 Repository: https://github.com/rust-lang/regex
 
-License/notice texts: [Text 84](#license-text-84), [Text 133](#license-text-133)
+License/notice texts: [Text 113](#license-text-113), [Text 181](#license-text-181)
 
 ### regex-automata 0.4.18
 
@@ -2456,7 +3202,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/regex-automata/0.4.18/d
 
 Repository: https://github.com/rust-lang/regex
 
-License/notice texts: [Text 84](#license-text-84), [Text 133](#license-text-133)
+License/notice texts: [Text 113](#license-text-113), [Text 181](#license-text-181)
 
 ### regex-syntax 0.8.11
 
@@ -2468,7 +3214,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/regex-syntax/0.8.11/dow
 
 Repository: https://github.com/rust-lang/regex
 
-License/notice texts: [Text 84](#license-text-84), [Text 97](#license-text-97), [Text 133](#license-text-133)
+License/notice texts: [Text 113](#license-text-113), [Text 131](#license-text-131), [Text 181](#license-text-181)
+
+### reqwest 0.12.28
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/reqwest/0.12.28/download
+
+Repository: https://github.com/seanmonstar/reqwest
+
+License/notice texts: [Text 65](#license-text-65), [Text 132](#license-text-132)
 
 ### rfd 0.15.4
 
@@ -2480,7 +3238,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/rfd/0.15.4/download
 
 Repository: https://github.com/PolyMeilex/rfd
 
-License/notice texts: [Text 86](#license-text-86)
+License/notice texts: [Text 116](#license-text-116)
 
 ### ring 0.17.14
 
@@ -2492,7 +3250,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/ring/0.17.14/download
 
 Repository: https://github.com/briansmith/ring
 
-License/notice texts: [Text 1](#license-text-1), [Text 91](#license-text-91), [Text 132](#license-text-132), [Text 133](#license-text-133), [Text 150](#license-text-150), [Text 191](#license-text-191)
+License/notice texts: [Text 1](#license-text-1), [Text 123](#license-text-123), [Text 179](#license-text-179), [Text 181](#license-text-181), [Text 198](#license-text-198), [Text 262](#license-text-262)
 
 ### rmp 0.8.15
 
@@ -2504,7 +3262,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/rmp/0.8.15/download
 
 Repository: https://github.com/3Hren/msgpack-rust
 
-License/notice texts: [Text 126](#license-text-126)
+License/notice texts: [Text 171](#license-text-171)
 
 ### rmp-serde 1.3.1
 
@@ -2516,7 +3274,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/rmp-serde/1.3.1/downloa
 
 Repository: https://github.com/3Hren/msgpack-rust
 
-License/notice texts: [Text 126](#license-text-126)
+License/notice texts: [Text 171](#license-text-171)
 
 ### rustc-hash 1.1.0
 
@@ -2528,7 +3286,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/rustc-hash/1.1.0/downlo
 
 Repository: https://github.com/rust-lang-nursery/rustc-hash
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### rustc-hash 2.1.3
 
@@ -2540,7 +3298,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/rustc-hash/2.1.3/downlo
 
 Repository: https://github.com/rust-lang/rustc-hash
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### rustc_version 0.4.1
 
@@ -2552,7 +3310,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/rustc_version/0.4.1/dow
 
 Repository: https://github.com/djc/rustc-version-rs
 
-License/notice texts: [Text 133](#license-text-133), [Text 168](#license-text-168)
+License/notice texts: [Text 181](#license-text-181), [Text 227](#license-text-227)
 
 ### rustix 1.1.5
 
@@ -2564,7 +3322,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/rustix/1.1.5/download
 
 Repository: https://github.com/bytecodealliance/rustix
 
-License/notice texts: [Text 33](#license-text-33), [Text 51](#license-text-51), [Text 133](#license-text-133), [Text 134](#license-text-134)
+License/notice texts: [Text 43](#license-text-43), [Text 71](#license-text-71), [Text 181](#license-text-181), [Text 182](#license-text-182)
+
+### rustls 0.23.43
+
+Declared license: `Apache-2.0 OR ISC OR MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/rustls/0.23.43/download
+
+Repository: https://github.com/rustls/rustls
+
+License/notice texts: [Text 125](#license-text-125), [Text 140](#license-text-140), [Text 181](#license-text-181)
 
 ### rustls 0.23.45
 
@@ -2576,7 +3346,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/rustls/0.23.45/download
 
 Repository: https://github.com/rustls/rustls
 
-License/notice texts: [Text 93](#license-text-93), [Text 103](#license-text-103), [Text 133](#license-text-133)
+License/notice texts: [Text 125](#license-text-125), [Text 140](#license-text-140), [Text 181](#license-text-181)
 
 ### rustls-pki-types 1.15.1
 
@@ -2588,7 +3358,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/rustls-pki-types/1.15.1
 
 Repository: https://github.com/rustls/pki-types
 
-License/notice texts: [Text 64](#license-text-64), [Text 124](#license-text-124)
+License/notice texts: [Text 87](#license-text-87), [Text 167](#license-text-167)
 
 ### rustls-webpki 0.103.15
 
@@ -2600,7 +3370,31 @@ Unmodified crate source: https://crates.io/api/v1/crates/rustls-webpki/0.103.15/
 
 Repository: https://github.com/rustls/webpki
 
-License/notice texts: [Text 76](#license-text-76)
+License/notice texts: [Text 104](#license-text-104)
+
+### rustversion 1.0.23
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/rustversion/1.0.23/download
+
+Repository: https://github.com/dtolnay/rustversion
+
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
+
+### ryu 1.0.23
+
+Declared license: `Apache-2.0 OR BSL-1.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/ryu/1.0.23/download
+
+Repository: https://github.com/dtolnay/ryu
+
+License/notice texts: [Text 112](#license-text-112), [Text 228](#license-text-228)
 
 ### scoped-tls 1.0.1
 
@@ -2612,7 +3406,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/scoped-tls/1.0.1/downlo
 
 Repository: https://github.com/alexcrichton/scoped-tls
 
-License/notice texts: [Text 52](#license-text-52), [Text 133](#license-text-133)
+License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
 
 ### scopeguard 1.2.0
 
@@ -2624,7 +3418,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/scopeguard/1.2.0/downlo
 
 Repository: https://github.com/bluss/scopeguard
 
-License/notice texts: [Text 133](#license-text-133), [Text 204](#license-text-204)
+License/notice texts: [Text 181](#license-text-181), [Text 277](#license-text-277)
 
 ### scraper 0.24.0
 
@@ -2636,7 +3430,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/scraper/0.24.0/download
 
 Repository: https://github.com/causal-agent/scraper
 
-License/notice texts: [Text 27](#license-text-27)
+License/notice texts: [Text 36](#license-text-36)
 
 ### scroll 0.13.0
 
@@ -2648,7 +3442,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/scroll/0.13.0/download
 
 Repository: https://github.com/m4b/scroll
 
-License/notice texts: [Text 90](#license-text-90)
+License/notice texts: [Text 122](#license-text-122)
 
 ### scroll_derive 0.13.2
 
@@ -2660,7 +3454,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/scroll_derive/0.13.2/do
 
 Repository: https://github.com/m4b/scroll
 
-License/notice texts: [Text 147](#license-text-147)
+License/notice texts: [Text 195](#license-text-195)
 
 ### selectors 0.31.0
 
@@ -2672,7 +3466,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/selectors/0.31.0/downlo
 
 Repository: https://github.com/servo/stylo
 
-License/notice texts: [Text 56](#license-text-56)
+License/notice texts: [Text 77](#license-text-77)
 
 License text provenance: https://www.mozilla.org/media/MPL/2.0/index.txt
 
@@ -2686,7 +3480,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/semver/1.0.28/download
 
 Repository: https://github.com/dtolnay/semver
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### serde 1.0.229
 
@@ -2698,7 +3492,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/serde/1.0.229/download
 
 Repository: https://github.com/serde-rs/serde
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### serde-error 0.1.3
 
@@ -2710,7 +3504,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/serde-error/0.1.3/downl
 
 Repository: https://github.com/Ekleog/serde-error
 
-License/notice texts: [Text 44](#license-text-44)
+License/notice texts: [Text 58](#license-text-58)
 
 ### serde_core 1.0.229
 
@@ -2722,7 +3516,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/serde_core/1.0.229/down
 
 Repository: https://github.com/serde-rs/serde
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### serde_derive 1.0.229
 
@@ -2734,7 +3528,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/serde_derive/1.0.229/do
 
 Repository: https://github.com/serde-rs/serde
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### serde_json 1.0.151
 
@@ -2746,7 +3540,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/serde_json/1.0.151/down
 
 Repository: https://github.com/serde-rs/json
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### serde_repr 0.1.21
 
@@ -2758,7 +3552,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/serde_repr/0.1.21/downl
 
 Repository: https://github.com/dtolnay/serde-repr
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
+
+### serde_urlencoded 0.7.1
+
+Declared license: `MIT/Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/serde_urlencoded/0.7.1/download
+
+Repository: https://github.com/nox/serde_urlencoded
+
+License/notice texts: [Text 112](#license-text-112), [Text 211](#license-text-211)
 
 ### servo_arc 0.4.3
 
@@ -2770,7 +3576,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/servo_arc/0.4.3/downloa
 
 Repository: https://github.com/servo/stylo
 
-License/notice texts: [Text 33](#license-text-33), [Text 133](#license-text-133)
+License/notice texts: [Text 43](#license-text-43), [Text 181](#license-text-181)
 
 ### sha1 0.10.7
 
@@ -2782,7 +3588,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/sha1/0.10.7/download
 
 Repository: https://github.com/RustCrypto/hashes
 
-License/notice texts: [Text 138](#license-text-138), [Text 152](#license-text-152)
+License/notice texts: [Text 186](#license-text-186), [Text 200](#license-text-200)
 
 ### sha1_smol 1.0.1
 
@@ -2794,7 +3600,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/sha1_smol/1.0.1/downloa
 
 Repository: https://github.com/mitsuhiko/sha1-smol
 
-License/notice texts: [Text 42](#license-text-42)
+License/notice texts: [Text 54](#license-text-54)
 
 ### sha2 0.10.9
 
@@ -2806,7 +3612,31 @@ Unmodified crate source: https://crates.io/api/v1/crates/sha2/0.10.9/download
 
 Repository: https://github.com/RustCrypto/hashes
 
-License/notice texts: [Text 138](#license-text-138), [Text 152](#license-text-152)
+License/notice texts: [Text 186](#license-text-186), [Text 200](#license-text-200)
+
+### sharded-slab 0.1.7
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/sharded-slab/0.1.7/download
+
+Repository: https://github.com/hawkw/sharded-slab
+
+License/notice texts: [Text 256](#license-text-256)
+
+### shlex 1.3.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/shlex/1.3.0/download
+
+Repository: https://github.com/comex/rust-shlex
+
+License/notice texts: [Text 85](#license-text-85), [Text 97](#license-text-97)
 
 ### shlex 2.0.1
 
@@ -2818,7 +3648,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/shlex/2.0.1/download
 
 Repository: https://github.com/comex/rust-shlex
 
-License/notice texts: [Text 62](#license-text-62), [Text 70](#license-text-70)
+License/notice texts: [Text 85](#license-text-85), [Text 97](#license-text-97)
 
 ### signal-hook-registry 1.4.8
 
@@ -2830,7 +3660,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/signal-hook-registry/1.
 
 Repository: https://github.com/vorner/signal-hook
 
-License/notice texts: [Text 67](#license-text-67), [Text 133](#license-text-133)
+License/notice texts: [Text 93](#license-text-93), [Text 181](#license-text-181)
 
 ### simd-adler32 0.3.10
 
@@ -2842,7 +3672,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/simd-adler32/0.3.10/dow
 
 Repository: https://github.com/mcountryman/simd-adler32
 
-License/notice texts: [Text 59](#license-text-59)
+License/notice texts: [Text 82](#license-text-82)
 
 ### siphasher 1.0.4
 
@@ -2854,7 +3684,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/siphasher/1.0.4/downloa
 
 Repository: https://github.com/jedisct1/rust-siphash
 
-License/notice texts: [Text 167](#license-text-167), [Text 174](#license-text-174), [Text 202](#license-text-202)
+License/notice texts: [Text 226](#license-text-226), [Text 235](#license-text-235), [Text 273](#license-text-273)
 
 ### slab 0.4.12
 
@@ -2866,7 +3696,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/slab/0.4.12/download
 
 Repository: https://github.com/tokio-rs/slab
 
-License/notice texts: [Text 122](#license-text-122)
+License/notice texts: [Text 164](#license-text-164)
+
+### smallvec 1.15.2
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/smallvec/1.15.2/download
+
+Repository: https://github.com/servo/rust-smallvec
+
+License/notice texts: [Text 15](#license-text-15), [Text 181](#license-text-181)
 
 ### smallvec 1.16.2
 
@@ -2878,7 +3720,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/smallvec/1.16.2/downloa
 
 Repository: https://github.com/servo/rust-smallvec
 
-License/notice texts: [Text 11](#license-text-11), [Text 133](#license-text-133)
+License/notice texts: [Text 15](#license-text-15), [Text 181](#license-text-181)
 
 ### socket2 0.6.5
 
@@ -2890,7 +3732,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/socket2/0.6.5/download
 
 Repository: https://github.com/rust-lang/socket2
 
-License/notice texts: [Text 52](#license-text-52), [Text 133](#license-text-133)
+License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
 
 ### socks 0.3.4
 
@@ -2902,7 +3744,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/socks/0.3.4/download
 
 Repository: https://github.com/sfackler/rust-socks
 
-License/notice texts: [Text 151](#license-text-151), [Text 155](#license-text-155)
+License/notice texts: [Text 199](#license-text-199), [Text 205](#license-text-205)
 
 ### spirv 0.3.0+sdk-1.3.268.0
 
@@ -2914,7 +3756,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/spirv/0.3.0+sdk-1.3.268
 
 Repository: https://github.com/gfx-rs/rspirv
 
-License/notice texts: [Text 174](#license-text-174)
+License/notice texts: [Text 235](#license-text-235)
 
 License text provenance: https://raw.githubusercontent.com/gfx-rs/rspirv/e91a5debc10c395b36db7721dfff6326d697a1e2/LICENSE
 
@@ -2928,7 +3770,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/stable_deref_trait/1.2.
 
 Repository: https://github.com/storyyeller/stable_deref_trait
 
-License/notice texts: [Text 53](#license-text-53), [Text 133](#license-text-133)
+License/notice texts: [Text 74](#license-text-74), [Text 181](#license-text-181)
+
+### static_vcruntime 3.0.0
+
+Declared license: `MIT OR Apache-2.0 OR Zlib`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/static_vcruntime/3.0.0/download
+
+Repository: https://github.com/ChrisDenton/static_vcruntime
+
+License/notice texts: [Text 130](#license-text-130), [Text 210](#license-text-210), [Text 215](#license-text-215), [Text 250](#license-text-250)
 
 ### string_cache 0.8.9
 
@@ -2940,7 +3794,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/string_cache/0.8.9/down
 
 Repository: https://github.com/servo/string-cache
 
-License/notice texts: [Text 81](#license-text-81), [Text 133](#license-text-133)
+License/notice texts: [Text 110](#license-text-110), [Text 181](#license-text-181)
 
 ### string_cache_codegen 0.5.4
 
@@ -2952,7 +3806,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/string_cache_codegen/0.
 
 Repository: https://github.com/servo/string-cache
 
-License/notice texts: [Text 81](#license-text-81), [Text 133](#license-text-133)
+License/notice texts: [Text 110](#license-text-110), [Text 181](#license-text-181)
 
 ### strsim 0.11.1
 
@@ -2964,7 +3818,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/strsim/0.11.1/download
 
 Repository: https://github.com/rapidfuzz/strsim-rs
 
-License/notice texts: [Text 25](#license-text-25)
+License/notice texts: [Text 34](#license-text-34)
 
 ### subtle 2.6.1
 
@@ -2976,7 +3830,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/subtle/2.6.1/download
 
 Repository: https://github.com/dalek-cryptography/subtle
 
-License/notice texts: [Text 171](#license-text-171)
+License/notice texts: [Text 232](#license-text-232)
 
 ### syn 2.0.119
 
@@ -2988,7 +3842,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/syn/2.0.119/download
 
 Repository: https://github.com/dtolnay/syn
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
+
+### syn 3.0.3
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/syn/3.0.3/download
+
+Repository: https://github.com/dtolnay/syn
+
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### syn 3.0.6
 
@@ -3000,7 +3866,31 @@ Unmodified crate source: https://crates.io/api/v1/crates/syn/3.0.6/download
 
 Repository: https://github.com/dtolnay/syn
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
+
+### sync_wrapper 1.0.2
+
+Declared license: `Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/sync_wrapper/1.0.2/download
+
+Repository: https://github.com/Actyx/sync_wrapper
+
+License/notice texts: [Text 17](#license-text-17)
+
+### synstructure 0.13.2
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/synstructure/0.13.2/download
+
+Repository: https://github.com/mystor/synstructure
+
+License/notice texts: [Text 39](#license-text-39)
 
 ### synstructure 0.14.0
 
@@ -3012,7 +3902,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/synstructure/0.14.0/dow
 
 Repository: https://github.com/mystor/synstructure
 
-License/notice texts: [Text 30](#license-text-30)
+License/notice texts: [Text 39](#license-text-39)
 
 ### tar 0.4.46
 
@@ -3024,7 +3914,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/tar/0.4.46/download
 
 Repository: https://github.com/composefs/tar-rs
 
-License/notice texts: [Text 121](#license-text-121), [Text 133](#license-text-133)
+License/notice texts: [Text 163](#license-text-163), [Text 181](#license-text-181)
 
 ### tempfile 3.27.0
 
@@ -3036,7 +3926,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/tempfile/3.27.0/downloa
 
 Repository: https://github.com/Stebalien/tempfile
 
-License/notice texts: [Text 117](#license-text-117), [Text 133](#license-text-133)
+License/notice texts: [Text 157](#license-text-157), [Text 181](#license-text-181)
 
 ### tendril 0.4.3
 
@@ -3048,7 +3938,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/tendril/0.4.3/download
 
 Repository: https://github.com/servo/tendril
 
-License/notice texts: [Text 79](#license-text-79), [Text 133](#license-text-133)
+License/notice texts: [Text 108](#license-text-108), [Text 181](#license-text-181)
 
 ### termcolor 1.4.1
 
@@ -3060,7 +3950,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/termcolor/1.4.1/downloa
 
 Repository: https://github.com/BurntSushi/termcolor
 
-License/notice texts: [Text 2](#license-text-2), [Text 15](#license-text-15)
+License/notice texts: [Text 3](#license-text-3), [Text 21](#license-text-21)
 
 ### thiserror 1.0.69
 
@@ -3072,7 +3962,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/thiserror/1.0.69/downlo
 
 Repository: https://github.com/dtolnay/thiserror
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
+
+### thiserror 2.0.20
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/thiserror/2.0.20/download
+
+Repository: https://github.com/dtolnay/thiserror
+
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### thiserror 2.0.21
 
@@ -3084,7 +3986,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/thiserror/2.0.21/downlo
 
 Repository: https://github.com/dtolnay/thiserror
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### thiserror-impl 1.0.69
 
@@ -3096,7 +3998,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/thiserror-impl/1.0.69/d
 
 Repository: https://github.com/dtolnay/thiserror
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
+
+### thiserror-impl 2.0.20
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/thiserror-impl/2.0.20/download
+
+Repository: https://github.com/dtolnay/thiserror
+
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### thiserror-impl 2.0.21
 
@@ -3108,7 +4022,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/thiserror-impl/2.0.21/d
 
 Repository: https://github.com/dtolnay/thiserror
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
+
+### thread_local 1.1.10
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/thread_local/1.1.10/download
+
+Repository: https://github.com/Amanieu/thread_local-rs
+
+License/notice texts: [Text 181](#license-text-181), [Text 227](#license-text-227)
 
 ### time 0.3.55
 
@@ -3120,7 +4046,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/time/0.3.55/download
 
 Repository: https://github.com/time-rs/time
 
-License/notice texts: [Text 13](#license-text-13), [Text 36](#license-text-36)
+License/notice texts: [Text 17](#license-text-17), [Text 47](#license-text-47)
 
 ### time-core 0.1.9
 
@@ -3132,7 +4058,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/time-core/0.1.9/downloa
 
 Repository: https://github.com/time-rs/time
 
-License/notice texts: [Text 13](#license-text-13), [Text 36](#license-text-36)
+License/notice texts: [Text 17](#license-text-17), [Text 47](#license-text-47)
 
 ### time-macros 0.2.32
 
@@ -3144,7 +4070,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/time-macros/0.2.32/down
 
 Repository: https://github.com/time-rs/time
 
-License/notice texts: [Text 13](#license-text-13), [Text 36](#license-text-36)
+License/notice texts: [Text 17](#license-text-17), [Text 47](#license-text-47)
 
 ### tinystr 0.8.4
 
@@ -3156,7 +4082,43 @@ Unmodified crate source: https://crates.io/api/v1/crates/tinystr/0.8.4/download
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
+
+### tinyvec 1.12.0
+
+Declared license: `Zlib OR Apache-2.0 OR MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/tinyvec/1.12.0/download
+
+Repository: https://github.com/Lokathor/tinyvec
+
+License/notice texts: [Text 148](#license-text-148), [Text 235](#license-text-235), [Text 278](#license-text-278)
+
+### tinyvec_macros 0.1.1
+
+Declared license: `MIT OR Apache-2.0 OR Zlib`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/tinyvec_macros/0.1.1/download
+
+Repository: https://github.com/Soveu/tinyvec_macros
+
+License/notice texts: [Text 31](#license-text-31), [Text 33](#license-text-33), [Text 120](#license-text-120)
+
+### tokio 1.53.1
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/tokio/1.53.1/download
+
+Repository: https://github.com/tokio-rs/tokio
+
+License/notice texts: [Text 48](#license-text-48)
 
 ### tokio 1.53.2
 
@@ -3168,7 +4130,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/tokio/1.53.2/download
 
 Repository: https://github.com/tokio-rs/tokio
 
-License/notice texts: [Text 37](#license-text-37)
+License/notice texts: [Text 48](#license-text-48)
 
 ### tokio-macros 2.7.2
 
@@ -3180,7 +4142,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/tokio-macros/2.7.2/down
 
 Repository: https://github.com/tokio-rs/tokio
 
-License/notice texts: [Text 12](#license-text-12)
+License/notice texts: [Text 16](#license-text-16)
+
+### tokio-rustls 0.26.4
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/tokio-rustls/0.26.4/download
+
+Repository: https://github.com/rustls/tokio-rustls
+
+License/notice texts: [Text 233](#license-text-233), [Text 246](#license-text-246)
 
 ### tokio-rustls 0.26.6
 
@@ -3192,7 +4166,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/tokio-rustls/0.26.6/dow
 
 Repository: https://github.com/rustls/tokio-rustls
 
-License/notice texts: [Text 172](#license-text-172), [Text 180](#license-text-180)
+License/notice texts: [Text 233](#license-text-233), [Text 246](#license-text-246)
 
 ### tokio-tungstenite 0.29.0
 
@@ -3204,7 +4178,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/tokio-tungstenite/0.29.
 
 Repository: https://github.com/snapview/tokio-tungstenite
 
-License/notice texts: [Text 205](#license-text-205)
+License/notice texts: [Text 279](#license-text-279)
+
+### toml 0.5.11
+
+Declared license: `MIT/Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/toml/0.5.11/download
+
+Repository: https://github.com/toml-rs/toml
+
+License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
 
 ### toml_datetime 1.1.1+spec-1.1.0
 
@@ -3216,7 +4202,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/toml_datetime/1.1.1+spe
 
 Repository: https://github.com/toml-rs/toml
 
-License/notice texts: [Text 92](#license-text-92), [Text 151](#license-text-151)
+License/notice texts: [Text 124](#license-text-124), [Text 199](#license-text-199)
 
 ### toml_edit 0.25.15+spec-1.1.0
 
@@ -3228,7 +4214,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/toml_edit/0.25.15+spec-
 
 Repository: https://github.com/toml-rs/toml
 
-License/notice texts: [Text 92](#license-text-92), [Text 151](#license-text-151)
+License/notice texts: [Text 124](#license-text-124), [Text 199](#license-text-199)
 
 ### toml_parser 1.1.3+spec-1.1.0
 
@@ -3240,7 +4226,55 @@ Unmodified crate source: https://crates.io/api/v1/crates/toml_parser/1.1.3+spec-
 
 Repository: https://github.com/toml-rs/toml
 
-License/notice texts: [Text 92](#license-text-92), [Text 151](#license-text-151)
+License/notice texts: [Text 124](#license-text-124), [Text 199](#license-text-199)
+
+### tower 0.5.3
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/tower/0.5.3/download
+
+Repository: https://github.com/tower-rs/tower
+
+License/notice texts: [Text 81](#license-text-81)
+
+### tower-http 0.6.11
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/tower-http/0.6.11/download
+
+Repository: https://github.com/tower-rs/tower-http
+
+License/notice texts: [Text 94](#license-text-94)
+
+### tower-layer 0.3.3
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/tower-layer/0.3.3/download
+
+Repository: https://github.com/tower-rs/tower
+
+License/notice texts: [Text 81](#license-text-81)
+
+### tower-service 0.3.3
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/tower-service/0.3.3/download
+
+Repository: https://github.com/tower-rs/tower
+
+License/notice texts: [Text 81](#license-text-81)
 
 ### tracing 0.1.44
 
@@ -3252,7 +4286,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/tracing/0.1.44/download
 
 Repository: https://github.com/tokio-rs/tracing
 
-License/notice texts: [Text 114](#license-text-114)
+License/notice texts: [Text 154](#license-text-154)
 
 ### tracing-attributes 0.1.31
 
@@ -3264,7 +4298,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/tracing-attributes/0.1.
 
 Repository: https://github.com/tokio-rs/tracing
 
-License/notice texts: [Text 114](#license-text-114)
+License/notice texts: [Text 154](#license-text-154)
 
 ### tracing-core 0.1.36
 
@@ -3276,7 +4310,43 @@ Unmodified crate source: https://crates.io/api/v1/crates/tracing-core/0.1.36/dow
 
 Repository: https://github.com/tokio-rs/tracing
 
-License/notice texts: [Text 72](#license-text-72), [Text 114](#license-text-114)
+License/notice texts: [Text 99](#license-text-99), [Text 154](#license-text-154)
+
+### tracing-log 0.2.0
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/tracing-log/0.2.0/download
+
+Repository: https://github.com/tokio-rs/tracing
+
+License/notice texts: [Text 154](#license-text-154)
+
+### tracing-subscriber 0.3.23
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/tracing-subscriber/0.3.23/download
+
+Repository: https://github.com/tokio-rs/tracing
+
+License/notice texts: [Text 154](#license-text-154)
+
+### try-lock 0.2.5
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/try-lock/0.2.5/download
+
+Repository: https://github.com/seanmonstar/try-lock
+
+License/notice texts: [Text 159](#license-text-159)
 
 ### tungstenite 0.29.0
 
@@ -3288,7 +4358,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/tungstenite/0.29.0/down
 
 Repository: https://github.com/snapview/tungstenite-rs
 
-License/notice texts: [Text 107](#license-text-107), [Text 133](#license-text-133)
+License/notice texts: [Text 144](#license-text-144), [Text 181](#license-text-181)
 
 ### typenum 1.20.1
 
@@ -3300,7 +4370,31 @@ Unmodified crate source: https://crates.io/api/v1/crates/typenum/1.20.1/download
 
 Repository: https://github.com/paholg/typenum
 
-License/notice texts: [Text 50](#license-text-50), [Text 54](#license-text-54), [Text 137](#license-text-137)
+License/notice texts: [Text 70](#license-text-70), [Text 75](#license-text-75), [Text 185](#license-text-185)
+
+### typewit 1.15.2
+
+Declared license: `Zlib`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/typewit/1.15.2/download
+
+Repository: https://github.com/rodrimati1992/typewit/
+
+License/notice texts: [Text 49](#license-text-49)
+
+### unicode-ident 1.0.24
+
+Declared license: `(MIT OR Apache-2.0) AND Unicode-3.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/unicode-ident/1.0.24/download
+
+Repository: https://github.com/dtolnay/unicode-ident
+
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112), [Text 272](#license-text-272)
 
 ### unicode-ident 1.0.26
 
@@ -3312,7 +4406,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/unicode-ident/1.0.26/do
 
 Repository: https://github.com/dtolnay/unicode-ident
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83), [Text 201](#license-text-201)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112), [Text 272](#license-text-272)
 
 ### unicode-width 0.1.14
 
@@ -3324,7 +4418,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/unicode-width/0.1.14/do
 
 Repository: https://github.com/unicode-rs/unicode-width
 
-License/notice texts: [Text 32](#license-text-32), [Text 100](#license-text-100), [Text 133](#license-text-133)
+License/notice texts: [Text 42](#license-text-42), [Text 137](#license-text-137), [Text 181](#license-text-181)
 
 ### unicode-width 0.2.2
 
@@ -3336,7 +4430,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/unicode-width/0.2.2/dow
 
 Repository: https://github.com/unicode-rs/unicode-width
 
-License/notice texts: [Text 32](#license-text-32), [Text 100](#license-text-100), [Text 133](#license-text-133)
+License/notice texts: [Text 42](#license-text-42), [Text 137](#license-text-137), [Text 181](#license-text-181)
 
 ### unicode-xid 0.2.6
 
@@ -3348,7 +4442,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/unicode-xid/0.2.6/downl
 
 Repository: https://github.com/unicode-rs/unicode-xid
 
-License/notice texts: [Text 32](#license-text-32), [Text 100](#license-text-100), [Text 133](#license-text-133)
+License/notice texts: [Text 42](#license-text-42), [Text 137](#license-text-137), [Text 181](#license-text-181)
 
 ### unit-prefix 0.5.2
 
@@ -3360,7 +4454,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/unit-prefix/0.5.2/downl
 
 Repository: https://codeberg.org/commons-rs/unit-prefix
 
-License/notice texts: [Text 149](#license-text-149)
+License/notice texts: [Text 197](#license-text-197)
 
 ### untrusted 0.9.0
 
@@ -3372,7 +4466,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/untrusted/0.9.0/downloa
 
 Repository: https://github.com/briansmith/untrusted
 
-License/notice texts: [Text 99](#license-text-99)
+License/notice texts: [Text 136](#license-text-136)
 
 ### ureq 3.3.0
 
@@ -3384,7 +4478,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/ureq/3.3.0/download
 
 Repository: https://github.com/algesten/ureq
 
-License/notice texts: [Text 106](#license-text-106), [Text 162](#license-text-162)
+License/notice texts: [Text 143](#license-text-143), [Text 221](#license-text-221)
 
 ### ureq-proto 0.6.4
 
@@ -3396,7 +4490,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/ureq-proto/0.6.4/downlo
 
 Repository: https://github.com/algesten/ureq-proto
 
-License/notice texts: [Text 75](#license-text-75), [Text 174](#license-text-174)
+License/notice texts: [Text 103](#license-text-103), [Text 235](#license-text-235)
 
 ### url 2.5.8
 
@@ -3408,7 +4502,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/url/2.5.8/download
 
 Repository: https://github.com/servo/rust-url
 
-License/notice texts: [Text 133](#license-text-133), [Text 148](#license-text-148)
+License/notice texts: [Text 181](#license-text-181), [Text 196](#license-text-196)
 
 ### urlencoding 2.1.3
 
@@ -3420,7 +4514,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/urlencoding/2.1.3/downl
 
 Repository: https://github.com/kornelski/rust_urlencoding
 
-License/notice texts: [Text 74](#license-text-74)
+License/notice texts: [Text 102](#license-text-102)
 
 ### utf-8 0.7.6
 
@@ -3432,7 +4526,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/utf-8/0.7.6/download
 
 Repository: https://github.com/SimonSapin/rust-utf8
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
+
+### utf16string 0.2.0
+
+Declared license: `MIT OR Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/utf16string/0.2.0/download
+
+Repository: https://github.com/getsentry/utf16string
+
+License/notice texts: [Text 181](#license-text-181), [Text 202](#license-text-202)
 
 ### utf8-zero 0.8.1
 
@@ -3444,7 +4550,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/utf8-zero/0.8.1/downloa
 
 Repository: https://github.com/algesten/utf8-zero
 
-License/notice texts: [Text 33](#license-text-33), [Text 83](#license-text-83)
+License/notice texts: [Text 43](#license-text-43), [Text 112](#license-text-112)
 
 ### utf8_iter 1.0.4
 
@@ -3456,7 +4562,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/utf8_iter/1.0.4/downloa
 
 Repository: https://github.com/hsivonen/utf8_iter
 
-License/notice texts: [Text 57](#license-text-57), [Text 160](#license-text-160), [Text 174](#license-text-174)
+License/notice texts: [Text 78](#license-text-78), [Text 218](#license-text-218), [Text 235](#license-text-235)
 
 ### utf8parse 0.2.2
 
@@ -3468,7 +4574,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/utf8parse/0.2.2/downloa
 
 Repository: https://github.com/alacritty/vte
 
-License/notice texts: [Text 83](#license-text-83), [Text 185](#license-text-185)
+License/notice texts: [Text 112](#license-text-112), [Text 252](#license-text-252)
 
 ### uuid 1.27.0
 
@@ -3480,7 +4586,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/uuid/1.27.0/download
 
 Repository: https://github.com/uuid-rs/uuid
 
-License/notice texts: [Text 61](#license-text-61), [Text 133](#license-text-133)
+License/notice texts: [Text 84](#license-text-84), [Text 181](#license-text-181)
 
 ### version_check 0.9.5
 
@@ -3492,7 +4598,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/version_check/0.9.5/dow
 
 Repository: https://github.com/SergioBenitez/version_check
 
-License/notice texts: [Text 133](#license-text-133), [Text 156](#license-text-156)
+License/notice texts: [Text 181](#license-text-181), [Text 207](#license-text-207)
+
+### want 0.3.1
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/want/0.3.1/download
+
+Repository: https://github.com/seanmonstar/want
+
+License/notice texts: [Text 170](#license-text-170)
 
 ### wayland-backend 0.3.17
 
@@ -3504,7 +4622,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/wayland-backend/0.3.17/
 
 Repository: https://github.com/smithay/wayland-rs
 
-License/notice texts: [Text 23](#license-text-23)
+License/notice texts: [Text 30](#license-text-30)
 
 ### wayland-client 0.31.15
 
@@ -3516,7 +4634,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/wayland-client/0.31.15/
 
 Repository: https://github.com/smithay/wayland-rs
 
-License/notice texts: [Text 23](#license-text-23)
+License/notice texts: [Text 30](#license-text-30)
 
 ### wayland-protocols 0.32.13
 
@@ -3528,7 +4646,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/wayland-protocols/0.32.
 
 Repository: https://github.com/smithay/wayland-rs
 
-License/notice texts: [Text 23](#license-text-23), [Text 193](#license-text-193)
+License/notice texts: [Text 30](#license-text-30), [Text 264](#license-text-264)
 
 ### wayland-protocols-wlr 0.3.12
 
@@ -3540,7 +4658,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/wayland-protocols-wlr/0
 
 Repository: https://github.com/smithay/wayland-rs
 
-License/notice texts: [Text 23](#license-text-23)
+License/notice texts: [Text 30](#license-text-30)
 
 ### wayland-scanner 0.31.11
 
@@ -3552,7 +4670,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/wayland-scanner/0.31.11
 
 Repository: https://github.com/smithay/wayland-rs
 
-License/notice texts: [Text 23](#license-text-23)
+License/notice texts: [Text 30](#license-text-30)
 
 ### wayland-sys 0.31.11
 
@@ -3564,7 +4682,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/wayland-sys/0.31.11/dow
 
 Repository: https://github.com/smithay/wayland-rs
 
-License/notice texts: [Text 23](#license-text-23)
+License/notice texts: [Text 30](#license-text-30)
 
 ### web_atoms 0.1.3
 
@@ -3576,7 +4694,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/web_atoms/0.1.3/downloa
 
 Repository: https://github.com/servo/html5ever
 
-License/notice texts: [Text 112](#license-text-112), [Text 133](#license-text-133)
+License/notice texts: [Text 150](#license-text-150), [Text 181](#license-text-181)
 
 ### webpki-roots 0.26.11
 
@@ -3588,7 +4706,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/webpki-roots/0.26.11/do
 
 Repository: https://github.com/rustls/webpki-roots
 
-License/notice texts: [Text 181](#license-text-181)
+License/notice texts: [Text 247](#license-text-247)
 
 ### webpki-roots 1.0.9
 
@@ -3600,7 +4718,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/webpki-roots/1.0.9/down
 
 Repository: https://github.com/rustls/webpki-roots
 
-License/notice texts: [Text 181](#license-text-181)
+License/notice texts: [Text 247](#license-text-247)
 
 ### winapi 0.3.9
 
@@ -3612,7 +4730,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/winapi/0.3.9/download
 
 Repository: https://github.com/retep998/winapi-rs
 
-License/notice texts: [Text 151](#license-text-151), [Text 173](#license-text-173)
+License/notice texts: [Text 199](#license-text-199), [Text 234](#license-text-234)
 
 ### windows 0.62.2
 
@@ -3624,7 +4742,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows/0.62.2/download
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows-collections 0.3.2
 
@@ -3636,7 +4754,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows-collections/0.3
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows-core 0.62.2
 
@@ -3648,7 +4766,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows-core/0.62.2/dow
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows-future 0.3.2
 
@@ -3660,7 +4778,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows-future/0.3.2/do
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows-implement 0.60.2
 
@@ -3672,7 +4790,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows-implement/0.60.
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows-interface 0.59.3
 
@@ -3684,7 +4802,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows-interface/0.59.
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows-link 0.2.1
 
@@ -3696,7 +4814,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows-link/0.2.1/down
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows-numerics 0.3.1
 
@@ -3708,7 +4826,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows-numerics/0.3.1/
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows-result 0.4.1
 
@@ -3720,7 +4838,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows-result/0.4.1/do
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows-strings 0.5.1
 
@@ -3732,7 +4850,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows-strings/0.5.1/d
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows-sys 0.59.0
 
@@ -3744,7 +4862,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows-sys/0.59.0/down
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows-sys 0.61.2
 
@@ -3756,7 +4874,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows-sys/0.61.2/down
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows-targets 0.52.6
 
@@ -3768,7 +4886,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows-targets/0.52.6/
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows-threading 0.2.1
 
@@ -3780,7 +4898,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows-threading/0.2.1
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### windows_x86_64_msvc 0.52.6
 
@@ -3792,7 +4910,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/windows_x86_64_msvc/0.5
 
 Repository: https://github.com/microsoft/windows-rs
 
-License/notice texts: [Text 158](#license-text-158), [Text 159](#license-text-159)
+License/notice texts: [Text 214](#license-text-214), [Text 217](#license-text-217)
 
 ### winnow 1.0.4
 
@@ -3804,7 +4922,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/winnow/1.0.4/download
 
 Repository: https://github.com/winnow-rs/winnow
 
-License/notice texts: [Text 169](#license-text-169)
+License/notice texts: [Text 230](#license-text-230)
+
+### winres 0.1.12
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/winres/0.1.12/download
+
+Repository: https://github.com/mxre/winres
+
+License/notice texts: [Text 68](#license-text-68)
 
 ### writeable 0.6.4
 
@@ -3816,7 +4946,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/writeable/0.6.4/downloa
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
 
 ### x11rb 0.14.0
 
@@ -3828,7 +4958,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/x11rb/0.14.0/download
 
 Repository: https://github.com/psychon/x11rb
 
-License/notice texts: [Text 136](#license-text-136), [Text 174](#license-text-174)
+License/notice texts: [Text 184](#license-text-184), [Text 235](#license-text-235)
 
 ### x11rb-protocol 0.14.0
 
@@ -3840,7 +4970,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/x11rb-protocol/0.14.0/d
 
 Repository: https://github.com/psychon/x11rb
 
-License/notice texts: [Text 136](#license-text-136), [Text 174](#license-text-174)
+License/notice texts: [Text 184](#license-text-184), [Text 235](#license-text-235)
 
 ### xattr 1.6.1
 
@@ -3852,7 +4982,43 @@ Unmodified crate source: https://crates.io/api/v1/crates/xattr/1.6.1/download
 
 Repository: https://github.com/Stebalien/xattr
 
-License/notice texts: [Text 117](#license-text-117), [Text 133](#license-text-133)
+License/notice texts: [Text 157](#license-text-157), [Text 181](#license-text-181)
+
+### xml-rs 0.8.29
+
+Declared license: `MIT`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/xml-rs/0.8.29/download
+
+Repository: https://github.com/kornelski/xml-rs
+
+License/notice texts: [Text 18](#license-text-18)
+
+### xz 0.1.0
+
+Declared license: `MIT/Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/xz/0.1.0/download
+
+Repository: https://github.com/alexcrichton/xz2-rs
+
+License/notice texts: [Text 57](#license-text-57), [Text 62](#license-text-62), [Text 235](#license-text-235)
+
+### xz2 0.1.7
+
+Declared license: `MIT/Apache-2.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/xz2/0.1.7/download
+
+Repository: https://github.com/alexcrichton/xz2-rs
+
+License/notice texts: [Text 118](#license-text-118), [Text 181](#license-text-181)
 
 ### yoke 0.8.3
 
@@ -3864,7 +5030,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/yoke/0.8.3/download
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
+
+### yoke-derive 0.8.2
+
+Declared license: `Unicode-3.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/yoke-derive/0.8.2/download
+
+Repository: https://github.com/unicode-org/icu4x
+
+License/notice texts: [Text 267](#license-text-267)
 
 ### yoke-derive 0.8.4
 
@@ -3876,7 +5054,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/yoke-derive/0.8.4/downl
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
 
 ### zbus 5.19.0
 
@@ -3888,7 +5066,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zbus/5.19.0/download
 
 Repository: https://github.com/z-galaxy/zbus/
 
-License/notice texts: [Text 38](#license-text-38)
+License/notice texts: [Text 50](#license-text-50)
 
 ### zbus_macros 5.19.0
 
@@ -3900,7 +5078,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zbus_macros/5.19.0/down
 
 Repository: https://github.com/z-galaxy/zbus/
 
-License/notice texts: [Text 38](#license-text-38)
+License/notice texts: [Text 50](#license-text-50)
 
 ### zbus_names 4.3.4
 
@@ -3912,7 +5090,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zbus_names/4.3.4/downlo
 
 Repository: https://github.com/z-galaxy/zbus/
 
-License/notice texts: [Text 38](#license-text-38)
+License/notice texts: [Text 50](#license-text-50)
 
 ### zcheapstr 1.1.0
 
@@ -3924,7 +5102,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zcheapstr/1.1.0/downloa
 
 Repository: https://github.com/z-galaxy/zcheapstr/
 
-License/notice texts: [Text 73](#license-text-73)
+License/notice texts: [Text 101](#license-text-101)
 
 ### zerocopy 0.8.59
 
@@ -3936,7 +5114,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zerocopy/0.8.59/downloa
 
 Repository: https://github.com/google/zerocopy
 
-License/notice texts: [Text 18](#license-text-18), [Text 35](#license-text-35), [Text 109](#license-text-109)
+License/notice texts: [Text 25](#license-text-25), [Text 46](#license-text-46), [Text 147](#license-text-147)
 
 ### zerocopy-derive 0.8.59
 
@@ -3948,7 +5126,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zerocopy-derive/0.8.59/
 
 Repository: https://github.com/google/zerocopy
 
-License/notice texts: [Text 18](#license-text-18), [Text 35](#license-text-35), [Text 109](#license-text-109)
+License/notice texts: [Text 25](#license-text-25), [Text 46](#license-text-46), [Text 147](#license-text-147)
 
 ### zerofrom 0.1.8
 
@@ -3960,7 +5138,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/zerofrom/0.1.8/download
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
+
+### zerofrom-derive 0.1.7
+
+Declared license: `Unicode-3.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/zerofrom-derive/0.1.7/download
+
+Repository: https://github.com/unicode-org/icu4x
+
+License/notice texts: [Text 267](#license-text-267)
 
 ### zerofrom-derive 0.1.8
 
@@ -3972,7 +5162,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zerofrom-derive/0.1.8/d
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
 
 ### zeroize 1.9.0
 
@@ -3984,7 +5174,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zeroize/1.9.0/download
 
 Repository: https://github.com/RustCrypto/utils
 
-License/notice texts: [Text 120](#license-text-120), [Text 174](#license-text-174)
+License/notice texts: [Text 162](#license-text-162), [Text 235](#license-text-235)
 
 ### zerotrie 0.2.5
 
@@ -3996,7 +5186,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zerotrie/0.2.5/download
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
 
 ### zerovec 0.11.8
 
@@ -4008,7 +5198,19 @@ Unmodified crate source: https://crates.io/api/v1/crates/zerovec/0.11.8/download
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
+
+### zerovec-derive 0.11.5
+
+Declared license: `Unicode-3.0`
+
+Source: `registry+https://github.com/rust-lang/crates.io-index`
+
+Unmodified crate source: https://crates.io/api/v1/crates/zerovec-derive/0.11.5/download
+
+Repository: https://github.com/unicode-org/icu4x
+
+License/notice texts: [Text 267](#license-text-267)
 
 ### zerovec-derive 0.11.6
 
@@ -4020,7 +5222,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zerovec-derive/0.11.6/d
 
 Repository: https://github.com/unicode-org/icu4x
 
-License/notice texts: [Text 196](#license-text-196)
+License/notice texts: [Text 267](#license-text-267)
 
 ### zlib-rs 0.6.8
 
@@ -4032,7 +5234,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zlib-rs/0.6.8/download
 
 Repository: https://github.com/trifectatechfoundation/zlib-rs
 
-License/notice texts: [Text 142](#license-text-142)
+License/notice texts: [Text 190](#license-text-190)
 
 ### zmij 1.0.23
 
@@ -4044,7 +5246,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zmij/1.0.23/download
 
 Repository: https://github.com/dtolnay/zmij
 
-License/notice texts: [Text 33](#license-text-33)
+License/notice texts: [Text 43](#license-text-43)
 
 ### zvariant 5.15.0
 
@@ -4056,7 +5258,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zvariant/5.15.0/downloa
 
 Repository: https://github.com/z-galaxy/zbus/
 
-License/notice texts: [Text 38](#license-text-38)
+License/notice texts: [Text 50](#license-text-50)
 
 ### zvariant_derive 5.15.0
 
@@ -4068,7 +5270,7 @@ Unmodified crate source: https://crates.io/api/v1/crates/zvariant_derive/5.15.0/
 
 Repository: https://github.com/z-galaxy/zbus/
 
-License/notice texts: [Text 38](#license-text-38)
+License/notice texts: [Text 50](#license-text-50)
 
 ### zvariant_utils 4.2.0
 
@@ -4080,9 +5282,238 @@ Unmodified crate source: https://crates.io/api/v1/crates/zvariant_utils/4.2.0/do
 
 Repository: https://github.com/z-galaxy/zbus/
 
-License/notice texts: [Text 33](#license-text-33)
+License/notice texts: [Text 43](#license-text-43)
 
-## Shared Rust license and notice texts
+## asdf-overlay DLL dependencies
+
+Release construction: deploy.yml runs npm ci:deploy / pnpm recursive build; packages/core/package.json invokes cargo xtask build-dll -- --release. xtask builds asdf-overlay-dll with default features, no extra feature flags, for x86_64/i686/aarch64 MSVC. Only x64/x86 DLLs are shipped by vosulay. The pinned .gitmodules is empty: no compiled submodules.
+
+Graph counts (including upstream workspace crates, build dependencies and proc macros; excluding dev-only edges):
+
+- `i686-pc-windows-msvc`: 205 crates
+- `x86_64-pc-windows-msvc`: 205 crates
+
+- **aho-corasick 1.1.5** — `Unlicense OR MIT`; [source](https://crates.io/api/v1/crates/aho-corasick/1.1.5/download); repository: https://github.com/BurntSushi/aho-corasick; [Text 3](#license-text-3), [Text 21](#license-text-21)
+- **anyhow 1.0.104** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/anyhow/1.0.104/download); repository: https://github.com/dtolnay/anyhow; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **arc-swap 1.9.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/arc-swap/1.9.2/download); repository: https://github.com/vorner/arc-swap; [Text 181](#license-text-181), [Text 280](#license-text-280)
+- **array-util 1.0.2** — `MIT`; [source](https://crates.io/api/v1/crates/array-util/1.0.2/download); repository: https://github.com/Daniel-Aaron-Bloom/array-util; [Text 79](#license-text-79)
+- **arrayvec 0.7.8** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/arrayvec/0.7.8/download); repository: https://github.com/bluss/arrayvec; [Text 91](#license-text-91), [Text 181](#license-text-181)
+- **asdf-overlay 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; [Text 17](#license-text-17), [Text 174](#license-text-174)
+- **asdf-overlay-common 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; [Text 17](#license-text-17), [Text 174](#license-text-174)
+- **asdf-overlay-dll 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; [Text 17](#license-text-17), [Text 174](#license-text-174)
+- **asdf-overlay-event 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; [Text 17](#license-text-17), [Text 174](#license-text-174)
+- **asdf-overlay-hook 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; [Text 17](#license-text-17), [Text 174](#license-text-174)
+- **asdf-overlay-vulkan-layer 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; [Text 17](#license-text-17), [Text 174](#license-text-174)
+- **asdf-overlay-window 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; [Text 17](#license-text-17), [Text 174](#license-text-174)
+- **asdf-overlay-window-event 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; [Text 17](#license-text-17), [Text 174](#license-text-174)
+- **ash 0.38.0+1.3.281** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/ash/0.38.0+1.3.281/download); repository: https://github.com/ash-rs/ash; [Text 105](#license-text-105), [Text 222](#license-text-222)
+- **async-stream 0.3.6** — `MIT`; [source](https://crates.io/api/v1/crates/async-stream/0.3.6/download); repository: https://github.com/tokio-rs/async-stream; [Text 27](#license-text-27)
+- **async-stream-impl 0.3.6** — `MIT`; [source](https://crates.io/api/v1/crates/async-stream-impl/0.3.6/download); repository: https://github.com/tokio-rs/async-stream; [Text 27](#license-text-27)
+- **atomic-waker 1.1.2** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/atomic-waker/1.1.2/download); repository: https://github.com/smol-rs/atomic-waker; [Text 43](#license-text-43), [Text 111](#license-text-111), [Text 181](#license-text-181)
+- **autocfg 1.5.1** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/autocfg/1.5.1/download); repository: https://github.com/cuviper/autocfg; [Text 53](#license-text-53), [Text 181](#license-text-181)
+- **base64 0.22.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/base64/0.22.1/download); repository: https://github.com/marshallpierce/rust-base64; [Text 19](#license-text-19), [Text 181](#license-text-181)
+- **bindgen 0.72.1** — `BSD-3-Clause`; [source](https://crates.io/api/v1/crates/bindgen/0.72.1/download); repository: https://github.com/rust-lang/rust-bindgen; [Text 216](#license-text-216)
+- **bitflags 2.13.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/bitflags/2.13.1/download); repository: https://github.com/bitflags/bitflags; [Text 113](#license-text-113), [Text 181](#license-text-181)
+- **build-target 0.8.0** — `MIT`; [source](https://crates.io/api/v1/crates/build-target/0.8.0/download); repository: https://github.com/OpenByteDev/build-target; [Text 201](#license-text-201)
+- **bytemuck 1.25.2** — `Zlib OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/bytemuck/1.25.2/download); repository: https://github.com/Lokathor/bytemuck; [Text 148](#license-text-148), [Text 176](#license-text-176), [Text 250](#license-text-250)
+- **bytemuck_derive 1.12.0** — `Zlib OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/bytemuck_derive/1.12.0/download); repository: https://github.com/Lokathor/bytemuck; [Text 148](#license-text-148), [Text 176](#license-text-176), [Text 250](#license-text-250)
+- **byteorder 1.5.0** — `Unlicense OR MIT`; [source](https://crates.io/api/v1/crates/byteorder/1.5.0/download); repository: https://github.com/BurntSushi/byteorder; [Text 3](#license-text-3), [Text 21](#license-text-21)
+- **bytes 1.12.1** — `MIT`; [source](https://crates.io/api/v1/crates/bytes/1.12.1/download); repository: https://github.com/tokio-rs/bytes; [Text 86](#license-text-86)
+- **cargo-emit 0.2.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cargo-emit/0.2.1/download); repository: https://github.com/nvzqz/cargo-emit; [Text 206](#license-text-206), [Text 235](#license-text-235)
+- **cc 1.4.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cc/1.4.4/download); repository: https://github.com/rust-lang/cc-rs; [Text 72](#license-text-72), [Text 181](#license-text-181)
+- **cexpr 0.6.0** — `Apache-2.0/MIT`; [source](https://crates.io/api/v1/crates/cexpr/0.6.0/download); repository: https://github.com/jethrogb/rust-cexpr; [Text 181](#license-text-181), [Text 240](#license-text-240)
+- **cfg-if 1.0.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cfg-if/1.0.4/download); repository: https://github.com/rust-lang/cfg-if; [Text 72](#license-text-72), [Text 181](#license-text-181)
+- **cfg-tt 0.4.0** — `MIT`; [source](https://crates.io/api/v1/crates/cfg-tt/0.4.0/download); repository: https://github.com/OpenByteDev/cfg-tt; [Text 201](#license-text-201)
+- **cfg_aliases 0.2.2** — `MIT`; [source](https://crates.io/api/v1/crates/cfg_aliases/0.2.2/download); repository: https://github.com/katharostech/cfg_aliases; [Text 63](#license-text-63)
+- **chacha20 0.10.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/chacha20/0.10.1/download); repository: https://github.com/RustCrypto/stream-ciphers; [Text 186](#license-text-186), [Text 209](#license-text-209)
+- **clang-sys 1.9.1** — `Apache-2.0`; [source](https://crates.io/api/v1/crates/clang-sys/1.9.1/download); repository: https://github.com/KyleMayes/clang-sys; [Text 235](#license-text-235)
+- **const_panic 0.2.17** — `Zlib`; [source](https://crates.io/api/v1/crates/const_panic/0.2.17/download); repository: https://github.com/rodrimati1992/const_panic/; [Text 126](#license-text-126)
+- **cpufeatures 0.3.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cpufeatures/0.3.0/download); repository: https://github.com/RustCrypto/utils; [Text 186](#license-text-186), [Text 193](#license-text-193)
+- **crossbeam-utils 0.8.22** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/crossbeam-utils/0.8.22/download); repository: https://github.com/crossbeam-rs/crossbeam; [Text 98](#license-text-98), [Text 181](#license-text-181)
+- **dashmap 6.2.1** — `MIT`; [source](https://crates.io/api/v1/crates/dashmap/6.2.1/download); repository: https://github.com/xacrimon/dashmap; [Text 29](#license-text-29)
+- **derive_more 2.1.1** — `MIT`; [source](https://crates.io/api/v1/crates/derive_more/2.1.1/download); repository: https://github.com/JelteF/derive_more; [Text 155](#license-text-155)
+- **derive_more-impl 2.1.1** — `MIT`; [source](https://crates.io/api/v1/crates/derive_more-impl/2.1.1/download); repository: https://github.com/JelteF/derive_more; [Text 155](#license-text-155)
+- **displaydoc 0.2.7** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/displaydoc/0.2.7/download); repository: https://github.com/yaahc/displaydoc; [Text 43](#license-text-43), [Text 181](#license-text-181)
+- **either 1.17.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/either/1.17.0/download); repository: https://github.com/rayon-rs/either; [Text 133](#license-text-133), [Text 181](#license-text-181)
+- **ffi-opaque 2.0.1** — `MIT`; [source](https://crates.io/api/v1/crates/ffi-opaque/2.0.1/download); repository: (not declared); [Text 69](#license-text-69)
+- **filetime 0.2.29** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/filetime/0.2.29/download); repository: https://github.com/alexcrichton/filetime; [Text 72](#license-text-72), [Text 181](#license-text-181)
+- **find-msvc-tools 0.1.11** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/find-msvc-tools/0.1.11/download); repository: https://github.com/rust-lang/cc-rs; [Text 72](#license-text-72), [Text 181](#license-text-181)
+- **fn-ptr 0.9.3** — `MIT`; [source](https://crates.io/api/v1/crates/fn-ptr/0.9.3/download); repository: https://github.com/OpenByteDev/fn-ptr; [Text 243](#license-text-243)
+- **form_urlencoded 1.2.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/form_urlencoded/1.2.2/download); repository: https://github.com/servo/rust-url; [Text 38](#license-text-38), [Text 181](#license-text-181)
+- **frida-build 0.17.2** — `wxWindows`; [source](https://crates.io/api/v1/crates/frida-build/0.17.2/download); repository: https://github.com/frida/frida-rust; [Text 107](#license-text-107)
+- **futures-channel 0.3.34** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/futures-channel/0.3.34/download); repository: https://github.com/rust-lang/futures-rs; [Text 51](#license-text-51), [Text 117](#license-text-117)
+- **futures-core 0.3.34** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/futures-core/0.3.34/download); repository: https://github.com/rust-lang/futures-rs; [Text 51](#license-text-51), [Text 117](#license-text-117)
+- **futures-io 0.3.34** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/futures-io/0.3.34/download); repository: https://github.com/rust-lang/futures-rs; [Text 51](#license-text-51), [Text 117](#license-text-117)
+- **futures-macro 0.3.34** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/futures-macro/0.3.34/download); repository: https://github.com/rust-lang/futures-rs; [Text 51](#license-text-51), [Text 117](#license-text-117)
+- **futures-sink 0.3.34** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/futures-sink/0.3.34/download); repository: https://github.com/rust-lang/futures-rs; [Text 51](#license-text-51), [Text 117](#license-text-117)
+- **futures-task 0.3.34** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/futures-task/0.3.34/download); repository: https://github.com/rust-lang/futures-rs; [Text 51](#license-text-51), [Text 117](#license-text-117)
+- **futures-util 0.3.34** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/futures-util/0.3.34/download); repository: https://github.com/rust-lang/futures-rs; [Text 51](#license-text-51), [Text 117](#license-text-117)
+- **getrandom 0.2.17** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/getrandom/0.2.17/download); repository: https://github.com/rust-random/getrandom; [Text 83](#license-text-83), [Text 188](#license-text-188)
+- **getrandom 0.4.3** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/getrandom/0.4.3/download); repository: https://github.com/rust-random/getrandom; [Text 95](#license-text-95), [Text 188](#license-text-188)
+- **gl_generator 0.14.0** — `Apache-2.0`; [source](https://crates.io/api/v1/crates/gl_generator/0.14.0/download); repository: https://github.com/brendanzab/gl-rs/; [Text 235](#license-text-235)
+- **glob 0.3.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/glob/0.3.4/download); repository: https://github.com/rust-lang/glob; [Text 113](#license-text-113), [Text 181](#license-text-181)
+- **hashbrown 0.14.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/hashbrown/0.14.5/download); repository: https://github.com/rust-lang/hashbrown; [Text 181](#license-text-181), [Text 281](#license-text-281)
+- **http 1.5.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/http/1.5.0/download); repository: https://github.com/hyperium/http; [Text 161](#license-text-161), [Text 244](#license-text-244)
+- **http-body 1.1.0** — `MIT`; [source](https://crates.io/api/v1/crates/http-body/1.1.0/download); repository: https://github.com/hyperium/http-body; [Text 44](#license-text-44)
+- **http-body-util 0.1.5** — `MIT`; [source](https://crates.io/api/v1/crates/http-body-util/0.1.5/download); repository: https://github.com/hyperium/http-body; [Text 44](#license-text-44)
+- **httparse 1.10.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/httparse/1.10.1/download); repository: https://github.com/seanmonstar/httparse; [Text 28](#license-text-28), [Text 181](#license-text-181)
+- **hyper 1.11.0** — `MIT`; [source](https://crates.io/api/v1/crates/hyper/1.11.0/download); repository: https://github.com/hyperium/hyper; [Text 60](#license-text-60)
+- **hyper-rustls 0.27.9** — `Apache-2.0 OR ISC OR MIT`; [source](https://crates.io/api/v1/crates/hyper-rustls/0.27.9/download); repository: https://github.com/rustls/hyper-rustls; [Text 125](#license-text-125), [Text 140](#license-text-140), [Text 181](#license-text-181)
+- **hyper-util 0.1.20** — `MIT`; [source](https://crates.io/api/v1/crates/hyper-util/0.1.20/download); repository: https://github.com/hyperium/hyper-util; [Text 177](#license-text-177)
+- **icu_collections 2.3.0** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/icu_collections/2.3.0/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **icu_locale_core 2.3.0** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/icu_locale_core/2.3.0/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **icu_normalizer 2.3.0** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/icu_normalizer/2.3.0/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **icu_normalizer_data 2.3.0** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/icu_normalizer_data/2.3.0/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **icu_properties 2.3.0** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/icu_properties/2.3.0/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **icu_properties_data 2.3.0** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/icu_properties_data/2.3.0/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **icu_provider 2.3.0** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/icu_provider/2.3.0/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **idna 1.1.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/idna/1.1.0/download); repository: https://github.com/servo/rust-url/; [Text 181](#license-text-181), [Text 196](#license-text-196)
+- **idna_adapter 1.2.2** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/idna_adapter/1.2.2/download); repository: https://github.com/hsivonen/idna_adapter; [Text 158](#license-text-158), [Text 181](#license-text-181)
+- **ipnet 2.12.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/ipnet/2.12.1/download); repository: https://github.com/krisprice/ipnet; [Text 88](#license-text-88), [Text 153](#license-text-153)
+- **itertools 0.13.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/itertools/0.13.0/download); repository: https://github.com/rust-itertools/itertools; [Text 133](#license-text-133), [Text 181](#license-text-181)
+- **itoa 1.0.18** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/itoa/1.0.18/download); repository: https://github.com/dtolnay/itoa; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **jobserver 0.1.35** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/jobserver/0.1.35/download); repository: https://github.com/rust-lang/jobserver-rs; [Text 72](#license-text-72), [Text 181](#license-text-181)
+- **khronos_api 3.1.0** — `Apache-2.0`; [source](https://crates.io/api/v1/crates/khronos_api/3.1.0/download); repository: https://github.com/brendanzab/gl-rs/; [Text 235](#license-text-235)
+- **konst 0.4.3** — `Zlib`; [source](https://crates.io/api/v1/crates/konst/0.4.3/download); repository: https://github.com/rodrimati1992/konst/; [Text 126](#license-text-126)
+- **lazy_static 1.5.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/lazy_static/1.5.0/download); repository: https://github.com/rust-lang-nursery/lazy-static.rs; [Text 7](#license-text-7), [Text 181](#license-text-181)
+- **libc 0.2.189** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/libc/0.2.189/download); repository: https://github.com/rust-lang/libc; [Text 23](#license-text-23), [Text 112](#license-text-112)
+- **libloading 0.8.9** — `ISC`; [source](https://crates.io/api/v1/crates/libloading/0.8.9/download); repository: https://github.com/nagisa/rust_libloading/; [Text 194](#license-text-194)
+- **libm 0.2.16** — `MIT`; [source](https://crates.io/api/v1/crates/libm/0.2.16/download); repository: https://github.com/rust-lang/compiler-builtins; [Text 73](#license-text-73)
+- **litemap 0.8.3** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/litemap/0.8.3/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **lock_api 0.4.14** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/lock_api/0.4.14/download); repository: https://github.com/Amanieu/parking_lot; [Text 181](#license-text-181), [Text 227](#license-text-227)
+- **log 0.4.33** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/log/0.4.33/download); repository: https://github.com/rust-lang/log; [Text 113](#license-text-113), [Text 181](#license-text-181)
+- **lru-slab 0.1.2** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/lru-slab/0.1.2/download); repository: https://github.com/Ralith/lru-slab; [Text 12](#license-text-12), [Text 24](#license-text-24), [Text 235](#license-text-235)
+- **lzma-sys 0.1.20** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/lzma-sys/0.1.20/download); repository: https://github.com/alexcrichton/xz2-rs; [Text 9](#license-text-9), [Text 100](#license-text-100), [Text 118](#license-text-118), [Text 146](#license-text-146), [Text 165](#license-text-165), [Text 181](#license-text-181)
+- **memchr 2.8.3** — `Unlicense OR MIT`; [source](https://crates.io/api/v1/crates/memchr/2.8.3/download); repository: https://github.com/BurntSushi/memchr; [Text 3](#license-text-3), [Text 21](#license-text-21)
+- **minimal-lexical 0.2.1** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/minimal-lexical/0.2.1/download); repository: https://github.com/Alexhuszagh/minimal-lexical; [Text 43](#license-text-43), [Text 145](#license-text-145), [Text 242](#license-text-242)
+- **mio 1.2.2** — `MIT`; [source](https://crates.io/api/v1/crates/mio/1.2.2/download); repository: https://github.com/tokio-rs/mio; [Text 11](#license-text-11)
+- **nohash-hasher 0.2.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/nohash-hasher/0.2.0/download); repository: https://github.com/paritytech/nohash-hasher; [Text 235](#license-text-235), [Text 258](#license-text-258)
+- **nom 7.1.3** — `MIT`; [source](https://crates.io/api/v1/crates/nom/7.1.3/download); repository: https://github.com/Geal/nom; [Text 92](#license-text-92)
+- **nu-ansi-term 0.50.3** — `MIT`; [source](https://crates.io/api/v1/crates/nu-ansi-term/0.50.3/download); repository: https://github.com/nushell/nu-ansi-term; [Text 236](#license-text-236)
+- **num-derive 0.4.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/num-derive/0.4.2/download); repository: https://github.com/rust-num/num-derive; [Text 113](#license-text-113), [Text 181](#license-text-181)
+- **num-traits 0.2.19** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/num-traits/0.2.19/download); repository: https://github.com/rust-num/num-traits; [Text 113](#license-text-113), [Text 181](#license-text-181)
+- **once_cell 1.21.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/once_cell/1.21.4/download); repository: https://github.com/matklad/once_cell; [Text 43](#license-text-43), [Text 181](#license-text-181)
+- **parking_lot 0.12.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/parking_lot/0.12.5/download); repository: https://github.com/Amanieu/parking_lot; [Text 181](#license-text-181), [Text 227](#license-text-227)
+- **parking_lot_core 0.9.12** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/parking_lot_core/0.9.12/download); repository: https://github.com/Amanieu/parking_lot; [Text 181](#license-text-181), [Text 227](#license-text-227)
+- **percent-encoding 2.3.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/percent-encoding/2.3.2/download); repository: https://github.com/servo/rust-url/; [Text 181](#license-text-181), [Text 196](#license-text-196)
+- **pin-project-lite 0.2.17** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/pin-project-lite/0.2.17/download); repository: https://github.com/taiki-e/pin-project-lite; [Text 17](#license-text-17), [Text 43](#license-text-43)
+- **pkg-config 0.3.34** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/pkg-config/0.3.34/download); repository: https://github.com/rust-lang/pkg-config-rs; [Text 72](#license-text-72), [Text 181](#license-text-181)
+- **potential_utf 0.1.6** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/potential_utf/0.1.6/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **prettyplease 0.2.37** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/prettyplease/0.2.37/download); repository: https://github.com/dtolnay/prettyplease; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **proc-macro2 1.0.107** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/proc-macro2/1.0.107/download); repository: https://github.com/dtolnay/proc-macro2; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **quinn 0.11.11** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/quinn/0.11.11/download); repository: https://github.com/quinn-rs/quinn; [Text 89](#license-text-89), [Text 221](#license-text-221)
+- **quinn-proto 0.11.17** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/quinn-proto/0.11.17/download); repository: https://github.com/quinn-rs/quinn; [Text 89](#license-text-89), [Text 221](#license-text-221)
+- **quinn-udp 0.5.15** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/quinn-udp/0.5.15/download); repository: https://github.com/quinn-rs/quinn; [Text 89](#license-text-89), [Text 221](#license-text-221)
+- **quote 1.0.47** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/quote/1.0.47/download); repository: https://github.com/dtolnay/quote; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **rand 0.10.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand/0.10.2/download); repository: https://github.com/rust-random/rand; [Text 37](#license-text-37), [Text 67](#license-text-67), [Text 166](#license-text-166)
+- **rand_core 0.10.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_core/0.10.1/download); repository: https://github.com/rust-random/rand_core; [Text 121](#license-text-121), [Text 160](#license-text-160), [Text 168](#license-text-168)
+- **rand_pcg 0.10.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_pcg/0.10.2/download); repository: https://github.com/rust-random/rngs; [Text 40](#license-text-40), [Text 121](#license-text-121), [Text 166](#license-text-166)
+- **regex 1.13.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/regex/1.13.1/download); repository: https://github.com/rust-lang/regex; [Text 113](#license-text-113), [Text 181](#license-text-181)
+- **regex-automata 0.4.18** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/regex-automata/0.4.18/download); repository: https://github.com/rust-lang/regex; [Text 113](#license-text-113), [Text 181](#license-text-181)
+- **regex-syntax 0.8.11** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/regex-syntax/0.8.11/download); repository: https://github.com/rust-lang/regex; [Text 113](#license-text-113), [Text 131](#license-text-131), [Text 181](#license-text-181)
+- **reqwest 0.12.28** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/reqwest/0.12.28/download); repository: https://github.com/seanmonstar/reqwest; [Text 65](#license-text-65), [Text 132](#license-text-132)
+- **ring 0.17.14** — `Apache-2.0 AND ISC`; [source](https://crates.io/api/v1/crates/ring/0.17.14/download); repository: https://github.com/briansmith/ring; [Text 1](#license-text-1), [Text 123](#license-text-123), [Text 179](#license-text-179), [Text 181](#license-text-181), [Text 198](#license-text-198), [Text 262](#license-text-262)
+- **rmp 0.8.15** — `MIT`; [source](https://crates.io/api/v1/crates/rmp/0.8.15/download); repository: https://github.com/3Hren/msgpack-rust; [Text 171](#license-text-171)
+- **rmp-serde 1.3.1** — `MIT`; [source](https://crates.io/api/v1/crates/rmp-serde/1.3.1/download); repository: https://github.com/3Hren/msgpack-rust; [Text 171](#license-text-171)
+- **rustc-hash 2.1.3** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/rustc-hash/2.1.3/download); repository: https://github.com/rust-lang/rustc-hash; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **rustc_version 0.4.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rustc_version/0.4.1/download); repository: https://github.com/djc/rustc-version-rs; [Text 181](#license-text-181), [Text 227](#license-text-227)
+- **rustls 0.23.43** — `Apache-2.0 OR ISC OR MIT`; [source](https://crates.io/api/v1/crates/rustls/0.23.43/download); repository: https://github.com/rustls/rustls; [Text 125](#license-text-125), [Text 140](#license-text-140), [Text 181](#license-text-181)
+- **rustls-pki-types 1.15.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rustls-pki-types/1.15.1/download); repository: https://github.com/rustls/pki-types; [Text 87](#license-text-87), [Text 167](#license-text-167)
+- **rustls-webpki 0.103.15** — `ISC`; [source](https://crates.io/api/v1/crates/rustls-webpki/0.103.15/download); repository: https://github.com/rustls/webpki; [Text 104](#license-text-104)
+- **rustversion 1.0.23** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rustversion/1.0.23/download); repository: https://github.com/dtolnay/rustversion; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **ryu 1.0.23** — `Apache-2.0 OR BSL-1.0`; [source](https://crates.io/api/v1/crates/ryu/1.0.23/download); repository: https://github.com/dtolnay/ryu; [Text 112](#license-text-112), [Text 228](#license-text-228)
+- **scopeguard 1.2.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/scopeguard/1.2.0/download); repository: https://github.com/bluss/scopeguard; [Text 181](#license-text-181), [Text 277](#license-text-277)
+- **semver 1.0.28** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/semver/1.0.28/download); repository: https://github.com/dtolnay/semver; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **serde 1.0.229** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/serde/1.0.229/download); repository: https://github.com/serde-rs/serde; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **serde-error 0.1.3** — `MIT`; [source](https://crates.io/api/v1/crates/serde-error/0.1.3/download); repository: https://github.com/Ekleog/serde-error; [Text 58](#license-text-58)
+- **serde_core 1.0.229** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/serde_core/1.0.229/download); repository: https://github.com/serde-rs/serde; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **serde_derive 1.0.229** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/serde_derive/1.0.229/download); repository: https://github.com/serde-rs/serde; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **serde_urlencoded 0.7.1** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/serde_urlencoded/0.7.1/download); repository: https://github.com/nox/serde_urlencoded; [Text 112](#license-text-112), [Text 211](#license-text-211)
+- **sharded-slab 0.1.7** — `MIT`; [source](https://crates.io/api/v1/crates/sharded-slab/0.1.7/download); repository: https://github.com/hawkw/sharded-slab; [Text 256](#license-text-256)
+- **shlex 1.3.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/shlex/1.3.0/download); repository: https://github.com/comex/rust-shlex; [Text 85](#license-text-85), [Text 97](#license-text-97)
+- **shlex 2.0.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/shlex/2.0.1/download); repository: https://github.com/comex/rust-shlex; [Text 85](#license-text-85), [Text 97](#license-text-97)
+- **slab 0.4.12** — `MIT`; [source](https://crates.io/api/v1/crates/slab/0.4.12/download); repository: https://github.com/tokio-rs/slab; [Text 164](#license-text-164)
+- **smallvec 1.15.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/smallvec/1.15.2/download); repository: https://github.com/servo/rust-smallvec; [Text 15](#license-text-15), [Text 181](#license-text-181)
+- **socket2 0.6.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/socket2/0.6.5/download); repository: https://github.com/rust-lang/socket2; [Text 72](#license-text-72), [Text 181](#license-text-181)
+- **stable_deref_trait 1.2.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/stable_deref_trait/1.2.1/download); repository: https://github.com/storyyeller/stable_deref_trait; [Text 74](#license-text-74), [Text 181](#license-text-181)
+- **static_vcruntime 3.0.0** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/static_vcruntime/3.0.0/download); repository: https://github.com/ChrisDenton/static_vcruntime; [Text 130](#license-text-130), [Text 210](#license-text-210), [Text 215](#license-text-215), [Text 250](#license-text-250)
+- **subtle 2.6.1** — `BSD-3-Clause`; [source](https://crates.io/api/v1/crates/subtle/2.6.1/download); repository: https://github.com/dalek-cryptography/subtle; [Text 232](#license-text-232)
+- **syn 2.0.119** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/syn/2.0.119/download); repository: https://github.com/dtolnay/syn; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **syn 3.0.3** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/syn/3.0.3/download); repository: https://github.com/dtolnay/syn; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **sync_wrapper 1.0.2** — `Apache-2.0`; [source](https://crates.io/api/v1/crates/sync_wrapper/1.0.2/download); repository: https://github.com/Actyx/sync_wrapper; [Text 17](#license-text-17)
+- **synstructure 0.13.2** — `MIT`; [source](https://crates.io/api/v1/crates/synstructure/0.13.2/download); repository: https://github.com/mystor/synstructure; [Text 39](#license-text-39)
+- **tar 0.4.46** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/tar/0.4.46/download); repository: https://github.com/composefs/tar-rs; [Text 163](#license-text-163), [Text 181](#license-text-181)
+- **thiserror 2.0.20** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror/2.0.20/download); repository: https://github.com/dtolnay/thiserror; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **thiserror-impl 2.0.20** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror-impl/2.0.20/download); repository: https://github.com/dtolnay/thiserror; [Text 43](#license-text-43), [Text 112](#license-text-112)
+- **thread_local 1.1.10** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thread_local/1.1.10/download); repository: https://github.com/Amanieu/thread_local-rs; [Text 181](#license-text-181), [Text 227](#license-text-227)
+- **tinystr 0.8.4** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/tinystr/0.8.4/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **tinyvec 1.12.0** — `Zlib OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/tinyvec/1.12.0/download); repository: https://github.com/Lokathor/tinyvec; [Text 148](#license-text-148), [Text 235](#license-text-235), [Text 278](#license-text-278)
+- **tinyvec_macros 0.1.1** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/tinyvec_macros/0.1.1/download); repository: https://github.com/Soveu/tinyvec_macros; [Text 31](#license-text-31), [Text 33](#license-text-33), [Text 120](#license-text-120)
+- **tokio 1.53.1** — `MIT`; [source](https://crates.io/api/v1/crates/tokio/1.53.1/download); repository: https://github.com/tokio-rs/tokio; [Text 48](#license-text-48)
+- **tokio-macros 2.7.2** — `MIT`; [source](https://crates.io/api/v1/crates/tokio-macros/2.7.2/download); repository: https://github.com/tokio-rs/tokio; [Text 16](#license-text-16)
+- **tokio-rustls 0.26.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/tokio-rustls/0.26.4/download); repository: https://github.com/rustls/tokio-rustls; [Text 233](#license-text-233), [Text 246](#license-text-246)
+- **toml 0.5.11** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/toml/0.5.11/download); repository: https://github.com/toml-rs/toml; [Text 72](#license-text-72), [Text 181](#license-text-181)
+- **tower 0.5.3** — `MIT`; [source](https://crates.io/api/v1/crates/tower/0.5.3/download); repository: https://github.com/tower-rs/tower; [Text 81](#license-text-81)
+- **tower-http 0.6.11** — `MIT`; [source](https://crates.io/api/v1/crates/tower-http/0.6.11/download); repository: https://github.com/tower-rs/tower-http; [Text 94](#license-text-94)
+- **tower-layer 0.3.3** — `MIT`; [source](https://crates.io/api/v1/crates/tower-layer/0.3.3/download); repository: https://github.com/tower-rs/tower; [Text 81](#license-text-81)
+- **tower-service 0.3.3** — `MIT`; [source](https://crates.io/api/v1/crates/tower-service/0.3.3/download); repository: https://github.com/tower-rs/tower; [Text 81](#license-text-81)
+- **tracing 0.1.44** — `MIT`; [source](https://crates.io/api/v1/crates/tracing/0.1.44/download); repository: https://github.com/tokio-rs/tracing; [Text 154](#license-text-154)
+- **tracing-attributes 0.1.31** — `MIT`; [source](https://crates.io/api/v1/crates/tracing-attributes/0.1.31/download); repository: https://github.com/tokio-rs/tracing; [Text 154](#license-text-154)
+- **tracing-core 0.1.36** — `MIT`; [source](https://crates.io/api/v1/crates/tracing-core/0.1.36/download); repository: https://github.com/tokio-rs/tracing; [Text 99](#license-text-99), [Text 154](#license-text-154)
+- **tracing-log 0.2.0** — `MIT`; [source](https://crates.io/api/v1/crates/tracing-log/0.2.0/download); repository: https://github.com/tokio-rs/tracing; [Text 154](#license-text-154)
+- **tracing-subscriber 0.3.23** — `MIT`; [source](https://crates.io/api/v1/crates/tracing-subscriber/0.3.23/download); repository: https://github.com/tokio-rs/tracing; [Text 154](#license-text-154)
+- **try-lock 0.2.5** — `MIT`; [source](https://crates.io/api/v1/crates/try-lock/0.2.5/download); repository: https://github.com/seanmonstar/try-lock; [Text 159](#license-text-159)
+- **typewit 1.15.2** — `Zlib`; [source](https://crates.io/api/v1/crates/typewit/1.15.2/download); repository: https://github.com/rodrimati1992/typewit/; [Text 49](#license-text-49)
+- **unicode-ident 1.0.24** — `(MIT OR Apache-2.0) AND Unicode-3.0`; [source](https://crates.io/api/v1/crates/unicode-ident/1.0.24/download); repository: https://github.com/dtolnay/unicode-ident; [Text 43](#license-text-43), [Text 112](#license-text-112), [Text 272](#license-text-272)
+- **unicode-xid 0.2.6** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/unicode-xid/0.2.6/download); repository: https://github.com/unicode-rs/unicode-xid; [Text 42](#license-text-42), [Text 137](#license-text-137), [Text 181](#license-text-181)
+- **untrusted 0.9.0** — `ISC`; [source](https://crates.io/api/v1/crates/untrusted/0.9.0/download); repository: https://github.com/briansmith/untrusted; [Text 136](#license-text-136)
+- **url 2.5.8** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/url/2.5.8/download); repository: https://github.com/servo/rust-url; [Text 181](#license-text-181), [Text 196](#license-text-196)
+- **utf16string 0.2.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/utf16string/0.2.0/download); repository: https://github.com/getsentry/utf16string; [Text 181](#license-text-181), [Text 202](#license-text-202)
+- **utf8_iter 1.0.4** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/utf8_iter/1.0.4/download); repository: https://github.com/hsivonen/utf8_iter; [Text 78](#license-text-78), [Text 218](#license-text-218), [Text 235](#license-text-235)
+- **want 0.3.1** — `MIT`; [source](https://crates.io/api/v1/crates/want/0.3.1/download); repository: https://github.com/seanmonstar/want; [Text 170](#license-text-170)
+- **webpki-roots 1.0.9** — `CDLA-Permissive-2.0`; [source](https://crates.io/api/v1/crates/webpki-roots/1.0.9/download); repository: https://github.com/rustls/webpki-roots; [Text 247](#license-text-247)
+- **winapi 0.3.9** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/winapi/0.3.9/download); repository: https://github.com/retep998/winapi-rs; [Text 199](#license-text-199), [Text 234](#license-text-234)
+- **windows 0.62.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/windows/0.62.2/download); repository: https://github.com/microsoft/windows-rs; [Text 214](#license-text-214), [Text 217](#license-text-217)
+- **windows-collections 0.3.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/windows-collections/0.3.2/download); repository: https://github.com/microsoft/windows-rs; [Text 214](#license-text-214), [Text 217](#license-text-217)
+- **windows-core 0.62.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/windows-core/0.62.2/download); repository: https://github.com/microsoft/windows-rs; [Text 214](#license-text-214), [Text 217](#license-text-217)
+- **windows-future 0.3.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/windows-future/0.3.2/download); repository: https://github.com/microsoft/windows-rs; [Text 214](#license-text-214), [Text 217](#license-text-217)
+- **windows-implement 0.60.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/windows-implement/0.60.2/download); repository: https://github.com/microsoft/windows-rs; [Text 214](#license-text-214), [Text 217](#license-text-217)
+- **windows-interface 0.59.3** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/windows-interface/0.59.3/download); repository: https://github.com/microsoft/windows-rs; [Text 214](#license-text-214), [Text 217](#license-text-217)
+- **windows-link 0.2.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/windows-link/0.2.1/download); repository: https://github.com/microsoft/windows-rs; [Text 214](#license-text-214), [Text 217](#license-text-217)
+- **windows-numerics 0.3.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/windows-numerics/0.3.1/download); repository: https://github.com/microsoft/windows-rs; [Text 214](#license-text-214), [Text 217](#license-text-217)
+- **windows-result 0.4.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/windows-result/0.4.1/download); repository: https://github.com/microsoft/windows-rs; [Text 214](#license-text-214), [Text 217](#license-text-217)
+- **windows-strings 0.5.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/windows-strings/0.5.1/download); repository: https://github.com/microsoft/windows-rs; [Text 214](#license-text-214), [Text 217](#license-text-217)
+- **windows-sys 0.61.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/windows-sys/0.61.2/download); repository: https://github.com/microsoft/windows-rs; [Text 214](#license-text-214), [Text 217](#license-text-217)
+- **windows-threading 0.2.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/windows-threading/0.2.1/download); repository: https://github.com/microsoft/windows-rs; [Text 214](#license-text-214), [Text 217](#license-text-217)
+- **winres 0.1.12** — `MIT`; [source](https://crates.io/api/v1/crates/winres/0.1.12/download); repository: https://github.com/mxre/winres; [Text 68](#license-text-68)
+- **writeable 0.6.4** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/writeable/0.6.4/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **xml-rs 0.8.29** — `MIT`; [source](https://crates.io/api/v1/crates/xml-rs/0.8.29/download); repository: https://github.com/kornelski/xml-rs; [Text 18](#license-text-18)
+- **xz 0.1.0** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/xz/0.1.0/download); repository: https://github.com/alexcrichton/xz2-rs; [Text 57](#license-text-57), [Text 62](#license-text-62), [Text 235](#license-text-235)
+- **xz2 0.1.7** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/xz2/0.1.7/download); repository: https://github.com/alexcrichton/xz2-rs; [Text 118](#license-text-118), [Text 181](#license-text-181)
+- **yoke 0.8.3** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/yoke/0.8.3/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **yoke-derive 0.8.2** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/yoke-derive/0.8.2/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **zerofrom 0.1.8** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/zerofrom/0.1.8/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **zerofrom-derive 0.1.7** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/zerofrom-derive/0.1.7/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **zeroize 1.9.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/zeroize/1.9.0/download); repository: https://github.com/RustCrypto/utils; [Text 162](#license-text-162), [Text 235](#license-text-235)
+- **zerotrie 0.2.5** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/zerotrie/0.2.5/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **zerovec 0.11.8** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/zerovec/0.11.8/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+- **zerovec-derive 0.11.5** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/zerovec-derive/0.11.5/download); repository: https://github.com/unicode-org/icu4x; [Text 267](#license-text-267)
+
+## asdf-overlay native Frida Gum devkit components
+
+crates/hook/build.rs statically links gum devkit 17.17.0. Component revisions below come from Frida 17.17.0's releng commit c9cc18138b364f691573c695e1fe47ddc4c56f26/deps.toml and Gum's ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c/meson.build. This conservatively covers Gum/GLib's Windows dependency closure, including SDK liblzma; it is not an archive-level reachability attestation. GLib's plain LGPL static-link obligations are not discharged by notices alone. XZ GPL scripts/build tooling and GLib test/documentation terms are preserved conservatively, not asserted to be shipped runtime code.
+
+Pinned dependency manifest: https://raw.githubusercontent.com/frida/releng/c9cc18138b364f691573c695e1fe47ddc4c56f26/deps.toml
+
+- **glib** revision `790ffa82e80d99fba8a3db494e46f907d560893c` — LGPL-2.1-or-later (plus per-file permissive terms); [source](https://github.com/frida/glib/tree/790ffa82e80d99fba8a3db494e46f907d560893c); [Text 10](#license-text-10), [Text 180](#license-text-180), [Text 208](#license-text-208), [Text 213](#license-text-213), [Text 249](#license-text-249), [Text 261](#license-text-261), [Text 274](#license-text-274), [Text 276](#license-text-276)
+- **capstone** revision `d536b1577fd033a31d75f48fd183aa425256cc18` — BSD-3-Clause and LLVM legacy license; [source](https://github.com/frida/capstone/tree/d536b1577fd033a31d75f48fd183aa425256cc18); [Text 56](#license-text-56), [Text 115](#license-text-115), [Text 245](#license-text-245)
+- **libffi** revision `4b75d8a1d9cf401d8a2fa16619938637ea7e7afa` — MIT (build tools separately licensed); [source](https://github.com/frida/libffi/tree/4b75d8a1d9cf401d8a2fa16619938637ea7e7afa); [Text 59](#license-text-59), [Text 254](#license-text-254)
+- **pcre2** revision `b47486922fdc3486499b310dc9cf903449700474` — BSD-3-Clause with PCRE2 exception; [source](https://github.com/frida/pcre2/tree/b47486922fdc3486499b310dc9cf903449700474); [Text 134](#license-text-134), [Text 152](#license-text-152), [Text 172](#license-text-172), [Text 219](#license-text-219)
+- **zlib** revision `171a3eacaea8b731ef1fc586e7777b77742e2a1d` — Zlib; [source](https://github.com/frida/zlib/tree/171a3eacaea8b731ef1fc586e7777b77742e2a1d); [Text 20](#license-text-20), [Text 228](#license-text-228), [Text 229](#license-text-229)
+- **xz** revision `e70f5800ab5001c9509d374dbf3e7e6b866c43fe` — Public-domain liblzma; GPL/LGPL scripts/tools not shipped; [source](https://github.com/frida/xz/tree/e70f5800ab5001c9509d374dbf3e7e6b866c43fe); [Text 9](#license-text-9), [Text 100](#license-text-100), [Text 134](#license-text-134), [Text 146](#license-text-146), [Text 165](#license-text-165)
+- **frida-gum** revision `ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c` — wxWindows-3.1 (LGPL-2.0-or-later with binary exception); [source](https://github.com/frida/frida-gum/tree/ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c); [Text 2](#license-text-2)
+
+## Shared dependency license and notice texts
 
 ### License text 1
 
@@ -4369,6 +5800,135 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ### License text 2
 
+Normalized SHA-256: `00764fcc23f0f2ac6d2619a1f9192e55176ecaaa525e76a47aaabc5d87fb087f`
+
+Used by:
+
+- **frida-gum ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c** — `wxWindows-3.1 (LGPL-2.0-or-later with binary exception)`; [source](https://github.com/frida/frida-gum/tree/ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c); repository: https://github.com/frida/frida-gum; files: `native/frida-gum/COPYING`
+
+````text
+              wxWindows Library Licence, Version 3.1
+              ======================================
+
+Copyright (c) 1998-2005 Julian Smart, Robert Roebling et al
+
+Everyone is permitted to copy and distribute verbatim copies
+of this licence document, but changing it is not allowed.
+
+                     WXWINDOWS LIBRARY LICENCE
+   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+This library is free software; you can redistribute it and/or modify it
+under the terms of the GNU Library General Public Licence as published by
+the Free Software Foundation; either version 2 of the Licence, or (at your
+option) any later version.
+
+This library is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+Licence for more details.
+
+You should have received a copy of the GNU Library General Public Licence
+along with this software, usually in a file named COPYING.LIB.  If not,
+write to the Free Software Foundation, Inc., 51 Franklin Street, Fifth
+Floor, Boston, MA 02110-1301 USA.
+
+EXCEPTION NOTICE
+
+1. As a special exception, the copyright holders of this library give
+permission for additional uses of the text contained in this release of the
+library as licenced under the wxWindows Library Licence, applying either
+version 3.1 of the Licence, or (at your option) any later version of the
+Licence as published by the copyright holders of version 3.1 of the Licence
+document.
+
+2. The exception is that you may use, copy, link, modify and distribute
+under your own terms, binary object code versions of works based on the
+Library.
+
+3. If you copy code from files distributed under the terms of the GNU
+General Public Licence or the GNU Library General Public Licence into a
+copy of this library, as this licence permits, the exception does not apply
+to the code that you add in this way.  To avoid misleading anyone as to the
+status of such modified files, you must delete this exception notice from
+such code and/or adjust the licensing conditions notice accordingly.
+
+4. If you write modifications of your own for this library, it is your
+choice whether to permit this exception to apply to your modifications.  If
+you do not wish that, you must delete the exception notice from such code
+and/or adjust the licensing conditions notice accordingly.
+
+
+Portions from https://github.com/mozilla/source-map:
+
+Copyright 2011 Mozilla Foundation and contributors
+Licensed under the New BSD license. See LICENSE or:
+http://opensource.org/licenses/BSD-3-Clause
+
+Based on the Base 64 VLQ implementation in Closure Compiler:
+https://code.google.com/p/closure-compiler/source/browse/trunk/src/com/google/debugging/sourcemap/Base64VLQ.java
+
+Copyright 2011 The Closure Compiler Authors. All rights reserved.
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+ * Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+ * Redistributions in binary form must reproduce the above
+   copyright notice, this list of conditions and the following
+   disclaimer in the documentation and/or other materials provided
+   with the distribution.
+ * Neither the name of Google Inc. nor the names of its
+   contributors may be used to endorse or promote products derived
+   from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+Portions from https://github.com/facebook/regenerator:
+
+BSD License
+
+For "regenerator" software
+
+Copyright (c) 2014, Facebook, Inc.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+ * Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+ * Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+````
+
+### License text 3
+
 Normalized SHA-256: `01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f`
 
 Used by:
@@ -4384,7 +5944,7 @@ This project is dual-licensed under the Unlicense and MIT licenses.
 You may use this code under the terms of either license.
 ````
 
-### License text 3
+### License text 4
 
 Normalized SHA-256: `0218327e7a480793ffdd4eb792379a9709e5c135c7ba267f709d6f6d4d70af0a`
 
@@ -4596,7 +6156,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 4
+### License text 5
 
 Normalized SHA-256: `025436edff4cfcdde17a5811fdea78892d8482efd1abdec5a17872d07a4f2112`
 
@@ -4632,7 +6192,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 5
+### License text 6
 
 Normalized SHA-256: `05c58f1374a0ba16711c4f60552df215d72078d374bbd245ad438388c87c3573`
 
@@ -4847,7 +6407,43 @@ Used by:
    limitations under the License.
 ````
 
-### License text 6
+### License text 7
+
+Normalized SHA-256: `0621878e61f0d0fda054bcbe02df75192c28bde1ecc8289cbd86aeba2dd72720`
+
+Used by:
+
+- **lazy_static 1.5.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/lazy_static/1.5.0/download); repository: https://github.com/rust-lang-nursery/lazy-static.rs; files: `LICENSE-MIT`
+
+````text
+Copyright (c) 2010 The Rust Project Developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 8
 
 Normalized SHA-256: `070dbc7dda03a29296f2d58bdb9b7331af90f2abc9f31df22875d1eabaf29852`
 
@@ -4877,13 +6473,90 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 7
+### License text 9
+
+Normalized SHA-256: `073060d5c1ee43ee909638ed7dba5547161ab264f7859cfddef8a213ef6b67fe`
+
+Used by:
+
+- **lzma-sys 0.1.20** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/lzma-sys/0.1.20/download); repository: https://github.com/alexcrichton/xz2-rs; files: `xz-5.2/COPYING`
+- **xz e70f5800ab5001c9509d374dbf3e7e6b866c43fe** — `Public-domain liblzma; GPL/LGPL scripts/tools not shipped`; [source](https://github.com/frida/xz/tree/e70f5800ab5001c9509d374dbf3e7e6b866c43fe); repository: https://github.com/frida/xz; files: `native/xz/COPYING`
+
+````text
+
+XZ Utils Licensing
+==================
+
+    Different licenses apply to different files in this package. Here
+    is a rough summary of which licenses apply to which parts of this
+    package (but check the individual files to be sure!):
+
+      - liblzma is in the public domain.
+
+      - xz, xzdec, and lzmadec command line tools are in the public
+        domain unless GNU getopt_long had to be compiled and linked
+        in from the lib directory. The getopt_long code is under
+        GNU LGPLv2.1+.
+
+      - The scripts to grep, diff, and view compressed files have been
+        adapted from gzip. These scripts and their documentation are
+        under GNU GPLv2+.
+
+      - All the documentation in the doc directory and most of the
+        XZ Utils specific documentation files in other directories
+        are in the public domain.
+
+      - Translated messages are in the public domain.
+
+      - The build system contains public domain files, and files that
+        are under GNU GPLv2+ or GNU GPLv3+. None of these files end up
+        in the binaries being built.
+
+      - Test files and test code in the tests directory, and debugging
+        utilities in the debug directory are in the public domain.
+
+      - The extra directory may contain public domain files, and files
+        that are under various free software licenses.
+
+    You can do whatever you want with the files that have been put into
+    the public domain. If you find public domain legally problematic,
+    take the previous sentence as a license grant. If you still find
+    the lack of copyright legally problematic, you have too many
+    lawyers.
+
+    As usual, this software is provided "as is", without any warranty.
+
+    If you copy significant amounts of public domain code from XZ Utils
+    into your project, acknowledging this somewhere in your software is
+    polite (especially if it is proprietary, non-free software), but
+    naturally it is not legally required. Here is an example of a good
+    notice to put into "about box" or into documentation:
+
+        This software includes code from XZ Utils <https://tukaani.org/xz/>.
+
+    The following license texts are included in the following files:
+      - COPYING.LGPLv2.1: GNU Lesser General Public License version 2.1
+      - COPYING.GPLv2: GNU General Public License version 2
+      - COPYING.GPLv3: GNU General Public License version 3
+
+    Note that the toolchain (compiler, linker etc.) may add some code
+    pieces that are copyrighted. Thus, it is possible that e.g. liblzma
+    binary wouldn't actually be in the public domain in its entirety
+    even though it contains no copyrighted code from the XZ Utils source
+    package.
+
+    If you have questions, don't hesitate to ask the author(s) for more
+    information.
+````
+
+### License text 10
 
 Normalized SHA-256: `074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff`
 
 Used by:
 
 - **document-features 0.2.12** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/document-features/0.2.12/download); repository: https://github.com/slint-ui/document-features; files: `LICENSE-APACHE`
+- **glib 790ffa82e80d99fba8a3db494e46f907d560893c** — `LGPL-2.1-or-later (plus per-file permissive terms)`; [source](https://github.com/frida/glib/tree/790ffa82e80d99fba8a3db494e46f907d560893c); repository: https://github.com/frida/glib; files: `native/glib/LICENSES/Apache-2.0.txt`
 
 ````text
 Apache License
@@ -4961,12 +6634,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 8
+### License text 11
 
 Normalized SHA-256: `07919255c7e04793d8ea760d6c2ce32d19f9ff02bdbdde3ce90b1e1880929a9b`
 
 Used by:
 
+- **mio 1.2.2** — `MIT`; [source](https://crates.io/api/v1/crates/mio/1.2.2/download); repository: https://github.com/tokio-rs/mio; files: `LICENSE`
 - **mio 1.2.4** — `MIT`; [source](https://crates.io/api/v1/crates/mio/1.2.4/download); repository: https://github.com/tokio-rs/mio; files: `LICENSE`
 
 ````text
@@ -4991,7 +6665,37 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### License text 9
+### License text 12
+
+Normalized SHA-256: `09785877275ffada6c371b652a30e95c26b435126fc0fc62f1bc2d72171f80a4`
+
+Used by:
+
+- **lru-slab 0.1.2** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/lru-slab/0.1.2/download); repository: https://github.com/Ralith/lru-slab; files: `LICENSE-ZLIB`
+
+````text
+Copyright (c) 2024 The lru-slab Developers
+
+This software is provided 'as-is', without any express or implied warranty. In
+no event will the authors be held liable for any damages arising from the use of
+this software.
+
+Permission is granted to anyone to use this software for any purpose, including
+commercial applications, and to alter it and redistribute it freely, subject to
+the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not claim
+   that you wrote the original software. If you use this software in a product, an
+   acknowledgment in the product documentation would be appreciated but is not
+   required.
+
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+
+3. This notice may not be removed or altered from any source distribution.
+````
+
+### License text 13
 
 Normalized SHA-256: `0a54e647fe54104658b5e563c04c6f9edf251710e47bce692e0bd990a4ddaa39`
 
@@ -5017,7 +6721,7 @@ Permission is granted to anyone to use this software for any purpose, including 
 3. This notice may not be removed or altered from any source distribution.
 ````
 
-### License text 10
+### License text 14
 
 Normalized SHA-256: `0ab4d106b6faac07fb6a051815fd1b4d862d730895e2d7d7358c2f13565e7a38`
 
@@ -5052,12 +6756,13 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 11
+### License text 15
 
 Normalized SHA-256: `0b28172679e0009b655da42797c03fd163a3379d5cfa67ba1f1655e974a2a1a9`
 
 Used by:
 
+- **smallvec 1.15.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/smallvec/1.15.2/download); repository: https://github.com/servo/rust-smallvec; files: `LICENSE-MIT`
 - **smallvec 1.16.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/smallvec/1.16.2/download); repository: https://github.com/servo/rust-smallvec; files: `LICENSE-MIT`
 
 ````text
@@ -5088,7 +6793,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 12
+### License text 16
 
 Normalized SHA-256: `0b83dc40cba89b9922bb84b0a9c7d2768ce37c1d7e138b7424fd4549915778c9`
 
@@ -5121,12 +6826,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 13
+### License text 17
 
 Normalized SHA-256: `0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594`
 
 Used by:
 
+- **asdf-overlay 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-APACHE`
+- **asdf-overlay-common 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-APACHE`
+- **asdf-overlay-dll 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-APACHE`
+- **asdf-overlay-event 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-APACHE`
+- **asdf-overlay-hook 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-APACHE`
+- **asdf-overlay-vulkan-layer 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-APACHE`
+- **asdf-overlay-window 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-APACHE`
+- **asdf-overlay-window-event 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-APACHE`
 - **fdeflate 0.3.7** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/fdeflate/0.3.7/download); repository: https://github.com/image-rs/fdeflate; files: `LICENSE-APACHE`
 - **miniz_oxide 0.8.9** — `MIT OR Zlib OR Apache-2.0`; [source](https://crates.io/api/v1/crates/miniz_oxide/0.8.9/download); repository: https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide; files: `LICENSE-APACHE.md`
 - **miniz_oxide 0.9.1** — `MIT OR Zlib OR Apache-2.0`; [source](https://crates.io/api/v1/crates/miniz_oxide/0.9.1/download); repository: https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide; files: `LICENSE-APACHE.md`
@@ -5134,6 +6847,7 @@ Used by:
 - **pin-project-lite 0.2.17** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/pin-project-lite/0.2.17/download); repository: https://github.com/taiki-e/pin-project-lite; files: `LICENSE-APACHE`
 - **portable-atomic 1.15.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/portable-atomic/1.15.0/download); repository: https://github.com/taiki-e/portable-atomic; files: `LICENSE-APACHE`
 - **raw-window-handle 0.6.2** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/raw-window-handle/0.6.2/download); repository: https://github.com/rust-windowing/raw-window-handle; files: `LICENSE-APACHE.md`
+- **sync_wrapper 1.0.2** — `Apache-2.0`; [source](https://crates.io/api/v1/crates/sync_wrapper/1.0.2/download); repository: https://github.com/Actyx/sync_wrapper; files: `LICENSE`
 - **time 0.3.55** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/time/0.3.55/download); repository: https://github.com/time-rs/time; files: `LICENSE-Apache`
 - **time-core 0.1.9** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/time-core/0.1.9/download); repository: https://github.com/time-rs/time; files: `LICENSE-Apache`
 - **time-macros 0.2.32** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/time-macros/0.2.32/download); repository: https://github.com/time-rs/time; files: `LICENSE-Apache`
@@ -5318,7 +7032,39 @@ Used by:
    END OF TERMS AND CONDITIONS
 ````
 
-### License text 14
+### License text 18
+
+Normalized SHA-256: `0dc18d924dc0a5f41172a393012843a5eaaef338e795b3645da9cc3b6068220b`
+
+Used by:
+
+- **xml-rs 0.8.29** — `MIT`; [source](https://crates.io/api/v1/crates/xml-rs/0.8.29/download); repository: https://github.com/kornelski/xml-rs; files: `LICENSE`
+
+````text
+The MIT License (MIT)
+
+Copyright (c) 2014 Vladimir Matveev
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+````
+
+### License text 19
 
 Normalized SHA-256: `0dd882e53de11566d50f8e8e2d5a651bcf3fabee4987d70f306233cf39094ba7`
 
@@ -5350,7 +7096,40 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### License text 15
+### License text 20
+
+Normalized SHA-256: `0f854f426019c475697e17f1b0fa638270f6e700bc756d9bfe50d17268bd3281`
+
+Used by:
+
+- **zlib 171a3eacaea8b731ef1fc586e7777b77742e2a1d** — `Zlib`; [source](https://github.com/frida/zlib/tree/171a3eacaea8b731ef1fc586e7777b77742e2a1d); repository: https://github.com/frida/zlib; files: `native/zlib/LICENSE`
+
+````text
+Copyright notice:
+
+ (C) 1995-2024 Jean-loup Gailly and Mark Adler
+
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any damages
+  arising from the use of this software.
+
+  Permission is granted to anyone to use this software for any purpose,
+  including commercial applications, and to alter it and redistribute it
+  freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software
+     in a product, an acknowledgment in the product documentation would be
+     appreciated but is not required.
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source distribution.
+
+  Jean-loup Gailly        Mark Adler
+  jloup@gzip.org          madler@alumni.caltech.edu
+````
+
+### License text 21
 
 Normalized SHA-256: `0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f`
 
@@ -5385,7 +7164,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### License text 16
+### License text 22
 
 Normalized SHA-256: `11955c617c19899b5c36d78c916739d1686f2e7ad8e3cec684c2f0f73b0db950`
 
@@ -5415,12 +7194,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 17
+### License text 23
 
 Normalized SHA-256: `123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e`
 
 Used by:
 
+- **libc 0.2.189** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/libc/0.2.189/download); repository: https://github.com/rust-lang/libc; files: `LICENSE-MIT`
 - **libc 0.2.190** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/libc/0.2.190/download); repository: https://github.com/rust-lang/libc; files: `LICENSE-MIT`
 
 ````text
@@ -5451,7 +7231,25 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 18
+### License text 24
+
+Normalized SHA-256: `1466d9b4f3a59bb8997fc8d5fa977ce3f6a24bb2358793c09bfdf007039f6486`
+
+Used by:
+
+- **lru-slab 0.1.2** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/lru-slab/0.1.2/download); repository: https://github.com/Ralith/lru-slab; files: `LICENSE-MIT`
+
+````text
+Copyright (c) 2024 The lru-slab Developers
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+````
+
+### License text 25
 
 Normalized SHA-256: `1520f0253bb05bbfc841b827fe6440172f0513b4a890f720c9de1665a07c21e8`
 
@@ -5664,7 +7462,7 @@ Used by:
    limitations under the License.
 ````
 
-### License text 19
+### License text 26
 
 Normalized SHA-256: `155420c6403d4e0fca34105e3c03fdd6939b64c393c7ec6f95f5b72c5474eab0`
 
@@ -5877,7 +7675,7 @@ Used by:
    limitations under the License.
 ````
 
-### License text 20
+### License text 27
 
 Normalized SHA-256: `157d381f6304eba77459fc10dfb5b1b22fc0d04e384a32865f32d8e67a34c0eb`
 
@@ -5940,7 +7738,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 21
+### License text 28
 
 Normalized SHA-256: `1626f2c950cee975b5809748e288468141d09aa420314c7c9b35e6e62b772b2d`
 
@@ -5970,7 +7768,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### License text 22
+### License text 29
 
 Normalized SHA-256: `16692e8cee4aa06e3913787497eba2d47c42002014136f5da67be6ee640e28a3`
 
@@ -6002,7 +7800,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 23
+### License text 30
 
 Normalized SHA-256: `1cb6f4dee8c649f175736380495f0af0c753c87f22d50931692968bb24bf2161`
 
@@ -6037,7 +7835,219 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### License text 24
+### License text 31
+
+Normalized SHA-256: `1cdc81fa44119bd4ea2c08ae5c635df952bafacd0e5e4dba002c62d1c4c6fb1b`
+
+Used by:
+
+- **tinyvec_macros 0.1.1** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/tinyvec_macros/0.1.1/download); repository: https://github.com/Soveu/tinyvec_macros; files: `LICENSE-APACHE.md`
+
+````text
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright 2020 Tomasz "Soveu" Marx
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+````
+
+### License text 32
 
 Normalized SHA-256: `1d4c38d56650edc2c673cadbec74bec14db1fe8f2f10f4e3477dcbb49563be40`
 
@@ -6067,7 +8077,39 @@ the following restrictions:
 3. This notice may not be removed or altered from any source distribution.
 ````
 
-### License text 25
+### License text 33
+
+Normalized SHA-256: `1dd8eca0f83669e75fa119e34fb9e1be9d16e3e9b6368962b8019db6e8ae5f7b`
+
+Used by:
+
+- **tinyvec_macros 0.1.1** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/tinyvec_macros/0.1.1/download); repository: https://github.com/Soveu/tinyvec_macros; files: `LICENSE-MIT.md`
+
+````text
+MIT License
+
+Copyright (c) 2020 Soveu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+````
+
+### License text 34
 
 Normalized SHA-256: `1e697ce8d21401fbf1bddd9b5c3fd4c4c79ae1e3bdf51f81761c85e11d5a89cd`
 
@@ -6101,7 +8143,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 26
+### License text 35
 
 Normalized SHA-256: `1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5`
 
@@ -6487,7 +8529,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
   defined by the Mozilla Public License, v. 2.0.
 ````
 
-### License text 27
+### License text 36
 
 Normalized SHA-256: `1f485f0d6125658861351e3d6084ea90fefe78f89450be9915044b7c56d5a75a`
 
@@ -6513,12 +8555,13 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ````
 
-### License text 28
+### License text 37
 
 Normalized SHA-256: `209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b`
 
 Used by:
 
+- **rand 0.10.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand/0.10.2/download); repository: https://github.com/rust-random/rand; files: `LICENSE-MIT`
 - **rand 0.8.8** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand/0.8.8/download); repository: https://github.com/rust-random/rand; files: `LICENSE-MIT`
 - **rand 0.9.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand/0.9.5/download); repository: https://github.com/rust-random/rand; files: `LICENSE-MIT`
 - **rand_chacha 0.9.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_chacha/0.9.0/download); repository: https://github.com/rust-random/rand; files: `LICENSE-MIT`
@@ -6554,7 +8597,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 29
+### License text 38
 
 Normalized SHA-256: `20c7855c364d57ea4c97889a5e8d98470a9952dade37bd9248b9a54431670e5e`
 
@@ -6590,12 +8633,13 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 30
+### License text 39
 
 Normalized SHA-256: `219920e865eee70b7dcfc948a86b099e7f4fe2de01bcca2ca9a20c0a033f2b59`
 
 Used by:
 
+- **synstructure 0.13.2** — `MIT`; [source](https://crates.io/api/v1/crates/synstructure/0.13.2/download); repository: https://github.com/mystor/synstructure; files: `LICENSE`
 - **synstructure 0.14.0** — `MIT`; [source](https://crates.io/api/v1/crates/synstructure/0.14.0/download); repository: https://github.com/mystor/synstructure; files: `LICENSE`
 
 ````text
@@ -6608,7 +8652,44 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 31
+### License text 40
+
+Normalized SHA-256: `2234e3cefee876aeb686ad89e978bdb07bf118a1186ab1cf161bcdf69d4b4f57`
+
+Used by:
+
+- **rand_pcg 0.10.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_pcg/0.10.2/download); repository: https://github.com/rust-random/rngs; files: `LICENSE-MIT`
+
+````text
+Copyright (c) 2014-2017 Melissa O'Neill and PCG Project contributors
+Copyright 2018 Developers of the Rand project
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 41
 
 Normalized SHA-256: `231c837c45eb53f108fb48929e488965bc4fcc14e9ea21d35f50e6b99d98685b`
 
@@ -6638,7 +8719,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 32
+### License text 42
 
 Normalized SHA-256: `23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d`
 
@@ -6658,7 +8739,7 @@ notice may not be copied, modified, or distributed except
 according to those terms.
 ````
 
-### License text 33
+### License text 43
 
 Normalized SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
 
@@ -6691,6 +8772,7 @@ Used by:
 - **futures-lite 2.6.1** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/futures-lite/2.6.1/download); repository: https://github.com/smol-rs/futures-lite; files: `LICENSE-MIT`
 - **itoa 1.0.18** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/itoa/1.0.18/download); repository: https://github.com/dtolnay/itoa; files: `LICENSE-MIT`
 - **linux-raw-sys 0.12.1** — `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/linux-raw-sys/0.12.1/download); repository: https://github.com/sunfishcode/linux-raw-sys; files: `LICENSE-MIT`
+- **minimal-lexical 0.2.1** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/minimal-lexical/0.2.1/download); repository: https://github.com/Alexhuszagh/minimal-lexical; files: `LICENSE-MIT`
 - **once_cell 1.21.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/once_cell/1.21.4/download); repository: https://github.com/matklad/once_cell; files: `LICENSE-MIT`
 - **ordered-stream 0.2.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/ordered-stream/0.2.0/download); repository: https://github.com/danieldg/ordered-stream; files: `LICENSE-MIT`
 - **parking 2.2.1** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/parking/2.2.1/download); repository: https://github.com/smol-rs/parking; files: `LICENSE-MIT`
@@ -6699,12 +8781,14 @@ Used by:
 - **piper 0.2.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/piper/0.2.5/download); repository: https://github.com/smol-rs/piper; files: `LICENSE-MIT`
 - **polling 3.11.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/polling/3.11.0/download); repository: https://github.com/smol-rs/polling; files: `LICENSE-MIT`
 - **portable-atomic 1.15.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/portable-atomic/1.15.0/download); repository: https://github.com/taiki-e/portable-atomic; files: `LICENSE-MIT`
+- **prettyplease 0.2.37** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/prettyplease/0.2.37/download); repository: https://github.com/dtolnay/prettyplease; files: `LICENSE-MIT`
 - **proc-macro-crate 3.5.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/proc-macro-crate/3.5.0/download); repository: https://github.com/bkchr/proc-macro-crate; files: `LICENSE-MIT`
 - **proc-macro2 1.0.107** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/proc-macro2/1.0.107/download); repository: https://github.com/dtolnay/proc-macro2; files: `LICENSE-MIT`
 - **quote 1.0.47** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/quote/1.0.47/download); repository: https://github.com/dtolnay/quote; files: `LICENSE-MIT`
 - **rustc-hash 1.1.0** — `Apache-2.0/MIT`; [source](https://crates.io/api/v1/crates/rustc-hash/1.1.0/download); repository: https://github.com/rust-lang-nursery/rustc-hash; files: `LICENSE-MIT`
 - **rustc-hash 2.1.3** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/rustc-hash/2.1.3/download); repository: https://github.com/rust-lang/rustc-hash; files: `LICENSE-MIT`
 - **rustix 1.1.5** — `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/rustix/1.1.5/download); repository: https://github.com/bytecodealliance/rustix; files: `LICENSE-MIT`
+- **rustversion 1.0.23** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rustversion/1.0.23/download); repository: https://github.com/dtolnay/rustversion; files: `LICENSE-MIT`
 - **semver 1.0.28** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/semver/1.0.28/download); repository: https://github.com/dtolnay/semver; files: `LICENSE-MIT`
 - **serde 1.0.229** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/serde/1.0.229/download); repository: https://github.com/serde-rs/serde; files: `LICENSE-MIT`
 - **serde_core 1.0.229** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/serde_core/1.0.229/download); repository: https://github.com/serde-rs/serde; files: `LICENSE-MIT`
@@ -6713,11 +8797,15 @@ Used by:
 - **serde_repr 0.1.21** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/serde_repr/0.1.21/download); repository: https://github.com/dtolnay/serde-repr; files: `LICENSE-MIT`
 - **servo_arc 0.4.3** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/servo_arc/0.4.3/download); repository: https://github.com/servo/stylo; files: `LICENSE-MIT`
 - **syn 2.0.119** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/syn/2.0.119/download); repository: https://github.com/dtolnay/syn; files: `LICENSE-MIT`
+- **syn 3.0.3** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/syn/3.0.3/download); repository: https://github.com/dtolnay/syn; files: `LICENSE-MIT`
 - **syn 3.0.6** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/syn/3.0.6/download); repository: https://github.com/dtolnay/syn; files: `LICENSE-MIT`
 - **thiserror 1.0.69** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror/1.0.69/download); repository: https://github.com/dtolnay/thiserror; files: `LICENSE-MIT`
+- **thiserror 2.0.20** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror/2.0.20/download); repository: https://github.com/dtolnay/thiserror; files: `LICENSE-MIT`
 - **thiserror 2.0.21** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror/2.0.21/download); repository: https://github.com/dtolnay/thiserror; files: `LICENSE-MIT`
 - **thiserror-impl 1.0.69** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror-impl/1.0.69/download); repository: https://github.com/dtolnay/thiserror; files: `LICENSE-MIT`
+- **thiserror-impl 2.0.20** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror-impl/2.0.20/download); repository: https://github.com/dtolnay/thiserror; files: `LICENSE-MIT`
 - **thiserror-impl 2.0.21** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror-impl/2.0.21/download); repository: https://github.com/dtolnay/thiserror; files: `LICENSE-MIT`
+- **unicode-ident 1.0.24** — `(MIT OR Apache-2.0) AND Unicode-3.0`; [source](https://crates.io/api/v1/crates/unicode-ident/1.0.24/download); repository: https://github.com/dtolnay/unicode-ident; files: `LICENSE-MIT`
 - **unicode-ident 1.0.26** — `(MIT OR Apache-2.0) AND Unicode-3.0`; [source](https://crates.io/api/v1/crates/unicode-ident/1.0.26/download); repository: https://github.com/dtolnay/unicode-ident; files: `LICENSE-MIT`
 - **utf-8 0.7.6** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/utf-8/0.7.6/download); repository: https://github.com/SimonSapin/rust-utf8; files: `LICENSE-MIT`
 - **utf8-zero 0.8.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/utf8-zero/0.8.1/download); repository: https://github.com/algesten/utf8-zero; files: `LICENSE-MIT`
@@ -6750,7 +8838,44 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 34
+### License text 44
+
+Normalized SHA-256: `248378d0a3383c173fb925f17141b88e71580b3ba17ddc6ac3d2a344683232ab`
+
+Used by:
+
+- **http-body 1.1.0** — `MIT`; [source](https://crates.io/api/v1/crates/http-body/1.1.0/download); repository: https://github.com/hyperium/http-body; files: `LICENSE`
+- **http-body-util 0.1.5** — `MIT`; [source](https://crates.io/api/v1/crates/http-body-util/0.1.5/download); repository: https://github.com/hyperium/http-body; files: `LICENSE`
+
+````text
+Copyright (c) 2019-2026 Sean McArthur & Hyper Contributors
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 45
 
 Normalized SHA-256: `24e5860bf589d8501643e6ea51ffb3df66db2867492b09033d486183efbfa970`
 
@@ -6782,7 +8907,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 35
+### License text 46
 
 Normalized SHA-256: `24fa231567ace7e0cdd96e5b2e649b0445d280710f7018d01ba6411e06aa641e`
 
@@ -6819,7 +8944,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 36
+### License text 47
 
 Normalized SHA-256: `2537228d9a1b44a5dc595241349cae7090b326c8de165aaf89bfddef4a00d0fc`
 
@@ -6851,12 +8976,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 37
+### License text 48
 
 Normalized SHA-256: `253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552`
 
 Used by:
 
+- **tokio 1.53.1** — `MIT`; [source](https://crates.io/api/v1/crates/tokio/1.53.1/download); repository: https://github.com/tokio-rs/tokio; files: `LICENSE`
 - **tokio 1.53.2** — `MIT`; [source](https://crates.io/api/v1/crates/tokio/1.53.2/download); repository: https://github.com/tokio-rs/tokio; files: `LICENSE`
 
 ````text
@@ -6883,7 +9009,35 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 38
+### License text 49
+
+Normalized SHA-256: `25bd20a7b965dea0add10dc1188dd9040ab81b51bcf4235cd5e9b94abf3e1360`
+
+Used by:
+
+- **typewit 1.15.2** — `Zlib`; [source](https://crates.io/api/v1/crates/typewit/1.15.2/download); repository: https://github.com/rodrimati1992/typewit/; files: `LICENSE-ZLIB.md`
+
+````text
+Copyright (c) 2023 Matias Rodriguez.
+
+This software is provided 'as-is', without any express or implied
+warranty. In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
+````
+
+### License text 50
 
 Normalized SHA-256: `260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad`
 
@@ -6923,7 +9077,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 39
+### License text 51
 
 Normalized SHA-256: `275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427`
 
@@ -7142,7 +9296,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 40
+### License text 52
 
 Normalized SHA-256: `2773e20df8f4c52a026b5b578c7f2457341f5aa3fb6612fd87e1d2e1bd8f48ad`
 
@@ -7355,7 +9509,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 41
+### License text 53
 
 Normalized SHA-256: `27995d58ad5c1145c1a8cd86244ce844886958a35eb2b78c6b772748669999ac`
 
@@ -7391,7 +9545,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 42
+### License text 54
 
 Normalized SHA-256: `282a21b0710441c364025461a447362daf18f5798a7b72ae2f801a2aa536da51`
 
@@ -7462,7 +9616,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 43
+### License text 55
 
 Normalized SHA-256: `29e9fe5074bd27e0e5d5d110394fbbcd841baee2651a3c4b4560a632702cede4`
 
@@ -7499,7 +9653,70 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 44
+### License text 56
+
+Normalized SHA-256: `2b16ef2d08597fccc3ffa8a8872e387e4b08e333e11b29c0bbb24f9d2167ac41`
+
+Used by:
+
+- **capstone d536b1577fd033a31d75f48fd183aa425256cc18** — `BSD-3-Clause and LLVM legacy license`; [source](https://github.com/frida/capstone/tree/d536b1577fd033a31d75f48fd183aa425256cc18); repository: https://github.com/frida/capstone; files: `native/capstone/suite/regress/LICENSE`
+
+````text
+This is the software license for Unicorn regression tests. The regression tests
+are written by several Unicorn contributors (See CREDITS.TXT) and maintained by
+Hoang-Vu Dang <dang.hvu@gmail.com>
+
+Copyright (c) 2015, Unicorn contributors
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+* Neither the name of the developer(s) nor the names of its
+  contributors may be used to endorse or promote products derived from this
+  software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+````
+
+### License text 57
+
+Normalized SHA-256: `2b92ef89cf4126aaaf12c5d84fd888bcf6a06afa92b046693b15637fdf8908eb`
+
+Used by:
+
+- **xz 0.1.0** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/xz/0.1.0/download); repository: https://github.com/alexcrichton/xz2-rs; files: `COPYRIGHT`
+
+````text
+Short version for non-laywers:
+  The xz-rs project is dual-licensed under Apache 2.0 and MIT terms.
+
+Longer version:
+  Copyright 2020 Hyeon Kim
+
+  Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+  http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+  <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+  option. This file may not be copied, modified, or distributed
+  except according to those terms.
+````
+
+### License text 58
 
 Normalized SHA-256: `2bea2657614005d9df887bcf7d6ba67dc3e5d8f63c63270f8df805a8a9d8d24d`
 
@@ -7528,7 +9745,69 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 45
+### License text 59
+
+Normalized SHA-256: `2c9c2acb9743e6b007b91350475308aee44691d96aa20eacef8e199988c8c388`
+
+Used by:
+
+- **libffi 4b75d8a1d9cf401d8a2fa16619938637ea7e7afa** — `MIT (build tools separately licensed)`; [source](https://github.com/frida/libffi/tree/4b75d8a1d9cf401d8a2fa16619938637ea7e7afa); repository: https://github.com/frida/libffi; files: `native/libffi/LICENSE`
+
+````text
+libffi - Copyright (c) 1996-2022  Anthony Green, Red Hat, Inc and others.
+See source files for details.
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+``Software''), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED ``AS IS'', WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+````
+
+### License text 60
+
+Normalized SHA-256: `2d01890414494742ba4a509fcec8efa40f6d8be22cbd72be7cff08d6fda4ec89`
+
+Used by:
+
+- **hyper 1.11.0** — `MIT`; [source](https://crates.io/api/v1/crates/hyper/1.11.0/download); repository: https://github.com/hyperium/hyper; files: `LICENSE`
+
+````text
+Copyright (c) 2014-2026 Sean McArthur
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+````
+
+### License text 61
 
 Normalized SHA-256: `2e3edd2716fb15616e867bd53f724f0906732242e9ae76bb1faad1d88f7eeebd`
 
@@ -7564,13 +9843,50 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 46
+### License text 62
+
+Normalized SHA-256: `2f711996bfe702cd521caaff43054cf949bc477153fcdb798d8d7b40be1c804e`
+
+Used by:
+
+- **xz 0.1.0** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/xz/0.1.0/download); repository: https://github.com/alexcrichton/xz2-rs; files: `LICENSE-MIT`
+
+````text
+Copyright (c) 2015-2020, Hyeon Kim
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 63
 
 Normalized SHA-256: `31b94860253d8ec7b4529f51901044d3b459d6292d996504a36b1bae3a36a812`
 
 Used by:
 
 - **cfg_aliases 0.1.1** — `MIT`; [source](https://crates.io/api/v1/crates/cfg_aliases/0.1.1/download); repository: https://github.com/katharostech/cfg_aliases; files: `LICENSE`
+- **cfg_aliases 0.2.2** — `MIT`; [source](https://crates.io/api/v1/crates/cfg_aliases/0.2.2/download); repository: https://github.com/katharostech/cfg_aliases; files: `LICENSE`
 
 ````text
 MIT License
@@ -7584,7 +9900,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 47
+### License text 64
 
 Normalized SHA-256: `3290ae0fbc9ddb77d2239121d710f0bb9d31b3b4744e6d97fe01e652b4c1870b`
 
@@ -7624,7 +9940,37 @@ is licensed under:
 at your option.
 ````
 
-### License text 48
+### License text 65
+
+Normalized SHA-256: `34f17d90673854314276164d17a4861400d4528066eb458a003fdb15ef98fbbe`
+
+Used by:
+
+- **reqwest 0.12.28** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/reqwest/0.12.28/download); repository: https://github.com/seanmonstar/reqwest; files: `LICENSE-MIT`
+
+````text
+Copyright (c) 2016-2025 Sean McArthur
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+````
+
+### License text 66
 
 Normalized SHA-256: `3521672491a3479422d5fe1aca6645dd2984090f85da6e5205abfb18fb7a6897`
 
@@ -7660,12 +10006,13 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 49
+### License text 67
 
 Normalized SHA-256: `35242e7a83f69875e6edeff02291e688c97caafe2f8902e4e19b49d3e78b4cab`
 
 Used by:
 
+- **rand 0.10.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand/0.10.2/download); repository: https://github.com/rust-random/rand; files: `LICENSE-APACHE`
 - **rand 0.8.8** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand/0.8.8/download); repository: https://github.com/rust-random/rand; files: `LICENSE-APACHE`
 - **rand 0.9.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand/0.9.5/download); repository: https://github.com/rust-random/rand; files: `LICENSE-APACHE`
 - **rand_chacha 0.9.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_chacha/0.9.0/download); repository: https://github.com/rust-random/rand; files: `LICENSE-APACHE`
@@ -7849,7 +10196,75 @@ TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 END OF TERMS AND CONDITIONS
 ````
 
-### License text 50
+### License text 68
+
+Normalized SHA-256: `3564da09711c475669c15346bb25a1530a7de683c13f4a51489c15a6d74438fa`
+
+Used by:
+
+- **winres 0.1.12** — `MIT`; [source](https://crates.io/api/v1/crates/winres/0.1.12/download); repository: https://github.com/mxre/winres; files: `LICENSE`
+
+````text
+Copyright 2016 Max Resch
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 69
+
+Normalized SHA-256: `363903136a28ef8bdeb4c81a78aca835505b0faca1a52d97799c149e6e1b1867`
+
+Used by:
+
+- **ffi-opaque 2.0.1** — `MIT`; [source](https://crates.io/api/v1/crates/ffi-opaque/2.0.1/download); repository: (not declared); files: `LICENSE`
+
+````text
+MIT License
+
+Copyright (c) 2020 Florian Gilcher
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+````
+
+### License text 70
 
 Normalized SHA-256: `36bb253818ac13761081556ff5c457d626da9df1eb4f56194d9ad3926c418a68`
 
@@ -7861,7 +10276,7 @@ Used by:
 MIT OR Apache-2.0
 ````
 
-### License text 51
+### License text 71
 
 Normalized SHA-256: `377c2e7c53250cc5905c0b0532d35973392af16ffb9596a41d99d202cf3617c9`
 
@@ -7901,20 +10316,25 @@ is licensed under:
 at your option.
 ````
 
-### License text 52
+### License text 72
 
 Normalized SHA-256: `378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397`
 
 Used by:
 
+- **cc 1.4.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cc/1.4.4/download); repository: https://github.com/rust-lang/cc-rs; files: `LICENSE-MIT`
 - **cc 1.5.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cc/1.5.1/download); repository: https://github.com/rust-lang/cc-rs; files: `LICENSE-MIT`
+- **cfg-if 1.0.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cfg-if/1.0.4/download); repository: https://github.com/rust-lang/cfg-if; files: `LICENSE-MIT`
 - **cfg-if 1.0.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cfg-if/1.0.5/download); repository: https://github.com/rust-lang/cfg-if; files: `LICENSE-MIT`
 - **cmake 0.1.58** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cmake/0.1.58/download); repository: https://github.com/rust-lang/cmake-rs; files: `LICENSE-MIT`
 - **filetime 0.2.29** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/filetime/0.2.29/download); repository: https://github.com/alexcrichton/filetime; files: `LICENSE-MIT`
+- **find-msvc-tools 0.1.11** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/find-msvc-tools/0.1.11/download); repository: https://github.com/rust-lang/cc-rs; files: `LICENSE-MIT`
 - **find-msvc-tools 0.1.14** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/find-msvc-tools/0.1.14/download); repository: https://github.com/rust-lang/cc-rs; files: `LICENSE-MIT`
+- **jobserver 0.1.35** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/jobserver/0.1.35/download); repository: https://github.com/rust-lang/jobserver-rs; files: `LICENSE-MIT`
 - **pkg-config 0.3.34** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/pkg-config/0.3.34/download); repository: https://github.com/rust-lang/pkg-config-rs; files: `LICENSE-MIT`
 - **scoped-tls 1.0.1** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/scoped-tls/1.0.1/download); repository: https://github.com/alexcrichton/scoped-tls; files: `LICENSE-MIT`
 - **socket2 0.6.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/socket2/0.6.5/download); repository: https://github.com/rust-lang/socket2; files: `LICENSE-MIT`
+- **toml 0.5.11** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/toml/0.5.11/download); repository: https://github.com/toml-rs/toml; files: `LICENSE-MIT`
 
 ````text
 Copyright (c) 2014 Alex Crichton
@@ -7944,7 +10364,276 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 53
+### License text 73
+
+Normalized SHA-256: `3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7`
+
+Used by:
+
+- **libm 0.2.16** — `MIT`; [source](https://crates.io/api/v1/crates/libm/0.2.16/download); repository: https://github.com/rust-lang/compiler-builtins; files: `LICENSE.txt`
+
+````text
+rust-lang/libm as a whole is available for use under the MIT license:
+
+------------------------------------------------------------------------------
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+------------------------------------------------------------------------------
+
+As a contributor, you agree that your code can be used under either the MIT
+license or the Apache-2.0 license:
+
+------------------------------------------------------------------------------
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+------------------------------------------------------------------------------
+
+This Rust library contains the following copyrights:
+
+    Copyright (c) 2018 Jorge Aparicio
+
+Portions of this software are derived from third-party works licensed under
+terms compatible with the above MIT license:
+
+* musl libc https://www.musl-libc.org/. This library contains the following
+  copyright:
+
+      Copyright © 2005-2020 Rich Felker, et al.
+
+* The CORE-MATH project https://core-math.gitlabpages.inria.fr/. CORE-MATH
+  routines are available under the MIT license on a per-file basis.
+
+The musl libc COPYRIGHT file also includes the following notice relevant to
+math portions of the library:
+
+------------------------------------------------------------------------------
+Much of the math library code (src/math/* and src/complex/*) is
+Copyright © 1993,2004 Sun Microsystems or
+Copyright © 2003-2011 David Schultz or
+Copyright © 2003-2009 Steven G. Kargl or
+Copyright © 2003-2009 Bruce D. Evans or
+Copyright © 2008 Stephen L. Moshier or
+Copyright © 2017-2018 Arm Limited
+and labelled as such in comments in the individual source files. All
+have been licensed under extremely permissive terms.
+------------------------------------------------------------------------------
+
+Copyright notices are retained in src/* files where relevant.
+````
+
+### License text 74
 
 Normalized SHA-256: `3c125f249fc6fb19f2415d027a0d9a170860583960ea53d08ea1d2b3f269d153`
 
@@ -7980,7 +10669,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 54
+### License text 75
 
 Normalized SHA-256: `3c97f5b6ad4e73ad22dc0d1e0c7120579a350df57095120017ddfe5a8669604e`
 
@@ -8192,7 +10881,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 55
+### License text 76
 
 Normalized SHA-256: `3e1de3c527ab251278d3b7b88657aef7360b8499c5c3f25fefa4aa1bd948491b`
 
@@ -8225,7 +10914,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 56
+### License text 77
 
 Normalized SHA-256: `3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04`
 
@@ -8610,7 +11299,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
   defined by the Mozilla Public License, v. 2.0.
 ````
 
-### License text 57
+### License text 78
 
 Normalized SHA-256: `3fa4ca83dcc9237839b1bdeb2e6d16bdfb5ec0c5ce42b24694d8bbf0dcbef72c`
 
@@ -8646,7 +11335,27 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 58
+### License text 79
+
+Normalized SHA-256: `3fc43b3720cecfeedbf1fa55751b5c35bb6598a5ea74b00f063bad53ac375c28`
+
+Used by:
+
+- **array-util 1.0.2** — `MIT`; [source](https://crates.io/api/v1/crates/array-util/1.0.2/download); repository: https://github.com/Daniel-Aaron-Bloom/array-util; files: `licenses/array-util-1.0.2/LICENESE`
+
+````text
+MIT License
+
+Copyright © 2024 Daniel Bloom
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+````
+
+### License text 80
 
 Normalized SHA-256: `4108245a1f2df9d4e94df8abed5b4ba0759bb2f9b40a6b939f1be141077ae50b`
 
@@ -8683,7 +11392,45 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 59
+### License text 81
+
+Normalized SHA-256: `4249c8e6c5ebb85f97c77e6457c6fafc1066406eb8f1ef61e796fbdc5ff18482`
+
+Used by:
+
+- **tower 0.5.3** — `MIT`; [source](https://crates.io/api/v1/crates/tower/0.5.3/download); repository: https://github.com/tower-rs/tower; files: `LICENSE`
+- **tower-layer 0.3.3** — `MIT`; [source](https://crates.io/api/v1/crates/tower-layer/0.3.3/download); repository: https://github.com/tower-rs/tower; files: `LICENSE`
+- **tower-service 0.3.3** — `MIT`; [source](https://crates.io/api/v1/crates/tower-service/0.3.3/download); repository: https://github.com/tower-rs/tower; files: `LICENSE`
+
+````text
+Copyright (c) 2019 Tower Contributors
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 82
 
 Normalized SHA-256: `42a35170233e83e18856792e748de4c1ce4a63b2afce9a370c89ef3fe23f9f2d`
 
@@ -8715,7 +11462,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 60
+### License text 83
 
 Normalized SHA-256: `42fa16951ce7f24b5a467a40e5b449a1d41e662f97ca779864f053f39e097737`
 
@@ -8752,7 +11499,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 61
+### License text 84
 
 Normalized SHA-256: `436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d`
 
@@ -8789,12 +11536,13 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 62
+### License text 85
 
 Normalized SHA-256: `4455bf75a91154108304cb283e0fea9948c14f13e20d60887cf2552449dea3b1`
 
 Used by:
 
+- **shlex 1.3.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/shlex/1.3.0/download); repository: https://github.com/comex/rust-shlex; files: `LICENSE-MIT`
 - **shlex 2.0.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/shlex/2.0.1/download); repository: https://github.com/comex/rust-shlex; files: `LICENSE-MIT`
 
 ````text
@@ -8821,7 +11569,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### License text 63
+### License text 86
 
 Normalized SHA-256: `45f522cacecb1023856e46df79ca625dfc550c94910078bd8aec6e02880b3d42`
 
@@ -8857,7 +11605,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 64
+### License text 87
 
 Normalized SHA-256: `45fd05c4865e7c350b98ad7ac50e1b15462d49af4a91e9b0c9dd933dc9a69742`
 
@@ -9069,7 +11817,45 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 65
+### License text 88
+
+Normalized SHA-256: `47dc9ff29128ddfb4d6a0435383c9f89120bc374dbcc1dd00b933a0b28aa7865`
+
+Used by:
+
+- **ipnet 2.12.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/ipnet/2.12.1/download); repository: https://github.com/krisprice/ipnet; files: `LICENSE-MIT`
+
+````text
+Copyright 2017 Juniper Networks, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+````
+
+### License text 89
+
+Normalized SHA-256: `4b2d0aca6789fa39e03d6738e869ea0988cceba210ca34ebb59c15c463e93a04`
+
+Used by:
+
+- **quinn 0.11.11** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/quinn/0.11.11/download); repository: https://github.com/quinn-rs/quinn; files: `LICENSE-MIT`
+- **quinn-proto 0.11.17** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/quinn-proto/0.11.17/download); repository: https://github.com/quinn-rs/quinn; files: `LICENSE-MIT`
+- **quinn-udp 0.5.15** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/quinn-udp/0.5.15/download); repository: https://github.com/quinn-rs/quinn; files: `LICENSE-MIT`
+
+````text
+Copyright (c) 2018 The quinn Developers
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+````
+
+### License text 90
 
 Normalized SHA-256: `4cada0bd02ea3692eee6f16400d86c6508bbd3bafb2b65fed0419f36d4f83e8f`
 
@@ -9105,7 +11891,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 66
+### License text 91
 
 Normalized SHA-256: `4da95ec4ecb65b738d470b7d762894ad9c97da93e6cbfb18b570fc2c96f4b871`
 
@@ -9141,7 +11927,38 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 67
+### License text 92
+
+Normalized SHA-256: `4dbda04344456f09a7a588140455413a9ac59b6b26a1ef7cdf9c800c012d87f0`
+
+Used by:
+
+- **nom 7.1.3** — `MIT`; [source](https://crates.io/api/v1/crates/nom/7.1.3/download); repository: https://github.com/Geal/nom; files: `LICENSE`
+
+````text
+Copyright (c) 2014-2019 Geoffroy Couprie
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+````
+
+### License text 93
 
 Normalized SHA-256: `503558bfefe66ca15e4e3f7955b3cb0ec87fd52f29bf24b336af7bd00e946d5c`
 
@@ -9177,7 +11994,43 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 68
+### License text 94
+
+Normalized SHA-256: `5049cf464977eff4b4fcfa7988d84e74116956a3eb9d5f1d451b3f828f945233`
+
+Used by:
+
+- **tower-http 0.6.11** — `MIT`; [source](https://crates.io/api/v1/crates/tower-http/0.6.11/download); repository: https://github.com/tower-rs/tower-http; files: `LICENSE`
+
+````text
+Copyright (c) 2019-2021 Tower Contributors
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 95
 
 Normalized SHA-256: `523a42c25d245dde9c015f882cec7f4555aad883382a6cf19b4b7d9b2cd5419b`
 
@@ -9214,7 +12067,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 69
+### License text 96
 
 Normalized SHA-256: `54e1fd7bd53273e601c9599eb162a004dacddee031ae297ee7109a7beb93b1c2`
 
@@ -9273,12 +12126,13 @@ bzip2/libbzip2 version 1.1.0 of 6 September 2010
 --------------------------------------------------------------------------
 ````
 
-### License text 70
+### License text 97
 
 Normalized SHA-256: `553fffcd9b1cb158bc3e9edc35da85ca5c3b3d7d2e61c883ebcfa8a65814b583`
 
 Used by:
 
+- **shlex 1.3.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/shlex/1.3.0/download); repository: https://github.com/comex/rust-shlex; files: `LICENSE-APACHE`
 - **shlex 2.0.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/shlex/2.0.1/download); repository: https://github.com/comex/rust-shlex; files: `LICENSE-APACHE`
 
 ````text
@@ -9297,12 +12151,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 71
+### License text 98
 
 Normalized SHA-256: `5734ed989dfca1f625b40281ee9f4530f91b2411ec01cb748223e7eb87e201ab`
 
 Used by:
 
+- **crossbeam-utils 0.8.22** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/crossbeam-utils/0.8.22/download); repository: https://github.com/crossbeam-rs/crossbeam; files: `LICENSE-MIT`
 - **crossbeam-utils 0.8.23** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/crossbeam-utils/0.8.23/download); repository: https://github.com/crossbeam-rs/crossbeam; files: `LICENSE-MIT`
 
 ````text
@@ -9335,7 +12190,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 72
+### License text 99
 
 Normalized SHA-256: `58545fed1565e42d687aecec6897d35c6d37ccb71479a137c0deb2203e125c79`
 
@@ -9367,7 +12222,521 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 73
+### License text 100
+
+Normalized SHA-256: `592987e8510228d546540b84a22444bde98e48d03078d3b2eefcd889bec5ce8c`
+
+Used by:
+
+- **lzma-sys 0.1.20** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/lzma-sys/0.1.20/download); repository: https://github.com/alexcrichton/xz2-rs; files: `xz-5.2/COPYING.LGPLv2.1`
+- **xz e70f5800ab5001c9509d374dbf3e7e6b866c43fe** — `Public-domain liblzma; GPL/LGPL scripts/tools not shipped`; [source](https://github.com/frida/xz/tree/e70f5800ab5001c9509d374dbf3e7e6b866c43fe); repository: https://github.com/frida/xz; files: `native/xz/COPYING.LGPLv2.1`
+
+````text
+                  GNU LESSER GENERAL PUBLIC LICENSE
+                       Version 2.1, February 1999
+
+ Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+ 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+[This is the first released version of the Lesser GPL.  It also counts
+ as the successor of the GNU Library Public License, version 2, hence
+ the version number 2.1.]
+
+                            Preamble
+
+  The licenses for most software are designed to take away your
+freedom to share and change it.  By contrast, the GNU General Public
+Licenses are intended to guarantee your freedom to share and change
+free software--to make sure the software is free for all its users.
+
+  This license, the Lesser General Public License, applies to some
+specially designated software packages--typically libraries--of the
+Free Software Foundation and other authors who decide to use it.  You
+can use it too, but we suggest you first think carefully about whether
+this license or the ordinary General Public License is the better
+strategy to use in any particular case, based on the explanations below.
+
+  When we speak of free software, we are referring to freedom of use,
+not price.  Our General Public Licenses are designed to make sure that
+you have the freedom to distribute copies of free software (and charge
+for this service if you wish); that you receive source code or can get
+it if you want it; that you can change the software and use pieces of
+it in new free programs; and that you are informed that you can do
+these things.
+
+  To protect your rights, we need to make restrictions that forbid
+distributors to deny you these rights or to ask you to surrender these
+rights.  These restrictions translate to certain responsibilities for
+you if you distribute copies of the library or if you modify it.
+
+  For example, if you distribute copies of the library, whether gratis
+or for a fee, you must give the recipients all the rights that we gave
+you.  You must make sure that they, too, receive or can get the source
+code.  If you link other code with the library, you must provide
+complete object files to the recipients, so that they can relink them
+with the library after making changes to the library and recompiling
+it.  And you must show them these terms so they know their rights.
+
+  We protect your rights with a two-step method: (1) we copyright the
+library, and (2) we offer you this license, which gives you legal
+permission to copy, distribute and/or modify the library.
+
+  To protect each distributor, we want to make it very clear that
+there is no warranty for the free library.  Also, if the library is
+modified by someone else and passed on, the recipients should know
+that what they have is not the original version, so that the original
+author's reputation will not be affected by problems that might be
+introduced by others.
+
+  Finally, software patents pose a constant threat to the existence of
+any free program.  We wish to make sure that a company cannot
+effectively restrict the users of a free program by obtaining a
+restrictive license from a patent holder.  Therefore, we insist that
+any patent license obtained for a version of the library must be
+consistent with the full freedom of use specified in this license.
+
+  Most GNU software, including some libraries, is covered by the
+ordinary GNU General Public License.  This license, the GNU Lesser
+General Public License, applies to certain designated libraries, and
+is quite different from the ordinary General Public License.  We use
+this license for certain libraries in order to permit linking those
+libraries into non-free programs.
+
+  When a program is linked with a library, whether statically or using
+a shared library, the combination of the two is legally speaking a
+combined work, a derivative of the original library.  The ordinary
+General Public License therefore permits such linking only if the
+entire combination fits its criteria of freedom.  The Lesser General
+Public License permits more lax criteria for linking other code with
+the library.
+
+  We call this license the "Lesser" General Public License because it
+does Less to protect the user's freedom than the ordinary General
+Public License.  It also provides other free software developers Less
+of an advantage over competing non-free programs.  These disadvantages
+are the reason we use the ordinary General Public License for many
+libraries.  However, the Lesser license provides advantages in certain
+special circumstances.
+
+  For example, on rare occasions, there may be a special need to
+encourage the widest possible use of a certain library, so that it becomes
+a de-facto standard.  To achieve this, non-free programs must be
+allowed to use the library.  A more frequent case is that a free
+library does the same job as widely used non-free libraries.  In this
+case, there is little to gain by limiting the free library to free
+software only, so we use the Lesser General Public License.
+
+  In other cases, permission to use a particular library in non-free
+programs enables a greater number of people to use a large body of
+free software.  For example, permission to use the GNU C Library in
+non-free programs enables many more people to use the whole GNU
+operating system, as well as its variant, the GNU/Linux operating
+system.
+
+  Although the Lesser General Public License is Less protective of the
+users' freedom, it does ensure that the user of a program that is
+linked with the Library has the freedom and the wherewithal to run
+that program using a modified version of the Library.
+
+  The precise terms and conditions for copying, distribution and
+modification follow.  Pay close attention to the difference between a
+"work based on the library" and a "work that uses the library".  The
+former contains code derived from the library, whereas the latter must
+be combined with the library in order to run.
+
+                  GNU LESSER GENERAL PUBLIC LICENSE
+   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+  0. This License Agreement applies to any software library or other
+program which contains a notice placed by the copyright holder or
+other authorized party saying it may be distributed under the terms of
+this Lesser General Public License (also called "this License").
+Each licensee is addressed as "you".
+
+  A "library" means a collection of software functions and/or data
+prepared so as to be conveniently linked with application programs
+(which use some of those functions and data) to form executables.
+
+  The "Library", below, refers to any such software library or work
+which has been distributed under these terms.  A "work based on the
+Library" means either the Library or any derivative work under
+copyright law: that is to say, a work containing the Library or a
+portion of it, either verbatim or with modifications and/or translated
+straightforwardly into another language.  (Hereinafter, translation is
+included without limitation in the term "modification".)
+
+  "Source code" for a work means the preferred form of the work for
+making modifications to it.  For a library, complete source code means
+all the source code for all modules it contains, plus any associated
+interface definition files, plus the scripts used to control compilation
+and installation of the library.
+
+  Activities other than copying, distribution and modification are not
+covered by this License; they are outside its scope.  The act of
+running a program using the Library is not restricted, and output from
+such a program is covered only if its contents constitute a work based
+on the Library (independent of the use of the Library in a tool for
+writing it).  Whether that is true depends on what the Library does
+and what the program that uses the Library does.
+
+  1. You may copy and distribute verbatim copies of the Library's
+complete source code as you receive it, in any medium, provided that
+you conspicuously and appropriately publish on each copy an
+appropriate copyright notice and disclaimer of warranty; keep intact
+all the notices that refer to this License and to the absence of any
+warranty; and distribute a copy of this License along with the
+Library.
+
+  You may charge a fee for the physical act of transferring a copy,
+and you may at your option offer warranty protection in exchange for a
+fee.
+
+  2. You may modify your copy or copies of the Library or any portion
+of it, thus forming a work based on the Library, and copy and
+distribute such modifications or work under the terms of Section 1
+above, provided that you also meet all of these conditions:
+
+    a) The modified work must itself be a software library.
+
+    b) You must cause the files modified to carry prominent notices
+    stating that you changed the files and the date of any change.
+
+    c) You must cause the whole of the work to be licensed at no
+    charge to all third parties under the terms of this License.
+
+    d) If a facility in the modified Library refers to a function or a
+    table of data to be supplied by an application program that uses
+    the facility, other than as an argument passed when the facility
+    is invoked, then you must make a good faith effort to ensure that,
+    in the event an application does not supply such function or
+    table, the facility still operates, and performs whatever part of
+    its purpose remains meaningful.
+
+    (For example, a function in a library to compute square roots has
+    a purpose that is entirely well-defined independent of the
+    application.  Therefore, Subsection 2d requires that any
+    application-supplied function or table used by this function must
+    be optional: if the application does not supply it, the square
+    root function must still compute square roots.)
+
+These requirements apply to the modified work as a whole.  If
+identifiable sections of that work are not derived from the Library,
+and can be reasonably considered independent and separate works in
+themselves, then this License, and its terms, do not apply to those
+sections when you distribute them as separate works.  But when you
+distribute the same sections as part of a whole which is a work based
+on the Library, the distribution of the whole must be on the terms of
+this License, whose permissions for other licensees extend to the
+entire whole, and thus to each and every part regardless of who wrote
+it.
+
+Thus, it is not the intent of this section to claim rights or contest
+your rights to work written entirely by you; rather, the intent is to
+exercise the right to control the distribution of derivative or
+collective works based on the Library.
+
+In addition, mere aggregation of another work not based on the Library
+with the Library (or with a work based on the Library) on a volume of
+a storage or distribution medium does not bring the other work under
+the scope of this License.
+
+  3. You may opt to apply the terms of the ordinary GNU General Public
+License instead of this License to a given copy of the Library.  To do
+this, you must alter all the notices that refer to this License, so
+that they refer to the ordinary GNU General Public License, version 2,
+instead of to this License.  (If a newer version than version 2 of the
+ordinary GNU General Public License has appeared, then you can specify
+that version instead if you wish.)  Do not make any other change in
+these notices.
+
+  Once this change is made in a given copy, it is irreversible for
+that copy, so the ordinary GNU General Public License applies to all
+subsequent copies and derivative works made from that copy.
+
+  This option is useful when you wish to copy part of the code of
+the Library into a program that is not a library.
+
+  4. You may copy and distribute the Library (or a portion or
+derivative of it, under Section 2) in object code or executable form
+under the terms of Sections 1 and 2 above provided that you accompany
+it with the complete corresponding machine-readable source code, which
+must be distributed under the terms of Sections 1 and 2 above on a
+medium customarily used for software interchange.
+
+  If distribution of object code is made by offering access to copy
+from a designated place, then offering equivalent access to copy the
+source code from the same place satisfies the requirement to
+distribute the source code, even though third parties are not
+compelled to copy the source along with the object code.
+
+  5. A program that contains no derivative of any portion of the
+Library, but is designed to work with the Library by being compiled or
+linked with it, is called a "work that uses the Library".  Such a
+work, in isolation, is not a derivative work of the Library, and
+therefore falls outside the scope of this License.
+
+  However, linking a "work that uses the Library" with the Library
+creates an executable that is a derivative of the Library (because it
+contains portions of the Library), rather than a "work that uses the
+library".  The executable is therefore covered by this License.
+Section 6 states terms for distribution of such executables.
+
+  When a "work that uses the Library" uses material from a header file
+that is part of the Library, the object code for the work may be a
+derivative work of the Library even though the source code is not.
+Whether this is true is especially significant if the work can be
+linked without the Library, or if the work is itself a library.  The
+threshold for this to be true is not precisely defined by law.
+
+  If such an object file uses only numerical parameters, data
+structure layouts and accessors, and small macros and small inline
+functions (ten lines or less in length), then the use of the object
+file is unrestricted, regardless of whether it is legally a derivative
+work.  (Executables containing this object code plus portions of the
+Library will still fall under Section 6.)
+
+  Otherwise, if the work is a derivative of the Library, you may
+distribute the object code for the work under the terms of Section 6.
+Any executables containing that work also fall under Section 6,
+whether or not they are linked directly with the Library itself.
+
+  6. As an exception to the Sections above, you may also combine or
+link a "work that uses the Library" with the Library to produce a
+work containing portions of the Library, and distribute that work
+under terms of your choice, provided that the terms permit
+modification of the work for the customer's own use and reverse
+engineering for debugging such modifications.
+
+  You must give prominent notice with each copy of the work that the
+Library is used in it and that the Library and its use are covered by
+this License.  You must supply a copy of this License.  If the work
+during execution displays copyright notices, you must include the
+copyright notice for the Library among them, as well as a reference
+directing the user to the copy of this License.  Also, you must do one
+of these things:
+
+    a) Accompany the work with the complete corresponding
+    machine-readable source code for the Library including whatever
+    changes were used in the work (which must be distributed under
+    Sections 1 and 2 above); and, if the work is an executable linked
+    with the Library, with the complete machine-readable "work that
+    uses the Library", as object code and/or source code, so that the
+    user can modify the Library and then relink to produce a modified
+    executable containing the modified Library.  (It is understood
+    that the user who changes the contents of definitions files in the
+    Library will not necessarily be able to recompile the application
+    to use the modified definitions.)
+
+    b) Use a suitable shared library mechanism for linking with the
+    Library.  A suitable mechanism is one that (1) uses at run time a
+    copy of the library already present on the user's computer system,
+    rather than copying library functions into the executable, and (2)
+    will operate properly with a modified version of the library, if
+    the user installs one, as long as the modified version is
+    interface-compatible with the version that the work was made with.
+
+    c) Accompany the work with a written offer, valid for at
+    least three years, to give the same user the materials
+    specified in Subsection 6a, above, for a charge no more
+    than the cost of performing this distribution.
+
+    d) If distribution of the work is made by offering access to copy
+    from a designated place, offer equivalent access to copy the above
+    specified materials from the same place.
+
+    e) Verify that the user has already received a copy of these
+    materials or that you have already sent this user a copy.
+
+  For an executable, the required form of the "work that uses the
+Library" must include any data and utility programs needed for
+reproducing the executable from it.  However, as a special exception,
+the materials to be distributed need not include anything that is
+normally distributed (in either source or binary form) with the major
+components (compiler, kernel, and so on) of the operating system on
+which the executable runs, unless that component itself accompanies
+the executable.
+
+  It may happen that this requirement contradicts the license
+restrictions of other proprietary libraries that do not normally
+accompany the operating system.  Such a contradiction means you cannot
+use both them and the Library together in an executable that you
+distribute.
+
+  7. You may place library facilities that are a work based on the
+Library side-by-side in a single library together with other library
+facilities not covered by this License, and distribute such a combined
+library, provided that the separate distribution of the work based on
+the Library and of the other library facilities is otherwise
+permitted, and provided that you do these two things:
+
+    a) Accompany the combined library with a copy of the same work
+    based on the Library, uncombined with any other library
+    facilities.  This must be distributed under the terms of the
+    Sections above.
+
+    b) Give prominent notice with the combined library of the fact
+    that part of it is a work based on the Library, and explaining
+    where to find the accompanying uncombined form of the same work.
+
+  8. You may not copy, modify, sublicense, link with, or distribute
+the Library except as expressly provided under this License.  Any
+attempt otherwise to copy, modify, sublicense, link with, or
+distribute the Library is void, and will automatically terminate your
+rights under this License.  However, parties who have received copies,
+or rights, from you under this License will not have their licenses
+terminated so long as such parties remain in full compliance.
+
+  9. You are not required to accept this License, since you have not
+signed it.  However, nothing else grants you permission to modify or
+distribute the Library or its derivative works.  These actions are
+prohibited by law if you do not accept this License.  Therefore, by
+modifying or distributing the Library (or any work based on the
+Library), you indicate your acceptance of this License to do so, and
+all its terms and conditions for copying, distributing or modifying
+the Library or works based on it.
+
+  10. Each time you redistribute the Library (or any work based on the
+Library), the recipient automatically receives a license from the
+original licensor to copy, distribute, link with or modify the Library
+subject to these terms and conditions.  You may not impose any further
+restrictions on the recipients' exercise of the rights granted herein.
+You are not responsible for enforcing compliance by third parties with
+this License.
+
+  11. If, as a consequence of a court judgment or allegation of patent
+infringement or for any other reason (not limited to patent issues),
+conditions are imposed on you (whether by court order, agreement or
+otherwise) that contradict the conditions of this License, they do not
+excuse you from the conditions of this License.  If you cannot
+distribute so as to satisfy simultaneously your obligations under this
+License and any other pertinent obligations, then as a consequence you
+may not distribute the Library at all.  For example, if a patent
+license would not permit royalty-free redistribution of the Library by
+all those who receive copies directly or indirectly through you, then
+the only way you could satisfy both it and this License would be to
+refrain entirely from distribution of the Library.
+
+If any portion of this section is held invalid or unenforceable under any
+particular circumstance, the balance of the section is intended to apply,
+and the section as a whole is intended to apply in other circumstances.
+
+It is not the purpose of this section to induce you to infringe any
+patents or other property right claims or to contest validity of any
+such claims; this section has the sole purpose of protecting the
+integrity of the free software distribution system which is
+implemented by public license practices.  Many people have made
+generous contributions to the wide range of software distributed
+through that system in reliance on consistent application of that
+system; it is up to the author/donor to decide if he or she is willing
+to distribute software through any other system and a licensee cannot
+impose that choice.
+
+This section is intended to make thoroughly clear what is believed to
+be a consequence of the rest of this License.
+
+  12. If the distribution and/or use of the Library is restricted in
+certain countries either by patents or by copyrighted interfaces, the
+original copyright holder who places the Library under this License may add
+an explicit geographical distribution limitation excluding those countries,
+so that distribution is permitted only in or among countries not thus
+excluded.  In such case, this License incorporates the limitation as if
+written in the body of this License.
+
+  13. The Free Software Foundation may publish revised and/or new
+versions of the Lesser General Public License from time to time.
+Such new versions will be similar in spirit to the present version,
+but may differ in detail to address new problems or concerns.
+
+Each version is given a distinguishing version number.  If the Library
+specifies a version number of this License which applies to it and
+"any later version", you have the option of following the terms and
+conditions either of that version or of any later version published by
+the Free Software Foundation.  If the Library does not specify a
+license version number, you may choose any version ever published by
+the Free Software Foundation.
+
+  14. If you wish to incorporate parts of the Library into other free
+programs whose distribution conditions are incompatible with these,
+write to the author to ask for permission.  For software which is
+copyrighted by the Free Software Foundation, write to the Free
+Software Foundation; we sometimes make exceptions for this.  Our
+decision will be guided by the two goals of preserving the free status
+of all derivatives of our free software and of promoting the sharing
+and reuse of software generally.
+
+                            NO WARRANTY
+
+  15. BECAUSE THE LIBRARY IS LICENSED FREE OF CHARGE, THERE IS NO
+WARRANTY FOR THE LIBRARY, TO THE EXTENT PERMITTED BY APPLICABLE LAW.
+EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR
+OTHER PARTIES PROVIDE THE LIBRARY "AS IS" WITHOUT WARRANTY OF ANY
+KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+LIBRARY IS WITH YOU.  SHOULD THE LIBRARY PROVE DEFECTIVE, YOU ASSUME
+THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+  16. IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN
+WRITING WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY
+AND/OR REDISTRIBUTE THE LIBRARY AS PERMITTED ABOVE, BE LIABLE TO YOU
+FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR
+CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THE
+LIBRARY (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING
+RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A
+FAILURE OF THE LIBRARY TO OPERATE WITH ANY OTHER SOFTWARE), EVEN IF
+SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGES.
+
+                     END OF TERMS AND CONDITIONS
+
+           How to Apply These Terms to Your New Libraries
+
+  If you develop a new library, and you want it to be of the greatest
+possible use to the public, we recommend making it free software that
+everyone can redistribute and change.  You can do so by permitting
+redistribution under these terms (or, alternatively, under the terms of the
+ordinary General Public License).
+
+  To apply these terms, attach the following notices to the library.  It is
+safest to attach them to the start of each source file to most effectively
+convey the exclusion of warranty; and each file should have at least the
+"copyright" line and a pointer to where the full notice is found.
+
+    <one line to give the library's name and a brief idea of what it does.>
+    Copyright (C) <year>  <name of author>
+
+    This library is free software; you can redistribute it and/or
+    modify it under the terms of the GNU Lesser General Public
+    License as published by the Free Software Foundation; either
+    version 2.1 of the License, or (at your option) any later version.
+
+    This library is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public
+    License along with this library; if not, write to the Free Software
+    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
+Also add information on how to contact you by electronic and paper mail.
+
+You should also get your employer (if you work as a programmer) or your
+school, if any, to sign a "copyright disclaimer" for the library, if
+necessary.  Here is a sample; alter the names:
+
+  Yoyodyne, Inc., hereby disclaims all copyright interest in the
+  library `Frob' (a library for tweaking knobs) written by James Random Hacker.
+
+  <signature of Ty Coon>, 1 April 1990
+  Ty Coon, President of Vice
+
+That's all there is to it!
+````
+
+### License text 101
 
 Normalized SHA-256: `59871bb1612f8a0569655c10b995636827eceab42c6578cebdc45ad2922e0142`
 
@@ -9403,7 +12772,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 74
+### License text 102
 
 Normalized SHA-256: `5a952e4a62a3022a7f39e9f0eb8d0638addd3efffb3f4092890923668152296e`
 
@@ -9434,7 +12803,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### License text 75
+### License text 103
 
 Normalized SHA-256: `5b460f37be48ac4cf2181596181cc6cae432fc2caae05944873f380730829a4b`
 
@@ -9452,7 +12821,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 76
+### License text 104
 
 Normalized SHA-256: `5b698ca13897be3afdb7174256fa1574f8c6892b8bea1a66dd6469d3fe27885a`
 
@@ -9482,7 +12851,7 @@ The files under third-party/chromium are licensed as described in
 third-party/chromium/LICENSE.
 ````
 
-### License text 77
+### License text 105
 
 Normalized SHA-256: `5c4292064b7284c0547971aaff57b640b567ae5c5c3f5703a13a4b38cc6d7c84`
 
@@ -9560,7 +12929,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 78
+### License text 106
 
 Normalized SHA-256: `5d5050b4897d9f5b5e7055fca74329a98183620f45d803f9bed81d9e24956968`
 
@@ -9639,7 +13008,68 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 79
+### License text 107
+
+Normalized SHA-256: `5ea1544b51a28bc823b03159190d4108f9fb4f4ef912389f5137c6d295e175b2`
+
+Used by:
+
+- **frida-build 0.17.2** — `wxWindows`; [source](https://crates.io/api/v1/crates/frida-build/0.17.2/download); repository: https://github.com/frida/frida-rust; files: `licenses/frida-build-0.17.2/COPYING`
+
+````text
+              wxWindows Library Licence, Version 3.1
+              ======================================
+
+Copyright (c) 1998-2005 Julian Smart, Robert Roebling et al
+
+Everyone is permitted to copy and distribute verbatim copies
+of this licence document, but changing it is not allowed.
+
+                     WXWINDOWS LIBRARY LICENCE
+   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+This library is free software; you can redistribute it and/or modify it
+under the terms of the GNU Library General Public Licence as published by
+the Free Software Foundation; either version 2 of the Licence, or (at your
+option) any later version.
+
+This library is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+Licence for more details.
+
+You should have received a copy of the GNU Library General Public Licence
+along with this software, usually in a file named COPYING.LIB.  If not,
+write to the Free Software Foundation, Inc., 51 Franklin Street, Fifth
+Floor, Boston, MA 02110-1301 USA.
+
+EXCEPTION NOTICE
+
+1. As a special exception, the copyright holders of this library give
+permission for additional uses of the text contained in this release of the
+library as licenced under the wxWindows Library Licence, applying either
+version 3.1 of the Licence, or (at your option) any later version of the
+Licence as published by the copyright holders of version 3.1 of the Licence
+document.
+
+2. The exception is that you may use, copy, link, modify and distribute
+under your own terms, binary object code versions of works based on the
+Library.
+
+3. If you copy code from files distributed under the terms of the GNU
+General Public Licence or the GNU Library General Public Licence into a
+copy of this library, as this licence permits, the exception does not apply
+to the code that you add in this way.  To avoid misleading anyone as to the
+status of such modified files, you must delete this exception notice from
+such code and/or adjust the licensing conditions notice accordingly.
+
+4. If you write modifications of your own for this library, it is your
+choice whether to permit this exception to apply to your modifications.  If
+you do not wish that, you must delete the exception notice from such code
+and/or adjust the licensing conditions notice accordingly.
+````
+
+### License text 108
 
 Normalized SHA-256: `60a7062291b01ba068f300612cdbdc20382ac1d4934f07bcdd7167c15299f309`
 
@@ -9676,7 +13106,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 80
+### License text 109
 
 Normalized SHA-256: `61d383b05b87d78f94d2937e2580cce47226d17823c0430fbcad09596537efcf`
 
@@ -9708,7 +13138,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 81
+### License text 110
 
 Normalized SHA-256: `62065228e42caebca7e7d7db1204cbb867033de5982ca4009928915e4095f3a3`
 
@@ -9745,7 +13175,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 82
+### License text 111
 
 Normalized SHA-256: `6226d0632e2e1a80c23597e964da9812ae193c535fe058154afb034e94167aa5`
 
@@ -9802,7 +13232,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 83
+### License text 112
 
 Normalized SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
 
@@ -9812,24 +13242,33 @@ Used by:
 - **async-trait 0.1.92** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/async-trait/0.1.92/download); repository: https://github.com/dtolnay/async-trait; files: `LICENSE-APACHE`
 - **dtoa 1.0.11** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/dtoa/1.0.11/download); repository: https://github.com/dtolnay/dtoa; files: `LICENSE-APACHE`
 - **itoa 1.0.18** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/itoa/1.0.18/download); repository: https://github.com/dtolnay/itoa; files: `LICENSE-APACHE`
+- **libc 0.2.189** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/libc/0.2.189/download); repository: https://github.com/rust-lang/libc; files: `LICENSE-APACHE`
 - **libc 0.2.190** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/libc/0.2.190/download); repository: https://github.com/rust-lang/libc; files: `LICENSE-APACHE`
 - **litrs 1.0.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/litrs/1.0.0/download); repository: https://github.com/LukasKalbertodt/litrs; files: `LICENSE-APACHE`
 - **pastey 0.2.3** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/pastey/0.2.3/download); repository: https://github.com/as1100k/pastey; files: `LICENSE-APACHE`
+- **prettyplease 0.2.37** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/prettyplease/0.2.37/download); repository: https://github.com/dtolnay/prettyplease; files: `LICENSE-APACHE`
 - **proc-macro2 1.0.107** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/proc-macro2/1.0.107/download); repository: https://github.com/dtolnay/proc-macro2; files: `LICENSE-APACHE`
 - **quote 1.0.47** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/quote/1.0.47/download); repository: https://github.com/dtolnay/quote; files: `LICENSE-APACHE`
 - **rustc-hash 2.1.3** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/rustc-hash/2.1.3/download); repository: https://github.com/rust-lang/rustc-hash; files: `LICENSE-APACHE`
+- **rustversion 1.0.23** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rustversion/1.0.23/download); repository: https://github.com/dtolnay/rustversion; files: `LICENSE-APACHE`
+- **ryu 1.0.23** — `Apache-2.0 OR BSL-1.0`; [source](https://crates.io/api/v1/crates/ryu/1.0.23/download); repository: https://github.com/dtolnay/ryu; files: `LICENSE-APACHE`
 - **semver 1.0.28** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/semver/1.0.28/download); repository: https://github.com/dtolnay/semver; files: `LICENSE-APACHE`
 - **serde 1.0.229** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/serde/1.0.229/download); repository: https://github.com/serde-rs/serde; files: `LICENSE-APACHE`
 - **serde_core 1.0.229** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/serde_core/1.0.229/download); repository: https://github.com/serde-rs/serde; files: `LICENSE-APACHE`
 - **serde_derive 1.0.229** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/serde_derive/1.0.229/download); repository: https://github.com/serde-rs/serde; files: `LICENSE-APACHE`
 - **serde_json 1.0.151** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/serde_json/1.0.151/download); repository: https://github.com/serde-rs/json; files: `LICENSE-APACHE`
 - **serde_repr 0.1.21** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/serde_repr/0.1.21/download); repository: https://github.com/dtolnay/serde-repr; files: `LICENSE-APACHE`
+- **serde_urlencoded 0.7.1** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/serde_urlencoded/0.7.1/download); repository: https://github.com/nox/serde_urlencoded; files: `LICENSE-APACHE`
 - **syn 2.0.119** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/syn/2.0.119/download); repository: https://github.com/dtolnay/syn; files: `LICENSE-APACHE`
+- **syn 3.0.3** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/syn/3.0.3/download); repository: https://github.com/dtolnay/syn; files: `LICENSE-APACHE`
 - **syn 3.0.6** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/syn/3.0.6/download); repository: https://github.com/dtolnay/syn; files: `LICENSE-APACHE`
 - **thiserror 1.0.69** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror/1.0.69/download); repository: https://github.com/dtolnay/thiserror; files: `LICENSE-APACHE`
+- **thiserror 2.0.20** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror/2.0.20/download); repository: https://github.com/dtolnay/thiserror; files: `LICENSE-APACHE`
 - **thiserror 2.0.21** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror/2.0.21/download); repository: https://github.com/dtolnay/thiserror; files: `LICENSE-APACHE`
 - **thiserror-impl 1.0.69** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror-impl/1.0.69/download); repository: https://github.com/dtolnay/thiserror; files: `LICENSE-APACHE`
+- **thiserror-impl 2.0.20** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror-impl/2.0.20/download); repository: https://github.com/dtolnay/thiserror; files: `LICENSE-APACHE`
 - **thiserror-impl 2.0.21** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thiserror-impl/2.0.21/download); repository: https://github.com/dtolnay/thiserror; files: `LICENSE-APACHE`
+- **unicode-ident 1.0.24** — `(MIT OR Apache-2.0) AND Unicode-3.0`; [source](https://crates.io/api/v1/crates/unicode-ident/1.0.24/download); repository: https://github.com/dtolnay/unicode-ident; files: `LICENSE-APACHE`
 - **unicode-ident 1.0.26** — `(MIT OR Apache-2.0) AND Unicode-3.0`; [source](https://crates.io/api/v1/crates/unicode-ident/1.0.26/download); repository: https://github.com/dtolnay/unicode-ident; files: `LICENSE-APACHE`
 - **utf-8 0.7.6** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/utf-8/0.7.6/download); repository: https://github.com/SimonSapin/rust-utf8; files: `LICENSE-APACHE`
 - **utf8-zero 0.8.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/utf8-zero/0.8.1/download); repository: https://github.com/algesten/utf8-zero; files: `LICENSE-APACHE`
@@ -10014,13 +13453,16 @@ TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 END OF TERMS AND CONDITIONS
 ````
 
-### License text 84
+### License text 113
 
 Normalized SHA-256: `6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb`
 
 Used by:
 
+- **bitflags 2.13.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/bitflags/2.13.1/download); repository: https://github.com/bitflags/bitflags; files: `LICENSE-MIT`
 - **bitflags 2.13.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/bitflags/2.13.2/download); repository: https://github.com/bitflags/bitflags; files: `LICENSE-MIT`
+- **glob 0.3.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/glob/0.3.4/download); repository: https://github.com/rust-lang/glob; files: `LICENSE-MIT`
+- **log 0.4.33** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/log/0.4.33/download); repository: https://github.com/rust-lang/log; files: `LICENSE-MIT`
 - **log 0.4.34** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/log/0.4.34/download); repository: https://github.com/rust-lang/log; files: `LICENSE-MIT`
 - **num-derive 0.4.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/num-derive/0.4.2/download); repository: https://github.com/rust-num/num-derive; files: `LICENSE-MIT`
 - **num-traits 0.2.19** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/num-traits/0.2.19/download); repository: https://github.com/rust-num/num-traits; files: `LICENSE-MIT`
@@ -10056,7 +13498,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 85
+### License text 114
 
 Normalized SHA-256: `655e3ee7a4c27430774962e62a6d37d7348e5f2f292010ad674ce1bebefd24bc`
 
@@ -10088,7 +13530,49 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 86
+### License text 115
+
+Normalized SHA-256: `65e9ed46a59976eda8f5bd1ea79a680dea38dd299c760bc9a8d87a764ef5029b`
+
+Used by:
+
+- **capstone d536b1577fd033a31d75f48fd183aa425256cc18** — `BSD-3-Clause and LLVM legacy license`; [source](https://github.com/frida/capstone/tree/d536b1577fd033a31d75f48fd183aa425256cc18); repository: https://github.com/frida/capstone; files: `native/capstone/LICENSE.TXT`, `native/capstone/bindings/python/LICENSE.TXT`
+
+````text
+This is the software license for Capstone disassembly framework.
+Capstone has been designed & implemented by Nguyen Anh Quynh <aquynh@gmail.com>
+
+See http://www.capstone-engine.org for further information.
+
+Copyright (c) 2013, COSEINC.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+* Neither the name of the developer(s) nor the names of its
+  contributors may be used to endorse or promote products derived from this
+  software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+````
+
+### License text 116
 
 Normalized SHA-256: `65fc947f4bac882a2cd104ef73c246b1b037059df9f2b3a58b7f77f0b9e56071`
 
@@ -10120,7 +13604,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 87
+### License text 117
 
 Normalized SHA-256: `6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd`
 
@@ -10163,7 +13647,44 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 88
+### License text 118
+
+Normalized SHA-256: `69036b033e4bb951821964dbc3d9b1efe6913a6e36d9c1f206de4035a1a85cc4`
+
+Used by:
+
+- **lzma-sys 0.1.20** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/lzma-sys/0.1.20/download); repository: https://github.com/alexcrichton/xz2-rs; files: `LICENSE-MIT`
+- **xz2 0.1.7** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/xz2/0.1.7/download); repository: https://github.com/alexcrichton/xz2-rs; files: `LICENSE-MIT`
+
+````text
+Copyright (c) 2016 Alex Crichton
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 119
 
 Normalized SHA-256: `6a2e0ade09a7d5f816f11566fee2b151b32235a7fad52b41d49cce96f833c1a9`
 
@@ -10193,14 +13714,46 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 89
+### License text 120
+
+Normalized SHA-256: `6abdec69ada0c5f06d4819d9a0db0824ce54d610665df0b64c774480db9c1f2a`
+
+Used by:
+
+- **tinyvec_macros 0.1.1** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/tinyvec_macros/0.1.1/download); repository: https://github.com/Soveu/tinyvec_macros; files: `LICENSE-ZLIB.md`
+
+````text
+zlib License
+
+(C) 2020 Tomasz "Soveu" Marx
+
+This software is provided 'as-is', without any express or implied
+warranty.  In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
+````
+
+### License text 121
 
 Normalized SHA-256: `6df43f6f4b5d4587f3d8d71e45532c688fd168afa5fe89d571cb32fa09c4ef51`
 
 Used by:
 
+- **rand_core 0.10.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_core/0.10.1/download); repository: https://github.com/rust-random/rand_core; files: `LICENSE-APACHE`
 - **rand_core 0.6.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_core/0.6.4/download); repository: https://github.com/rust-random/rand; files: `LICENSE-APACHE`
 - **rand_core 0.9.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_core/0.9.5/download); repository: https://github.com/rust-random/rand; files: `LICENSE-APACHE`
+- **rand_pcg 0.10.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_pcg/0.10.2/download); repository: https://github.com/rust-random/rngs; files: `LICENSE-APACHE`
 
 ````text
                               Apache License
@@ -10392,7 +13945,7 @@ APPENDIX: How to apply the Apache License to your work.
    identification within third-party archives.
 ````
 
-### License text 90
+### License text 122
 
 Normalized SHA-256: `6e24b7455f0b9afefdf4f3efd59a56ce76a3020c2dc4371937e281fc5e587fd7`
 
@@ -10424,7 +13977,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 91
+### License text 123
 
 Normalized SHA-256: `6ee2ed6c77710de911761acd5fc1ad1da00f476beb1a7ef27e78c2d1858deafc`
 
@@ -10458,7 +14011,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 92
+### License text 124
 
 Normalized SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
 
@@ -10502,12 +14055,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 93
+### License text 125
 
 Normalized SHA-256: `709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c`
 
 Used by:
 
+- **hyper-rustls 0.27.9** — `Apache-2.0 OR ISC OR MIT`; [source](https://crates.io/api/v1/crates/hyper-rustls/0.27.9/download); repository: https://github.com/rustls/hyper-rustls; files: `LICENSE-MIT`
+- **rustls 0.23.43** — `Apache-2.0 OR ISC OR MIT`; [source](https://crates.io/api/v1/crates/rustls/0.23.43/download); repository: https://github.com/rustls/rustls; files: `LICENSE-MIT`
 - **rustls 0.23.45** — `Apache-2.0 OR ISC OR MIT`; [source](https://crates.io/api/v1/crates/rustls/0.23.45/download); repository: https://github.com/rustls/rustls; files: `LICENSE-MIT`
 
 ````text
@@ -10538,7 +14093,36 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 94
+### License text 126
+
+Normalized SHA-256: `7307b6cdfdb8034ee45352e8ac6da25b659bb2eaa51b8a8eaf15412f173e3fdc`
+
+Used by:
+
+- **const_panic 0.2.17** — `Zlib`; [source](https://crates.io/api/v1/crates/const_panic/0.2.17/download); repository: https://github.com/rodrimati1992/const_panic/; files: `LICENSE-ZLIB.md`
+- **konst 0.4.3** — `Zlib`; [source](https://crates.io/api/v1/crates/konst/0.4.3/download); repository: https://github.com/rodrimati1992/konst/; files: `LICENSE-ZLIB.md`
+
+````text
+Copyright (c) 2021 Matias Rodriguez.
+
+This software is provided 'as-is', without any express or implied
+warranty. In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
+````
+
+### License text 127
 
 Normalized SHA-256: `7365cc8878a1d7ce155a58c4ca09c3d7a6be413efa5334a80ea842912b669349`
 
@@ -10574,7 +14158,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 95
+### License text 128
 
 Normalized SHA-256: `73663aa1887e9ff1fc094f9b6fc2c06c6a9faa5d24833c8e31490afb565c9039`
 
@@ -10653,7 +14237,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 96
+### License text 129
 
 Normalized SHA-256: `7377e48a67377f0baa9ccee6425e125eb7b96d5b8e706f4c99479ca4ffa21b77`
 
@@ -10686,7 +14270,27 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 97
+### License text 130
+
+Normalized SHA-256: `748c208045a6f00734dbc85a1c0e401c9a25e1f83fc756e99916750dbd2469a7`
+
+Used by:
+
+- **static_vcruntime 3.0.0** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/static_vcruntime/3.0.0/download); repository: https://github.com/ChrisDenton/static_vcruntime; files: `LICENSE-MIT`
+
+````text
+MIT License
+
+Copyright (c) 2021 Chris Denton.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice (including the next paragraph) shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+````
+
+### License text 131
 
 Normalized SHA-256: `74db5baf44a41b1000312c673544b3374e4198af5605c7f9080a402cec42cfa3`
 
@@ -10754,7 +14358,287 @@ use or other dealings in these Data Files or Software without prior
 written authorization of the copyright holder.
 ````
 
-### License text 98
+### License text 132
+
+Normalized SHA-256: `751963a8b88c0e3a9f27e98933079fbcf09b9998b2c13ac49c2e4d58444520d6`
+
+Used by:
+
+- **reqwest 0.12.28** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/reqwest/0.12.28/download); repository: https://github.com/seanmonstar/reqwest; files: `LICENSE-APACHE`
+
+````text
+                              Apache License
+                        Version 2.0, January 2004
+                     http://www.apache.org/licenses/
+
+TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+1. Definitions.
+
+   "License" shall mean the terms and conditions for use, reproduction,
+   and distribution as defined by Sections 1 through 9 of this document.
+
+   "Licensor" shall mean the copyright owner or entity authorized by
+   the copyright owner that is granting the License.
+
+   "Legal Entity" shall mean the union of the acting entity and all
+   other entities that control, are controlled by, or are under common
+   control with that entity. For the purposes of this definition,
+   "control" means (i) the power, direct or indirect, to cause the
+   direction or management of such entity, whether by contract or
+   otherwise, or (ii) ownership of fifty percent (50%) or more of the
+   outstanding shares, or (iii) beneficial ownership of such entity.
+
+   "You" (or "Your") shall mean an individual or Legal Entity
+   exercising permissions granted by this License.
+
+   "Source" form shall mean the preferred form for making modifications,
+   including but not limited to software source code, documentation
+   source, and configuration files.
+
+   "Object" form shall mean any form resulting from mechanical
+   transformation or translation of a Source form, including but
+   not limited to compiled object code, generated documentation,
+   and conversions to other media types.
+
+   "Work" shall mean the work of authorship, whether in Source or
+   Object form, made available under the License, as indicated by a
+   copyright notice that is included in or attached to the work
+   (an example is provided in the Appendix below).
+
+   "Derivative Works" shall mean any work, whether in Source or Object
+   form, that is based on (or derived from) the Work and for which the
+   editorial revisions, annotations, elaborations, or other modifications
+   represent, as a whole, an original work of authorship. For the purposes
+   of this License, Derivative Works shall not include works that remain
+   separable from, or merely link (or bind by name) to the interfaces of,
+   the Work and Derivative Works thereof.
+
+   "Contribution" shall mean any work of authorship, including
+   the original version of the Work and any modifications or additions
+   to that Work or Derivative Works thereof, that is intentionally
+   submitted to Licensor for inclusion in the Work by the copyright owner
+   or by an individual or Legal Entity authorized to submit on behalf of
+   the copyright owner. For the purposes of this definition, "submitted"
+   means any form of electronic, verbal, or written communication sent
+   to the Licensor or its representatives, including but not limited to
+   communication on electronic mailing lists, source code control systems,
+   and issue tracking systems that are managed by, or on behalf of, the
+   Licensor for the purpose of discussing and improving the Work, but
+   excluding communication that is conspicuously marked or otherwise
+   designated in writing by the copyright owner as "Not a Contribution."
+
+   "Contributor" shall mean Licensor and any individual or Legal Entity
+   on behalf of whom a Contribution has been received by Licensor and
+   subsequently incorporated within the Work.
+
+2. Grant of Copyright License. Subject to the terms and conditions of
+   this License, each Contributor hereby grants to You a perpetual,
+   worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+   copyright license to reproduce, prepare Derivative Works of,
+   publicly display, publicly perform, sublicense, and distribute the
+   Work and such Derivative Works in Source or Object form.
+
+3. Grant of Patent License. Subject to the terms and conditions of
+   this License, each Contributor hereby grants to You a perpetual,
+   worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+   (except as stated in this section) patent license to make, have made,
+   use, offer to sell, sell, import, and otherwise transfer the Work,
+   where such license applies only to those patent claims licensable
+   by such Contributor that are necessarily infringed by their
+   Contribution(s) alone or by combination of their Contribution(s)
+   with the Work to which such Contribution(s) was submitted. If You
+   institute patent litigation against any entity (including a
+   cross-claim or counterclaim in a lawsuit) alleging that the Work
+   or a Contribution incorporated within the Work constitutes direct
+   or contributory patent infringement, then any patent licenses
+   granted to You under this License for that Work shall terminate
+   as of the date such litigation is filed.
+
+4. Redistribution. You may reproduce and distribute copies of the
+   Work or Derivative Works thereof in any medium, with or without
+   modifications, and in Source or Object form, provided that You
+   meet the following conditions:
+
+   (a) You must give any other recipients of the Work or
+       Derivative Works a copy of this License; and
+
+   (b) You must cause any modified files to carry prominent notices
+       stating that You changed the files; and
+
+   (c) You must retain, in the Source form of any Derivative Works
+       that You distribute, all copyright, patent, trademark, and
+       attribution notices from the Source form of the Work,
+       excluding those notices that do not pertain to any part of
+       the Derivative Works; and
+
+   (d) If the Work includes a "NOTICE" text file as part of its
+       distribution, then any Derivative Works that You distribute must
+       include a readable copy of the attribution notices contained
+       within such NOTICE file, excluding those notices that do not
+       pertain to any part of the Derivative Works, in at least one
+       of the following places: within a NOTICE text file distributed
+       as part of the Derivative Works; within the Source form or
+       documentation, if provided along with the Derivative Works; or,
+       within a display generated by the Derivative Works, if and
+       wherever such third-party notices normally appear. The contents
+       of the NOTICE file are for informational purposes only and
+       do not modify the License. You may add Your own attribution
+       notices within Derivative Works that You distribute, alongside
+       or as an addendum to the NOTICE text from the Work, provided
+       that such additional attribution notices cannot be construed
+       as modifying the License.
+
+   You may add Your own copyright statement to Your modifications and
+   may provide additional or different license terms and conditions
+   for use, reproduction, or distribution of Your modifications, or
+   for any such Derivative Works as a whole, provided Your use,
+   reproduction, and distribution of the Work otherwise complies with
+   the conditions stated in this License.
+
+5. Submission of Contributions. Unless You explicitly state otherwise,
+   any Contribution intentionally submitted for inclusion in the Work
+   by You to the Licensor shall be under the terms and conditions of
+   this License, without any additional terms or conditions.
+   Notwithstanding the above, nothing herein shall supersede or modify
+   the terms of any separate license agreement you may have executed
+   with Licensor regarding such Contributions.
+
+6. Trademarks. This License does not grant permission to use the trade
+   names, trademarks, service marks, or product names of the Licensor,
+   except as required for reasonable and customary use in describing the
+   origin of the Work and reproducing the content of the NOTICE file.
+
+7. Disclaimer of Warranty. Unless required by applicable law or
+   agreed to in writing, Licensor provides the Work (and each
+   Contributor provides its Contributions) on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+   implied, including, without limitation, any warranties or conditions
+   of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+   PARTICULAR PURPOSE. You are solely responsible for determining the
+   appropriateness of using or redistributing the Work and assume any
+   risks associated with Your exercise of permissions under this License.
+
+8. Limitation of Liability. In no event and under no legal theory,
+   whether in tort (including negligence), contract, or otherwise,
+   unless required by applicable law (such as deliberate and grossly
+   negligent acts) or agreed to in writing, shall any Contributor be
+   liable to You for damages, including any direct, indirect, special,
+   incidental, or consequential damages of any character arising as a
+   result of this License or out of the use or inability to use the
+   Work (including but not limited to damages for loss of goodwill,
+   work stoppage, computer failure or malfunction, or any and all
+   other commercial damages or losses), even if such Contributor
+   has been advised of the possibility of such damages.
+
+9. Accepting Warranty or Additional Liability. While redistributing
+   the Work or Derivative Works thereof, You may choose to offer,
+   and charge a fee for, acceptance of support, warranty, indemnity,
+   or other liability obligations and/or rights consistent with this
+   License. However, in accepting such obligations, You may act only
+   on Your own behalf and on Your sole responsibility, not on behalf
+   of any other Contributor, and only if You agree to indemnify,
+   defend, and hold each Contributor harmless for any liability
+   incurred by, or claims asserted against, such Contributor by reason
+   of your accepting any such warranty or additional liability.
+
+END OF TERMS AND CONDITIONS
+
+APPENDIX: How to apply the Apache License to your work.
+
+   To apply the Apache License to your work, attach the following
+   boilerplate notice, with the fields enclosed by brackets "[]"
+   replaced with your own identifying information. (Don't include
+   the brackets!)  The text should be enclosed in the appropriate
+   comment syntax for the file format. We also recommend that a
+   file or class name and description of purpose be included on the
+   same "printed page" as the copyright notice for easier
+   identification within third-party archives.
+
+Copyright 2016 Sean McArthur
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+````
+
+### License text 133
+
+Normalized SHA-256: `7576269ea71f767b99297934c0b2367532690f8c4badc695edf8e04ab6a1e545`
+
+Used by:
+
+- **either 1.17.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/either/1.17.0/download); repository: https://github.com/rayon-rs/either; files: `LICENSE-MIT`
+- **itertools 0.13.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/itertools/0.13.0/download); repository: https://github.com/rust-itertools/itertools; files: `LICENSE-MIT`
+
+````text
+Copyright (c) 2015
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 134
+
+Normalized SHA-256: `7939f4c45423cec4a18236ad0a88570e33508dd7462e07b1038001f90ece65fb`
+
+Used by:
+
+- **pcre2 b47486922fdc3486499b310dc9cf903449700474** — `BSD-3-Clause with PCRE2 exception`; [source](https://github.com/frida/pcre2/tree/b47486922fdc3486499b310dc9cf903449700474); repository: https://github.com/frida/pcre2; files: `native/pcre2/LICENSE.build`
+- **xz e70f5800ab5001c9509d374dbf3e7e6b866c43fe** — `Public-domain liblzma; GPL/LGPL scripts/tools not shipped`; [source](https://github.com/frida/xz/tree/e70f5800ab5001c9509d374dbf3e7e6b866c43fe); repository: https://github.com/frida/xz; files: `native/xz/LICENSE.build`
+
+````text
+Copyright (c) 2021 The Meson development team
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+````
+
+### License text 135
 
 Normalized SHA-256: `799e9ca9d179295ef372f25d3769cdda7d25bb2668add6a6a1e22d1e4c678b8d`
 
@@ -10790,7 +14674,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 99
+### License text 136
 
 Normalized SHA-256: `7abd9b6960dcf7d4d0a48606a5b71bfe37d472db68d70637f3a58a56785f1621`
 
@@ -10814,7 +14698,7 @@ Used by:
 // OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ````
 
-### License text 100
+### License text 137
 
 Normalized SHA-256: `7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0`
 
@@ -10853,7 +14737,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 101
+### License text 138
 
 Normalized SHA-256: `7bbe6f97e37716d8ab45a0a4cf466583b9bfaafd53100d6f51e6a345dba924a2`
 
@@ -10883,7 +14767,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### License text 102
+### License text 139
 
 Normalized SHA-256: `7ca6700600dfa9c9497bf5556365067daa802c871ea78239f129309c7a2048f7`
 
@@ -10915,12 +14799,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 103
+### License text 140
 
 Normalized SHA-256: `7cfafc877eccc46c0e346ccbaa5c51bb6b894d2b818e617d970211e232785ad4`
 
 Used by:
 
+- **hyper-rustls 0.27.9** — `Apache-2.0 OR ISC OR MIT`; [source](https://crates.io/api/v1/crates/hyper-rustls/0.27.9/download); repository: https://github.com/rustls/hyper-rustls; files: `LICENSE-ISC`
+- **rustls 0.23.43** — `Apache-2.0 OR ISC OR MIT`; [source](https://crates.io/api/v1/crates/rustls/0.23.43/download); repository: https://github.com/rustls/rustls; files: `LICENSE-ISC`
 - **rustls 0.23.45** — `Apache-2.0 OR ISC OR MIT`; [source](https://crates.io/api/v1/crates/rustls/0.23.45/download); repository: https://github.com/rustls/rustls; files: `LICENSE-ISC`
 
 ````text
@@ -10941,7 +14827,7 @@ ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 ````
 
-### License text 104
+### License text 141
 
 Normalized SHA-256: `7dc1552e88f49132cb358b1b962fc5e79fa42d70bcbb88c526d33e45b8e98036`
 
@@ -10977,7 +14863,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 105
+### License text 142
 
 Normalized SHA-256: `7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c`
 
@@ -11012,7 +14898,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 For more information, please refer to <http://unlicense.org/>
 ````
 
-### License text 106
+### License text 143
 
 Normalized SHA-256: `7e5886959f67f8c75063a9d55cd3cb08c5a8cbea9a944fa1df2d4ae038f53721`
 
@@ -11044,7 +14930,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 107
+### License text 144
 
 Normalized SHA-256: `7fea0ee51a4ca5d5cea7464135fd55e8b09caf3a61da3d451ac8a22af95c033f`
 
@@ -11075,7 +14961,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### License text 108
+### License text 145
 
 Normalized SHA-256: `8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90`
 
@@ -11084,6 +14970,7 @@ Used by:
 - **bit-set 0.8.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/bit-set/0.8.0/download); repository: https://github.com/contain-rs/bit-set; files: `LICENSE-APACHE`
 - **bit-vec 0.8.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/bit-vec/0.8.0/download); repository: https://github.com/contain-rs/bit-vec; files: `LICENSE-APACHE`
 - **downcast-rs 1.2.1** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/downcast-rs/1.2.1/download); repository: https://github.com/marcianx/downcast-rs; files: `LICENSE-APACHE`
+- **minimal-lexical 0.2.1** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/minimal-lexical/0.2.1/download); repository: https://github.com/Alexhuszagh/minimal-lexical; files: `LICENSE-APACHE`
 
 ````text
                               Apache License
@@ -11289,7 +15176,358 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 109
+### License text 146
+
+Normalized SHA-256: `8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643`
+
+Used by:
+
+- **lzma-sys 0.1.20** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/lzma-sys/0.1.20/download); repository: https://github.com/alexcrichton/xz2-rs; files: `xz-5.2/COPYING.GPLv2`
+- **xz e70f5800ab5001c9509d374dbf3e7e6b866c43fe** — `Public-domain liblzma; GPL/LGPL scripts/tools not shipped`; [source](https://github.com/frida/xz/tree/e70f5800ab5001c9509d374dbf3e7e6b866c43fe); repository: https://github.com/frida/xz; files: `native/xz/COPYING.GPLv2`
+
+````text
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 2, June 1991
+
+ Copyright (C) 1989, 1991 Free Software Foundation, Inc.,
+ 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+                            Preamble
+
+  The licenses for most software are designed to take away your
+freedom to share and change it.  By contrast, the GNU General Public
+License is intended to guarantee your freedom to share and change free
+software--to make sure the software is free for all its users.  This
+General Public License applies to most of the Free Software
+Foundation's software and to any other program whose authors commit to
+using it.  (Some other Free Software Foundation software is covered by
+the GNU Lesser General Public License instead.)  You can apply it to
+your programs, too.
+
+  When we speak of free software, we are referring to freedom, not
+price.  Our General Public Licenses are designed to make sure that you
+have the freedom to distribute copies of free software (and charge for
+this service if you wish), that you receive source code or can get it
+if you want it, that you can change the software or use pieces of it
+in new free programs; and that you know you can do these things.
+
+  To protect your rights, we need to make restrictions that forbid
+anyone to deny you these rights or to ask you to surrender the rights.
+These restrictions translate to certain responsibilities for you if you
+distribute copies of the software, or if you modify it.
+
+  For example, if you distribute copies of such a program, whether
+gratis or for a fee, you must give the recipients all the rights that
+you have.  You must make sure that they, too, receive or can get the
+source code.  And you must show them these terms so they know their
+rights.
+
+  We protect your rights with two steps: (1) copyright the software, and
+(2) offer you this license which gives you legal permission to copy,
+distribute and/or modify the software.
+
+  Also, for each author's protection and ours, we want to make certain
+that everyone understands that there is no warranty for this free
+software.  If the software is modified by someone else and passed on, we
+want its recipients to know that what they have is not the original, so
+that any problems introduced by others will not reflect on the original
+authors' reputations.
+
+  Finally, any free program is threatened constantly by software
+patents.  We wish to avoid the danger that redistributors of a free
+program will individually obtain patent licenses, in effect making the
+program proprietary.  To prevent this, we have made it clear that any
+patent must be licensed for everyone's free use or not licensed at all.
+
+  The precise terms and conditions for copying, distribution and
+modification follow.
+
+                    GNU GENERAL PUBLIC LICENSE
+   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+  0. This License applies to any program or other work which contains
+a notice placed by the copyright holder saying it may be distributed
+under the terms of this General Public License.  The "Program", below,
+refers to any such program or work, and a "work based on the Program"
+means either the Program or any derivative work under copyright law:
+that is to say, a work containing the Program or a portion of it,
+either verbatim or with modifications and/or translated into another
+language.  (Hereinafter, translation is included without limitation in
+the term "modification".)  Each licensee is addressed as "you".
+
+Activities other than copying, distribution and modification are not
+covered by this License; they are outside its scope.  The act of
+running the Program is not restricted, and the output from the Program
+is covered only if its contents constitute a work based on the
+Program (independent of having been made by running the Program).
+Whether that is true depends on what the Program does.
+
+  1. You may copy and distribute verbatim copies of the Program's
+source code as you receive it, in any medium, provided that you
+conspicuously and appropriately publish on each copy an appropriate
+copyright notice and disclaimer of warranty; keep intact all the
+notices that refer to this License and to the absence of any warranty;
+and give any other recipients of the Program a copy of this License
+along with the Program.
+
+You may charge a fee for the physical act of transferring a copy, and
+you may at your option offer warranty protection in exchange for a fee.
+
+  2. You may modify your copy or copies of the Program or any portion
+of it, thus forming a work based on the Program, and copy and
+distribute such modifications or work under the terms of Section 1
+above, provided that you also meet all of these conditions:
+
+    a) You must cause the modified files to carry prominent notices
+    stating that you changed the files and the date of any change.
+
+    b) You must cause any work that you distribute or publish, that in
+    whole or in part contains or is derived from the Program or any
+    part thereof, to be licensed as a whole at no charge to all third
+    parties under the terms of this License.
+
+    c) If the modified program normally reads commands interactively
+    when run, you must cause it, when started running for such
+    interactive use in the most ordinary way, to print or display an
+    announcement including an appropriate copyright notice and a
+    notice that there is no warranty (or else, saying that you provide
+    a warranty) and that users may redistribute the program under
+    these conditions, and telling the user how to view a copy of this
+    License.  (Exception: if the Program itself is interactive but
+    does not normally print such an announcement, your work based on
+    the Program is not required to print an announcement.)
+
+These requirements apply to the modified work as a whole.  If
+identifiable sections of that work are not derived from the Program,
+and can be reasonably considered independent and separate works in
+themselves, then this License, and its terms, do not apply to those
+sections when you distribute them as separate works.  But when you
+distribute the same sections as part of a whole which is a work based
+on the Program, the distribution of the whole must be on the terms of
+this License, whose permissions for other licensees extend to the
+entire whole, and thus to each and every part regardless of who wrote it.
+
+Thus, it is not the intent of this section to claim rights or contest
+your rights to work written entirely by you; rather, the intent is to
+exercise the right to control the distribution of derivative or
+collective works based on the Program.
+
+In addition, mere aggregation of another work not based on the Program
+with the Program (or with a work based on the Program) on a volume of
+a storage or distribution medium does not bring the other work under
+the scope of this License.
+
+  3. You may copy and distribute the Program (or a work based on it,
+under Section 2) in object code or executable form under the terms of
+Sections 1 and 2 above provided that you also do one of the following:
+
+    a) Accompany it with the complete corresponding machine-readable
+    source code, which must be distributed under the terms of Sections
+    1 and 2 above on a medium customarily used for software interchange; or,
+
+    b) Accompany it with a written offer, valid for at least three
+    years, to give any third party, for a charge no more than your
+    cost of physically performing source distribution, a complete
+    machine-readable copy of the corresponding source code, to be
+    distributed under the terms of Sections 1 and 2 above on a medium
+    customarily used for software interchange; or,
+
+    c) Accompany it with the information you received as to the offer
+    to distribute corresponding source code.  (This alternative is
+    allowed only for noncommercial distribution and only if you
+    received the program in object code or executable form with such
+    an offer, in accord with Subsection b above.)
+
+The source code for a work means the preferred form of the work for
+making modifications to it.  For an executable work, complete source
+code means all the source code for all modules it contains, plus any
+associated interface definition files, plus the scripts used to
+control compilation and installation of the executable.  However, as a
+special exception, the source code distributed need not include
+anything that is normally distributed (in either source or binary
+form) with the major components (compiler, kernel, and so on) of the
+operating system on which the executable runs, unless that component
+itself accompanies the executable.
+
+If distribution of executable or object code is made by offering
+access to copy from a designated place, then offering equivalent
+access to copy the source code from the same place counts as
+distribution of the source code, even though third parties are not
+compelled to copy the source along with the object code.
+
+  4. You may not copy, modify, sublicense, or distribute the Program
+except as expressly provided under this License.  Any attempt
+otherwise to copy, modify, sublicense or distribute the Program is
+void, and will automatically terminate your rights under this License.
+However, parties who have received copies, or rights, from you under
+this License will not have their licenses terminated so long as such
+parties remain in full compliance.
+
+  5. You are not required to accept this License, since you have not
+signed it.  However, nothing else grants you permission to modify or
+distribute the Program or its derivative works.  These actions are
+prohibited by law if you do not accept this License.  Therefore, by
+modifying or distributing the Program (or any work based on the
+Program), you indicate your acceptance of this License to do so, and
+all its terms and conditions for copying, distributing or modifying
+the Program or works based on it.
+
+  6. Each time you redistribute the Program (or any work based on the
+Program), the recipient automatically receives a license from the
+original licensor to copy, distribute or modify the Program subject to
+these terms and conditions.  You may not impose any further
+restrictions on the recipients' exercise of the rights granted herein.
+You are not responsible for enforcing compliance by third parties to
+this License.
+
+  7. If, as a consequence of a court judgment or allegation of patent
+infringement or for any other reason (not limited to patent issues),
+conditions are imposed on you (whether by court order, agreement or
+otherwise) that contradict the conditions of this License, they do not
+excuse you from the conditions of this License.  If you cannot
+distribute so as to satisfy simultaneously your obligations under this
+License and any other pertinent obligations, then as a consequence you
+may not distribute the Program at all.  For example, if a patent
+license would not permit royalty-free redistribution of the Program by
+all those who receive copies directly or indirectly through you, then
+the only way you could satisfy both it and this License would be to
+refrain entirely from distribution of the Program.
+
+If any portion of this section is held invalid or unenforceable under
+any particular circumstance, the balance of the section is intended to
+apply and the section as a whole is intended to apply in other
+circumstances.
+
+It is not the purpose of this section to induce you to infringe any
+patents or other property right claims or to contest validity of any
+such claims; this section has the sole purpose of protecting the
+integrity of the free software distribution system, which is
+implemented by public license practices.  Many people have made
+generous contributions to the wide range of software distributed
+through that system in reliance on consistent application of that
+system; it is up to the author/donor to decide if he or she is willing
+to distribute software through any other system and a licensee cannot
+impose that choice.
+
+This section is intended to make thoroughly clear what is believed to
+be a consequence of the rest of this License.
+
+  8. If the distribution and/or use of the Program is restricted in
+certain countries either by patents or by copyrighted interfaces, the
+original copyright holder who places the Program under this License
+may add an explicit geographical distribution limitation excluding
+those countries, so that distribution is permitted only in or among
+countries not thus excluded.  In such case, this License incorporates
+the limitation as if written in the body of this License.
+
+  9. The Free Software Foundation may publish revised and/or new versions
+of the General Public License from time to time.  Such new versions will
+be similar in spirit to the present version, but may differ in detail to
+address new problems or concerns.
+
+Each version is given a distinguishing version number.  If the Program
+specifies a version number of this License which applies to it and "any
+later version", you have the option of following the terms and conditions
+either of that version or of any later version published by the Free
+Software Foundation.  If the Program does not specify a version number of
+this License, you may choose any version ever published by the Free Software
+Foundation.
+
+  10. If you wish to incorporate parts of the Program into other free
+programs whose distribution conditions are different, write to the author
+to ask for permission.  For software which is copyrighted by the Free
+Software Foundation, write to the Free Software Foundation; we sometimes
+make exceptions for this.  Our decision will be guided by the two goals
+of preserving the free status of all derivatives of our free software and
+of promoting the sharing and reuse of software generally.
+
+                            NO WARRANTY
+
+  11. BECAUSE THE PROGRAM IS LICENSED FREE OF CHARGE, THERE IS NO WARRANTY
+FOR THE PROGRAM, TO THE EXTENT PERMITTED BY APPLICABLE LAW.  EXCEPT WHEN
+OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES
+PROVIDE THE PROGRAM "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED
+OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS
+TO THE QUALITY AND PERFORMANCE OF THE PROGRAM IS WITH YOU.  SHOULD THE
+PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING,
+REPAIR OR CORRECTION.
+
+  12. IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
+WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR
+REDISTRIBUTE THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES,
+INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING
+OUT OF THE USE OR INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED
+TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY
+YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER
+PROGRAMS), EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES.
+
+                     END OF TERMS AND CONDITIONS
+
+            How to Apply These Terms to Your New Programs
+
+  If you develop a new program, and you want it to be of the greatest
+possible use to the public, the best way to achieve this is to make it
+free software which everyone can redistribute and change under these terms.
+
+  To do so, attach the following notices to the program.  It is safest
+to attach them to the start of each source file to most effectively
+convey the exclusion of warranty; and each file should have at least
+the "copyright" line and a pointer to where the full notice is found.
+
+    <one line to give the program's name and a brief idea of what it does.>
+    Copyright (C) <year>  <name of author>
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License along
+    with this program; if not, write to the Free Software Foundation, Inc.,
+    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+Also add information on how to contact you by electronic and paper mail.
+
+If the program is interactive, make it output a short notice like this
+when it starts in an interactive mode:
+
+    Gnomovision version 69, Copyright (C) year name of author
+    Gnomovision comes with ABSOLUTELY NO WARRANTY; for details type `show w'.
+    This is free software, and you are welcome to redistribute it
+    under certain conditions; type `show c' for details.
+
+The hypothetical commands `show w' and `show c' should show the appropriate
+parts of the General Public License.  Of course, the commands you use may
+be called something other than `show w' and `show c'; they could even be
+mouse-clicks or menu items--whatever suits your program.
+
+You should also get your employer (if you work as a programmer) or your
+school, if any, to sign a "copyright disclaimer" for the program, if
+necessary.  Here is a sample; alter the names:
+
+  Yoyodyne, Inc., hereby disclaims all copyright interest in the program
+  `Gnomovision' (which makes passes at compilers) written by James Hacker.
+
+  <signature of Ty Coon>, 1 April 1989
+  Ty Coon, President of Vice
+
+This General Public License does not permit incorporating your program into
+proprietary programs.  If your program is a subroutine library, you may
+consider it more useful to permit linking proprietary applications with the
+library.  If this is what you want to do, use the GNU Lesser General
+Public License instead of this License.
+````
+
+### License text 147
 
 Normalized SHA-256: `83c1763356e822adde0a2cae748d938a73fdc263849ccff6b27776dff213bd32`
 
@@ -11325,13 +15563,15 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ````
 
-### License text 110
+### License text 148
 
 Normalized SHA-256: `84b34dd7608f7fb9b17bd588a6bf392bf7de504e2716f024a77d89f1b145a151`
 
 Used by:
 
 - **bytemuck 1.25.2** — `Zlib OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/bytemuck/1.25.2/download); repository: https://github.com/Lokathor/bytemuck; files: `LICENSE-ZLIB`
+- **bytemuck_derive 1.12.0** — `Zlib OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/bytemuck_derive/1.12.0/download); repository: https://github.com/Lokathor/bytemuck; files: `LICENSE-ZLIB`
+- **tinyvec 1.12.0** — `Zlib OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/tinyvec/1.12.0/download); repository: https://github.com/Lokathor/tinyvec; files: `LICENSE-ZLIB.md`
 
 ````text
 Copyright (c) 2019 Daniel "Lokathor" Gee.
@@ -11347,7 +15587,7 @@ Permission is granted to anyone to use this software for any purpose, including 
 3. This notice may not be removed or altered from any source distribution.
 ````
 
-### License text 111
+### License text 149
 
 Normalized SHA-256: `861399f8c21c042b110517e76dc6b63a2b334276c8cf17412fc3c8908ca8dc17`
 
@@ -11370,7 +15610,7 @@ AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ````
 
-### License text 112
+### License text 150
 
 Normalized SHA-256: `86dd7f026f916daf7511e39951ad8ea8cf55a8db67ae64060dacf829761c18f3`
 
@@ -11409,7 +15649,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 113
+### License text 151
 
 Normalized SHA-256: `8764a597675778ddfd4e25f81b08a05dbcf089ac05662df7613fe67f150e3aa2`
 
@@ -11445,7 +15685,324 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 114
+### License text 152
+
+Normalized SHA-256: `87d884eceb7fc54611470ce9f74280d28612b0c877adfc767e9676892a638987`
+
+Used by:
+
+- **pcre2 b47486922fdc3486499b310dc9cf903449700474** — `BSD-3-Clause with PCRE2 exception`; [source](https://github.com/frida/pcre2/tree/b47486922fdc3486499b310dc9cf903449700474); repository: https://github.com/frida/pcre2; files: `native/pcre2/LICENCE`
+
+````text
+PCRE2 LICENCE
+-------------
+
+PCRE2 is a library of functions to support regular expressions whose syntax
+and semantics are as close as possible to those of the Perl 5 language.
+
+Releases 10.00 and above of PCRE2 are distributed under the terms of the "BSD"
+licence, as specified below, with one exemption for certain binary
+redistributions. The documentation for PCRE2, supplied in the "doc" directory,
+is distributed under the same terms as the software itself. The data in the
+testdata directory is not copyrighted and is in the public domain.
+
+The basic library functions are written in C and are freestanding. Also
+included in the distribution is a just-in-time compiler that can be used to
+optimize pattern matching. This is an optional feature that can be omitted when
+the library is built.
+
+
+THE BASIC LIBRARY FUNCTIONS
+---------------------------
+
+Written by:       Philip Hazel
+Email local part: Philip.Hazel
+Email domain:     gmail.com
+
+Retired from University of Cambridge Computing Service,
+Cambridge, England.
+
+Copyright (c) 1997-2022 University of Cambridge
+All rights reserved.
+
+
+PCRE2 JUST-IN-TIME COMPILATION SUPPORT
+--------------------------------------
+
+Written by:       Zoltan Herczeg
+Email local part: hzmester
+Email domain:     freemail.hu
+
+Copyright(c) 2010-2022 Zoltan Herczeg
+All rights reserved.
+
+
+STACK-LESS JUST-IN-TIME COMPILER
+--------------------------------
+
+Written by:       Zoltan Herczeg
+Email local part: hzmester
+Email domain:     freemail.hu
+
+Copyright(c) 2009-2022 Zoltan Herczeg
+All rights reserved.
+
+
+THE "BSD" LICENCE
+-----------------
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notices,
+      this list of conditions and the following disclaimer.
+
+    * Redistributions in binary form must reproduce the above copyright
+      notices, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+
+    * Neither the name of the University of Cambridge nor the names of any
+      contributors may be used to endorse or promote products derived from this
+      software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+
+EXEMPTION FOR BINARY LIBRARY-LIKE PACKAGES
+------------------------------------------
+
+The second condition in the BSD licence (covering binary redistributions) does
+not apply all the way down a chain of software. If binary package A includes
+PCRE2, it must respect the condition, but if package B is software that
+includes package A, the condition is not imposed on package B unless it uses
+PCRE2 independently.
+
+End
+````
+
+### License text 153
+
+Normalized SHA-256: `87d9feb9238c6bd8e0024fc4733b06cff036f89f36d93b7df1c8a0549bbb7a5b`
+
+Used by:
+
+- **ipnet 2.12.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/ipnet/2.12.1/download); repository: https://github.com/krisprice/ipnet; files: `LICENSE-APACHE`
+
+````text
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "{}"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright 2017 Juniper Networks, Inc.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+````
+
+### License text 154
 
 Normalized SHA-256: `898b1ae9821e98daf8964c8d6c7f61641f5f5aa78ad500020771c0939ee0dea1`
 
@@ -11454,6 +16011,8 @@ Used by:
 - **tracing 0.1.44** — `MIT`; [source](https://crates.io/api/v1/crates/tracing/0.1.44/download); repository: https://github.com/tokio-rs/tracing; files: `LICENSE`
 - **tracing-attributes 0.1.31** — `MIT`; [source](https://crates.io/api/v1/crates/tracing-attributes/0.1.31/download); repository: https://github.com/tokio-rs/tracing; files: `LICENSE`
 - **tracing-core 0.1.36** — `MIT`; [source](https://crates.io/api/v1/crates/tracing-core/0.1.36/download); repository: https://github.com/tokio-rs/tracing; files: `LICENSE`
+- **tracing-log 0.2.0** — `MIT`; [source](https://crates.io/api/v1/crates/tracing-log/0.2.0/download); repository: https://github.com/tokio-rs/tracing; files: `LICENSE`
+- **tracing-subscriber 0.3.23** — `MIT`; [source](https://crates.io/api/v1/crates/tracing-subscriber/0.3.23/download); repository: https://github.com/tokio-rs/tracing; files: `LICENSE`
 
 ````text
 Copyright (c) 2019 Tokio Contributors
@@ -11483,7 +16042,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 115
+### License text 155
 
 Normalized SHA-256: `8a35369f3ca263b3c62fbb5032947e53b6bfebc6c8a4d1bb982de1c069f6fba5`
 
@@ -11516,7 +16075,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 116
+### License text 156
 
 Normalized SHA-256: `8ada45cd9f843acf64e4722ae262c622a2b3b3007c7310ef36ac1061a30f6adb`
 
@@ -11729,7 +16288,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 117
+### License text 157
 
 Normalized SHA-256: `8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36`
 
@@ -11766,7 +16325,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 118
+### License text 158
 
 Normalized SHA-256: `8b43ce8accd61e9d370b5ca9e9c4f953279b5c239926c62315b40e24df51b726`
 
@@ -11802,7 +16361,74 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 119
+### License text 159
+
+Normalized SHA-256: `8b62775bacdfa5ae8390519b7cdf7ab7d6c53f008981f1b9abd6135ef745b67e`
+
+Used by:
+
+- **try-lock 0.2.5** — `MIT`; [source](https://crates.io/api/v1/crates/try-lock/0.2.5/download); repository: https://github.com/seanmonstar/try-lock; files: `LICENSE`
+
+````text
+Copyright (c) 2018-2023 Sean McArthur
+Copyright (c) 2016 Alex Crichton
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+````
+
+### License text 160
+
+Normalized SHA-256: `8b6e9feec03e7c9a5facb26855cecd31662bf989b636bcfe79521bdf8ac863f0`
+
+Used by:
+
+- **rand_core 0.10.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_core/0.10.1/download); repository: https://github.com/rust-random/rand_core; files: `LICENSE-MIT`
+
+````text
+Copyright (c) 2018-2026 The Rand Project Developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 161
 
 Normalized SHA-256: `8bb1b50b0e5c9399ae33bd35fab2769010fa6c14e8860c729a52295d84896b7a`
 
@@ -12014,7 +16640,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 120
+### License text 162
 
 Normalized SHA-256: `8c7516d4b27b1e495be5e38b612298b63de48d05f49cdac94f70f3cd70f8864b`
 
@@ -12050,7 +16676,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 121
+### License text 163
 
 Normalized SHA-256: `8ca6b96cea9e67c6c5c63f452c31bd396db8bd2406231fdea5d48ef462b48077`
 
@@ -12086,7 +16712,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 122
+### License text 164
 
 Normalized SHA-256: `8ce0830173fdac609dfb4ea603fdc002c2f4af0dc9b1a005653f5da9cf534b18`
 
@@ -12122,17 +16748,705 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 123
+### License text 165
+
+Normalized SHA-256: `8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903`
+
+Used by:
+
+- **lzma-sys 0.1.20** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/lzma-sys/0.1.20/download); repository: https://github.com/alexcrichton/xz2-rs; files: `xz-5.2/COPYING.GPLv3`
+- **xz e70f5800ab5001c9509d374dbf3e7e6b866c43fe** — `Public-domain liblzma; GPL/LGPL scripts/tools not shipped`; [source](https://github.com/frida/xz/tree/e70f5800ab5001c9509d374dbf3e7e6b866c43fe); repository: https://github.com/frida/xz; files: `native/xz/COPYING.GPLv3`
+
+````text
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 3, 29 June 2007
+
+ Copyright (C) 2007 Free Software Foundation, Inc. <http://fsf.org/>
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+                            Preamble
+
+  The GNU General Public License is a free, copyleft license for
+software and other kinds of works.
+
+  The licenses for most software and other practical works are designed
+to take away your freedom to share and change the works.  By contrast,
+the GNU General Public License is intended to guarantee your freedom to
+share and change all versions of a program--to make sure it remains free
+software for all its users.  We, the Free Software Foundation, use the
+GNU General Public License for most of our software; it applies also to
+any other work released this way by its authors.  You can apply it to
+your programs, too.
+
+  When we speak of free software, we are referring to freedom, not
+price.  Our General Public Licenses are designed to make sure that you
+have the freedom to distribute copies of free software (and charge for
+them if you wish), that you receive source code or can get it if you
+want it, that you can change the software or use pieces of it in new
+free programs, and that you know you can do these things.
+
+  To protect your rights, we need to prevent others from denying you
+these rights or asking you to surrender the rights.  Therefore, you have
+certain responsibilities if you distribute copies of the software, or if
+you modify it: responsibilities to respect the freedom of others.
+
+  For example, if you distribute copies of such a program, whether
+gratis or for a fee, you must pass on to the recipients the same
+freedoms that you received.  You must make sure that they, too, receive
+or can get the source code.  And you must show them these terms so they
+know their rights.
+
+  Developers that use the GNU GPL protect your rights with two steps:
+(1) assert copyright on the software, and (2) offer you this License
+giving you legal permission to copy, distribute and/or modify it.
+
+  For the developers' and authors' protection, the GPL clearly explains
+that there is no warranty for this free software.  For both users' and
+authors' sake, the GPL requires that modified versions be marked as
+changed, so that their problems will not be attributed erroneously to
+authors of previous versions.
+
+  Some devices are designed to deny users access to install or run
+modified versions of the software inside them, although the manufacturer
+can do so.  This is fundamentally incompatible with the aim of
+protecting users' freedom to change the software.  The systematic
+pattern of such abuse occurs in the area of products for individuals to
+use, which is precisely where it is most unacceptable.  Therefore, we
+have designed this version of the GPL to prohibit the practice for those
+products.  If such problems arise substantially in other domains, we
+stand ready to extend this provision to those domains in future versions
+of the GPL, as needed to protect the freedom of users.
+
+  Finally, every program is threatened constantly by software patents.
+States should not allow patents to restrict development and use of
+software on general-purpose computers, but in those that do, we wish to
+avoid the special danger that patents applied to a free program could
+make it effectively proprietary.  To prevent this, the GPL assures that
+patents cannot be used to render the program non-free.
+
+  The precise terms and conditions for copying, distribution and
+modification follow.
+
+                       TERMS AND CONDITIONS
+
+  0. Definitions.
+
+  "This License" refers to version 3 of the GNU General Public License.
+
+  "Copyright" also means copyright-like laws that apply to other kinds of
+works, such as semiconductor masks.
+
+  "The Program" refers to any copyrightable work licensed under this
+License.  Each licensee is addressed as "you".  "Licensees" and
+"recipients" may be individuals or organizations.
+
+  To "modify" a work means to copy from or adapt all or part of the work
+in a fashion requiring copyright permission, other than the making of an
+exact copy.  The resulting work is called a "modified version" of the
+earlier work or a work "based on" the earlier work.
+
+  A "covered work" means either the unmodified Program or a work based
+on the Program.
+
+  To "propagate" a work means to do anything with it that, without
+permission, would make you directly or secondarily liable for
+infringement under applicable copyright law, except executing it on a
+computer or modifying a private copy.  Propagation includes copying,
+distribution (with or without modification), making available to the
+public, and in some countries other activities as well.
+
+  To "convey" a work means any kind of propagation that enables other
+parties to make or receive copies.  Mere interaction with a user through
+a computer network, with no transfer of a copy, is not conveying.
+
+  An interactive user interface displays "Appropriate Legal Notices"
+to the extent that it includes a convenient and prominently visible
+feature that (1) displays an appropriate copyright notice, and (2)
+tells the user that there is no warranty for the work (except to the
+extent that warranties are provided), that licensees may convey the
+work under this License, and how to view a copy of this License.  If
+the interface presents a list of user commands or options, such as a
+menu, a prominent item in the list meets this criterion.
+
+  1. Source Code.
+
+  The "source code" for a work means the preferred form of the work
+for making modifications to it.  "Object code" means any non-source
+form of a work.
+
+  A "Standard Interface" means an interface that either is an official
+standard defined by a recognized standards body, or, in the case of
+interfaces specified for a particular programming language, one that
+is widely used among developers working in that language.
+
+  The "System Libraries" of an executable work include anything, other
+than the work as a whole, that (a) is included in the normal form of
+packaging a Major Component, but which is not part of that Major
+Component, and (b) serves only to enable use of the work with that
+Major Component, or to implement a Standard Interface for which an
+implementation is available to the public in source code form.  A
+"Major Component", in this context, means a major essential component
+(kernel, window system, and so on) of the specific operating system
+(if any) on which the executable work runs, or a compiler used to
+produce the work, or an object code interpreter used to run it.
+
+  The "Corresponding Source" for a work in object code form means all
+the source code needed to generate, install, and (for an executable
+work) run the object code and to modify the work, including scripts to
+control those activities.  However, it does not include the work's
+System Libraries, or general-purpose tools or generally available free
+programs which are used unmodified in performing those activities but
+which are not part of the work.  For example, Corresponding Source
+includes interface definition files associated with source files for
+the work, and the source code for shared libraries and dynamically
+linked subprograms that the work is specifically designed to require,
+such as by intimate data communication or control flow between those
+subprograms and other parts of the work.
+
+  The Corresponding Source need not include anything that users
+can regenerate automatically from other parts of the Corresponding
+Source.
+
+  The Corresponding Source for a work in source code form is that
+same work.
+
+  2. Basic Permissions.
+
+  All rights granted under this License are granted for the term of
+copyright on the Program, and are irrevocable provided the stated
+conditions are met.  This License explicitly affirms your unlimited
+permission to run the unmodified Program.  The output from running a
+covered work is covered by this License only if the output, given its
+content, constitutes a covered work.  This License acknowledges your
+rights of fair use or other equivalent, as provided by copyright law.
+
+  You may make, run and propagate covered works that you do not
+convey, without conditions so long as your license otherwise remains
+in force.  You may convey covered works to others for the sole purpose
+of having them make modifications exclusively for you, or provide you
+with facilities for running those works, provided that you comply with
+the terms of this License in conveying all material for which you do
+not control copyright.  Those thus making or running the covered works
+for you must do so exclusively on your behalf, under your direction
+and control, on terms that prohibit them from making any copies of
+your copyrighted material outside their relationship with you.
+
+  Conveying under any other circumstances is permitted solely under
+the conditions stated below.  Sublicensing is not allowed; section 10
+makes it unnecessary.
+
+  3. Protecting Users' Legal Rights From Anti-Circumvention Law.
+
+  No covered work shall be deemed part of an effective technological
+measure under any applicable law fulfilling obligations under article
+11 of the WIPO copyright treaty adopted on 20 December 1996, or
+similar laws prohibiting or restricting circumvention of such
+measures.
+
+  When you convey a covered work, you waive any legal power to forbid
+circumvention of technological measures to the extent such circumvention
+is effected by exercising rights under this License with respect to
+the covered work, and you disclaim any intention to limit operation or
+modification of the work as a means of enforcing, against the work's
+users, your or third parties' legal rights to forbid circumvention of
+technological measures.
+
+  4. Conveying Verbatim Copies.
+
+  You may convey verbatim copies of the Program's source code as you
+receive it, in any medium, provided that you conspicuously and
+appropriately publish on each copy an appropriate copyright notice;
+keep intact all notices stating that this License and any
+non-permissive terms added in accord with section 7 apply to the code;
+keep intact all notices of the absence of any warranty; and give all
+recipients a copy of this License along with the Program.
+
+  You may charge any price or no price for each copy that you convey,
+and you may offer support or warranty protection for a fee.
+
+  5. Conveying Modified Source Versions.
+
+  You may convey a work based on the Program, or the modifications to
+produce it from the Program, in the form of source code under the
+terms of section 4, provided that you also meet all of these conditions:
+
+    a) The work must carry prominent notices stating that you modified
+    it, and giving a relevant date.
+
+    b) The work must carry prominent notices stating that it is
+    released under this License and any conditions added under section
+    7.  This requirement modifies the requirement in section 4 to
+    "keep intact all notices".
+
+    c) You must license the entire work, as a whole, under this
+    License to anyone who comes into possession of a copy.  This
+    License will therefore apply, along with any applicable section 7
+    additional terms, to the whole of the work, and all its parts,
+    regardless of how they are packaged.  This License gives no
+    permission to license the work in any other way, but it does not
+    invalidate such permission if you have separately received it.
+
+    d) If the work has interactive user interfaces, each must display
+    Appropriate Legal Notices; however, if the Program has interactive
+    interfaces that do not display Appropriate Legal Notices, your
+    work need not make them do so.
+
+  A compilation of a covered work with other separate and independent
+works, which are not by their nature extensions of the covered work,
+and which are not combined with it such as to form a larger program,
+in or on a volume of a storage or distribution medium, is called an
+"aggregate" if the compilation and its resulting copyright are not
+used to limit the access or legal rights of the compilation's users
+beyond what the individual works permit.  Inclusion of a covered work
+in an aggregate does not cause this License to apply to the other
+parts of the aggregate.
+
+  6. Conveying Non-Source Forms.
+
+  You may convey a covered work in object code form under the terms
+of sections 4 and 5, provided that you also convey the
+machine-readable Corresponding Source under the terms of this License,
+in one of these ways:
+
+    a) Convey the object code in, or embodied in, a physical product
+    (including a physical distribution medium), accompanied by the
+    Corresponding Source fixed on a durable physical medium
+    customarily used for software interchange.
+
+    b) Convey the object code in, or embodied in, a physical product
+    (including a physical distribution medium), accompanied by a
+    written offer, valid for at least three years and valid for as
+    long as you offer spare parts or customer support for that product
+    model, to give anyone who possesses the object code either (1) a
+    copy of the Corresponding Source for all the software in the
+    product that is covered by this License, on a durable physical
+    medium customarily used for software interchange, for a price no
+    more than your reasonable cost of physically performing this
+    conveying of source, or (2) access to copy the
+    Corresponding Source from a network server at no charge.
+
+    c) Convey individual copies of the object code with a copy of the
+    written offer to provide the Corresponding Source.  This
+    alternative is allowed only occasionally and noncommercially, and
+    only if you received the object code with such an offer, in accord
+    with subsection 6b.
+
+    d) Convey the object code by offering access from a designated
+    place (gratis or for a charge), and offer equivalent access to the
+    Corresponding Source in the same way through the same place at no
+    further charge.  You need not require recipients to copy the
+    Corresponding Source along with the object code.  If the place to
+    copy the object code is a network server, the Corresponding Source
+    may be on a different server (operated by you or a third party)
+    that supports equivalent copying facilities, provided you maintain
+    clear directions next to the object code saying where to find the
+    Corresponding Source.  Regardless of what server hosts the
+    Corresponding Source, you remain obligated to ensure that it is
+    available for as long as needed to satisfy these requirements.
+
+    e) Convey the object code using peer-to-peer transmission, provided
+    you inform other peers where the object code and Corresponding
+    Source of the work are being offered to the general public at no
+    charge under subsection 6d.
+
+  A separable portion of the object code, whose source code is excluded
+from the Corresponding Source as a System Library, need not be
+included in conveying the object code work.
+
+  A "User Product" is either (1) a "consumer product", which means any
+tangible personal property which is normally used for personal, family,
+or household purposes, or (2) anything designed or sold for incorporation
+into a dwelling.  In determining whether a product is a consumer product,
+doubtful cases shall be resolved in favor of coverage.  For a particular
+product received by a particular user, "normally used" refers to a
+typical or common use of that class of product, regardless of the status
+of the particular user or of the way in which the particular user
+actually uses, or expects or is expected to use, the product.  A product
+is a consumer product regardless of whether the product has substantial
+commercial, industrial or non-consumer uses, unless such uses represent
+the only significant mode of use of the product.
+
+  "Installation Information" for a User Product means any methods,
+procedures, authorization keys, or other information required to install
+and execute modified versions of a covered work in that User Product from
+a modified version of its Corresponding Source.  The information must
+suffice to ensure that the continued functioning of the modified object
+code is in no case prevented or interfered with solely because
+modification has been made.
+
+  If you convey an object code work under this section in, or with, or
+specifically for use in, a User Product, and the conveying occurs as
+part of a transaction in which the right of possession and use of the
+User Product is transferred to the recipient in perpetuity or for a
+fixed term (regardless of how the transaction is characterized), the
+Corresponding Source conveyed under this section must be accompanied
+by the Installation Information.  But this requirement does not apply
+if neither you nor any third party retains the ability to install
+modified object code on the User Product (for example, the work has
+been installed in ROM).
+
+  The requirement to provide Installation Information does not include a
+requirement to continue to provide support service, warranty, or updates
+for a work that has been modified or installed by the recipient, or for
+the User Product in which it has been modified or installed.  Access to a
+network may be denied when the modification itself materially and
+adversely affects the operation of the network or violates the rules and
+protocols for communication across the network.
+
+  Corresponding Source conveyed, and Installation Information provided,
+in accord with this section must be in a format that is publicly
+documented (and with an implementation available to the public in
+source code form), and must require no special password or key for
+unpacking, reading or copying.
+
+  7. Additional Terms.
+
+  "Additional permissions" are terms that supplement the terms of this
+License by making exceptions from one or more of its conditions.
+Additional permissions that are applicable to the entire Program shall
+be treated as though they were included in this License, to the extent
+that they are valid under applicable law.  If additional permissions
+apply only to part of the Program, that part may be used separately
+under those permissions, but the entire Program remains governed by
+this License without regard to the additional permissions.
+
+  When you convey a copy of a covered work, you may at your option
+remove any additional permissions from that copy, or from any part of
+it.  (Additional permissions may be written to require their own
+removal in certain cases when you modify the work.)  You may place
+additional permissions on material, added by you to a covered work,
+for which you have or can give appropriate copyright permission.
+
+  Notwithstanding any other provision of this License, for material you
+add to a covered work, you may (if authorized by the copyright holders of
+that material) supplement the terms of this License with terms:
+
+    a) Disclaiming warranty or limiting liability differently from the
+    terms of sections 15 and 16 of this License; or
+
+    b) Requiring preservation of specified reasonable legal notices or
+    author attributions in that material or in the Appropriate Legal
+    Notices displayed by works containing it; or
+
+    c) Prohibiting misrepresentation of the origin of that material, or
+    requiring that modified versions of such material be marked in
+    reasonable ways as different from the original version; or
+
+    d) Limiting the use for publicity purposes of names of licensors or
+    authors of the material; or
+
+    e) Declining to grant rights under trademark law for use of some
+    trade names, trademarks, or service marks; or
+
+    f) Requiring indemnification of licensors and authors of that
+    material by anyone who conveys the material (or modified versions of
+    it) with contractual assumptions of liability to the recipient, for
+    any liability that these contractual assumptions directly impose on
+    those licensors and authors.
+
+  All other non-permissive additional terms are considered "further
+restrictions" within the meaning of section 10.  If the Program as you
+received it, or any part of it, contains a notice stating that it is
+governed by this License along with a term that is a further
+restriction, you may remove that term.  If a license document contains
+a further restriction but permits relicensing or conveying under this
+License, you may add to a covered work material governed by the terms
+of that license document, provided that the further restriction does
+not survive such relicensing or conveying.
+
+  If you add terms to a covered work in accord with this section, you
+must place, in the relevant source files, a statement of the
+additional terms that apply to those files, or a notice indicating
+where to find the applicable terms.
+
+  Additional terms, permissive or non-permissive, may be stated in the
+form of a separately written license, or stated as exceptions;
+the above requirements apply either way.
+
+  8. Termination.
+
+  You may not propagate or modify a covered work except as expressly
+provided under this License.  Any attempt otherwise to propagate or
+modify it is void, and will automatically terminate your rights under
+this License (including any patent licenses granted under the third
+paragraph of section 11).
+
+  However, if you cease all violation of this License, then your
+license from a particular copyright holder is reinstated (a)
+provisionally, unless and until the copyright holder explicitly and
+finally terminates your license, and (b) permanently, if the copyright
+holder fails to notify you of the violation by some reasonable means
+prior to 60 days after the cessation.
+
+  Moreover, your license from a particular copyright holder is
+reinstated permanently if the copyright holder notifies you of the
+violation by some reasonable means, this is the first time you have
+received notice of violation of this License (for any work) from that
+copyright holder, and you cure the violation prior to 30 days after
+your receipt of the notice.
+
+  Termination of your rights under this section does not terminate the
+licenses of parties who have received copies or rights from you under
+this License.  If your rights have been terminated and not permanently
+reinstated, you do not qualify to receive new licenses for the same
+material under section 10.
+
+  9. Acceptance Not Required for Having Copies.
+
+  You are not required to accept this License in order to receive or
+run a copy of the Program.  Ancillary propagation of a covered work
+occurring solely as a consequence of using peer-to-peer transmission
+to receive a copy likewise does not require acceptance.  However,
+nothing other than this License grants you permission to propagate or
+modify any covered work.  These actions infringe copyright if you do
+not accept this License.  Therefore, by modifying or propagating a
+covered work, you indicate your acceptance of this License to do so.
+
+  10. Automatic Licensing of Downstream Recipients.
+
+  Each time you convey a covered work, the recipient automatically
+receives a license from the original licensors, to run, modify and
+propagate that work, subject to this License.  You are not responsible
+for enforcing compliance by third parties with this License.
+
+  An "entity transaction" is a transaction transferring control of an
+organization, or substantially all assets of one, or subdividing an
+organization, or merging organizations.  If propagation of a covered
+work results from an entity transaction, each party to that
+transaction who receives a copy of the work also receives whatever
+licenses to the work the party's predecessor in interest had or could
+give under the previous paragraph, plus a right to possession of the
+Corresponding Source of the work from the predecessor in interest, if
+the predecessor has it or can get it with reasonable efforts.
+
+  You may not impose any further restrictions on the exercise of the
+rights granted or affirmed under this License.  For example, you may
+not impose a license fee, royalty, or other charge for exercise of
+rights granted under this License, and you may not initiate litigation
+(including a cross-claim or counterclaim in a lawsuit) alleging that
+any patent claim is infringed by making, using, selling, offering for
+sale, or importing the Program or any portion of it.
+
+  11. Patents.
+
+  A "contributor" is a copyright holder who authorizes use under this
+License of the Program or a work on which the Program is based.  The
+work thus licensed is called the contributor's "contributor version".
+
+  A contributor's "essential patent claims" are all patent claims
+owned or controlled by the contributor, whether already acquired or
+hereafter acquired, that would be infringed by some manner, permitted
+by this License, of making, using, or selling its contributor version,
+but do not include claims that would be infringed only as a
+consequence of further modification of the contributor version.  For
+purposes of this definition, "control" includes the right to grant
+patent sublicenses in a manner consistent with the requirements of
+this License.
+
+  Each contributor grants you a non-exclusive, worldwide, royalty-free
+patent license under the contributor's essential patent claims, to
+make, use, sell, offer for sale, import and otherwise run, modify and
+propagate the contents of its contributor version.
+
+  In the following three paragraphs, a "patent license" is any express
+agreement or commitment, however denominated, not to enforce a patent
+(such as an express permission to practice a patent or covenant not to
+sue for patent infringement).  To "grant" such a patent license to a
+party means to make such an agreement or commitment not to enforce a
+patent against the party.
+
+  If you convey a covered work, knowingly relying on a patent license,
+and the Corresponding Source of the work is not available for anyone
+to copy, free of charge and under the terms of this License, through a
+publicly available network server or other readily accessible means,
+then you must either (1) cause the Corresponding Source to be so
+available, or (2) arrange to deprive yourself of the benefit of the
+patent license for this particular work, or (3) arrange, in a manner
+consistent with the requirements of this License, to extend the patent
+license to downstream recipients.  "Knowingly relying" means you have
+actual knowledge that, but for the patent license, your conveying the
+covered work in a country, or your recipient's use of the covered work
+in a country, would infringe one or more identifiable patents in that
+country that you have reason to believe are valid.
+
+  If, pursuant to or in connection with a single transaction or
+arrangement, you convey, or propagate by procuring conveyance of, a
+covered work, and grant a patent license to some of the parties
+receiving the covered work authorizing them to use, propagate, modify
+or convey a specific copy of the covered work, then the patent license
+you grant is automatically extended to all recipients of the covered
+work and works based on it.
+
+  A patent license is "discriminatory" if it does not include within
+the scope of its coverage, prohibits the exercise of, or is
+conditioned on the non-exercise of one or more of the rights that are
+specifically granted under this License.  You may not convey a covered
+work if you are a party to an arrangement with a third party that is
+in the business of distributing software, under which you make payment
+to the third party based on the extent of your activity of conveying
+the work, and under which the third party grants, to any of the
+parties who would receive the covered work from you, a discriminatory
+patent license (a) in connection with copies of the covered work
+conveyed by you (or copies made from those copies), or (b) primarily
+for and in connection with specific products or compilations that
+contain the covered work, unless you entered into that arrangement,
+or that patent license was granted, prior to 28 March 2007.
+
+  Nothing in this License shall be construed as excluding or limiting
+any implied license or other defenses to infringement that may
+otherwise be available to you under applicable patent law.
+
+  12. No Surrender of Others' Freedom.
+
+  If conditions are imposed on you (whether by court order, agreement or
+otherwise) that contradict the conditions of this License, they do not
+excuse you from the conditions of this License.  If you cannot convey a
+covered work so as to satisfy simultaneously your obligations under this
+License and any other pertinent obligations, then as a consequence you may
+not convey it at all.  For example, if you agree to terms that obligate you
+to collect a royalty for further conveying from those to whom you convey
+the Program, the only way you could satisfy both those terms and this
+License would be to refrain entirely from conveying the Program.
+
+  13. Use with the GNU Affero General Public License.
+
+  Notwithstanding any other provision of this License, you have
+permission to link or combine any covered work with a work licensed
+under version 3 of the GNU Affero General Public License into a single
+combined work, and to convey the resulting work.  The terms of this
+License will continue to apply to the part which is the covered work,
+but the special requirements of the GNU Affero General Public License,
+section 13, concerning interaction through a network will apply to the
+combination as such.
+
+  14. Revised Versions of this License.
+
+  The Free Software Foundation may publish revised and/or new versions of
+the GNU General Public License from time to time.  Such new versions will
+be similar in spirit to the present version, but may differ in detail to
+address new problems or concerns.
+
+  Each version is given a distinguishing version number.  If the
+Program specifies that a certain numbered version of the GNU General
+Public License "or any later version" applies to it, you have the
+option of following the terms and conditions either of that numbered
+version or of any later version published by the Free Software
+Foundation.  If the Program does not specify a version number of the
+GNU General Public License, you may choose any version ever published
+by the Free Software Foundation.
+
+  If the Program specifies that a proxy can decide which future
+versions of the GNU General Public License can be used, that proxy's
+public statement of acceptance of a version permanently authorizes you
+to choose that version for the Program.
+
+  Later license versions may give you additional or different
+permissions.  However, no additional obligations are imposed on any
+author or copyright holder as a result of your choosing to follow a
+later version.
+
+  15. Disclaimer of Warranty.
+
+  THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY
+APPLICABLE LAW.  EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT
+HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM "AS IS" WITHOUT WARRANTY
+OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM
+IS WITH YOU.  SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+  16. Limitation of Liability.
+
+  IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
+WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MODIFIES AND/OR CONVEYS
+THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY
+GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE
+USE OR INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS OF
+DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD
+PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER PROGRAMS),
+EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGES.
+
+  17. Interpretation of Sections 15 and 16.
+
+  If the disclaimer of warranty and limitation of liability provided
+above cannot be given local legal effect according to their terms,
+reviewing courts shall apply local law that most closely approximates
+an absolute waiver of all civil liability in connection with the
+Program, unless a warranty or assumption of liability accompanies a
+copy of the Program in return for a fee.
+
+                     END OF TERMS AND CONDITIONS
+
+            How to Apply These Terms to Your New Programs
+
+  If you develop a new program, and you want it to be of the greatest
+possible use to the public, the best way to achieve this is to make it
+free software which everyone can redistribute and change under these terms.
+
+  To do so, attach the following notices to the program.  It is safest
+to attach them to the start of each source file to most effectively
+state the exclusion of warranty; and each file should have at least
+the "copyright" line and a pointer to where the full notice is found.
+
+    <one line to give the program's name and a brief idea of what it does.>
+    Copyright (C) <year>  <name of author>
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+Also add information on how to contact you by electronic and paper mail.
+
+  If the program does terminal interaction, make it output a short
+notice like this when it starts in an interactive mode:
+
+    <program>  Copyright (C) <year>  <name of author>
+    This program comes with ABSOLUTELY NO WARRANTY; for details type `show w'.
+    This is free software, and you are welcome to redistribute it
+    under certain conditions; type `show c' for details.
+
+The hypothetical commands `show w' and `show c' should show the appropriate
+parts of the General Public License.  Of course, your program's commands
+might be different; for a GUI interface, you would use an "about box".
+
+  You should also get your employer (if you work as a programmer) or school,
+if any, to sign a "copyright disclaimer" for the program, if necessary.
+For more information on this, and how to apply and follow the GNU GPL, see
+<http://www.gnu.org/licenses/>.
+
+  The GNU General Public License does not permit incorporating your program
+into proprietary programs.  If your program is a subroutine library, you
+may consider it more useful to permit linking proprietary applications with
+the library.  If this is what you want to do, use the GNU Lesser General
+Public License instead of this License.  But first, please read
+<http://www.gnu.org/philosophy/why-not-lgpl.html>.
+````
+
+### License text 166
 
 Normalized SHA-256: `90eb64f0279b0d9432accfa6023ff803bc4965212383697eee27a0f426d5f8d5`
 
 Used by:
 
+- **rand 0.10.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand/0.10.2/download); repository: https://github.com/rust-random/rand; files: `COPYRIGHT`
 - **rand 0.8.8** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand/0.8.8/download); repository: https://github.com/rust-random/rand; files: `COPYRIGHT`
 - **rand 0.9.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand/0.9.5/download); repository: https://github.com/rust-random/rand; files: `COPYRIGHT`
 - **rand_chacha 0.9.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_chacha/0.9.0/download); repository: https://github.com/rust-random/rand; files: `COPYRIGHT`
 - **rand_core 0.6.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_core/0.6.4/download); repository: https://github.com/rust-random/rand; files: `COPYRIGHT`
 - **rand_core 0.9.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_core/0.9.5/download); repository: https://github.com/rust-random/rand; files: `COPYRIGHT`
+- **rand_pcg 0.10.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_pcg/0.10.2/download); repository: https://github.com/rust-random/rngs; files: `COPYRIGHT`
 
 ````text
 Copyrights in the Rand project are retained by their contributors. No
@@ -12149,7 +17463,7 @@ The Rand project includes code from the Rust project
 published under these same licenses.
 ````
 
-### License text 124
+### License text 167
 
 Normalized SHA-256: `9117d922e667125508dde62b02c1f57ed22f5ad21eb536aa2e2d99e1c796e639`
 
@@ -12185,7 +17499,27 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 125
+### License text 168
+
+Normalized SHA-256: `92b81db30f7ab6d693e0af5661a40d273ca1947e891123ed823924192c10cbc7`
+
+Used by:
+
+- **rand_core 0.10.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rand_core/0.10.1/download); repository: https://github.com/rust-random/rand_core; files: `COPYRIGHT`
+
+````text
+Copyrights in the Rand project are retained by their contributors. No
+copyright assignment is required to contribute to the Rand project.
+
+For full authorship information, see the version control history.
+
+Except as otherwise noted (below and/or in individual files), Rand is
+licensed under the Apache License, Version 2.0 <LICENSE-APACHE> or
+<http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+<LICENSE-MIT> or <http://opensource.org/licenses/MIT>, at your option.
+````
+
+### License text 169
 
 Normalized SHA-256: `968a067d2458015543add393bbde51ef3f330ea122cf7b3380ea62e5a8945aee`
 
@@ -12219,7 +17553,37 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 126
+### License text 170
+
+Normalized SHA-256: `96d741569b18c61043e5ad2b8505b5e4891a27994b732b1da9f86f46be67f59a`
+
+Used by:
+
+- **want 0.3.1** — `MIT`; [source](https://crates.io/api/v1/crates/want/0.3.1/download); repository: https://github.com/seanmonstar/want; files: `LICENSE`
+
+````text
+Copyright (c) 2018-2019 Sean McArthur
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+````
+
+### License text 171
 
 Normalized SHA-256: `979d35e1d157289100ba2a7eb13fffe4e7a1b93506c755c4c66890918e467c4e`
 
@@ -12252,7 +17616,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 127
+### License text 172
+
+Normalized SHA-256: `99272c55f3dcfa07a8a7e15a5c1a33096e4727de74241d65fa049fccfdd59507`
+
+Used by:
+
+- **pcre2 b47486922fdc3486499b310dc9cf903449700474** — `BSD-3-Clause with PCRE2 exception`; [source](https://github.com/frida/pcre2/tree/b47486922fdc3486499b310dc9cf903449700474); repository: https://github.com/frida/pcre2; files: `native/pcre2/COPYING`
+
+````text
+PCRE2 LICENCE
+
+Please see the file LICENCE in the PCRE2 distribution for licensing details.
+
+End
+````
+
+### License text 173
 
 Normalized SHA-256: `9a6d7a3c1b8edcc706c4b6c37f8dae9a77f02c7f9051df603f975db136b55419`
 
@@ -12272,15 +17652,23 @@ option. All files in the project carrying such notice may not be
 copied, modified, or distributed except according to those terms.
 ````
 
-### License text 128
+### License text 174
 
 Normalized SHA-256: `9b6f1c28850c107565baae488bfe7d48375b926ec05fc808ed9d985014040843`
 
 Used by:
 
+- **asdf-overlay 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-MIT`
 - **asdf-overlay-client 2.1.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/asdf-overlay-client/2.1.0/download); repository: https://github.com/storycraft/asdf-overlay; files: `asdf-overlay-2.1.0-LICENSE-MIT.txt`
+- **asdf-overlay-common 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-MIT`
 - **asdf-overlay-common 2.1.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/asdf-overlay-common/2.1.0/download); repository: https://github.com/storycraft/asdf-overlay; files: `asdf-overlay-2.1.0-LICENSE-MIT.txt`
+- **asdf-overlay-dll 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-MIT`
+- **asdf-overlay-event 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-MIT`
 - **asdf-overlay-event 2.1.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/asdf-overlay-event/2.1.0/download); repository: https://github.com/storycraft/asdf-overlay; files: `asdf-overlay-2.1.0-LICENSE-MIT.txt`
+- **asdf-overlay-hook 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-MIT`
+- **asdf-overlay-vulkan-layer 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-MIT`
+- **asdf-overlay-window 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-MIT`
+- **asdf-overlay-window-event 2.1.0** — `MIT OR Apache-2.0`; [source](https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b); repository: https://github.com/storycraft/asdf-overlay; files: `LICENSE-MIT`
 - **asdf-overlay-window-event 2.1.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/asdf-overlay-window-event/2.1.0/download); repository: https://github.com/storycraft/asdf-overlay; files: `asdf-overlay-2.1.0-LICENSE-MIT.txt`
 
 ````text
@@ -12307,7 +17695,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 129
+### License text 175
 
 Normalized SHA-256: `9c5a80639a57c1c945570e7ebbca0706305849ce3c098021325cca9db2f7acc4`
 
@@ -12339,13 +17727,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 130
+### License text 176
 
 Normalized SHA-256: `9df9ba60a11af705f2e451b53762686e615d86f76b169cf075c3237730dbd7e2`
 
 Used by:
 
 - **bytemuck 1.25.2** — `Zlib OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/bytemuck/1.25.2/download); repository: https://github.com/Lokathor/bytemuck; files: `LICENSE-MIT`
+- **bytemuck_derive 1.12.0** — `Zlib OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/bytemuck_derive/1.12.0/download); repository: https://github.com/Lokathor/bytemuck; files: `LICENSE-MIT`
 
 ````text
 MIT License
@@ -12359,7 +17748,37 @@ The above copyright notice and this permission notice (including the next paragr
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 131
+### License text 177
+
+Normalized SHA-256: `9e0a97848ea543aef745c98e84fde696a9a3e0735538f6daefdd3cb1942effc1`
+
+Used by:
+
+- **hyper-util 0.1.20** — `MIT`; [source](https://crates.io/api/v1/crates/hyper-util/0.1.20/download); repository: https://github.com/hyperium/hyper-util; files: `LICENSE`
+
+````text
+Copyright (c) 2023-2025 Sean McArthur
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+````
+
+### License text 178
 
 Normalized SHA-256: `9e0dfd2dd4173a530e238cb6adb37aa78c34c6bc7444e0e10c1ab5d8881f63ba`
 
@@ -12395,7 +17814,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 132
+### License text 179
 
 Normalized SHA-256: `9eacbcb81be660840c714a560a9d65ba07913db98dd4baf969f78dd499fdd60f`
 
@@ -12421,12 +17840,145 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 133
+### License text 180
+
+Normalized SHA-256: `a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499`
+
+Used by:
+
+- **glib 790ffa82e80d99fba8a3db494e46f907d560893c** — `LGPL-2.1-or-later (plus per-file permissive terms)`; [source](https://github.com/frida/glib/tree/790ffa82e80d99fba8a3db494e46f907d560893c); repository: https://github.com/frida/glib; files: `native/glib/LICENSES/CC0-1.0.txt`
+
+````text
+Creative Commons Legal Code
+
+CC0 1.0 Universal
+
+    CREATIVE COMMONS CORPORATION IS NOT A LAW FIRM AND DOES NOT PROVIDE
+    LEGAL SERVICES. DISTRIBUTION OF THIS DOCUMENT DOES NOT CREATE AN
+    ATTORNEY-CLIENT RELATIONSHIP. CREATIVE COMMONS PROVIDES THIS
+    INFORMATION ON AN "AS-IS" BASIS. CREATIVE COMMONS MAKES NO WARRANTIES
+    REGARDING THE USE OF THIS DOCUMENT OR THE INFORMATION OR WORKS
+    PROVIDED HEREUNDER, AND DISCLAIMS LIABILITY FOR DAMAGES RESULTING FROM
+    THE USE OF THIS DOCUMENT OR THE INFORMATION OR WORKS PROVIDED
+    HEREUNDER.
+
+Statement of Purpose
+
+The laws of most jurisdictions throughout the world automatically confer
+exclusive Copyright and Related Rights (defined below) upon the creator
+and subsequent owner(s) (each and all, an "owner") of an original work of
+authorship and/or a database (each, a "Work").
+
+Certain owners wish to permanently relinquish those rights to a Work for
+the purpose of contributing to a commons of creative, cultural and
+scientific works ("Commons") that the public can reliably and without fear
+of later claims of infringement build upon, modify, incorporate in other
+works, reuse and redistribute as freely as possible in any form whatsoever
+and for any purposes, including without limitation commercial purposes.
+These owners may contribute to the Commons to promote the ideal of a free
+culture and the further production of creative, cultural and scientific
+works, or to gain reputation or greater distribution for their Work in
+part through the use and efforts of others.
+
+For these and/or other purposes and motivations, and without any
+expectation of additional consideration or compensation, the person
+associating CC0 with a Work (the "Affirmer"), to the extent that he or she
+is an owner of Copyright and Related Rights in the Work, voluntarily
+elects to apply CC0 to the Work and publicly distribute the Work under its
+terms, with knowledge of his or her Copyright and Related Rights in the
+Work and the meaning and intended legal effect of CC0 on those rights.
+
+1. Copyright and Related Rights. A Work made available under CC0 may be
+protected by copyright and related or neighboring rights ("Copyright and
+Related Rights"). Copyright and Related Rights include, but are not
+limited to, the following:
+
+  i. the right to reproduce, adapt, distribute, perform, display,
+     communicate, and translate a Work;
+ ii. moral rights retained by the original author(s) and/or performer(s);
+iii. publicity and privacy rights pertaining to a person's image or
+     likeness depicted in a Work;
+ iv. rights protecting against unfair competition in regards to a Work,
+     subject to the limitations in paragraph 4(a), below;
+  v. rights protecting the extraction, dissemination, use and reuse of data
+     in a Work;
+ vi. database rights (such as those arising under Directive 96/9/EC of the
+     European Parliament and of the Council of 11 March 1996 on the legal
+     protection of databases, and under any national implementation
+     thereof, including any amended or successor version of such
+     directive); and
+vii. other similar, equivalent or corresponding rights throughout the
+     world based on applicable law or treaty, and any national
+     implementations thereof.
+
+2. Waiver. To the greatest extent permitted by, but not in contravention
+of, applicable law, Affirmer hereby overtly, fully, permanently,
+irrevocably and unconditionally waives, abandons, and surrenders all of
+Affirmer's Copyright and Related Rights and associated claims and causes
+of action, whether now known or unknown (including existing as well as
+future claims and causes of action), in the Work (i) in all territories
+worldwide, (ii) for the maximum duration provided by applicable law or
+treaty (including future time extensions), (iii) in any current or future
+medium and for any number of copies, and (iv) for any purpose whatsoever,
+including without limitation commercial, advertising or promotional
+purposes (the "Waiver"). Affirmer makes the Waiver for the benefit of each
+member of the public at large and to the detriment of Affirmer's heirs and
+successors, fully intending that such Waiver shall not be subject to
+revocation, rescission, cancellation, termination, or any other legal or
+equitable action to disrupt the quiet enjoyment of the Work by the public
+as contemplated by Affirmer's express Statement of Purpose.
+
+3. Public License Fallback. Should any part of the Waiver for any reason
+be judged legally invalid or ineffective under applicable law, then the
+Waiver shall be preserved to the maximum extent permitted taking into
+account Affirmer's express Statement of Purpose. In addition, to the
+extent the Waiver is so judged Affirmer hereby grants to each affected
+person a royalty-free, non transferable, non sublicensable, non exclusive,
+irrevocable and unconditional license to exercise Affirmer's Copyright and
+Related Rights in the Work (i) in all territories worldwide, (ii) for the
+maximum duration provided by applicable law or treaty (including future
+time extensions), (iii) in any current or future medium and for any number
+of copies, and (iv) for any purpose whatsoever, including without
+limitation commercial, advertising or promotional purposes (the
+"License"). The License shall be deemed effective as of the date CC0 was
+applied by Affirmer to the Work. Should any part of the License for any
+reason be judged legally invalid or ineffective under applicable law, such
+partial invalidity or ineffectiveness shall not invalidate the remainder
+of the License, and in such case Affirmer hereby affirms that he or she
+will not (i) exercise any of his or her remaining Copyright and Related
+Rights in the Work or (ii) assert any associated claims and causes of
+action with respect to the Work, in either case contrary to Affirmer's
+express Statement of Purpose.
+
+4. Limitations and Disclaimers.
+
+ a. No trademark or patent rights held by Affirmer are waived, abandoned,
+    surrendered, licensed or otherwise affected by this document.
+ b. Affirmer offers the Work as-is and makes no representations or
+    warranties of any kind concerning the Work, express, implied,
+    statutory or otherwise, including without limitation warranties of
+    title, merchantability, fitness for a particular purpose, non
+    infringement, or the absence of latent or other defects, accuracy, or
+    the present or absence of errors, whether or not discoverable, all to
+    the greatest extent permissible under applicable law.
+ c. Affirmer disclaims responsibility for clearing rights of other persons
+    that may apply to the Work or any use thereof, including without
+    limitation any person's Copyright and Related Rights in the Work.
+    Further, Affirmer disclaims responsibility for obtaining any necessary
+    consents, permissions or other rights required for any use of the
+    Work.
+ d. Affirmer understands and acknowledges that Creative Commons is not a
+    party to this document and has no duty or obligation with respect to
+    this CC0 or use of the Work.
+````
+
+### License text 181
 
 Normalized SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
 
 Used by:
 
+- **arc-swap 1.9.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/arc-swap/1.9.2/download); repository: https://github.com/vorner/arc-swap; files: `LICENSE-APACHE`
 - **arrayvec 0.7.8** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/arrayvec/0.7.8/download); repository: https://github.com/bluss/arrayvec; files: `LICENSE-APACHE`
 - **async-channel 2.5.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/async-channel/2.5.0/download); repository: https://github.com/smol-rs/async-channel; files: `LICENSE-APACHE`
 - **async-executor 1.14.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/async-executor/1.14.0/download); repository: https://github.com/smol-rs/async-executor; files: `LICENSE-APACHE`
@@ -12442,25 +17994,32 @@ Used by:
 - **autocfg 1.5.1** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/autocfg/1.5.1/download); repository: https://github.com/cuviper/autocfg; files: `LICENSE-APACHE`
 - **base64 0.22.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/base64/0.22.1/download); repository: https://github.com/marshallpierce/rust-base64; files: `LICENSE-APACHE`
 - **base64 0.23.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/base64/0.23.1/download); repository: https://github.com/marshallpierce/rust-base64; files: `LICENSE-APACHE`
+- **bitflags 2.13.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/bitflags/2.13.1/download); repository: https://github.com/bitflags/bitflags; files: `LICENSE-APACHE`
 - **bitflags 2.13.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/bitflags/2.13.2/download); repository: https://github.com/bitflags/bitflags; files: `LICENSE-APACHE`
 - **blocking 1.7.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/blocking/1.7.0/download); repository: https://github.com/smol-rs/blocking; files: `LICENSE-APACHE`
 - **bzip2 0.6.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/bzip2/0.6.1/download); repository: https://github.com/trifectatechfoundation/bzip2-rs; files: `LICENSE-APACHE`
+- **cc 1.4.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cc/1.4.4/download); repository: https://github.com/rust-lang/cc-rs; files: `LICENSE-APACHE`
 - **cc 1.5.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cc/1.5.1/download); repository: https://github.com/rust-lang/cc-rs; files: `LICENSE-APACHE`
 - **cef 152.4.0+152.0.8** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/cef/152.4.0+152.0.8/download); repository: https://github.com/tauri-apps/cef-rs; files: `licenses/cef-152.4.0+152.0.8/LICENSE-APACHE`
 - **cef-dll-sys 152.4.0+152.0.8** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/cef-dll-sys/152.4.0+152.0.8/download); repository: https://github.com/tauri-apps/cef-rs; files: `licenses/cef-dll-sys-152.4.0+152.0.8/LICENSE-APACHE`
+- **cexpr 0.6.0** — `Apache-2.0/MIT`; [source](https://crates.io/api/v1/crates/cexpr/0.6.0/download); repository: https://github.com/jethrogb/rust-cexpr; files: `LICENSE-APACHE`
+- **cfg-if 1.0.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cfg-if/1.0.4/download); repository: https://github.com/rust-lang/cfg-if; files: `LICENSE-APACHE`
 - **cfg-if 1.0.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cfg-if/1.0.5/download); repository: https://github.com/rust-lang/cfg-if; files: `LICENSE-APACHE`
 - **cmake 0.1.58** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cmake/0.1.58/download); repository: https://github.com/rust-lang/cmake-rs; files: `LICENSE-APACHE`
 - **concurrent-queue 2.5.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/concurrent-queue/2.5.0/download); repository: https://github.com/smol-rs/concurrent-queue; files: `LICENSE-APACHE`
+- **crossbeam-utils 0.8.22** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/crossbeam-utils/0.8.22/download); repository: https://github.com/crossbeam-rs/crossbeam; files: `LICENSE-APACHE`
 - **crossbeam-utils 0.8.23** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/crossbeam-utils/0.8.23/download); repository: https://github.com/crossbeam-rs/crossbeam; files: `LICENSE-APACHE`
 - **debug-ignore 1.0.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/debug-ignore/1.0.5/download); repository: https://github.com/sunshowers-code/debug-ignore; files: `LICENSE-APACHE`
 - **displaydoc 0.2.7** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/displaydoc/0.2.7/download); repository: https://github.com/yaahc/displaydoc; files: `LICENSE-APACHE`
 - **download-cef 3.0.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/download-cef/3.0.0/download); repository: https://github.com/tauri-apps/cef-rs; files: `licenses/download-cef-3.0.0/LICENSE-APACHE`
+- **either 1.17.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/either/1.17.0/download); repository: https://github.com/rayon-rs/either; files: `LICENSE-APACHE`
 - **equivalent 1.0.2** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/equivalent/1.0.2/download); repository: https://github.com/indexmap-rs/equivalent; files: `LICENSE-APACHE`
 - **errno 0.3.14** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/errno/0.3.14/download); repository: https://github.com/lambda-fairy/rust-errno; files: `LICENSE-APACHE`
 - **event-listener 5.4.2** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/event-listener/5.4.2/download); repository: https://github.com/smol-rs/event-listener; files: `LICENSE-APACHE`
 - **event-listener-strategy 0.5.4** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/event-listener-strategy/0.5.4/download); repository: https://github.com/smol-rs/event-listener-strategy; files: `LICENSE-APACHE`
 - **fastrand 2.5.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/fastrand/2.5.0/download); repository: https://github.com/smol-rs/fastrand; files: `LICENSE-APACHE`
 - **filetime 0.2.29** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/filetime/0.2.29/download); repository: https://github.com/alexcrichton/filetime; files: `LICENSE-APACHE`
+- **find-msvc-tools 0.1.11** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/find-msvc-tools/0.1.11/download); repository: https://github.com/rust-lang/cc-rs; files: `LICENSE-APACHE`
 - **find-msvc-tools 0.1.14** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/find-msvc-tools/0.1.14/download); repository: https://github.com/rust-lang/cc-rs; files: `LICENSE-APACHE`
 - **flate2 1.1.10** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/flate2/1.1.10/download); repository: https://github.com/rust-lang/flate2-rs; files: `LICENSE-APACHE`
 - **form_urlencoded 1.2.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/form_urlencoded/1.2.2/download); repository: https://github.com/servo/rust-url; files: `LICENSE-APACHE`
@@ -12468,17 +18027,24 @@ Used by:
 - **futf 0.1.5** — `MIT / Apache-2.0`; [source](https://crates.io/api/v1/crates/futf/0.1.5/download); repository: https://github.com/servo/futf; files: `LICENSE-APACHE`
 - **futures-lite 2.6.1** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/futures-lite/2.6.1/download); repository: https://github.com/smol-rs/futures-lite; files: `LICENSE-APACHE`
 - **gethostname 1.1.0** — `Apache-2.0`; [source](https://crates.io/api/v1/crates/gethostname/1.1.0/download); repository: https://codeberg.org/swsnr/gethostname.rs.git; files: `LICENSE`
+- **glob 0.3.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/glob/0.3.4/download); repository: https://github.com/rust-lang/glob; files: `LICENSE-APACHE`
 - **hashbrown 0.14.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/hashbrown/0.14.5/download); repository: https://github.com/rust-lang/hashbrown; files: `LICENSE-APACHE`
 - **hashbrown 0.17.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/hashbrown/0.17.1/download); repository: https://github.com/rust-lang/hashbrown; files: `LICENSE-APACHE`
 - **heck 0.5.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/heck/0.5.0/download); repository: https://github.com/withoutboats/heck; files: `LICENSE-APACHE`
 - **html5ever 0.35.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/html5ever/0.35.0/download); repository: https://github.com/servo/html5ever; files: `LICENSE-APACHE`
 - **httparse 1.10.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/httparse/1.10.1/download); repository: https://github.com/seanmonstar/httparse; files: `LICENSE-APACHE`
+- **hyper-rustls 0.27.9** — `Apache-2.0 OR ISC OR MIT`; [source](https://crates.io/api/v1/crates/hyper-rustls/0.27.9/download); repository: https://github.com/rustls/hyper-rustls; files: `LICENSE-APACHE`
 - **idna 1.1.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/idna/1.1.0/download); repository: https://github.com/servo/rust-url/; files: `LICENSE-APACHE`
 - **idna_adapter 1.2.2** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/idna_adapter/1.2.2/download); repository: https://github.com/hsivonen/idna_adapter; files: `LICENSE-APACHE`
 - **indexmap 2.14.2** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/indexmap/2.14.2/download); repository: https://github.com/indexmap-rs/indexmap; files: `LICENSE-APACHE`
+- **itertools 0.13.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/itertools/0.13.0/download); repository: https://github.com/rust-itertools/itertools; files: `LICENSE-APACHE`
+- **jobserver 0.1.35** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/jobserver/0.1.35/download); repository: https://github.com/rust-lang/jobserver-rs; files: `LICENSE-APACHE`
+- **lazy_static 1.5.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/lazy_static/1.5.0/download); repository: https://github.com/rust-lang-nursery/lazy-static.rs; files: `LICENSE-APACHE`
 - **linux-raw-sys 0.12.1** — `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/linux-raw-sys/0.12.1/download); repository: https://github.com/sunfishcode/linux-raw-sys; files: `LICENSE-APACHE`
 - **lock_api 0.4.14** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/lock_api/0.4.14/download); repository: https://github.com/Amanieu/parking_lot; files: `LICENSE-APACHE`
+- **log 0.4.33** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/log/0.4.33/download); repository: https://github.com/rust-lang/log; files: `LICENSE-APACHE`
 - **log 0.4.34** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/log/0.4.34/download); repository: https://github.com/rust-lang/log; files: `LICENSE-APACHE`
+- **lzma-sys 0.1.20** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/lzma-sys/0.1.20/download); repository: https://github.com/alexcrichton/xz2-rs; files: `LICENSE-APACHE`
 - **markup5ever 0.35.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/markup5ever/0.35.0/download); repository: https://github.com/servo/html5ever; files: `LICENSE-APACHE`
 - **match_token 0.35.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/match_token/0.35.0/download); repository: https://github.com/servo/html5ever; files: `licenses/match_token-0.35.0/LICENSE-APACHE`
 - **num-derive 0.4.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/num-derive/0.4.2/download); repository: https://github.com/rust-num/num-derive; files: `LICENSE-APACHE`
@@ -12502,11 +18068,13 @@ Used by:
 - **rustc-hash 1.1.0** — `Apache-2.0/MIT`; [source](https://crates.io/api/v1/crates/rustc-hash/1.1.0/download); repository: https://github.com/rust-lang-nursery/rustc-hash; files: `LICENSE-APACHE`
 - **rustc_version 0.4.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rustc_version/0.4.1/download); repository: https://github.com/djc/rustc-version-rs; files: `LICENSE-APACHE`
 - **rustix 1.1.5** — `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/rustix/1.1.5/download); repository: https://github.com/bytecodealliance/rustix; files: `LICENSE-APACHE`
+- **rustls 0.23.43** — `Apache-2.0 OR ISC OR MIT`; [source](https://crates.io/api/v1/crates/rustls/0.23.43/download); repository: https://github.com/rustls/rustls; files: `LICENSE-APACHE`
 - **rustls 0.23.45** — `Apache-2.0 OR ISC OR MIT`; [source](https://crates.io/api/v1/crates/rustls/0.23.45/download); repository: https://github.com/rustls/rustls; files: `LICENSE-APACHE`
 - **scoped-tls 1.0.1** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/scoped-tls/1.0.1/download); repository: https://github.com/alexcrichton/scoped-tls; files: `LICENSE-APACHE`
 - **scopeguard 1.2.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/scopeguard/1.2.0/download); repository: https://github.com/bluss/scopeguard; files: `LICENSE-APACHE`
 - **servo_arc 0.4.3** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/servo_arc/0.4.3/download); repository: https://github.com/servo/stylo; files: `LICENSE-APACHE`
 - **signal-hook-registry 1.4.8** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/signal-hook-registry/1.4.8/download); repository: https://github.com/vorner/signal-hook; files: `LICENSE-APACHE`
+- **smallvec 1.15.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/smallvec/1.15.2/download); repository: https://github.com/servo/rust-smallvec; files: `LICENSE-APACHE`
 - **smallvec 1.16.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/smallvec/1.16.2/download); repository: https://github.com/servo/rust-smallvec; files: `LICENSE-APACHE`
 - **socket2 0.6.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/socket2/0.6.5/download); repository: https://github.com/rust-lang/socket2; files: `LICENSE-APACHE`
 - **stable_deref_trait 1.2.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/stable_deref_trait/1.2.1/download); repository: https://github.com/storyyeller/stable_deref_trait; files: `LICENSE-APACHE`
@@ -12515,15 +18083,19 @@ Used by:
 - **tar 0.4.46** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/tar/0.4.46/download); repository: https://github.com/composefs/tar-rs; files: `LICENSE-APACHE`
 - **tempfile 3.27.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/tempfile/3.27.0/download); repository: https://github.com/Stebalien/tempfile; files: `LICENSE-APACHE`
 - **tendril 0.4.3** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/tendril/0.4.3/download); repository: https://github.com/servo/tendril; files: `LICENSE-APACHE`
+- **thread_local 1.1.10** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thread_local/1.1.10/download); repository: https://github.com/Amanieu/thread_local-rs; files: `LICENSE-APACHE`
+- **toml 0.5.11** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/toml/0.5.11/download); repository: https://github.com/toml-rs/toml; files: `LICENSE-APACHE`
 - **tungstenite 0.29.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/tungstenite/0.29.0/download); repository: https://github.com/snapview/tungstenite-rs; files: `LICENSE-APACHE`
 - **unicode-width 0.1.14** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/unicode-width/0.1.14/download); repository: https://github.com/unicode-rs/unicode-width; files: `LICENSE-APACHE`
 - **unicode-width 0.2.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/unicode-width/0.2.2/download); repository: https://github.com/unicode-rs/unicode-width; files: `LICENSE-APACHE`
 - **unicode-xid 0.2.6** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/unicode-xid/0.2.6/download); repository: https://github.com/unicode-rs/unicode-xid; files: `LICENSE-APACHE`
 - **url 2.5.8** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/url/2.5.8/download); repository: https://github.com/servo/rust-url; files: `LICENSE-APACHE`
+- **utf16string 0.2.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/utf16string/0.2.0/download); repository: https://github.com/getsentry/utf16string; files: `LICENSE-APACHE`
 - **uuid 1.27.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/uuid/1.27.0/download); repository: https://github.com/uuid-rs/uuid; files: `LICENSE-APACHE`
 - **version_check 0.9.5** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/version_check/0.9.5/download); repository: https://github.com/SergioBenitez/version_check; files: `LICENSE-APACHE`
 - **web_atoms 0.1.3** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/web_atoms/0.1.3/download); repository: https://github.com/servo/html5ever; files: `LICENSE-APACHE`
 - **xattr 1.6.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/xattr/1.6.1/download); repository: https://github.com/Stebalien/xattr; files: `LICENSE-APACHE`
+- **xz2 0.1.7** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/xz2/0.1.7/download); repository: https://github.com/alexcrichton/xz2-rs; files: `LICENSE-APACHE`
 
 ````text
                               Apache License
@@ -12729,7 +18301,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 134
+### License text 182
 
 Normalized SHA-256: `a6c48161a09acc75a0e25503bab66a731eb5fba5392ed4bb4743e4ba5085327a`
 
@@ -12960,7 +18532,7 @@ the License, but only in their entirety and only with respect to the Combined
 Software.
 ````
 
-### License text 135
+### License text 183
 
 Normalized SHA-256: `a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9`
 
@@ -13147,7 +18719,7 @@ Used by:
    END OF TERMS AND CONDITIONS
 ````
 
-### License text 136
+### License text 184
 
 Normalized SHA-256: `a72561f47c1f665535930f606739d9098a6186802d5e2e8ec491faf00f4add5b`
 
@@ -13184,7 +18756,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 137
+### License text 185
 
 Normalized SHA-256: `a825bd853ab71619a4923d7b4311221427848070ff44d990da39b0b274c1683f`
 
@@ -13216,14 +18788,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 138
+### License text 186
 
 Normalized SHA-256: `a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5`
 
 Used by:
 
 - **block-buffer 0.10.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/block-buffer/0.10.4/download); repository: https://github.com/RustCrypto/utils; files: `LICENSE-APACHE`
+- **chacha20 0.10.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/chacha20/0.10.1/download); repository: https://github.com/RustCrypto/stream-ciphers; files: `LICENSE-APACHE`
 - **cpufeatures 0.2.17** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cpufeatures/0.2.17/download); repository: https://github.com/RustCrypto/utils; files: `LICENSE-APACHE`
+- **cpufeatures 0.3.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cpufeatures/0.3.0/download); repository: https://github.com/RustCrypto/utils; files: `LICENSE-APACHE`
 - **crypto-common 0.1.7** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/crypto-common/0.1.7/download); repository: https://github.com/RustCrypto/traits; files: `LICENSE-APACHE`
 - **digest 0.10.7** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/digest/0.10.7/download); repository: https://github.com/RustCrypto/traits; files: `LICENSE-APACHE`
 - **sha1 0.10.7** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/sha1/0.10.7/download); repository: https://github.com/RustCrypto/hashes; files: `LICENSE-APACHE`
@@ -13433,7 +19007,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 139
+### License text 187
 
 Normalized SHA-256: `aa893340d14b9844625be6a50ac644169a01b52f0211cbf81b09e1874c8cd81d`
 
@@ -13463,7 +19037,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 140
+### License text 188
 
 Normalized SHA-256: `aaff376532ea30a0cd5330b9502ad4a4c8bf769c539c87ffe78819d188a18ebf`
 
@@ -13677,7 +19251,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 141
+### License text 189
 
 Normalized SHA-256: `ab499c75a0f0da8e0fe83bf9ba3a27e5c39705310f07107c6c66b69958d2401c`
 
@@ -13709,7 +19283,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### License text 142
+### License text 190
 
 Normalized SHA-256: `ae078f5c300de75464ac3feafe98111bd27ce41d226d95d30adc280479517ac2`
 
@@ -13739,7 +19313,7 @@ freely, subject to the following restrictions:
 3. This notice may not be removed or altered from any source distribution.
 ````
 
-### License text 143
+### License text 191
 
 Normalized SHA-256: `ae26bc7b1bc91fb8648f6a298decbb1a77090a56c9d04e2c23b8365e5f54acb5`
 
@@ -13771,7 +19345,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 144
+### License text 192
 
 Normalized SHA-256: `ae895c8576e682f310fb70d93d9f99b1dd82872094c54a8f6cdfe2ca5c2d6ecb`
 
@@ -13793,13 +19367,14 @@ Permission is granted to anyone to use this software for any purpose, including 
 3. This notice may not be removed or altered from any source distribution.
 ````
 
-### License text 145
+### License text 193
 
 Normalized SHA-256: `ae9baa7beea910273c2f384c2a6b721fb7bd02bda3436074a1072e4ee689f985`
 
 Used by:
 
 - **cpufeatures 0.2.17** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cpufeatures/0.2.17/download); repository: https://github.com/RustCrypto/utils; files: `LICENSE-MIT`
+- **cpufeatures 0.3.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cpufeatures/0.3.0/download); repository: https://github.com/RustCrypto/utils; files: `LICENSE-MIT`
 
 ````text
 Copyright (c) 2020-2025 The RustCrypto Project Developers
@@ -13829,7 +19404,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 146
+### License text 194
 
 Normalized SHA-256: `b29f8b01452350c20dd1af16ef83b598fea3053578ccc1c7a0ef40e57be2620f`
 
@@ -13852,7 +19427,7 @@ NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE US
 THIS SOFTWARE.
 ````
 
-### License text 147
+### License text 195
 
 Normalized SHA-256: `b35d026cc7aca9d5859a02eb87ddf7a386a24c986838651bd1f283f94e003327`
 
@@ -13885,7 +19460,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 148
+### License text 196
 
 Normalized SHA-256: `b38f11f6096706e6de553dabe2a7ed142d59b6fa8c97e290c67496154745cdd5`
 
@@ -13923,7 +19498,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 149
+### License text 197
 
 Normalized SHA-256: `b39b7556926992260c18201e59f9478217ed593602099546581b4092a4b9e10e`
 
@@ -13955,7 +19530,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 150
+### License text 198
 
 Normalized SHA-256: `b3d734001a94efff3579978d953391aa7115f877657d25eb54037a43875d078a`
 
@@ -13975,7 +19550,7 @@ See src/polyfill/once_cell/LICENSE-APACHE and src/polyfill/once_cell/LICENSE-MIT
 for the license to code that was sourced from the once_cell project.
 ````
 
-### License text 151
+### License text 199
 
 Normalized SHA-256: `b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1`
 
@@ -14202,7 +19777,7 @@ Used by:
    limitations under the License.
 ````
 
-### License text 152
+### License text 200
 
 Normalized SHA-256: `b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1`
 
@@ -14241,7 +19816,67 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 153
+### License text 201
+
+Normalized SHA-256: `b5d96963647c68d3e16a42138d2a27edf189f4977de52995595b6cb01096ccca`
+
+Used by:
+
+- **build-target 0.8.0** — `MIT`; [source](https://crates.io/api/v1/crates/build-target/0.8.0/download); repository: https://github.com/OpenByteDev/build-target; files: `LICENSE`
+- **cfg-tt 0.4.0** — `MIT`; [source](https://crates.io/api/v1/crates/cfg-tt/0.4.0/download); repository: https://github.com/OpenByteDev/cfg-tt; files: `LICENSE`
+
+````text
+MIT License
+
+Copyright (c) OpenByte <development.openbyte@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+````
+
+### License text 202
+
+Normalized SHA-256: `b5dd5bfd08ec04894af18caa0028257b3d868ef223393e5155eb6de140565286`
+
+Used by:
+
+- **utf16string 0.2.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/utf16string/0.2.0/download); repository: https://github.com/getsentry/utf16string; files: `LICENSE-MIT`
+
+````text
+MIT License
+
+Copyright (c) 2020 Armin Ronacher
+Copyright (c) 2019 Manish Goregaokar
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 203
 
 Normalized SHA-256: `b6087acc891a8f5fa7b972f3660d653d34bfc236c099fe9c7c217ebbbfc8e386`
 
@@ -14272,7 +19907,7 @@ IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISI
 OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ````
 
-### License text 154
+### License text 204
 
 Normalized SHA-256: `b68ad1a3367b825447089e1f8d6829b97f47a89eb78d2f4ebaef4672f5606186`
 
@@ -14305,7 +19940,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 155
+### License text 205
 
 Normalized SHA-256: `b68cdf814c41180614110bb1ae36c58f7de5ed701683e2f7dad366e683493111`
 
@@ -14335,7 +19970,39 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 156
+### License text 206
+
+Normalized SHA-256: `b7a25bf691f6efa5eebefb49965309ba4d9c739249b5248a1e02c9e9e1a6a4f8`
+
+Used by:
+
+- **cargo-emit 0.2.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cargo-emit/0.2.1/download); repository: https://github.com/nvzqz/cargo-emit; files: `LICENSE-MIT`
+
+````text
+MIT License
+
+Copyright (c) 2019 Nikolai Vazquez
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+````
+
+### License text 207
 
 Normalized SHA-256: `b7e650f3fce5c53249d1cdc608b54df156a97edd636cf9d23498d0cfe7aec63e`
 
@@ -14365,7 +20032,111 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 157
+### License text 208
+
+Normalized SHA-256: `b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0`
+
+Used by:
+
+- **glib 790ffa82e80d99fba8a3db494e46f907d560893c** — `LGPL-2.1-or-later (plus per-file permissive terms)`; [source](https://github.com/frida/glib/tree/790ffa82e80d99fba8a3db494e46f907d560893c); repository: https://github.com/frida/glib; files: `native/glib/LICENSES/MIT.txt`
+
+````text
+MIT License
+
+Copyright (c) <year> <copyright holders>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+````
+
+### License text 209
+
+Normalized SHA-256: `b8c6939380a400f53e11923d50fcc4dd2fa1ba8339fd9d04cda38a0251b6c9b0`
+
+Used by:
+
+- **chacha20 0.10.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/chacha20/0.10.1/download); repository: https://github.com/RustCrypto/stream-ciphers; files: `LICENSE-MIT`
+
+````text
+Copyright (c) 2019-2026 The RustCrypto Project Developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 210
+
+Normalized SHA-256: `b9290e9d37bc53272ff4f3fb392c1762169fc0a8b797d164803049c81eacb48c`
+
+Used by:
+
+- **static_vcruntime 3.0.0** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/static_vcruntime/3.0.0/download); repository: https://github.com/ChrisDenton/static_vcruntime; files: `LICENSE`
+
+````text
+MIT OR Apache-2.0 OR Zlib
+````
+
+### License text 211
+
+Normalized SHA-256: `b9eb266294324f672cbe945fe8f2e32f85024f0d61a1a7d14382cdde0ac44769`
+
+Used by:
+
+- **serde_urlencoded 0.7.1** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/serde_urlencoded/0.7.1/download); repository: https://github.com/nox/serde_urlencoded; files: `LICENSE-MIT`
+
+````text
+Copyright (c) 2016 Anthony Ramine
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 212
 
 Normalized SHA-256: `bc12b75fd81829814d843a03fa52aad0e53355b1f13665e309ff7fa33c66e5b5`
 
@@ -14401,7 +20172,48 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 158
+### License text 213
+
+Normalized SHA-256: `c0142ddc7c67186f98990f8e7558747bdfbfcc76fc865335177bbc8d785ee860`
+
+Used by:
+
+- **glib 790ffa82e80d99fba8a3db494e46f907d560893c** — `LGPL-2.1-or-later (plus per-file permissive terms)`; [source](https://github.com/frida/glib/tree/790ffa82e80d99fba8a3db494e46f907d560893c); repository: https://github.com/frida/glib; files: `native/glib/docs/reference/COPYING`
+
+````text
+This work may be reproduced and distributed in whole or in part, in
+any medium, physical or electronic, so as long as this copyright
+notice remains intact and unchanged on all copies.  Commercial
+redistribution is permitted and encouraged, but you may not
+redistribute, in whole or in part, under terms more restrictive than
+those under which you received it. If you redistribute a modified or
+translated version of this work, you must also make the source code to
+the modified or translated version available in electronic form
+without charge.  However, mere aggregation as part of a larger work
+shall not count as a modification for this purpose.
+
+All code examples in this work are placed into the public domain,
+and may be used, modified and redistributed without restriction.
+
+BECAUSE THIS WORK IS LICENSED FREE OF CHARGE, THERE IS NO
+WARRANTY FOR THE WORK, TO THE EXTENT PERMITTED BY APPLICABLE LAW.
+EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR
+OTHER PARTIES PROVIDE THE WORK "AS IS" WITHOUT WARRANTY OF ANY
+KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE.  SHOULD THE WORK PROVE DEFECTIVE, YOU ASSUME
+THE COST OF ALL NECESSARY REPAIR OR CORRECTION.
+
+IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN
+WRITING WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY
+AND/OR REDISTRIBUTE THE WORK AS PERMITTED ABOVE, BE LIABLE TO YOU
+FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR
+CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THE
+WORK, EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES.
+````
+
+### License text 214
 
 Normalized SHA-256: `c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b`
 
@@ -14627,7 +20439,69 @@ Used by:
    limitations under the License.
 ````
 
-### License text 159
+### License text 215
+
+Normalized SHA-256: `c1ff532091cac33bdecedf7268ff4f9bc3ddcffba494249fb723033e9e782f1a`
+
+Used by:
+
+- **static_vcruntime 3.0.0** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/static_vcruntime/3.0.0/download); repository: https://github.com/ChrisDenton/static_vcruntime; files: `LICENSE-ZLIB`
+
+````text
+Copyright (c) 2021 Chris Denton.
+
+This software is provided 'as-is', without any express or implied warranty. In no event will the authors be held liable for any damages arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose, including commercial applications, and to alter it and redistribute it freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not claim that you wrote the original software. If you use this software in a product, an acknowledgment in the product documentation would be appreciated but is not required.
+
+2. Altered source versions must be plainly marked as such, and must not be misrepresented as being the original software.
+
+3. This notice may not be removed or altered from any source distribution.
+````
+
+### License text 216
+
+Normalized SHA-256: `c23953d9deb0a3312dbeaf6c128a657f3591acee45067612fa68405eaa4525db`
+
+Used by:
+
+- **bindgen 0.72.1** — `BSD-3-Clause`; [source](https://crates.io/api/v1/crates/bindgen/0.72.1/download); repository: https://github.com/rust-lang/rust-bindgen; files: `LICENSE`
+
+````text
+BSD 3-Clause License
+
+Copyright (c) 2013, Jyun-Yan You
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of the copyright holder nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+````
+
+### License text 217
 
 Normalized SHA-256: `c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383`
 
@@ -14673,7 +20547,7 @@ Used by:
     SOFTWARE
 ````
 
-### License text 160
+### License text 218
 
 Normalized SHA-256: `c30152c94a6d75e021adbc52b3a52470366a46edb917e17deae3259251af244c`
 
@@ -14726,7 +20600,40 @@ licensed under the Apache License, Version 2.0 <LICENSE-APACHE> or
 <LICENSE-MIT> or <http://opensource.org/licenses/MIT>, at your option.
 ````
 
-### License text 161
+### License text 219
+
+Normalized SHA-256: `c666ec2313dba24523ccad88f4c04ea4b24fad6545263a35b1d4ab2b08efe50a`
+
+Used by:
+
+- **pcre2 b47486922fdc3486499b310dc9cf903449700474** — `BSD-3-Clause with PCRE2 exception`; [source](https://github.com/frida/pcre2/tree/b47486922fdc3486499b310dc9cf903449700474); repository: https://github.com/frida/pcre2; files: `native/pcre2/cmake/COPYING-CMAKE-SCRIPTS`
+
+````text
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+1. Redistributions of source code must retain the copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. The name of the author may not be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+````
+
+### License text 220
 
 Normalized SHA-256: `c6a4ae2a0565d17ac7fccae808275596fc5959ffdf507107d001bc4669189e45`
 
@@ -14750,7 +20657,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ````
 
-### License text 162
+### License text 221
 
 Normalized SHA-256: `c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`
 
@@ -14758,6 +20665,9 @@ Used by:
 
 - **codespan-reporting 0.11.1** — `Apache-2.0`; [source](https://crates.io/api/v1/crates/codespan-reporting/0.11.1/download); repository: https://github.com/brendanzab/codespan; files: `licenses/codespan-reporting-0.11.1/LICENSE`
 - **ntapi 0.4.3** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/ntapi/0.4.3/download); repository: https://github.com/MSxDOS/ntapi; files: `LICENSE-APACHE`
+- **quinn 0.11.11** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/quinn/0.11.11/download); repository: https://github.com/quinn-rs/quinn; files: `LICENSE-APACHE`
+- **quinn-proto 0.11.17** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/quinn-proto/0.11.17/download); repository: https://github.com/quinn-rs/quinn; files: `LICENSE-APACHE`
+- **quinn-udp 0.5.15** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/quinn-udp/0.5.15/download); repository: https://github.com/quinn-rs/quinn; files: `LICENSE-APACHE`
 - **ureq 3.3.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/ureq/3.3.0/download); repository: https://github.com/algesten/ureq; files: `LICENSE-APACHE`
 
 ````text
@@ -14964,7 +20874,7 @@ Used by:
    limitations under the License.
 ````
 
-### License text 163
+### License text 222
 
 Normalized SHA-256: `c733ccf8ab25df175a63d9d844677b98e3a5ab8f8de1c1616087e6868a7f948e`
 
@@ -15000,7 +20910,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 164
+### License text 223
 
 Normalized SHA-256: `c77a4cf9da729987d0fe7ccd811e3bd27393914ddf3d23467c18cc22954513b3`
 
@@ -15036,7 +20946,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 165
+### License text 224
 
 Normalized SHA-256: `c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4`
 
@@ -15068,7 +20978,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 166
+### License text 225
 
 Normalized SHA-256: `c8c6324cf2f0f076e3ed5dea4a21f00bd4dd6fce44f72b110bc52e7fe06f6e1e`
 
@@ -15104,7 +21014,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 167
+### License text 226
 
 Normalized SHA-256: `c962ee4d1d05ddc138b202b2540219ebc57893fcf97b364852094a9a94ce1365`
 
@@ -15122,7 +21032,7 @@ http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
 option.
 ````
 
-### License text 168
+### License text 227
 
 Normalized SHA-256: `c9a75f18b9ab2927829a208fc6aa2cf4e63b8420887ba29cdb265d6619ae82d5`
 
@@ -15132,6 +21042,7 @@ Used by:
 - **parking_lot 0.12.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/parking_lot/0.12.5/download); repository: https://github.com/Amanieu/parking_lot; files: `LICENSE-MIT`
 - **parking_lot_core 0.9.12** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/parking_lot_core/0.9.12/download); repository: https://github.com/Amanieu/parking_lot; files: `LICENSE-MIT`
 - **rustc_version 0.4.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/rustc_version/0.4.1/download); repository: https://github.com/djc/rustc-version-rs; files: `LICENSE-MIT`
+- **thread_local 1.1.10** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/thread_local/1.1.10/download); repository: https://github.com/Amanieu/thread_local-rs; files: `LICENSE-MIT`
 
 ````text
 Copyright (c) 2016 The Rust Project Developers
@@ -15161,7 +21072,72 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 169
+### License text 228
+
+Normalized SHA-256: `c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566`
+
+Used by:
+
+- **ryu 1.0.23** — `Apache-2.0 OR BSL-1.0`; [source](https://crates.io/api/v1/crates/ryu/1.0.23/download); repository: https://github.com/dtolnay/ryu; files: `LICENSE-BOOST`
+- **zlib 171a3eacaea8b731ef1fc586e7777b77742e2a1d** — `Zlib`; [source](https://github.com/frida/zlib/tree/171a3eacaea8b731ef1fc586e7777b77742e2a1d); repository: https://github.com/frida/zlib; files: `native/zlib/contrib/dotzlib/LICENSE_1_0.txt`
+
+````text
+Boost Software License - Version 1.0 - August 17th, 2003
+
+Permission is hereby granted, free of charge, to any person or organization
+obtaining a copy of the software and accompanying documentation covered by
+this license (the "Software") to use, reproduce, display, distribute,
+execute, and transmit the Software, and to prepare derivative works of the
+Software, and to permit third-parties to whom the Software is furnished to
+do so, all subject to the following:
+
+The copyright notices in the Software and this entire statement, including
+the above license grant, this restriction and the following disclaimer,
+must be included in all copies of the Software, in whole or in part, and
+all derivative works of the Software, unless such copies or derivative
+works are solely in the form of machine-executable object code generated by
+a source language processor.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT
+SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
+FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 229
+
+Normalized SHA-256: `cb3101cb814ef48ae95cdbdb74ef44a335484f4e190837fc8df38e3c3c1f9361`
+
+Used by:
+
+- **zlib 171a3eacaea8b731ef1fc586e7777b77742e2a1d** — `Zlib`; [source](https://github.com/frida/zlib/tree/171a3eacaea8b731ef1fc586e7777b77742e2a1d); repository: https://github.com/frida/zlib; files: `native/zlib/LICENSE.build`
+
+````text
+Copyright (c) 2018 The Meson development team
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+````
+
+### License text 230
 
 Normalized SHA-256: `cb5aedb296c5246d1f22e9099f925a65146f9f0d6b4eebba97fd27a6cdbbab2d`
 
@@ -15190,7 +21166,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 170
+### License text 231
 
 Normalized SHA-256: `cc02a53316678ca2575cc69d12daa7b1833935d4b7742c31fbab7bd74a481077`
 
@@ -15226,7 +21202,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 171
+### License text 232
 
 Normalized SHA-256: `cc0332a88c2ea21d5f3c1298f966120f4c95196871c3f6bb4fcf615508b93fa1`
 
@@ -15266,12 +21242,13 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ````
 
-### License text 172
+### License text 233
 
 Normalized SHA-256: `cc117d90b498b32b11a886f279b359da16a73c3b01efbb2f5cc004b20262334e`
 
 Used by:
 
+- **tokio-rustls 0.26.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/tokio-rustls/0.26.4/download); repository: https://github.com/rustls/tokio-rustls; files: `LICENSE-APACHE`
 - **tokio-rustls 0.26.6** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/tokio-rustls/0.26.6/download); repository: https://github.com/rustls/tokio-rustls; files: `LICENSE-APACHE`
 
 ````text
@@ -15478,7 +21455,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 173
+### License text 234
 
 Normalized SHA-256: `ce7bc3499fee93d5022ef430d5e4201e79a6d9154f3974e42f41349f0569e09b`
 
@@ -15508,21 +21485,29 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 174
+### License text 235
 
 Normalized SHA-256: `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`
 
 Used by:
 
+- **cargo-emit 0.2.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cargo-emit/0.2.1/download); repository: https://github.com/nvzqz/cargo-emit; files: `LICENSE-APACHE`
+- **clang-sys 1.9.1** — `Apache-2.0`; [source](https://crates.io/api/v1/crates/clang-sys/1.9.1/download); repository: https://github.com/KyleMayes/clang-sys; files: `LICENSE.txt`
 - **encode_unicode 1.0.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/encode_unicode/1.0.0/download); repository: https://github.com/tormol/encode_unicode; files: `LICENSE-APACHE`
 - **fxhash 0.2.1** — `Apache-2.0/MIT`; [source](https://crates.io/api/v1/crates/fxhash/0.2.1/download); repository: https://github.com/cbreeden/fxhash; files: `licenses/fxhash-0.2.1/LICENSE-APACHE`
+- **gl_generator 0.14.0** — `Apache-2.0`; [source](https://crates.io/api/v1/crates/gl_generator/0.14.0/download); repository: https://github.com/brendanzab/gl-rs/; files: `licenses/gl_generator-0.14.0/LICENSE`
+- **khronos_api 3.1.0** — `Apache-2.0`; [source](https://crates.io/api/v1/crates/khronos_api/3.1.0/download); repository: https://github.com/brendanzab/gl-rs/; files: `licenses/khronos_api-3.1.0/LICENSE`
+- **lru-slab 0.1.2** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/lru-slab/0.1.2/download); repository: https://github.com/Ralith/lru-slab; files: `LICENSE-APACHE`
 - **mac 0.1.1** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/mac/0.1.1/download); repository: https://github.com/reem/rust-mac.git; files: `licenses/mac-0.1.1/LICENSE-APACHE`
+- **nohash-hasher 0.2.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/nohash-hasher/0.2.0/download); repository: https://github.com/paritytech/nohash-hasher; files: `LICENSE-APACHE`
 - **siphasher 1.0.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/siphasher/1.0.4/download); repository: https://github.com/jedisct1/rust-siphash; files: `LICENSE-APACHE`
 - **spirv 0.3.0+sdk-1.3.268.0** — `Apache-2.0`; [source](https://crates.io/api/v1/crates/spirv/0.3.0+sdk-1.3.268.0/download); repository: https://github.com/gfx-rs/rspirv; files: `licenses/spirv-0.3.0+sdk-1.3.268.0/LICENSE`
+- **tinyvec 1.12.0** — `Zlib OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/tinyvec/1.12.0/download); repository: https://github.com/Lokathor/tinyvec; files: `LICENSE-APACHE.md`
 - **ureq-proto 0.6.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/ureq-proto/0.6.4/download); repository: https://github.com/algesten/ureq-proto; files: `LICENSE-APACHE.txt`
 - **utf8_iter 1.0.4** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/utf8_iter/1.0.4/download); repository: https://github.com/hsivonen/utf8_iter; files: `LICENSE-APACHE`
 - **x11rb 0.14.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/x11rb/0.14.0/download); repository: https://github.com/psychon/x11rb; files: `LICENSE-APACHE`
 - **x11rb-protocol 0.14.0** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/x11rb-protocol/0.14.0/download); repository: https://github.com/psychon/x11rb; files: `LICENSE-APACHE`
+- **xz 0.1.0** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/xz/0.1.0/download); repository: https://github.com/alexcrichton/xz2-rs; files: `LICENSE-APACHE`
 - **zeroize 1.9.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/zeroize/1.9.0/download); repository: https://github.com/RustCrypto/utils; files: `LICENSE-APACHE`
 
 ````text
@@ -15730,7 +21715,40 @@ Used by:
    limitations under the License.
 ````
 
-### License text 175
+### License text 236
+
+Normalized SHA-256: `cfdb7491dfa8800a1d561957d6a072ad63a6305ffa48386d04eae8eac8d65e8a`
+
+Used by:
+
+- **nu-ansi-term 0.50.3** — `MIT`; [source](https://crates.io/api/v1/crates/nu-ansi-term/0.50.3/download); repository: https://github.com/nushell/nu-ansi-term; files: `LICENSE`
+
+````text
+The MIT License (MIT)
+
+Copyright (c) 2014 Benjamin Sago
+Copyright (c) 2021-2022 The Nushell Project Developers
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+````
+
+### License text 237
 
 Normalized SHA-256: `d13669f0eaff9b7015bff0d8637297213b53d9f239826636c07a15633acf7052`
 
@@ -15766,7 +21784,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 176
+### License text 238
 
 Normalized SHA-256: `d3174ad63e721d4c9dccb8ad4320848992d314369bc46319720b5802c9153fe9`
 
@@ -15952,7 +21970,7 @@ TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
    of your accepting any such warranty or additional liability.
 ````
 
-### License text 177
+### License text 239
 
 Normalized SHA-256: `d5c22aa3118d240e877ad41c5d9fa232f9c77d757d4aac0c2f943afc0a95e0ef`
 
@@ -15988,7 +22006,43 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 178
+### License text 240
+
+Normalized SHA-256: `d9771b8c6cf4426d3846de54c1febe20907f1eeadf7adfb5ade89a83bd9ea77f`
+
+Used by:
+
+- **cexpr 0.6.0** — `Apache-2.0/MIT`; [source](https://crates.io/api/v1/crates/cexpr/0.6.0/download); repository: https://github.com/jethrogb/rust-cexpr; files: `LICENSE-MIT`
+
+````text
+(C) Copyright 2016 Jethro G. Beekman
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 241
 
 Normalized SHA-256: `da23be69ad3ccf7a5823d62152efcd2b15de9482a5014fcb1b02844662d86abd`
 
@@ -16016,7 +22070,87 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE
 ````
 
-### License text 179
+### License text 242
+
+Normalized SHA-256: `dbe1fff0fb1314b6af94f161511406275cf01c5a32441fbf24528a57a051d599`
+
+Used by:
+
+- **minimal-lexical 0.2.1** — `MIT/Apache-2.0`; [source](https://crates.io/api/v1/crates/minimal-lexical/0.2.1/download); repository: https://github.com/Alexhuszagh/minimal-lexical; files: `LICENSE.md`
+
+````text
+Minimal-lexical is dual licensed under the Apache 2.0 license as well as the MIT
+license. See the LICENCE-MIT and the LICENCE-APACHE files for the licenses.
+
+---
+
+`src/bellerophon.rs` is loosely based off the Golang implementation,
+found [here](https://github.com/golang/go/blob/b10849fbb97a2244c086991b4623ae9f32c212d0/src/strconv/extfloat.go).
+That code (used if the `compact` feature is enabled) is subject to a
+[3-clause BSD license](https://github.com/golang/go/blob/b10849fbb97a2244c086991b4623ae9f32c212d0/LICENSE):
+
+Copyright (c) 2009 The Go Authors. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google Inc. nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+````
+
+### License text 243
+
+Normalized SHA-256: `dc59db7b8582bbb77b37303f26559cc2b04cb2846411288a8d6e54cca6f209c1`
+
+Used by:
+
+- **fn-ptr 0.9.3** — `MIT`; [source](https://crates.io/api/v1/crates/fn-ptr/0.9.3/download); repository: https://github.com/OpenByteDev/fn-ptr; files: `LICENSE`
+
+````text
+MIT License
+
+Copyright (c) 2025 OpenByte
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+````
+
+### License text 244
 
 Normalized SHA-256: `dc91f8200e4b2a1f9261035d4c18c33c246911a6c0f7b543d75347e61b249cff`
 
@@ -16052,12 +22186,95 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 180
+### License text 245
+
+Normalized SHA-256: `dfdca2d7fdbabfd937f9dc41b7f61647b0e6cb1f9ee767ecb4520f979ebe91da`
+
+Used by:
+
+- **capstone d536b1577fd033a31d75f48fd183aa425256cc18** — `BSD-3-Clause and LLVM legacy license`; [source](https://github.com/frida/capstone/tree/d536b1577fd033a31d75f48fd183aa425256cc18); repository: https://github.com/frida/capstone; files: `native/capstone/LICENSE_LLVM.TXT`
+
+````text
+==============================================================================
+LLVM Release License
+==============================================================================
+University of Illinois/NCSA
+Open Source License
+
+Copyright (c) 2003-2013 University of Illinois at Urbana-Champaign.
+All rights reserved.
+
+Developed by:
+
+    LLVM Team
+
+    University of Illinois at Urbana-Champaign
+
+    http://llvm.org
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal with
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimers.
+
+    * Redistributions in binary form must reproduce the above copyright notice,
+      this list of conditions and the following disclaimers in the
+      documentation and/or other materials provided with the distribution.
+
+    * Neither the names of the LLVM Team, University of Illinois at
+      Urbana-Champaign, nor the names of its contributors may be used to
+      endorse or promote products derived from this Software without specific
+      prior written permission.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE
+SOFTWARE.
+
+==============================================================================
+Copyrights and Licenses for Third Party Software Distributed with LLVM:
+==============================================================================
+The LLVM software contains code written by third parties.  Such software will
+have its own individual LICENSE.TXT file in the directory in which it appears.
+This file will describe the copyrights, license, and restrictions which apply
+to that code.
+
+The disclaimer of warranty in the University of Illinois Open Source License
+applies to all code in the LLVM Distribution, and nothing in any of the
+other licenses gives permission to use the names of the LLVM Team or the
+University of Illinois to endorse or promote products derived from this
+Software.
+
+The following pieces of software have additional or alternate copyrights,
+licenses, and/or restrictions:
+
+Program             Directory
+-------             ---------
+Autoconf            llvm/autoconf
+                    llvm/projects/ModuleMaker/autoconf
+                    llvm/projects/sample/autoconf
+Google Test         llvm/utils/unittest/googletest
+OpenBSD regex       llvm/lib/Support/{reg*, COPYRIGHT.regex}
+pyyaml tests        llvm/test/YAMLParser/{*.data, LICENSE.TXT}
+ARM contributions   llvm/lib/Target/ARM/LICENSE.TXT
+md5 contributions   llvm/lib/Support/MD5.cpp llvm/include/llvm/Support/MD5.h
+````
+
+### License text 246
 
 Normalized SHA-256: `e20fa2b8e0a2565f24a792b94b4bf4b6c2b9d36f781d8a9516e218a036e6677a`
 
 Used by:
 
+- **tokio-rustls 0.26.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/tokio-rustls/0.26.4/download); repository: https://github.com/rustls/tokio-rustls; files: `LICENSE-MIT`
 - **tokio-rustls 0.26.6** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/tokio-rustls/0.26.6/download); repository: https://github.com/rustls/tokio-rustls; files: `LICENSE-MIT`
 
 ````text
@@ -16088,7 +22305,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 181
+### License text 247
 
 Normalized SHA-256: `e271993808fec50ab29350b39539cdec611a9103f827e0aa26d61da70e2d33f8`
 
@@ -16161,7 +22378,7 @@ of Data, including for example machine learning models and models'
 insights.
 ````
 
-### License text 182
+### License text 248
 
 Normalized SHA-256: `e2e245f2b566d0bfafb0f6a04c16b82d710c4e6e7d799e39bb4ef6e541b85b98`
 
@@ -16191,13 +22408,41 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 183
+### License text 249
+
+Normalized SHA-256: `e34c58338bd89d43e709e226610d8f32b3e3c47f4ad9a99a8dc1d4ac7842488e`
+
+Used by:
+
+- **glib 790ffa82e80d99fba8a3db494e46f907d560893c** — `LGPL-2.1-or-later (plus per-file permissive terms)`; [source](https://github.com/frida/glib/tree/790ffa82e80d99fba8a3db494e46f907d560893c); repository: https://github.com/frida/glib; files: `native/glib/LICENSES/LLVM-exception.txt`
+
+````text
+---- LLVM Exceptions to the Apache 2.0 License ----
+
+   As an exception, if, as a result of your compiling your source code, portions
+   of this Software are embedded into an Object form of such source code, you
+   may redistribute such embedded portions in such Object form without complying
+   with the conditions of Sections 4(a), 4(b) and 4(d) of the License.
+
+   In addition, if you combine or link compiled forms of this Software with
+   software that is licensed under the GPLv2 ("Combined Software") and if a
+   court of competent jurisdiction determines that the patent provision (Section
+   3), the indemnity provision (Section 9) or other Section of the License
+   conflicts with the conditions of the GPLv2, you may retroactively and
+   prospectively choose to deem waived or otherwise exclude such Section(s) of
+   the License, but only in their entirety and only with respect to the Combined
+   Software.
+````
+
+### License text 250
 
 Normalized SHA-256: `e3ba223bb1423f0aad8c3dfce0fe3148db48926d41e6fbc3afbbf5ff9e1c89cb`
 
 Used by:
 
 - **bytemuck 1.25.2** — `Zlib OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/bytemuck/1.25.2/download); repository: https://github.com/Lokathor/bytemuck; files: `LICENSE-APACHE`
+- **bytemuck_derive 1.12.0** — `Zlib OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/bytemuck_derive/1.12.0/download); repository: https://github.com/Lokathor/bytemuck; files: `LICENSE-APACHE`
+- **static_vcruntime 3.0.0** — `MIT OR Apache-2.0 OR Zlib`; [source](https://crates.io/api/v1/crates/static_vcruntime/3.0.0/download); repository: https://github.com/ChrisDenton/static_vcruntime; files: `LICENSE-APACHE`
 
 ````text
 Apache License
@@ -16263,7 +22508,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### License text 184
+### License text 251
 
 Normalized SHA-256: `e4705ddab847449a2cdcb3c88b005ea10330aa249d9148ca2eef9c84c5d29895`
 
@@ -16464,7 +22709,7 @@ Used by:
    limitations under the License.
 ````
 
-### License text 185
+### License text 252
 
 Normalized SHA-256: `e4c9b06fa850cb9b540a5e400e9f6394cf15efcf4098144de477d1d3dae10150`
 
@@ -16500,7 +22745,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 186
+### License text 253
 
 Normalized SHA-256: `e63690624d604aa626c3c62b6ead1a9f4a916d2260ac8132022acbafe2556045`
 
@@ -16536,7 +22781,371 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 187
+### License text 254
+
+Normalized SHA-256: `e67978cd18816c0cb7d29aaaacde7b7447402c2fb321a051698890a8eaedda94`
+
+Used by:
+
+- **libffi 4b75d8a1d9cf401d8a2fa16619938637ea7e7afa** — `MIT (build tools separately licensed)`; [source](https://github.com/frida/libffi/tree/4b75d8a1d9cf401d8a2fa16619938637ea7e7afa); repository: https://github.com/frida/libffi; files: `native/libffi/LICENSE-BUILDTOOLS`
+
+````text
+The libffi source distribution contains certain code that is not part
+of libffi, and is only used as tooling to assist with the building and
+testing of libffi.  This includes the msvcc.sh script used to wrap the
+Microsoft compiler with GNU compatible command-line options,
+make_sunver.pl, and the libffi test code distributed in the
+testsuite/libffi.bhaible directory.  This code is distributed with
+libffi for the purpose of convenience only, and libffi is in no way
+derived from this code.
+
+msvcc.sh an testsuite/libffi.bhaible are both distributed under the
+terms of the GNU GPL version 2, as below.
+
+
+
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 2, June 1991
+
+ Copyright (C) 1989, 1991 Free Software Foundation, Inc.,
+ 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+                            Preamble
+
+  The licenses for most software are designed to take away your
+freedom to share and change it.  By contrast, the GNU General Public
+License is intended to guarantee your freedom to share and change free
+software--to make sure the software is free for all its users.  This
+General Public License applies to most of the Free Software
+Foundation's software and to any other program whose authors commit to
+using it.  (Some other Free Software Foundation software is covered by
+the GNU Lesser General Public License instead.)  You can apply it to
+your programs, too.
+
+  When we speak of free software, we are referring to freedom, not
+price.  Our General Public Licenses are designed to make sure that you
+have the freedom to distribute copies of free software (and charge for
+this service if you wish), that you receive source code or can get it
+if you want it, that you can change the software or use pieces of it
+in new free programs; and that you know you can do these things.
+
+  To protect your rights, we need to make restrictions that forbid
+anyone to deny you these rights or to ask you to surrender the rights.
+These restrictions translate to certain responsibilities for you if you
+distribute copies of the software, or if you modify it.
+
+  For example, if you distribute copies of such a program, whether
+gratis or for a fee, you must give the recipients all the rights that
+you have.  You must make sure that they, too, receive or can get the
+source code.  And you must show them these terms so they know their
+rights.
+
+  We protect your rights with two steps: (1) copyright the software, and
+(2) offer you this license which gives you legal permission to copy,
+distribute and/or modify the software.
+
+  Also, for each author's protection and ours, we want to make certain
+that everyone understands that there is no warranty for this free
+software.  If the software is modified by someone else and passed on, we
+want its recipients to know that what they have is not the original, so
+that any problems introduced by others will not reflect on the original
+authors' reputations.
+
+  Finally, any free program is threatened constantly by software
+patents.  We wish to avoid the danger that redistributors of a free
+program will individually obtain patent licenses, in effect making the
+program proprietary.  To prevent this, we have made it clear that any
+patent must be licensed for everyone's free use or not licensed at all.
+
+  The precise terms and conditions for copying, distribution and
+modification follow.
+
+                    GNU GENERAL PUBLIC LICENSE
+   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+  0. This License applies to any program or other work which contains
+a notice placed by the copyright holder saying it may be distributed
+under the terms of this General Public License.  The "Program", below,
+refers to any such program or work, and a "work based on the Program"
+means either the Program or any derivative work under copyright law:
+that is to say, a work containing the Program or a portion of it,
+either verbatim or with modifications and/or translated into another
+language.  (Hereinafter, translation is included without limitation in
+the term "modification".)  Each licensee is addressed as "you".
+
+Activities other than copying, distribution and modification are not
+covered by this License; they are outside its scope.  The act of
+running the Program is not restricted, and the output from the Program
+is covered only if its contents constitute a work based on the
+Program (independent of having been made by running the Program).
+Whether that is true depends on what the Program does.
+
+  1. You may copy and distribute verbatim copies of the Program's
+source code as you receive it, in any medium, provided that you
+conspicuously and appropriately publish on each copy an appropriate
+copyright notice and disclaimer of warranty; keep intact all the
+notices that refer to this License and to the absence of any warranty;
+and give any other recipients of the Program a copy of this License
+along with the Program.
+
+You may charge a fee for the physical act of transferring a copy, and
+you may at your option offer warranty protection in exchange for a fee.
+
+  2. You may modify your copy or copies of the Program or any portion
+of it, thus forming a work based on the Program, and copy and
+distribute such modifications or work under the terms of Section 1
+above, provided that you also meet all of these conditions:
+
+    a) You must cause the modified files to carry prominent notices
+    stating that you changed the files and the date of any change.
+
+    b) You must cause any work that you distribute or publish, that in
+    whole or in part contains or is derived from the Program or any
+    part thereof, to be licensed as a whole at no charge to all third
+    parties under the terms of this License.
+
+    c) If the modified program normally reads commands interactively
+    when run, you must cause it, when started running for such
+    interactive use in the most ordinary way, to print or display an
+    announcement including an appropriate copyright notice and a
+    notice that there is no warranty (or else, saying that you provide
+    a warranty) and that users may redistribute the program under
+    these conditions, and telling the user how to view a copy of this
+    License.  (Exception: if the Program itself is interactive but
+    does not normally print such an announcement, your work based on
+    the Program is not required to print an announcement.)
+
+These requirements apply to the modified work as a whole.  If
+identifiable sections of that work are not derived from the Program,
+and can be reasonably considered independent and separate works in
+themselves, then this License, and its terms, do not apply to those
+sections when you distribute them as separate works.  But when you
+distribute the same sections as part of a whole which is a work based
+on the Program, the distribution of the whole must be on the terms of
+this License, whose permissions for other licensees extend to the
+entire whole, and thus to each and every part regardless of who wrote it.
+
+Thus, it is not the intent of this section to claim rights or contest
+your rights to work written entirely by you; rather, the intent is to
+exercise the right to control the distribution of derivative or
+collective works based on the Program.
+
+In addition, mere aggregation of another work not based on the Program
+with the Program (or with a work based on the Program) on a volume of
+a storage or distribution medium does not bring the other work under
+the scope of this License.
+
+  3. You may copy and distribute the Program (or a work based on it,
+under Section 2) in object code or executable form under the terms of
+Sections 1 and 2 above provided that you also do one of the following:
+
+    a) Accompany it with the complete corresponding machine-readable
+    source code, which must be distributed under the terms of Sections
+    1 and 2 above on a medium customarily used for software interchange; or,
+
+    b) Accompany it with a written offer, valid for at least three
+    years, to give any third party, for a charge no more than your
+    cost of physically performing source distribution, a complete
+    machine-readable copy of the corresponding source code, to be
+    distributed under the terms of Sections 1 and 2 above on a medium
+    customarily used for software interchange; or,
+
+    c) Accompany it with the information you received as to the offer
+    to distribute corresponding source code.  (This alternative is
+    allowed only for noncommercial distribution and only if you
+    received the program in object code or executable form with such
+    an offer, in accord with Subsection b above.)
+
+The source code for a work means the preferred form of the work for
+making modifications to it.  For an executable work, complete source
+code means all the source code for all modules it contains, plus any
+associated interface definition files, plus the scripts used to
+control compilation and installation of the executable.  However, as a
+special exception, the source code distributed need not include
+anything that is normally distributed (in either source or binary
+form) with the major components (compiler, kernel, and so on) of the
+operating system on which the executable runs, unless that component
+itself accompanies the executable.
+
+If distribution of executable or object code is made by offering
+access to copy from a designated place, then offering equivalent
+access to copy the source code from the same place counts as
+distribution of the source code, even though third parties are not
+compelled to copy the source along with the object code.
+
+  4. You may not copy, modify, sublicense, or distribute the Program
+except as expressly provided under this License.  Any attempt
+otherwise to copy, modify, sublicense or distribute the Program is
+void, and will automatically terminate your rights under this License.
+However, parties who have received copies, or rights, from you under
+this License will not have their licenses terminated so long as such
+parties remain in full compliance.
+
+  5. You are not required to accept this License, since you have not
+signed it.  However, nothing else grants you permission to modify or
+distribute the Program or its derivative works.  These actions are
+prohibited by law if you do not accept this License.  Therefore, by
+modifying or distributing the Program (or any work based on the
+Program), you indicate your acceptance of this License to do so, and
+all its terms and conditions for copying, distributing or modifying
+the Program or works based on it.
+
+  6. Each time you redistribute the Program (or any work based on the
+Program), the recipient automatically receives a license from the
+original licensor to copy, distribute or modify the Program subject to
+these terms and conditions.  You may not impose any further
+restrictions on the recipients' exercise of the rights granted herein.
+You are not responsible for enforcing compliance by third parties to
+this License.
+
+  7. If, as a consequence of a court judgment or allegation of patent
+infringement or for any other reason (not limited to patent issues),
+conditions are imposed on you (whether by court order, agreement or
+otherwise) that contradict the conditions of this License, they do not
+excuse you from the conditions of this License.  If you cannot
+distribute so as to satisfy simultaneously your obligations under this
+License and any other pertinent obligations, then as a consequence you
+may not distribute the Program at all.  For example, if a patent
+license would not permit royalty-free redistribution of the Program by
+all those who receive copies directly or indirectly through you, then
+the only way you could satisfy both it and this License would be to
+refrain entirely from distribution of the Program.
+
+If any portion of this section is held invalid or unenforceable under
+any particular circumstance, the balance of the section is intended to
+apply and the section as a whole is intended to apply in other
+circumstances.
+
+It is not the purpose of this section to induce you to infringe any
+patents or other property right claims or to contest validity of any
+such claims; this section has the sole purpose of protecting the
+integrity of the free software distribution system, which is
+implemented by public license practices.  Many people have made
+generous contributions to the wide range of software distributed
+through that system in reliance on consistent application of that
+system; it is up to the author/donor to decide if he or she is willing
+to distribute software through any other system and a licensee cannot
+impose that choice.
+
+This section is intended to make thoroughly clear what is believed to
+be a consequence of the rest of this License.
+
+  8. If the distribution and/or use of the Program is restricted in
+certain countries either by patents or by copyrighted interfaces, the
+original copyright holder who places the Program under this License
+may add an explicit geographical distribution limitation excluding
+those countries, so that distribution is permitted only in or among
+countries not thus excluded.  In such case, this License incorporates
+the limitation as if written in the body of this License.
+
+  9. The Free Software Foundation may publish revised and/or new versions
+of the General Public License from time to time.  Such new versions will
+be similar in spirit to the present version, but may differ in detail to
+address new problems or concerns.
+
+Each version is given a distinguishing version number.  If the Program
+specifies a version number of this License which applies to it and "any
+later version", you have the option of following the terms and conditions
+either of that version or of any later version published by the Free
+Software Foundation.  If the Program does not specify a version number of
+this License, you may choose any version ever published by the Free Software
+Foundation.
+
+  10. If you wish to incorporate parts of the Program into other free
+programs whose distribution conditions are different, write to the author
+to ask for permission.  For software which is copyrighted by the Free
+Software Foundation, write to the Free Software Foundation; we sometimes
+make exceptions for this.  Our decision will be guided by the two goals
+of preserving the free status of all derivatives of our free software and
+of promoting the sharing and reuse of software generally.
+
+                            NO WARRANTY
+
+  11. BECAUSE THE PROGRAM IS LICENSED FREE OF CHARGE, THERE IS NO WARRANTY
+FOR THE PROGRAM, TO THE EXTENT PERMITTED BY APPLICABLE LAW.  EXCEPT WHEN
+OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES
+PROVIDE THE PROGRAM "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED
+OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS
+TO THE QUALITY AND PERFORMANCE OF THE PROGRAM IS WITH YOU.  SHOULD THE
+PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING,
+REPAIR OR CORRECTION.
+
+  12. IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
+WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR
+REDISTRIBUTE THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES,
+INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING
+OUT OF THE USE OR INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED
+TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY
+YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER
+PROGRAMS), EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES.
+
+                     END OF TERMS AND CONDITIONS
+
+            How to Apply These Terms to Your New Programs
+
+  If you develop a new program, and you want it to be of the greatest
+possible use to the public, the best way to achieve this is to make it
+free software which everyone can redistribute and change under these terms.
+
+  To do so, attach the following notices to the program.  It is safest
+to attach them to the start of each source file to most effectively
+convey the exclusion of warranty; and each file should have at least
+the "copyright" line and a pointer to where the full notice is found.
+
+    <one line to give the program's name and a brief idea of what it does.>
+    Copyright (C) <year>  <name of author>
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License along
+    with this program; if not, write to the Free Software Foundation, Inc.,
+    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+Also add information on how to contact you by electronic and paper mail.
+
+If the program is interactive, make it output a short notice like this
+when it starts in an interactive mode:
+
+    Gnomovision version 69, Copyright (C) year name of author
+    Gnomovision comes with ABSOLUTELY NO WARRANTY; for details type `show w'.
+    This is free software, and you are welcome to redistribute it
+    under certain conditions; type `show c' for details.
+
+The hypothetical commands `show w' and `show c' should show the appropriate
+parts of the General Public License.  Of course, the commands you use may
+be called something other than `show w' and `show c'; they could even be
+mouse-clicks or menu items--whatever suits your program.
+
+You should also get your employer (if you work as a programmer) or your
+school, if any, to sign a "copyright disclaimer" for the program, if
+necessary.  Here is a sample; alter the names:
+
+  Yoyodyne, Inc., hereby disclaims all copyright interest in the program
+  `Gnomovision' (which makes passes at compilers) written by James Hacker.
+
+  <signature of Ty Coon>, 1 April 1989
+  Ty Coon, President of Vice
+
+This General Public License does not permit incorporating your program into
+proprietary programs.  If your program is a subroutine library, you may
+consider it more useful to permit linking proprietary applications with the
+library.  If this is what you want to do, use the GNU Lesser General
+Public License instead of this License.
+````
+
+### License text 255
 
 Normalized SHA-256: `eaf40297c75da471f7cda1f3458e8d91b4b2ec866e609527a13acfa93b638652`
 
@@ -16572,7 +23181,37 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 188
+### License text 256
+
+Normalized SHA-256: `eafbfa606bc005ed7fd2f623d65af17ffe4ef7c017221ac14405bf4140771ea9`
+
+Used by:
+
+- **sharded-slab 0.1.7** — `MIT`; [source](https://crates.io/api/v1/crates/sharded-slab/0.1.7/download); repository: https://github.com/hawkw/sharded-slab; files: `LICENSE`
+
+````text
+Copyright (c) 2019 Eliza Weisman
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+````
+
+### License text 257
 
 Normalized SHA-256: `eb69613e00e596e13d2f58e820aee10e9d51754b91d7111bc997f1fc90791f66`
 
@@ -16604,7 +23243,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 189
+### License text 258
+
+Normalized SHA-256: `ec353d4fecf7963b4c054384557e5dbc3c7a717997eb4a3815b315721a6aa75a`
+
+Used by:
+
+- **nohash-hasher 0.2.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/nohash-hasher/0.2.0/download); repository: https://github.com/paritytech/nohash-hasher; files: `LICENSE-MIT`
+
+````text
+Copyright 2018 Parity Technologies (UK) Ltd.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
+OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+````
+
+### License text 259
 
 Normalized SHA-256: `ecc269ef87fd38a1d98e30bfac9ba964a9dbd9315c3770fed98d4d7cb5882055`
 
@@ -16640,7 +23308,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 190
+### License text 260
 
 Normalized SHA-256: `edd65bdd88957a205c47d53fa499eed8865a70320f0f03f6391668cb304ea376`
 
@@ -16853,7 +23521,500 @@ Used by:
    limitations under the License.
 ````
 
-### License text 191
+### License text 261
+
+Normalized SHA-256: `f007aa44d788f7ef4731cb26cb6f4593dbd9650b8f6f5ea8eff558229e3961a3`
+
+Used by:
+
+- **glib 790ffa82e80d99fba8a3db494e46f907d560893c** — `LGPL-2.1-or-later (plus per-file permissive terms)`; [source](https://github.com/frida/glib/tree/790ffa82e80d99fba8a3db494e46f907d560893c); repository: https://github.com/frida/glib; files: `native/glib/proxy-libintl-static/COPYING.LIB.txt`
+
+````text
+		  GNU LIBRARY GENERAL PUBLIC LICENSE
+		       Version 2, June 1991
+
+ Copyright (C) 1991 Free Software Foundation, Inc.
+    		    59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+[This is the first released version of the library GPL.  It is
+ numbered 2 because it goes with version 2 of the ordinary GPL.]
+
+			    Preamble
+
+  The licenses for most software are designed to take away your
+freedom to share and change it.  By contrast, the GNU General Public
+Licenses are intended to guarantee your freedom to share and change
+free software--to make sure the software is free for all its users.
+
+  This license, the Library General Public License, applies to some
+specially designated Free Software Foundation software, and to any
+other libraries whose authors decide to use it.  You can use it for
+your libraries, too.
+
+  When we speak of free software, we are referring to freedom, not
+price.  Our General Public Licenses are designed to make sure that you
+have the freedom to distribute copies of free software (and charge for
+this service if you wish), that you receive source code or can get it
+if you want it, that you can change the software or use pieces of it
+in new free programs; and that you know you can do these things.
+
+  To protect your rights, we need to make restrictions that forbid
+anyone to deny you these rights or to ask you to surrender the rights.
+These restrictions translate to certain responsibilities for you if
+you distribute copies of the library, or if you modify it.
+
+  For example, if you distribute copies of the library, whether gratis
+or for a fee, you must give the recipients all the rights that we gave
+you.  You must make sure that they, too, receive or can get the source
+code.  If you link a program with the library, you must provide
+complete object files to the recipients so that they can relink them
+with the library, after making changes to the library and recompiling
+it.  And you must show them these terms so they know their rights.
+
+  Our method of protecting your rights has two steps: (1) copyright
+the library, and (2) offer you this license which gives you legal
+permission to copy, distribute and/or modify the library.
+
+  Also, for each distributor's protection, we want to make certain
+that everyone understands that there is no warranty for this free
+library.  If the library is modified by someone else and passed on, we
+want its recipients to know that what they have is not the original
+version, so that any problems introduced by others will not reflect on
+the original authors' reputations.
+
+  Finally, any free program is threatened constantly by software
+patents.  We wish to avoid the danger that companies distributing free
+software will individually obtain patent licenses, thus in effect
+transforming the program into proprietary software.  To prevent this,
+we have made it clear that any patent must be licensed for everyone's
+free use or not licensed at all.
+
+  Most GNU software, including some libraries, is covered by the ordinary
+GNU General Public License, which was designed for utility programs.  This
+license, the GNU Library General Public License, applies to certain
+designated libraries.  This license is quite different from the ordinary
+one; be sure to read it in full, and don't assume that anything in it is
+the same as in the ordinary license.
+
+  The reason we have a separate public license for some libraries is that
+they blur the distinction we usually make between modifying or adding to a
+program and simply using it.  Linking a program with a library, without
+changing the library, is in some sense simply using the library, and is
+analogous to running a utility program or application program.  However, in
+a textual and legal sense, the linked executable is a combined work, a
+derivative of the original library, and the ordinary General Public License
+treats it as such.
+
+  Because of this blurred distinction, using the ordinary General
+Public License for libraries did not effectively promote software
+sharing, because most developers did not use the libraries.  We
+concluded that weaker conditions might promote sharing better.
+
+  However, unrestricted linking of non-free programs would deprive the
+users of those programs of all benefit from the free status of the
+libraries themselves.  This Library General Public License is intended to
+permit developers of non-free programs to use free libraries, while
+preserving your freedom as a user of such programs to change the free
+libraries that are incorporated in them.  (We have not seen how to achieve
+this as regards changes in header files, but we have achieved it as regards
+changes in the actual functions of the Library.)  The hope is that this
+will lead to faster development of free libraries.
+
+  The precise terms and conditions for copying, distribution and
+modification follow.  Pay close attention to the difference between a
+"work based on the library" and a "work that uses the library".  The
+former contains code derived from the library, while the latter only
+works together with the library.
+
+  Note that it is possible for a library to be covered by the ordinary
+General Public License rather than by this special one.
+
+		  GNU LIBRARY GENERAL PUBLIC LICENSE
+   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+  0. This License Agreement applies to any software library which
+contains a notice placed by the copyright holder or other authorized
+party saying it may be distributed under the terms of this Library
+General Public License (also called "this License").  Each licensee is
+addressed as "you".
+
+  A "library" means a collection of software functions and/or data
+prepared so as to be conveniently linked with application programs
+(which use some of those functions and data) to form executables.
+
+  The "Library", below, refers to any such software library or work
+which has been distributed under these terms.  A "work based on the
+Library" means either the Library or any derivative work under
+copyright law: that is to say, a work containing the Library or a
+portion of it, either verbatim or with modifications and/or translated
+straightforwardly into another language.  (Hereinafter, translation is
+included without limitation in the term "modification".)
+
+  "Source code" for a work means the preferred form of the work for
+making modifications to it.  For a library, complete source code means
+all the source code for all modules it contains, plus any associated
+interface definition files, plus the scripts used to control compilation
+and installation of the library.
+
+  Activities other than copying, distribution and modification are not
+covered by this License; they are outside its scope.  The act of
+running a program using the Library is not restricted, and output from
+such a program is covered only if its contents constitute a work based
+on the Library (independent of the use of the Library in a tool for
+writing it).  Whether that is true depends on what the Library does
+and what the program that uses the Library does.
+
+  1. You may copy and distribute verbatim copies of the Library's
+complete source code as you receive it, in any medium, provided that
+you conspicuously and appropriately publish on each copy an
+appropriate copyright notice and disclaimer of warranty; keep intact
+all the notices that refer to this License and to the absence of any
+warranty; and distribute a copy of this License along with the
+Library.
+
+  You may charge a fee for the physical act of transferring a copy,
+and you may at your option offer warranty protection in exchange for a
+fee.
+
+  2. You may modify your copy or copies of the Library or any portion
+of it, thus forming a work based on the Library, and copy and
+distribute such modifications or work under the terms of Section 1
+above, provided that you also meet all of these conditions:
+
+    a) The modified work must itself be a software library.
+
+    b) You must cause the files modified to carry prominent notices
+    stating that you changed the files and the date of any change.
+
+    c) You must cause the whole of the work to be licensed at no
+    charge to all third parties under the terms of this License.
+
+    d) If a facility in the modified Library refers to a function or a
+    table of data to be supplied by an application program that uses
+    the facility, other than as an argument passed when the facility
+    is invoked, then you must make a good faith effort to ensure that,
+    in the event an application does not supply such function or
+    table, the facility still operates, and performs whatever part of
+    its purpose remains meaningful.
+
+    (For example, a function in a library to compute square roots has
+    a purpose that is entirely well-defined independent of the
+    application.  Therefore, Subsection 2d requires that any
+    application-supplied function or table used by this function must
+    be optional: if the application does not supply it, the square
+    root function must still compute square roots.)
+
+These requirements apply to the modified work as a whole.  If
+identifiable sections of that work are not derived from the Library,
+and can be reasonably considered independent and separate works in
+themselves, then this License, and its terms, do not apply to those
+sections when you distribute them as separate works.  But when you
+distribute the same sections as part of a whole which is a work based
+on the Library, the distribution of the whole must be on the terms of
+this License, whose permissions for other licensees extend to the
+entire whole, and thus to each and every part regardless of who wrote
+it.
+
+Thus, it is not the intent of this section to claim rights or contest
+your rights to work written entirely by you; rather, the intent is to
+exercise the right to control the distribution of derivative or
+collective works based on the Library.
+
+In addition, mere aggregation of another work not based on the Library
+with the Library (or with a work based on the Library) on a volume of
+a storage or distribution medium does not bring the other work under
+the scope of this License.
+
+  3. You may opt to apply the terms of the ordinary GNU General Public
+License instead of this License to a given copy of the Library.  To do
+this, you must alter all the notices that refer to this License, so
+that they refer to the ordinary GNU General Public License, version 2,
+instead of to this License.  (If a newer version than version 2 of the
+ordinary GNU General Public License has appeared, then you can specify
+that version instead if you wish.)  Do not make any other change in
+these notices.
+
+  Once this change is made in a given copy, it is irreversible for
+that copy, so the ordinary GNU General Public License applies to all
+subsequent copies and derivative works made from that copy.
+
+  This option is useful when you wish to copy part of the code of
+the Library into a program that is not a library.
+
+  4. You may copy and distribute the Library (or a portion or
+derivative of it, under Section 2) in object code or executable form
+under the terms of Sections 1 and 2 above provided that you accompany
+it with the complete corresponding machine-readable source code, which
+must be distributed under the terms of Sections 1 and 2 above on a
+medium customarily used for software interchange.
+
+  If distribution of object code is made by offering access to copy
+from a designated place, then offering equivalent access to copy the
+source code from the same place satisfies the requirement to
+distribute the source code, even though third parties are not
+compelled to copy the source along with the object code.
+
+  5. A program that contains no derivative of any portion of the
+Library, but is designed to work with the Library by being compiled or
+linked with it, is called a "work that uses the Library".  Such a
+work, in isolation, is not a derivative work of the Library, and
+therefore falls outside the scope of this License.
+
+  However, linking a "work that uses the Library" with the Library
+creates an executable that is a derivative of the Library (because it
+contains portions of the Library), rather than a "work that uses the
+library".  The executable is therefore covered by this License.
+Section 6 states terms for distribution of such executables.
+
+  When a "work that uses the Library" uses material from a header file
+that is part of the Library, the object code for the work may be a
+derivative work of the Library even though the source code is not.
+Whether this is true is especially significant if the work can be
+linked without the Library, or if the work is itself a library.  The
+threshold for this to be true is not precisely defined by law.
+
+  If such an object file uses only numerical parameters, data
+structure layouts and accessors, and small macros and small inline
+functions (ten lines or less in length), then the use of the object
+file is unrestricted, regardless of whether it is legally a derivative
+work.  (Executables containing this object code plus portions of the
+Library will still fall under Section 6.)
+
+  Otherwise, if the work is a derivative of the Library, you may
+distribute the object code for the work under the terms of Section 6.
+Any executables containing that work also fall under Section 6,
+whether or not they are linked directly with the Library itself.
+
+  6. As an exception to the Sections above, you may also compile or
+link a "work that uses the Library" with the Library to produce a
+work containing portions of the Library, and distribute that work
+under terms of your choice, provided that the terms permit
+modification of the work for the customer's own use and reverse
+engineering for debugging such modifications.
+
+  You must give prominent notice with each copy of the work that the
+Library is used in it and that the Library and its use are covered by
+this License.  You must supply a copy of this License.  If the work
+during execution displays copyright notices, you must include the
+copyright notice for the Library among them, as well as a reference
+directing the user to the copy of this License.  Also, you must do one
+of these things:
+
+    a) Accompany the work with the complete corresponding
+    machine-readable source code for the Library including whatever
+    changes were used in the work (which must be distributed under
+    Sections 1 and 2 above); and, if the work is an executable linked
+    with the Library, with the complete machine-readable "work that
+    uses the Library", as object code and/or source code, so that the
+    user can modify the Library and then relink to produce a modified
+    executable containing the modified Library.  (It is understood
+    that the user who changes the contents of definitions files in the
+    Library will not necessarily be able to recompile the application
+    to use the modified definitions.)
+
+    b) Accompany the work with a written offer, valid for at
+    least three years, to give the same user the materials
+    specified in Subsection 6a, above, for a charge no more
+    than the cost of performing this distribution.
+
+    c) If distribution of the work is made by offering access to copy
+    from a designated place, offer equivalent access to copy the above
+    specified materials from the same place.
+
+    d) Verify that the user has already received a copy of these
+    materials or that you have already sent this user a copy.
+
+  For an executable, the required form of the "work that uses the
+Library" must include any data and utility programs needed for
+reproducing the executable from it.  However, as a special exception,
+the source code distributed need not include anything that is normally
+distributed (in either source or binary form) with the major
+components (compiler, kernel, and so on) of the operating system on
+which the executable runs, unless that component itself accompanies
+the executable.
+
+  It may happen that this requirement contradicts the license
+restrictions of other proprietary libraries that do not normally
+accompany the operating system.  Such a contradiction means you cannot
+use both them and the Library together in an executable that you
+distribute.
+
+  7. You may place library facilities that are a work based on the
+Library side-by-side in a single library together with other library
+facilities not covered by this License, and distribute such a combined
+library, provided that the separate distribution of the work based on
+the Library and of the other library facilities is otherwise
+permitted, and provided that you do these two things:
+
+    a) Accompany the combined library with a copy of the same work
+    based on the Library, uncombined with any other library
+    facilities.  This must be distributed under the terms of the
+    Sections above.
+
+    b) Give prominent notice with the combined library of the fact
+    that part of it is a work based on the Library, and explaining
+    where to find the accompanying uncombined form of the same work.
+
+  8. You may not copy, modify, sublicense, link with, or distribute
+the Library except as expressly provided under this License.  Any
+attempt otherwise to copy, modify, sublicense, link with, or
+distribute the Library is void, and will automatically terminate your
+rights under this License.  However, parties who have received copies,
+or rights, from you under this License will not have their licenses
+terminated so long as such parties remain in full compliance.
+
+  9. You are not required to accept this License, since you have not
+signed it.  However, nothing else grants you permission to modify or
+distribute the Library or its derivative works.  These actions are
+prohibited by law if you do not accept this License.  Therefore, by
+modifying or distributing the Library (or any work based on the
+Library), you indicate your acceptance of this License to do so, and
+all its terms and conditions for copying, distributing or modifying
+the Library or works based on it.
+
+  10. Each time you redistribute the Library (or any work based on the
+Library), the recipient automatically receives a license from the
+original licensor to copy, distribute, link with or modify the Library
+subject to these terms and conditions.  You may not impose any further
+restrictions on the recipients' exercise of the rights granted herein.
+You are not responsible for enforcing compliance by third parties to
+this License.
+
+  11. If, as a consequence of a court judgment or allegation of patent
+infringement or for any other reason (not limited to patent issues),
+conditions are imposed on you (whether by court order, agreement or
+otherwise) that contradict the conditions of this License, they do not
+excuse you from the conditions of this License.  If you cannot
+distribute so as to satisfy simultaneously your obligations under this
+License and any other pertinent obligations, then as a consequence you
+may not distribute the Library at all.  For example, if a patent
+license would not permit royalty-free redistribution of the Library by
+all those who receive copies directly or indirectly through you, then
+the only way you could satisfy both it and this License would be to
+refrain entirely from distribution of the Library.
+
+If any portion of this section is held invalid or unenforceable under any
+particular circumstance, the balance of the section is intended to apply,
+and the section as a whole is intended to apply in other circumstances.
+
+It is not the purpose of this section to induce you to infringe any
+patents or other property right claims or to contest validity of any
+such claims; this section has the sole purpose of protecting the
+integrity of the free software distribution system which is
+implemented by public license practices.  Many people have made
+generous contributions to the wide range of software distributed
+through that system in reliance on consistent application of that
+system; it is up to the author/donor to decide if he or she is willing
+to distribute software through any other system and a licensee cannot
+impose that choice.
+
+This section is intended to make thoroughly clear what is believed to
+be a consequence of the rest of this License.
+
+  12. If the distribution and/or use of the Library is restricted in
+certain countries either by patents or by copyrighted interfaces, the
+original copyright holder who places the Library under this License may add
+an explicit geographical distribution limitation excluding those countries,
+so that distribution is permitted only in or among countries not thus
+excluded.  In such case, this License incorporates the limitation as if
+written in the body of this License.
+
+  13. The Free Software Foundation may publish revised and/or new
+versions of the Library General Public License from time to time.
+Such new versions will be similar in spirit to the present version,
+but may differ in detail to address new problems or concerns.
+
+Each version is given a distinguishing version number.  If the Library
+specifies a version number of this License which applies to it and
+"any later version", you have the option of following the terms and
+conditions either of that version or of any later version published by
+the Free Software Foundation.  If the Library does not specify a
+license version number, you may choose any version ever published by
+the Free Software Foundation.
+
+  14. If you wish to incorporate parts of the Library into other free
+programs whose distribution conditions are incompatible with these,
+write to the author to ask for permission.  For software which is
+copyrighted by the Free Software Foundation, write to the Free
+Software Foundation; we sometimes make exceptions for this.  Our
+decision will be guided by the two goals of preserving the free status
+of all derivatives of our free software and of promoting the sharing
+and reuse of software generally.
+
+			    NO WARRANTY
+
+  15. BECAUSE THE LIBRARY IS LICENSED FREE OF CHARGE, THERE IS NO
+WARRANTY FOR THE LIBRARY, TO THE EXTENT PERMITTED BY APPLICABLE LAW.
+EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR
+OTHER PARTIES PROVIDE THE LIBRARY "AS IS" WITHOUT WARRANTY OF ANY
+KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+LIBRARY IS WITH YOU.  SHOULD THE LIBRARY PROVE DEFECTIVE, YOU ASSUME
+THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+  16. IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN
+WRITING WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY
+AND/OR REDISTRIBUTE THE LIBRARY AS PERMITTED ABOVE, BE LIABLE TO YOU
+FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR
+CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THE
+LIBRARY (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING
+RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A
+FAILURE OF THE LIBRARY TO OPERATE WITH ANY OTHER SOFTWARE), EVEN IF
+SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGES.
+
+		     END OF TERMS AND CONDITIONS
+
+           How to Apply These Terms to Your New Libraries
+
+  If you develop a new library, and you want it to be of the greatest
+possible use to the public, we recommend making it free software that
+everyone can redistribute and change.  You can do so by permitting
+redistribution under these terms (or, alternatively, under the terms of the
+ordinary General Public License).
+
+  To apply these terms, attach the following notices to the library.  It is
+safest to attach them to the start of each source file to most effectively
+convey the exclusion of warranty; and each file should have at least the
+"copyright" line and a pointer to where the full notice is found.
+
+    <one line to give the library's name and a brief idea of what it does.>
+    Copyright (C) <year>  <name of author>
+
+    This library is free software; you can redistribute it and/or
+    modify it under the terms of the GNU Library General Public
+    License as published by the Free Software Foundation; either
+    version 2 of the License, or (at your option) any later version.
+
+    This library is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    Library General Public License for more details.
+
+    You should have received a copy of the GNU Library General Public
+    License along with this library; if not, write to the
+    Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+    Boston, MA  02111-1307  USA.
+
+Also add information on how to contact you by electronic and paper mail.
+
+You should also get your employer (if you work as a programmer) or your
+school, if any, to sign a "copyright disclaimer" for the library, if
+necessary.  Here is a sample; alter the names:
+
+  Yoyodyne, Inc., hereby disclaims all copyright interest in the
+  library `Frob' (a library for tweaking knobs) written by James Random Hacker.
+
+  <signature of Ty Coon>, 1 April 1990
+  Ty Coon, President of Vice
+
+That's all there is to it!
+````
+
+### License text 262
 
 Normalized SHA-256: `f025ccfb7dfb6bdfedc75ca0f67acc69e6fb4998143d834f7c2f38a29989680f`
 
@@ -16877,7 +24038,7 @@ OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ````
 
-### License text 192
+### License text 263
 
 Normalized SHA-256: `f0cf9b1c62bbe3bd3a69f5f79c7158f513f612b4940a0a812d1db39d605318bc`
 
@@ -16911,7 +24072,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### License text 193
+### License text 264
 
 Normalized SHA-256: `f1a2b233e8a9a71c40f4aa885be08a0842ac85bb8588703c1dd7e6e6502e3124`
 
@@ -16955,7 +24116,7 @@ The above is the version of the MIT "Expat" License used by X.org:
     http://cgit.freedesktop.org/xorg/xserver/tree/COPYING
 ````
 
-### License text 194
+### License text 265
 
 Normalized SHA-256: `f1f86507901c4e35cdf3454a62ef96bc998f9ae9602e47975268655f3510fe29`
 
@@ -16995,7 +24156,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ````
 
-### License text 195
+### License text 266
 
 Normalized SHA-256: `f28420c1906af38be726cd7842798f0194b27c41d6051c0d1e9ee348b8a4a0ea`
 
@@ -17032,7 +24193,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 196
+### License text 267
 
 Normalized SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
 
@@ -17044,17 +24205,21 @@ Used by:
 - **icu_normalizer_data 2.3.0** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/icu_normalizer_data/2.3.0/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **icu_properties 2.3.0** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/icu_properties/2.3.0/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **icu_properties_data 2.3.0** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/icu_properties_data/2.3.0/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
+- **icu_provider 2.3.0** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/icu_provider/2.3.0/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **icu_provider 2.3.1** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/icu_provider/2.3.1/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **litemap 0.8.3** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/litemap/0.8.3/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **potential_utf 0.1.6** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/potential_utf/0.1.6/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **tinystr 0.8.4** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/tinystr/0.8.4/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **writeable 0.6.4** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/writeable/0.6.4/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **yoke 0.8.3** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/yoke/0.8.3/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
+- **yoke-derive 0.8.2** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/yoke-derive/0.8.2/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **yoke-derive 0.8.4** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/yoke-derive/0.8.4/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **zerofrom 0.1.8** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/zerofrom/0.1.8/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
+- **zerofrom-derive 0.1.7** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/zerofrom-derive/0.1.7/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **zerofrom-derive 0.1.8** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/zerofrom-derive/0.1.8/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **zerotrie 0.2.5** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/zerotrie/0.2.5/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **zerovec 0.11.8** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/zerovec/0.11.8/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
+- **zerovec-derive 0.11.5** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/zerovec-derive/0.11.5/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 - **zerovec-derive 0.11.6** — `Unicode-3.0`; [source](https://crates.io/api/v1/crates/zerovec-derive/0.11.6/download); repository: https://github.com/unicode-org/icu4x; files: `LICENSE`
 
 ````text
@@ -17106,7 +24271,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ````
 
-### License text 197
+### License text 268
 
 Normalized SHA-256: `f40c6a9846f80f7f96cf3a516c59962017af6e7e8628cf1d1beb1402ed92f1a6`
 
@@ -17134,7 +24299,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 198
+### License text 269
 
 Normalized SHA-256: `f51ac2c59a222f7476ce507ca879960e2b64ea64bb2786eefdbeb7b0b538d1b7`
 
@@ -17171,7 +24336,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 199
+### License text 270
 
 Normalized SHA-256: `f7715d38a3fa1b4ac97c5729740752505a39cb92ee83ab5b102aeb5eaa7cdea4`
 
@@ -17207,7 +24372,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 200
+### License text 271
 
 Normalized SHA-256: `f7bdb3426d045cd50efd4953026e3eb5a83d0199f458a075602611b9344da5b9`
 
@@ -17238,12 +24403,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 201
+### License text 272
 
 Normalized SHA-256: `f7db81051789b729fea528a63ec4c938fdcb93d9d61d97dc8cc2e9df6d47f2a1`
 
 Used by:
 
+- **unicode-ident 1.0.24** — `(MIT OR Apache-2.0) AND Unicode-3.0`; [source](https://crates.io/api/v1/crates/unicode-ident/1.0.24/download); repository: https://github.com/dtolnay/unicode-ident; files: `LICENSE-UNICODE`
 - **unicode-ident 1.0.26** — `(MIT OR Apache-2.0) AND Unicode-3.0`; [source](https://crates.io/api/v1/crates/unicode-ident/1.0.26/download); repository: https://github.com/dtolnay/unicode-ident; files: `LICENSE-UNICODE`
 
 ````text
@@ -17288,7 +24454,7 @@ dealings in these Data Files or Software without prior written
 authorization of the copyright holder.
 ````
 
-### License text 202
+### License text 273
 
 Normalized SHA-256: `f9c4c77baa3828004ee54b8a4f2db2e88ed44a6237a493965bf551fac0fcb62d`
 
@@ -17316,7 +24482,193 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### License text 203
+### License text 274
+
+Normalized SHA-256: `fa6f36630bb1e0c571d34b2bbdf188d08495c9dbf58f28cac112f303fc1f58fb`
+
+Used by:
+
+- **glib 790ffa82e80d99fba8a3db494e46f907d560893c** — `LGPL-2.1-or-later (plus per-file permissive terms)`; [source](https://github.com/frida/glib/tree/790ffa82e80d99fba8a3db494e46f907d560893c); repository: https://github.com/frida/glib; files: `native/glib/LICENSES/LGPL-2.1-or-later.txt`
+
+````text
+GNU LESSER GENERAL PUBLIC LICENSE
+
+Version 2.1, February 1999
+
+Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
+Everyone is permitted to copy and distribute verbatim copies of this license document, but changing it is not allowed.
+
+[This is the first released version of the Lesser GPL.  It also counts as the successor of the GNU Library Public License, version 2, hence the version number 2.1.]
+
+Preamble
+
+The licenses for most software are designed to take away your freedom to share and change it. By contrast, the GNU General Public Licenses are intended to guarantee your freedom to share and change free software--to make sure the software is free for all its users.
+
+This license, the Lesser General Public License, applies to some specially designated software packages--typically libraries--of the Free Software Foundation and other authors who decide to use it. You can use it too, but we suggest you first think carefully about whether this license or the ordinary General Public License is the better strategy to use in any particular case, based on the explanations below.
+
+When we speak of free software, we are referring to freedom of use, not price. Our General Public Licenses are designed to make sure that you have the freedom to distribute copies of free software (and charge for this service if you wish); that you receive source code or can get it if you want it; that you can change the software and use pieces of it in new free programs; and that you are informed that you can do these things.
+
+To protect your rights, we need to make restrictions that forbid distributors to deny you these rights or to ask you to surrender these rights. These restrictions translate to certain responsibilities for you if you distribute copies of the library or if you modify it.
+
+For example, if you distribute copies of the library, whether gratis or for a fee, you must give the recipients all the rights that we gave you. You must make sure that they, too, receive or can get the source code. If you link other code with the library, you must provide complete object files to the recipients, so that they can relink them with the library after making changes to the library and recompiling it. And you must show them these terms so they know their rights.
+
+We protect your rights with a two-step method: (1) we copyright the library, and (2) we offer you this license, which gives you legal permission to copy, distribute and/or modify the library.
+
+To protect each distributor, we want to make it very clear that there is no warranty for the free library. Also, if the library is modified by someone else and passed on, the recipients should know that what they have is not the original version, so that the original author's reputation will not be affected by problems that might be introduced by others.
+
+Finally, software patents pose a constant threat to the existence of any free program. We wish to make sure that a company cannot effectively restrict the users of a free program by obtaining a restrictive license from a patent holder. Therefore, we insist that any patent license obtained for a version of the library must be consistent with the full freedom of use specified in this license.
+
+Most GNU software, including some libraries, is covered by the ordinary GNU General Public License. This license, the GNU Lesser General Public License, applies to certain designated libraries, and is quite different from the ordinary General Public License. We use this license for certain libraries in order to permit linking those libraries into non-free programs.
+
+When a program is linked with a library, whether statically or using a shared library, the combination of the two is legally speaking a combined work, a derivative of the original library. The ordinary General Public License therefore permits such linking only if the entire combination fits its criteria of freedom. The Lesser General Public License permits more lax criteria for linking other code with the library.
+
+We call this license the "Lesser" General Public License because it does Less to protect the user's freedom than the ordinary General Public License. It also provides other free software developers Less of an advantage over competing non-free programs. These disadvantages are the reason we use the ordinary General Public License for many libraries. However, the Lesser license provides advantages in certain special circumstances.
+
+For example, on rare occasions, there may be a special need to encourage the widest possible use of a certain library, so that it becomes a de-facto standard. To achieve this, non-free programs must be allowed to use the library. A more frequent case is that a free library does the same job as widely used non-free libraries. In this case, there is little to gain by limiting the free library to free software only, so we use the Lesser General Public License.
+
+In other cases, permission to use a particular library in non-free programs enables a greater number of people to use a large body of free software. For example, permission to use the GNU C Library in non-free programs enables many more people to use the whole GNU operating system, as well as its variant, the GNU/Linux operating system.
+
+Although the Lesser General Public License is Less protective of the users' freedom, it does ensure that the user of a program that is linked with the Library has the freedom and the wherewithal to run that program using a modified version of the Library.
+
+The precise terms and conditions for copying, distribution and modification follow. Pay close attention to the difference between a "work based on the library" and a "work that uses the library". The former contains code derived from the library, whereas the latter must be combined with the library in order to run.
+
+TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+0. This License Agreement applies to any software library or other program which contains a notice placed by the copyright holder or other authorized party saying it may be distributed under the terms of this Lesser General Public License (also called "this License"). Each licensee is addressed as "you".
+
+A "library" means a collection of software functions and/or data prepared so as to be conveniently linked with application programs (which use some of those functions and data) to form executables.
+
+The "Library", below, refers to any such software library or work which has been distributed under these terms. A "work based on the Library" means either the Library or any derivative work under copyright law: that is to say, a work containing the Library or a portion of it, either verbatim or with modifications and/or translated straightforwardly into another language. (Hereinafter, translation is included without limitation in the term "modification".)
+
+"Source code" for a work means the preferred form of the work for making modifications to it. For a library, complete source code means all the source code for all modules it contains, plus any associated interface definition files, plus the scripts used to control compilation and installation of the library.
+
+Activities other than copying, distribution and modification are not covered by this License; they are outside its scope. The act of running a program using the Library is not restricted, and output from such a program is covered only if its contents constitute a work based on the Library (independent of the use of the Library in a tool for writing it). Whether that is true depends on what the Library does and what the program that uses the Library does.
+
+1. You may copy and distribute verbatim copies of the Library's complete source code as you receive it, in any medium, provided that you conspicuously and appropriately publish on each copy an appropriate copyright notice and disclaimer of warranty; keep intact all the notices that refer to this License and to the absence of any warranty; and distribute a copy of this License along with the Library.
+
+You may charge a fee for the physical act of transferring a copy, and you may at your option offer warranty protection in exchange for a fee.
+
+2. You may modify your copy or copies of the Library or any portion of it, thus forming a work based on the Library, and copy and distribute such modifications or work under the terms of Section 1 above, provided that you also meet all of these conditions:
+
+     a) The modified work must itself be a software library.
+
+     b) You must cause the files modified to carry prominent notices stating that you changed the files and the date of any change.
+
+     c) You must cause the whole of the work to be licensed at no charge to all third parties under the terms of this License.
+
+     d) If a facility in the modified Library refers to a function or a table of data to be supplied by an application program that uses the facility, other than as an argument passed when the facility is invoked, then you must make a good faith effort to ensure that, in the event an application does not supply such function or table, the facility still operates, and performs whatever part of its purpose remains meaningful.
+
+(For example, a function in a library to compute square roots has a purpose that is entirely well-defined independent of the application. Therefore, Subsection 2d requires that any application-supplied function or table used by this function must be optional: if the application does not supply it, the square root function must still compute square roots.)
+
+These requirements apply to the modified work as a whole. If identifiable sections of that work are not derived from the Library, and can be reasonably considered independent and separate works in themselves, then this License, and its terms, do not apply to those sections when you distribute them as separate works. But when you distribute the same sections as part of a whole which is a work based on the Library, the distribution of the whole must be on the terms of this License, whose permissions for other licensees extend to the entire whole, and thus to each and every part regardless of who wrote it.
+
+Thus, it is not the intent of this section to claim rights or contest your rights to work written entirely by you; rather, the intent is to exercise the right to control the distribution of derivative or collective works based on the Library.
+
+In addition, mere aggregation of another work not based on the Library with the Library (or with a work based on the Library) on a volume of a storage or distribution medium does not bring the other work under the scope of this License.
+
+3. You may opt to apply the terms of the ordinary GNU General Public License instead of this License to a given copy of the Library. To do this, you must alter all the notices that refer to this License, so that they refer to the ordinary GNU General Public License, version 2, instead of to this License. (If a newer version than version 2 of the ordinary GNU General Public License has appeared, then you can specify that version instead if you wish.) Do not make any other change in these notices.
+
+Once this change is made in a given copy, it is irreversible for that copy, so the ordinary GNU General Public License applies to all subsequent copies and derivative works made from that copy.
+
+This option is useful when you wish to copy part of the code of the Library into a program that is not a library.
+
+4. You may copy and distribute the Library (or a portion or derivative of it, under Section 2) in object code or executable form under the terms of Sections 1 and 2 above provided that you accompany it with the complete corresponding machine-readable source code, which must be distributed under the terms of Sections 1 and 2 above on a medium customarily used for software interchange.
+
+If distribution of object code is made by offering access to copy from a designated place, then offering equivalent access to copy the source code from the same place satisfies the requirement to distribute the source code, even though third parties are not compelled to copy the source along with the object code.
+
+5. A program that contains no derivative of any portion of the Library, but is designed to work with the Library by being compiled or linked with it, is called a "work that uses the Library". Such a work, in isolation, is not a derivative work of the Library, and therefore falls outside the scope of this License.
+
+However, linking a "work that uses the Library" with the Library creates an executable that is a derivative of the Library (because it contains portions of the Library), rather than a "work that uses the library". The executable is therefore covered by this License. Section 6 states terms for distribution of such executables.
+
+When a "work that uses the Library" uses material from a header file that is part of the Library, the object code for the work may be a derivative work of the Library even though the source code is not. Whether this is true is especially significant if the work can be linked without the Library, or if the work is itself a library. The threshold for this to be true is not precisely defined by law.
+
+If such an object file uses only numerical parameters, data structure layouts and accessors, and small macros and small inline functions (ten lines or less in length), then the use of the object file is unrestricted, regardless of whether it is legally a derivative work. (Executables containing this object code plus portions of the Library will still fall under Section 6.)
+
+Otherwise, if the work is a derivative of the Library, you may distribute the object code for the work under the terms of Section 6. Any executables containing that work also fall under Section 6, whether or not they are linked directly with the Library itself.
+
+6. As an exception to the Sections above, you may also combine or link a "work that uses the Library" with the Library to produce a work containing portions of the Library, and distribute that work under terms of your choice, provided that the terms permit modification of the work for the customer's own use and reverse engineering for debugging such modifications.
+
+You must give prominent notice with each copy of the work that the Library is used in it and that the Library and its use are covered by this License. You must supply a copy of this License. If the work during execution displays copyright notices, you must include the copyright notice for the Library among them, as well as a reference directing the user to the copy of this License. Also, you must do one of these things:
+
+     a) Accompany the work with the complete corresponding machine-readable source code for the Library including whatever changes were used in the work (which must be distributed under Sections 1 and 2 above); and, if the work is an executable linked with the Library, with the complete machine-readable "work that uses the Library", as object code and/or source code, so that the user can modify the Library and then relink to produce a modified executable containing the modified Library. (It is understood that the user who changes the contents of definitions files in the Library will not necessarily be able to recompile the application to use the modified definitions.)
+
+     b) Use a suitable shared library mechanism for linking with the Library. A suitable mechanism is one that (1) uses at run time a copy of the library already present on the user's computer system, rather than copying library functions into the executable, and (2) will operate properly with a modified version of the library, if the user installs one, as long as the modified version is interface-compatible with the version that the work was made with.
+
+     c) Accompany the work with a written offer, valid for at least three years, to give the same user the materials specified in Subsection 6a, above, for a charge no more than the cost of performing this distribution.
+
+     d) If distribution of the work is made by offering access to copy from a designated place, offer equivalent access to copy the above specified materials from the same place.
+
+     e) Verify that the user has already received a copy of these materials or that you have already sent this user a copy.
+
+For an executable, the required form of the "work that uses the Library" must include any data and utility programs needed for reproducing the executable from it. However, as a special exception, the materials to be distributed need not include anything that is normally distributed (in either source or binary form) with the major components (compiler, kernel, and so on) of the operating system on which the executable runs, unless that component itself accompanies the executable.
+
+It may happen that this requirement contradicts the license restrictions of other proprietary libraries that do not normally accompany the operating system. Such a contradiction means you cannot use both them and the Library together in an executable that you distribute.
+
+7. You may place library facilities that are a work based on the Library side-by-side in a single library together with other library facilities not covered by this License, and distribute such a combined library, provided that the separate distribution of the work based on the Library and of the other library facilities is otherwise permitted, and provided that you do these two things:
+
+     a) Accompany the combined library with a copy of the same work based on the Library, uncombined with any other library facilities. This must be distributed under the terms of the Sections above.
+
+     b) Give prominent notice with the combined library of the fact that part of it is a work based on the Library, and explaining where to find the accompanying uncombined form of the same work.
+
+8. You may not copy, modify, sublicense, link with, or distribute the Library except as expressly provided under this License. Any attempt otherwise to copy, modify, sublicense, link with, or distribute the Library is void, and will automatically terminate your rights under this License. However, parties who have received copies, or rights, from you under this License will not have their licenses terminated so long as such parties remain in full compliance.
+
+9. You are not required to accept this License, since you have not signed it. However, nothing else grants you permission to modify or distribute the Library or its derivative works. These actions are prohibited by law if you do not accept this License. Therefore, by modifying or distributing the Library (or any work based on the Library), you indicate your acceptance of this License to do so, and all its terms and conditions for copying, distributing or modifying the Library or works based on it.
+
+10. Each time you redistribute the Library (or any work based on the Library), the recipient automatically receives a license from the original licensor to copy, distribute, link with or modify the Library subject to these terms and conditions. You may not impose any further restrictions on the recipients' exercise of the rights granted herein. You are not responsible for enforcing compliance by third parties with this License.
+
+11. If, as a consequence of a court judgment or allegation of patent infringement or for any other reason (not limited to patent issues), conditions are imposed on you (whether by court order, agreement or otherwise) that contradict the conditions of this License, they do not excuse you from the conditions of this License. If you cannot distribute so as to satisfy simultaneously your obligations under this License and any other pertinent obligations, then as a consequence you may not distribute the Library at all. For example, if a patent license would not permit royalty-free redistribution of the Library by all those who receive copies directly or indirectly through you, then the only way you could satisfy both it and this License would be to refrain entirely from distribution of the Library.
+
+If any portion of this section is held invalid or unenforceable under any particular circumstance, the balance of the section is intended to apply, and the section as a whole is intended to apply in other circumstances.
+
+It is not the purpose of this section to induce you to infringe any patents or other property right claims or to contest validity of any such claims; this section has the sole purpose of protecting the integrity of the free software distribution system which is implemented by public license practices. Many people have made generous contributions to the wide range of software distributed through that system in reliance on consistent application of that system; it is up to the author/donor to decide if he or she is willing to distribute software through any other system and a licensee cannot impose that choice.
+
+This section is intended to make thoroughly clear what is believed to be a consequence of the rest of this License.
+
+12. If the distribution and/or use of the Library is restricted in certain countries either by patents or by copyrighted interfaces, the original copyright holder who places the Library under this License may add an explicit geographical distribution limitation excluding those countries, so that distribution is permitted only in or among countries not thus excluded. In such case, this License incorporates the limitation as if written in the body of this License.
+
+13. The Free Software Foundation may publish revised and/or new versions of the Lesser General Public License from time to time. Such new versions will be similar in spirit to the present version, but may differ in detail to address new problems or concerns.
+
+Each version is given a distinguishing version number. If the Library specifies a version number of this License which applies to it and "any later version", you have the option of following the terms and conditions either of that version or of any later version published by the Free Software Foundation. If the Library does not specify a license version number, you may choose any version ever published by the Free Software Foundation.
+
+14. If you wish to incorporate parts of the Library into other free programs whose distribution conditions are incompatible with these, write to the author to ask for permission. For software which is copyrighted by the Free Software Foundation, write to the Free Software Foundation; we sometimes make exceptions for this. Our decision will be guided by the two goals of preserving the free status of all derivatives of our free software and of promoting the sharing and reuse of software generally.
+
+NO WARRANTY
+
+15. BECAUSE THE LIBRARY IS LICENSED FREE OF CHARGE, THERE IS NO WARRANTY FOR THE LIBRARY, TO THE EXTENT PERMITTED BY APPLICABLE LAW. EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES PROVIDE THE LIBRARY "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE LIBRARY IS WITH YOU. SHOULD THE LIBRARY PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+16. IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR REDISTRIBUTE THE LIBRARY AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THE LIBRARY (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A FAILURE OF THE LIBRARY TO OPERATE WITH ANY OTHER SOFTWARE), EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+END OF TERMS AND CONDITIONS
+
+How to Apply These Terms to Your New Libraries
+
+If you develop a new library, and you want it to be of the greatest possible use to the public, we recommend making it free software that everyone can redistribute and change. You can do so by permitting redistribution under these terms (or, alternatively, under the terms of the ordinary General Public License).
+
+To apply these terms, attach the following notices to the library. It is safest to attach them to the start of each source file to most effectively convey the exclusion of warranty; and each file should have at least the "copyright" line and a pointer to where the full notice is found.
+
+     one line to give the library's name and an idea of what it does.
+     Copyright (C) year  name of author
+
+     This library is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation; either version 2.1 of the License, or (at your option) any later version.
+
+     This library is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
+
+     You should have received a copy of the GNU Lesser General Public License along with this library; if not, write to the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA Also add information on how to contact you by electronic and paper mail.
+
+You should also get your employer (if you work as a programmer) or your school, if any, to sign a "copyright disclaimer" for the library, if necessary. Here is a sample; alter the names:
+
+Yoyodyne, Inc., hereby disclaims all copyright interest in
+the library `Frob' (a library for tweaking knobs) written
+by James Random Hacker.
+
+signature of Ty Coon, 1 April 1990
+Ty Coon, President of Vice
+That's all there is to it!
+````
+
+### License text 275
 
 Normalized SHA-256: `fb252fecf98d9af8f1d9201c5860319a514f5a8a24700dc84fc6ea287a7a4958`
 
@@ -17352,7 +24704,34 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 204
+### License text 276
+
+Normalized SHA-256: `fb261b2d5dbe76c4850f90da763210bc385e52428df6bbfd7b06295ac8a32914`
+
+Used by:
+
+- **glib 790ffa82e80d99fba8a3db494e46f907d560893c** — `LGPL-2.1-or-later (plus per-file permissive terms)`; [source](https://github.com/frida/glib/tree/790ffa82e80d99fba8a3db494e46f907d560893c); repository: https://github.com/frida/glib; files: `native/glib/LICENSES/LicenseRef-old-glib-tests.txt`
+
+````text
+This work is provided "as is"; redistribution and modification
+in whole or in part, in any medium, physical or electronic is
+permitted without restriction.
+
+This work is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+In no event shall the authors or contributors be liable for any
+direct, indirect, incidental, special, exemplary, or consequential
+damages (including, but not limited to, procurement of substitute
+goods or services; loss of use, data, or profits; or business
+interruption) however caused and on any theory of liability, whether
+in contract, strict liability, or tort (including negligence or
+otherwise) arising in any way out of the use of this software, even
+if advised of the possibility of such damage.
+````
+
+### License text 277
 
 Normalized SHA-256: `fb77f0a9c53e473abe5103c8632ef9f0f2874d4fb3f17cb2d8c661aab9cee9d7`
 
@@ -17388,7 +24767,23 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### License text 205
+### License text 278
+
+Normalized SHA-256: `fd80a26fbb3f644af1fa994134446702932968519797227e07a1368dea80f0bc`
+
+Used by:
+
+- **tinyvec 1.12.0** — `Zlib OR Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/tinyvec/1.12.0/download); repository: https://github.com/Lokathor/tinyvec; files: `LICENSE-MIT.md`
+
+````text
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+````
+
+### License text 279
 
 Normalized SHA-256: `fdd55e2b2da854b0fbdc1e607df7c2ba1e1ebf91ecb77c515511ebeef972bc8f`
 
@@ -17419,7 +24814,43 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### License text 206
+### License text 280
+
+Normalized SHA-256: `ff3f1cd12af8866d9bde961d6cc40df774cd131d484de31d3170c4b02b21a7b5`
+
+Used by:
+
+- **arc-swap 1.9.2** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/arc-swap/1.9.2/download); repository: https://github.com/vorner/arc-swap; files: `LICENSE-MIT`
+
+````text
+Copyright (c) 2017 arc-swap developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+````
+
+### License text 281
 
 Normalized SHA-256: `ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2`
 
@@ -25733,7 +33164,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## Inno Setup installer engine
 
-Inno Setup 7.1.0 (pinned in the release workflow) compiles the Windows installer and contributes its setup runtime. Source: https://github.com/jrsoftware/issrc/tree/is-7_1_0; license: https://github.com/jrsoftware/issrc/blob/is-7_1_0/license.txt
+Inno Setup 6.7.3 (pinned in the release workflow) compiles the Windows installer and contributes its setup runtime. Source: https://github.com/jrsoftware/issrc/tree/is-6_7_3; license: https://github.com/jrsoftware/issrc/blob/is-6_7_3/license.txt
 
 ````text
 Inno Setup License

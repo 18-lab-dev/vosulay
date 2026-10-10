@@ -7,6 +7,11 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import io
+import os
+import tarfile
+import tempfile
+import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGETS = {
@@ -15,12 +20,13 @@ TARGETS = {
 }
 
 
-def collect():
+def collect(root=ROOT, targets=TARGETS, include_workspace=False):
     packages = {}
-    for target, roots in TARGETS.items():
+    for target, roots in targets.items():
         metadata = json.loads(subprocess.check_output(
             ["cargo", "metadata", "--locked", "--format-version", "1",
-             "--filter-platform", target], cwd=ROOT))
+             "--filter-platform", target], cwd=root,
+            env={**os.environ, "RUSTUP_TOOLCHAIN": "1.96.1"}))
         by_id = {p["id"]: p for p in metadata["packages"]}
         nodes = {n["id"]: n for n in metadata["resolve"]["nodes"]}
         pending = [p["id"] for p in metadata["packages"]
@@ -32,18 +38,64 @@ def collect():
                 continue
             seen.add(package_id)
             package = by_id[package_id]
-            if package["source"] is not None:
+            if package["source"] is not None or include_workspace:
                 packages[package_id] = package
             # Include build dependencies/proc macros conservatively; omit dev-only edges.
             pending.extend(d["pkg"] for d in nodes[package_id]["deps"]
                            if any(k["kind"] != "dev" for k in d["dep_kinds"]))
-    return sorted(packages.values(), key=lambda p: (p["name"], p["version"], p["source"]))
+    return sorted(packages.values(), key=lambda p: (p["name"], p["version"], p["source"] or ""))
+
+
+def collect_asdf():
+    pin = json.loads((ROOT / "tools/notices/overrides.json").read_text())["_asdf_source"]
+    data = urllib.request.urlopen(pin["url"], timeout=120).read()
+    if hashlib.sha256(data).hexdigest() != pin["sha256"]:
+        raise ValueError("asdf-overlay source archive SHA-256 mismatch")
+    temporary = tempfile.TemporaryDirectory()
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+        # Reject archive links and unsafe paths before extraction (Python 3.11+).
+        for member in archive.getmembers():
+            path = Path(member.name)
+            if path.is_absolute() or ".." in path.parts or not (member.isfile() or member.isdir()):
+                raise ValueError(f"unsafe upstream archive member: {member.name}")
+        archive.extractall(temporary.name)
+    root = Path(temporary.name) / ("asdf-overlay-" + pin["commit"])
+    if (root / ".gitmodules").read_text().strip():
+        raise ValueError("asdf-overlay submodules changed; audit their compiled code and licenses")
+    native = json.loads((ROOT / "tools/notices/overrides.json").read_text())["_frida_native"]
+    if (root / "crates/hook/FRIDA_VERSION").read_text().strip() != native["version"]:
+        raise ValueError("asdf-overlay Frida devkit version changed; refresh native license inventory")
+    graphs = {}
+    union = {}
+    for target in ("x86_64-pc-windows-msvc", "i686-pc-windows-msvc"):
+        graph = collect(root, {target: ("asdf-overlay-dll",)}, include_workspace=True)
+        graphs[target] = len(graph)
+        for package in graph:
+            if package["source"] is None:
+                package["source"] = "git+https://github.com/storycraft/asdf-overlay#" + pin["commit"]
+                package["id"] = package["source"] + ":" + package["name"] + "@" + package["version"]
+                package["notice_license_root"] = str(root)
+            union[package["id"]] = package
+    return temporary, sorted(union.values(), key=lambda p: (p["name"], p["version"], p["source"])), graphs
+
+
+def source_url(package):
+    if package["source"].startswith("registry+"):
+        return f"https://crates.io/api/v1/crates/{package['name']}/{package['version']}/download"
+    repository, commit = package["source"].removeprefix("git+").split("#", 1)
+    return repository + "/tree/" + commit
 
 
 def license_files(package):
-    directory = Path(package["manifest_path"]).parent
-    files = set()
-    for file in directory.rglob("*"):
+    if package.get("notice_license_root"):
+        directory = Path(package["notice_license_root"])
+        files = {directory / "LICENSE-MIT", directory / "LICENSE-APACHE"}
+    else:
+        directory = (ROOT / "tools/notices" if package["id"].startswith("native:")
+                     else Path(package["manifest_path"]).parent)
+        files = set()
+    for file in (() if package.get("notice_license_root") or package["id"].startswith("native:")
+                 else directory.rglob("*")):
         name = file.name.upper()
         if file.is_file() and (name.startswith(("LICENSE", "LICENCE", "COPYING"))
                                or name in ("NOTICE", "NOTICE.TXT", "COPYRIGHT")):
@@ -84,15 +136,25 @@ def render():
               "Source: https://github.com/storycraft/asdf-overlay/tree/"
               "c925244c8d14ca36d82585834cdfebf13d6ce86b\n\n"
               "Upstream offers MIT OR Apache-2.0; the MIT option is reproduced below. "
-              "This covers asdf-overlay's own code, not an attestation of all dependencies "
-              "embedded in the prebuilt DLLs; see `docs/provenance.md` for that release blocker.\n\n"]
+              "DLL dependency licenses below are enumerated from the pinned upstream lockfile; "
+              "this is not proof of source-to-prebuilt equivalence. Native Frida devkit "
+              "obligations are recorded separately in docs/provenance.md.\n\n"]
     overlay = ROOT / "tools/notices/asdf-overlay-2.1.0-LICENSE-MIT.txt"
     chunks.append("```text\n" + overlay.read_text().rstrip() + "\n```\n\n")
-    packages = collect()
+    own_packages = collect()
+    upstream_temporary, asdf_packages, asdf_counts = collect_asdf()
+    union = {p["id"]: p for p in own_packages + asdf_packages}
+    packages = sorted(union.values(), key=lambda p: (p["name"], p["version"], p["source"]))
     overrides = json.loads((ROOT / "tools/notices/overrides.json").read_text())
+    native_pin = overrides["_frida_native"]
+    manifest = ROOT / "tools/notices/Frida-17.17.0-deps.toml"
+    if hashlib.sha256(manifest.read_bytes()).hexdigest() != native_pin["manifest_sha256"]:
+        raise ValueError("Frida pinned dependency manifest digest mismatch")
+    native_packages = native_pin["components"]
+    all_components = packages + native_packages
     texts = {}
     package_texts = {}
-    for package in packages:
+    for package in all_components:
         directory, files = license_files(package)
         key = package["id"]
         package_texts[key] = set()
@@ -116,8 +178,7 @@ def render():
         chunks.append(f"### {package['name']} {package['version']}\n\n"
                       f"Declared license: `{package['license'] or 'see license file'}`\n\n"
                       f"Source: `{package['source']}`\n\n"
-                      f"Unmodified crate source: https://crates.io/api/v1/crates/"
-                      f"{package['name']}/{package['version']}/download\n\n"
+                      f"Unmodified crate source: {source_url(package)}\n\n"
                       f"Repository: {package.get('repository') or '(not declared)'}\n\n"
                       f"License/notice texts: {links}\n\n")
         key = package["name"] + "@" + package["version"]
@@ -130,21 +191,56 @@ def render():
         if package["name"] == "mac":
             chunks.append("Author: Jonathan Reem. Upstream README declares MIT/Apache-2.0; "
                           "Apache-2.0 terms are reproduced here.\n\n")
-    chunks.append("## Shared Rust license and notice texts\n\n")
+    chunks.append("## asdf-overlay DLL dependencies\n\n"
+                  "Release construction: deploy.yml runs npm ci:deploy / pnpm recursive build; "
+                  "packages/core/package.json invokes cargo xtask build-dll -- --release. "
+                  "xtask builds asdf-overlay-dll with default features, no extra feature flags, "
+                  "for x86_64/i686/aarch64 MSVC. Only x64/x86 DLLs are shipped by vosulay. "
+                  "The pinned .gitmodules is empty: no compiled submodules.\n\n"
+                  "Graph counts (including upstream workspace crates, build dependencies "
+                  "and proc macros; excluding dev-only edges):\n\n")
+    for target, count in sorted(asdf_counts.items()):
+        chunks.append(f"- `{target}`: {count} crates\n")
+    chunks.append("\n")
+    for package in asdf_packages:
+        links = ", ".join(f"[Text {text_ids[text]}](#license-text-{text_ids[text]})"
+                          for text in sorted(package_texts[package["id"]], key=text_ids.get))
+        chunks.append(f"- **{package['name']} {package['version']}** — "
+                      f"`{package['license'] or 'see license file'}`; "
+                      f"[source]({source_url(package)}); "
+                      f"repository: {package.get('repository') or '(not declared)'}; {links}\n")
+    chunks.append("\n")
+    chunks.append("## asdf-overlay native Frida Gum devkit components\n\n"
+                  "crates/hook/build.rs statically links gum devkit 17.17.0. "
+                  "Component revisions below come from Frida 17.17.0's releng commit "
+                  "c9cc18138b364f691573c695e1fe47ddc4c56f26/deps.toml and Gum's "
+                  "ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c/meson.build. "
+                  "This conservatively covers Gum/GLib's Windows dependency closure, "
+                  "including SDK liblzma; it is not an archive-level reachability attestation. "
+                  "GLib's plain LGPL static-link obligations are not discharged by notices "
+                  "alone. XZ GPL scripts/build tooling and GLib test/documentation terms "
+                  "are preserved conservatively, not asserted to be shipped runtime code.\n\n")
+    chunks.append(f"Pinned dependency manifest: {native_pin['manifest_url']}\n\n")
+    for package in native_packages:
+        links = ", ".join(f"[Text {text_ids[text]}](#license-text-{text_ids[text]})"
+                          for text in sorted(package_texts[package["id"]], key=text_ids.get))
+        chunks.append(f"- **{package['name']}** revision `{package['version']}` — "
+                      f"{package['license']}; [source]({source_url(package)}); {links}\n")
+    chunks.append("\n")
+    chunks.append("## Shared dependency license and notice texts\n\n")
     for text in ordered_texts:
         number = text_ids[text]
         chunks.append(f"### License text {number}\n\n"
                       f"Normalized SHA-256: `{hashlib.sha256(text.encode()).hexdigest()}`\n\n"
                       "Used by:\n\n")
-        for package in packages:
+        for package in all_components:
             filenames = texts[text].get(package["id"])
             if filenames is None:
                 continue
             paths = ", ".join(f"`{name}`" for name in sorted(filenames))
             chunks.append(f"- **{package['name']} {package['version']}** — "
                           f"`{package['license'] or 'see license file'}`; "
-                          f"[source](https://crates.io/api/v1/crates/{package['name']}/"
-                          f"{package['version']}/download); repository: "
+                          f"[source]({source_url(package)}); repository: "
                           f"{package.get('repository') or '(not declared)'}; files: {paths}\n")
         chunks.append("\n````text\n" + text + "````\n\n")
     import tomllib
@@ -169,6 +265,7 @@ def render():
                   f"https://github.com/jrsoftware/issrc/blob/{inno_tag}/license.txt\n\n````text\n"
                   + (ROOT / "tools/notices/Inno-Setup-LICENSE.txt").read_text().rstrip()
                   + "\n````\n")
+    upstream_temporary.cleanup()
     return "".join(chunks).encode("utf-8")
 
 

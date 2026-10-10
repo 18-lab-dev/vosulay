@@ -22,8 +22,9 @@ env:
   CARGO_TERM_COLOR: always
   NFPM_VERSION: 2.47.0
   NFPM_SHA256: 0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783
-  INNO_SETUP_VERSION: 7.1.0
-  INNO_SETUP_SHA256: 0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f
+  # The 6.x line built every installer released so far.
+  INNO_SETUP_VERSION: 6.7.3
+  INNO_SETUP_SHA256: 9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732
 
 jobs:
   linux:
@@ -131,8 +132,8 @@ jobs:
           # A pinned compiler, unpacked without installing (no registry or
           # uninstaller), so every release is built by the same Inno Setup.
           $tag = 'is-' + ($env:INNO_SETUP_VERSION -replace '\.', '_')
-          $setup = Join-Path $env:RUNNER_TEMP "innosetup-$env:INNO_SETUP_VERSION-x64.exe"
-          Invoke-WebRequest "https://github.com/jrsoftware/issrc/releases/download/$tag/innosetup-$env:INNO_SETUP_VERSION-x64.exe" -OutFile $setup
+          $setup = Join-Path $env:RUNNER_TEMP "innosetup-$env:INNO_SETUP_VERSION.exe"
+          Invoke-WebRequest "https://github.com/jrsoftware/issrc/releases/download/$tag/innosetup-$env:INNO_SETUP_VERSION.exe" -OutFile $setup
           if ((Get-FileHash -Algorithm SHA256 $setup).Hash -ne $env:INNO_SETUP_SHA256) {
             throw 'Inno Setup download does not match its pinned SHA-256'
           }

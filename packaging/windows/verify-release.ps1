@@ -1,7 +1,8 @@
 # Verifies a packaged Windows release before upload: every file vosulay ships
 # under its own name carries the product name and version that code signing
-# enforces, the ZIP holds the same client DLL as the installer's source tree,
-# and with -RequireSignature the files vosulay signs have valid signatures.
+# enforces, the ZIP holds the same client DLL as the staged package directory
+# the installer is compiled from (the installer itself is not unpacked), and
+# with -RequireSignature the files vosulay signs have valid signatures.
 #
 # vosulay.exe is CEF's prebuilt bootstrap with rebranded resources. It is an
 # upstream binary, so it is never signed by this project (docs/code-signing.md).

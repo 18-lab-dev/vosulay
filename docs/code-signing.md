@@ -12,12 +12,12 @@ packages it always has.
 
 ## Team roles
 
-- Committers and reviewers: [members of the shiruviaa organization](https://github.com/orgs/shiruviaa/people)
-- Approvers: [owners of the shiruviaa organization](https://github.com/orgs/shiruviaa/people?query=role%3Aowner)
+- Committers, reviewers and approvers: [qt715](https://github.com/qt715)
 
-Every team member uses multi-factor authentication for GitHub and SignPath.
-Changes from people outside the team are reviewed by a team member before they
-are merged. An approver approves each signing request.
+K4zoku, the author of the prototypes vosulay grew from, also holds repository
+administrator access. Every team member uses multi-factor authentication for
+GitHub and SignPath. Changes from anyone else are reviewed by qt715 before they
+are merged, and qt715 approves each signing request.
 
 ## Privacy policy
 
@@ -64,7 +64,9 @@ signs only when it runs on a `v<version>` tag and the repository variable
 4. runs [`packaging/windows/verify-release.ps1`](../packaging/windows/verify-release.ps1)
    with `-RequireSignature`, which checks product name and version on all three
    files, valid Authenticode signatures on the DLL and installer, and that the
-   ZIP holds the same DLL as the installer.
+   ZIP's DLL matches the staged `dist/package/vosulay.dll` the installer is
+   compiled from. It does not unpack the installer, so the installer's embedded
+   copy is not compared independently.
 
 Unsigned runs use the same steps without submissions and verify without
 `-RequireSignature`.
