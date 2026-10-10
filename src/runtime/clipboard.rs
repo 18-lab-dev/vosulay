@@ -8,7 +8,7 @@
 //! owns the clipboard itself. Without it (X11 sessions, compositors lacking
 //! the protocol) the page keeps Chromium's own clipboard.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use std::{
     io::{Read, Write},
     os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd},
@@ -41,7 +41,8 @@ const MAX_TEXT: usize = 1 << 20;
 
 enum Command {
     Read(mpsc::Sender<Selection>),
-    Write(Arc<str>),
+    /// Replies once the selection request has been flushed to the compositor.
+    Write(Arc<str>, mpsc::Sender<bool>),
 }
 
 enum Selection {
@@ -95,8 +96,16 @@ impl Clipboard {
         })
     }
 
+    /// Returns only after the service has claimed the clipboard; a cut
+    /// deletes its selection on this success, so a stopped service must fail.
     pub(crate) fn write(&self, text: &str) -> Result<()> {
-        self.send(Command::Write(text.into()))
+        let (reply, applied) = mpsc::channel();
+        self.send(Command::Write(text.into(), reply))?;
+        let applied = applied
+            .recv_timeout(READ_TIMEOUT)
+            .context("clipboard service did not store the text")?;
+        ensure!(applied, "could not set the system clipboard");
+        Ok(())
     }
 
     fn send(&self, command: Command) -> Result<()> {
@@ -186,7 +195,7 @@ impl Service {
             Command::Read(reply) => {
                 let _ = reply.send(self.selection());
             }
-            Command::Write(text) => {
+            Command::Write(text, reply) => {
                 let handle = self.queue.handle();
                 let source = self.manager.create_data_source(&handle, text.clone());
                 for kind in TEXT_TYPES {
@@ -196,6 +205,7 @@ impl Service {
                 if let Some((previous, _)) = self.state.source.replace((source, text)) {
                     previous.destroy();
                 }
+                let _ = reply.send(self.connection.flush().is_ok());
             }
         }
     }
@@ -409,4 +419,24 @@ fn clear_nonblocking(file: &std::fs::File) -> Result<()> {
         bail!("could not prepare clipboard transfer");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A service that stops after taking a write must not report success.
+    #[test]
+    fn write_fails_when_the_service_stops_before_applying_it() {
+        let (wake_read, wake) = pipe().unwrap();
+        let (commands, receiver) = mpsc::channel();
+        let service = thread::spawn(move || {
+            let _wake = wake_read;
+            // Dropping the command drops its reply sender unanswered.
+            drop(receiver.recv().unwrap());
+        });
+        let clipboard = Clipboard { commands, wake };
+        assert!(clipboard.write("cut text").is_err());
+        service.join().unwrap();
+    }
 }

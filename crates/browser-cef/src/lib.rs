@@ -224,16 +224,9 @@ wrap_app! {
                     command_line.append_switch(Some(&"disable-gpu-vsync".into()));
                 }
                 command_line.append_switch(Some(&"no-startup-window".into()));
-                // Windowless Chromium never holds Wayland keyboard focus, so a
-                // Wayland compositor never offers it the clipboard and rejects
-                // its selections. X11 lets any client read and own selections,
-                // and Xwayland bridges them to Wayland clients.
-                #[cfg(target_os = "linux")]
-                if std::env::var_os("DISPLAY").is_some_and(|display| !display.is_empty())
-                    && command_line.has_switch(Some(&"ozone-platform".into())) == 0
-                {
-                    command_line.append_switch_with_value(Some(&"ozone-platform".into()), Some(&"x11".into()));
-                }
+                // Chromium keeps its own Wayland/X11 choice. Forcing X11 for
+                // clipboard access lost the WebGPU adapter on NVIDIA; the
+                // Linux host serves the editor's clipboard instead.
                 #[cfg(windows)]
                 {
                     // Native attachment uses the host's selected privileges.
