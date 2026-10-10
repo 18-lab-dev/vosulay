@@ -305,6 +305,11 @@ impl State {
             }
             #[cfg(target_os = "linux")]
             "clipboard-write" => {
+                let request = message
+                    .get("request_id")
+                    .and_then(Value::as_str)
+                    .filter(|id| !id.is_empty() && id.len() <= 64)
+                    .context("invalid clipboard request")?;
                 let text = message
                     .get("text")
                     .and_then(Value::as_str)
@@ -314,7 +319,10 @@ impl State {
                     .as_ref()
                     .context("system clipboard unavailable")?
                     .write(text)?;
-                Ok(Vec::new())
+                // A cut deletes its selection only after this acknowledgement.
+                Ok(vec![
+                    json!({"type": "clipboard-written", "request_id": request}),
+                ])
             }
             "save-config" => {
                 let save_id = message

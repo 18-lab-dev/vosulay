@@ -2846,7 +2846,9 @@
   // On Linux the host owns the system clipboard for the page: windowless
   // Chromium cannot reach it while a Wayland game has keyboard focus. Elsewhere
   // the host reports it unavailable and Chromium's own copy/paste runs.
-  const hostClipboard = { available: false, next: 0, pending: null };
+  const hostClipboard = { available: false, next: 0, pending: null, cut: null };
+  // The native bridge rejects larger messages; leave room for the envelope.
+  const MAX_CLIPBOARD_BYTES = 255 * 1024;
 
   function textEntry(target, writable) {
     if (!(target instanceof Element)) return null;
@@ -2884,6 +2886,19 @@
     ipc({ type: "clipboard-read", request_id: hostClipboard.pending.id });
   }, true);
 
+  function finishHostCut(id) {
+    const cut = hostClipboard.cut;
+    if (!cut || cut.id !== id) return;
+    hostClipboard.cut = null;
+    const { field } = cut;
+    // Delete only the text that was written, if the user has not changed it since.
+    if (document.activeElement !== field || field.value !== cut.value) return;
+    if (cut.start !== null) {
+      if (field.selectionStart !== cut.start || field.selectionEnd !== cut.end) return;
+    }
+    document.execCommand("delete");
+  }
+
   for (const kind of ["copy", "cut"]) {
     document.addEventListener(kind, (event) => {
       if (!hostClipboard.available) return;
@@ -2891,8 +2906,21 @@
       const text = selectedText(field);
       if (!text) return;
       event.preventDefault();
-      ipc({ type: "clipboard-write", text });
-      if (kind === "cut" && field && !field.readOnly) document.execCommand("delete");
+      // JSON escaping can grow the text, so measure what the bridge receives.
+      if (new TextEncoder().encode(JSON.stringify(text)).length > MAX_CLIPBOARD_BYTES) {
+        setError("Selection is too large to copy");
+        return;
+      }
+      hostClipboard.next += 1;
+      const id = `write-${hostClipboard.next}`;
+      hostClipboard.cut = kind === "cut" && field && !field.readOnly ? {
+        id,
+        field,
+        value: field.value,
+        start: typeof field.selectionStart === "number" ? field.selectionStart : null,
+        end: typeof field.selectionEnd === "number" ? field.selectionEnd : null,
+      } : null;
+      ipc({ type: "clipboard-write", request_id: id, text });
     }, true);
   }
 
@@ -3119,6 +3147,8 @@
         hostClipboard.available = envelope.available === true;
       } else if (envelope.type === "clipboard-text") {
         finishHostPaste(envelope.request_id, envelope.text);
+      } else if (envelope.type === "clipboard-written") {
+        finishHostCut(envelope.request_id);
       } else if (envelope.type === "overlay-file") {
         const source = parseSource(envelope.url, ["vosulay-overlay:"]);
         if (!source) {
