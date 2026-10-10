@@ -54,13 +54,15 @@ pub unsafe extern "system" fn vkQueuePresentKHR(queue: vk::Queue, info: *const v
         if !resources.prepare_slot(device, image_index as usize) { continue; }
         let mut mode = gpu::FrameMode::Redraw;
         let frame = if resources.can_start_frame(device) {
-            swap.input.client.lock().latest()
+            let mut client = swap.input.client.lock();
+            client.latest().map(|frame| (frame, client.frame_generation()))
         } else { None };
         // The mapping lease spans staging upload, not the control mutex.
-        if let Some(frame) = frame
+        if let Some((frame, generation)) = frame
             && frame.width() == swap.extent.width && frame.height() == swap.extent.height
         {
-                    if resources.copy_staging(device, frame.pixels()).is_ok() {
+                    let damage = resources.uploaded(generation).and_then(|uploaded| frame.damage_since(uploaded));
+                    if resources.copy_staging(device, frame.pixels(), damage, (generation, frame.sequence())).is_ok() {
                         mode = gpu::FrameMode::Software;
                     } else { resources.disable(); }
                 // Ring guard is released before command recording and GPU flight.

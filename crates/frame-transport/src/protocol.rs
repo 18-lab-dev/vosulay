@@ -6,7 +6,7 @@ pub const PACKET_SIZE: usize = 128;
 pub const FORMAT_BGRA: u32 = 1;
 pub const MAX_DIMENSION: u32 = 16384;
 pub const MAX_FRAME_BYTES: usize = 256 * 1024 * 1024;
-const VERSION: u16 = 3;
+const VERSION: u16 = 4;
 
 /// CLOCK_MONOTONIC is shared by every local process, unlike an Instant epoch.
 pub fn focus_timestamp() -> u64 {

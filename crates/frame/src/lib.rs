@@ -5,7 +5,7 @@ pub use input::{BrowserInput, InputModifiers, KeyKind, MouseButton, PlatformEven
 use anyhow::Result;
 
 /// Changed physical pixels since the preceding CPU-frame submission.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DamageRect {
     pub x: u32,
     pub y: u32,

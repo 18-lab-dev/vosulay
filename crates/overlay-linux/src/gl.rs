@@ -5,6 +5,7 @@ use libc::{c_char, c_int, c_uint, c_void};
 use std::ffi::CStr;
 use std::mem;
 use std::ptr;
+use vosulay_frame::DamageRect;
 
 const GL_TEXTURE_2D: c_uint = 0x0de1;
 const GL_RGBA: c_uint = 0x1908;
@@ -510,17 +511,27 @@ impl Renderer {
         }
         let consumed = if let Some(frame) = frame.as_ref() {
             let bytes = frame.pixels();
+            let region = self
+                .has_frame
+                .then(|| frame.damage_since(self.sequence))
+                .flatten()
+                .unwrap_or_else(|| DamageRect::full(self.width, self.height));
             // Input is tightly-packed BGRA. Uploading as RGBA is portable to
-            // ES3; the fragment shader performs the B/R swizzle.
+            // ES3; the fragment shader performs the B/R swizzle. Only the
+            // region changed since this texture's frame is copied: a full
+            // frame per present costs milliseconds at 1440p.
             unsafe {
                 set_unpack_defaults(gl);
+                (gl.pixel_store)(GL_UNPACK_ROW_LENGTH, self.width as c_int);
+                (gl.pixel_store)(GL_UNPACK_SKIP_PIXELS, region.x as c_int);
+                (gl.pixel_store)(GL_UNPACK_SKIP_ROWS, region.y as c_int);
                 (gl.tex_sub_image)(
                     GL_TEXTURE_2D,
                     0,
-                    0,
-                    0,
-                    self.width as c_int,
-                    self.height as c_int,
+                    region.x as c_int,
+                    region.y as c_int,
+                    region.width as c_int,
+                    region.height as c_int,
                     GL_RGBA,
                     GL_UNSIGNED_BYTE,
                     bytes.as_ptr().cast(),

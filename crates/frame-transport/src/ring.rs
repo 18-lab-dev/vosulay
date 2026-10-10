@@ -6,8 +6,9 @@
 //! receipt and kept in process-local memory. Shared copies are only compared,
 //! to report corruption, and never feed pointer arithmetic, lengths, damage
 //! clipping or copy ranges, so altered metadata cannot move an access outside
-//! the mapping. Nothing here makes payload bytes or slot control words
-//! trustworthy; those remain a cooperative contract between both processes.
+//! the mapping. Nothing here makes payload bytes, slot control words or the
+//! damage history trustworthy; those remain a cooperative contract between
+//! both processes, and history rectangles are clipped to local geometry.
 use crate::protocol::{invalid, pixel_bytes};
 use std::{
     io,
@@ -16,14 +17,17 @@ use std::{
     ptr::NonNull,
     sync::{
         Arc,
-        atomic::{AtomicU32, AtomicU64, Ordering},
+        atomic::{AtomicU32, AtomicU64, Ordering, fence},
     },
 };
 use vosulay_frame::DamageRect;
 
 const SLOTS: usize = 3;
+/// Publications whose damage a consumer can still combine. A consumer further
+/// behind than this uploads the whole frame.
+const HISTORY: usize = 64;
 // Native-endian load of these bytes; the shared memory holds them verbatim.
-const MAGIC: u64 = u64::from_ne_bytes(*b"VLAYRNG1");
+const MAGIC: u64 = u64::from_ne_bytes(*b"VLAYRNG2");
 const FREE: u64 = 0;
 const WRITING: u64 = 1;
 const READY: u64 = 2;
@@ -34,6 +38,16 @@ const SEALS: i32 = libc::F_SEAL_GROW | libc::F_SEAL_SHRINK | libc::F_SEAL_SEAL;
 #[repr(C, align(64))]
 struct Slot {
     control: AtomicU64,
+}
+/// Region changed by one publication relative to the one before it, written
+/// as a seqlock: `sequence` is zero while the rectangle is being replaced.
+#[repr(C, align(32))]
+struct History {
+    sequence: AtomicU64,
+    x: AtomicU32,
+    y: AtomicU32,
+    width: AtomicU32,
+    height: AtomicU32,
 }
 // Header fields are atomics so the ordinary (atomic) metadata stores of a
 // cooperating peer do not race with these loads. They are not a defence
@@ -47,6 +61,7 @@ struct Header {
     height: AtomicU32,
     frame_bytes: AtomicU64,
     slots: [Slot; SLOTS],
+    history: [History; HISTORY],
 }
 const HEADER_BYTES: usize = size_of::<Header>();
 const _: () = assert!(
@@ -54,7 +69,9 @@ const _: () = assert!(
         && std::mem::offset_of!(Header, height) == 12
         && std::mem::offset_of!(Header, frame_bytes) == 16
         && std::mem::offset_of!(Header, slots) == 64
-        && HEADER_BYTES == 256
+        && std::mem::offset_of!(Header, history) == 256
+        && size_of::<History>() == 32
+        && HEADER_BYTES == 256 + HISTORY * 32
 );
 
 /// Process-local ring geometry. It is validated before mapping and is the only
@@ -125,6 +142,13 @@ impl Mapping {
             frame_bytes: AtomicU64::new(geometry.frame_bytes as u64),
             slots: std::array::from_fn(|_| Slot {
                 control: AtomicU64::new(FREE),
+            }),
+            history: std::array::from_fn(|_| History {
+                sequence: AtomicU64::new(0),
+                x: AtomicU32::new(0),
+                y: AtomicU32::new(0),
+                width: AtomicU32::new(0),
+                height: AtomicU32::new(0),
             }),
         };
         // SAFETY: page alignment satisfies Header, mapping is writable and not yet shared.
@@ -204,6 +228,32 @@ impl Mapping {
         }
         Ok(())
     }
+    /// Records the region `sequence` changed; call before publishing its slot.
+    fn record_damage(&self, sequence: u64, rect: DamageRect) {
+        let entry = &self.header().history[(sequence % HISTORY as u64) as usize];
+        entry.sequence.store(0, Ordering::Relaxed);
+        fence(Ordering::Release);
+        entry.x.store(rect.x, Ordering::Relaxed);
+        entry.y.store(rect.y, Ordering::Relaxed);
+        entry.width.store(rect.width, Ordering::Relaxed);
+        entry.height.store(rect.height, Ordering::Relaxed);
+        entry.sequence.store(sequence, Ordering::Release);
+    }
+    /// The region `sequence` changed, or None once that entry is overwritten.
+    fn damage(&self, sequence: u64) -> Option<DamageRect> {
+        let entry = &self.header().history[(sequence % HISTORY as u64) as usize];
+        if entry.sequence.load(Ordering::Acquire) != sequence {
+            return None;
+        }
+        let rect = DamageRect {
+            x: entry.x.load(Ordering::Relaxed),
+            y: entry.y.load(Ordering::Relaxed),
+            width: entry.width.load(Ordering::Relaxed),
+            height: entry.height.load(Ordering::Relaxed),
+        };
+        fence(Ordering::Acquire);
+        (entry.sequence.load(Ordering::Relaxed) == sequence).then_some(rect)
+    }
     fn payload(&self, slot: usize) -> *mut u8 {
         assert!(slot < SLOTS, "frame ring slot out of range");
         // SAFETY: slot < SLOTS and the local frame size keep the slot inside
@@ -263,6 +313,8 @@ pub struct Producer {
     sequence: u64,
     last_published_slot: Option<usize>,
     damage: [Option<DamageRect>; SLOTS],
+    /// Change since the last successful publication, for the shared history.
+    unpublished: Option<DamageRect>,
 }
 impl Producer {
     pub fn new(width: u32, height: u32) -> io::Result<Self> {
@@ -273,6 +325,7 @@ impl Producer {
             sequence: 0,
             last_published_slot: None,
             damage: [Some(DamageRect::full(width, height)); SLOTS],
+            unpublished: Some(DamageRect::full(width, height)),
         })
     }
     pub fn handle(&self) -> RingHandle {
@@ -306,6 +359,10 @@ impl Producer {
         for pending in &mut self.damage {
             *pending = Some(pending.map_or(damage, |previous| previous.union(damage)));
         }
+        self.unpublished = Some(
+            self.unpublished
+                .map_or(damage, |previous| previous.union(damage)),
+        );
         if let Some(index) = self.last_published_slot {
             let control = header.slots[index].control.load(Ordering::Acquire);
             if control >> 2 == self.sequence && control & STATE_MASK != WRITING {
@@ -318,6 +375,8 @@ impl Producer {
                 if self.damage[index].is_none_or(|rect| {
                     damage_rows(rect, width).all(|range| previous[range.clone()] == pixels[range])
                 }) {
+                    // These pixels equal the last publication exactly.
+                    self.unpublished = None;
                     return Ok(false);
                 }
             }
@@ -367,6 +426,12 @@ impl Producer {
                     }
                 }
                 self.damage[index] = None;
+                mapping.record_damage(
+                    sequence,
+                    self.unpublished
+                        .take()
+                        .expect("publication damage accumulated"),
+                );
                 header.slots[index]
                     .control
                     .store(sequence << 2 | READY, Ordering::Release);
@@ -467,6 +532,21 @@ impl ReadFrame {
     }
     pub fn sequence(&self) -> u64 {
         self.sequence
+    }
+    /// Region that changed between publication `uploaded` of this ring and
+    /// this frame. None means copy the whole frame: `uploaded` is not an
+    /// earlier publication, or its history has been overwritten.
+    pub fn damage_since(&self, uploaded: u64) -> Option<DamageRect> {
+        if uploaded == 0 || uploaded >= self.sequence || self.sequence - uploaded > HISTORY as u64 {
+            return None;
+        }
+        let Geometry { width, height, .. } = self.mapping.geometry;
+        let mut region: Option<DamageRect> = None;
+        for sequence in uploaded + 1..=self.sequence {
+            let rect = self.mapping.damage(sequence)?.clipped(width, height)?;
+            region = Some(region.map_or(rect, |region| region.union(rect)));
+        }
+        region
     }
     pub fn pixels(&self) -> &[u8] {
         // SAFETY: READING lease protects initialized bytes until this guard
@@ -679,6 +759,83 @@ mod tests {
         assert_eq!(second.latest().unwrap().pixels(), &pixels);
         assert_eq!(a.pixels(), &[1; 32]);
         assert_eq!(c.pixels(), &leased_c);
+    }
+
+    #[test]
+    fn consumer_damage_spans_skipped_and_dropped_publications() {
+        let mut producer = Producer::new(8, 4).unwrap();
+        let mut game = consumer(&producer);
+        let mut first = consumer(&producer);
+        let mut second = consumer(&producer);
+        let rect = |pixel: usize| DamageRect {
+            x: pixel as u32 % 8,
+            y: pixel as u32 / 8,
+            width: 1,
+            height: 1,
+        };
+        let mut pixels = [1; 128];
+        let change = |pixels: &mut [u8; 128], pixel: usize, value: u8| {
+            pixels[pixel * 4..pixel * 4 + 4].fill(value);
+            Some(rect(pixel))
+        };
+        assert!(producer.publish(&pixels, None).unwrap());
+        let uploaded = game.latest().unwrap();
+        let damage = change(&mut pixels, 9, 2);
+        assert!(producer.publish(&pixels, damage).unwrap());
+        let a = first.latest().unwrap();
+        let damage = change(&mut pixels, 10, 3);
+        assert!(producer.publish(&pixels, damage).unwrap());
+        let b = second.latest().unwrap();
+        // All three slots are leased: this change is dropped, so its damage
+        // must travel with the next successful publication.
+        let damage = change(&mut pixels, 11, 4);
+        assert!(!producer.publish(&pixels, damage).unwrap());
+        drop(a);
+        let damage = change(&mut pixels, 12, 5);
+        assert!(producer.publish(&pixels, damage).unwrap());
+        drop(b);
+        let base = uploaded.sequence();
+        drop(uploaded);
+        let frame = game.latest().unwrap();
+        assert_eq!(frame.pixels(), &pixels);
+        let row = |x: u32, width: u32| DamageRect {
+            x,
+            y: 1,
+            width,
+            height: 1,
+        };
+        assert_eq!(frame.damage_since(base), Some(row(1, 4)));
+        assert_eq!(frame.damage_since(frame.sequence() - 1), Some(row(3, 2)));
+        assert_eq!(frame.damage_since(frame.sequence()), None);
+        assert_eq!(frame.damage_since(0), None);
+    }
+
+    #[test]
+    fn damage_older_than_the_history_window_requires_a_full_copy() {
+        let mut producer = Producer::new(4, 2).unwrap();
+        let mut game = consumer(&producer);
+        let mut pixels = [0; 32];
+        assert!(producer.publish(&pixels, None).unwrap());
+        let base = game.latest().unwrap().sequence();
+        let single = DamageRect {
+            x: 3,
+            y: 1,
+            width: 1,
+            height: 1,
+        };
+        for step in 1..=HISTORY as u8 {
+            pixels[28..32].fill(step);
+            assert!(producer.publish(&pixels, Some(single)).unwrap());
+        }
+        let frame = game.latest().unwrap();
+        assert_eq!(frame.sequence() - base, HISTORY as u64);
+        assert_eq!(frame.damage_since(base), Some(single));
+        pixels[28..32].fill(0xff);
+        drop(frame);
+        assert!(producer.publish(&pixels, Some(single)).unwrap());
+        let frame = game.latest().unwrap();
+        assert_eq!(frame.damage_since(base), None);
+        assert_eq!(frame.damage_since(frame.sequence() - 1), Some(single));
     }
 
     #[test]

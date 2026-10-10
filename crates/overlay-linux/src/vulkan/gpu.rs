@@ -1,5 +1,6 @@
 use ash::{vk, vk::Handle};
 use std::{ptr, slice};
+use vosulay_frame::DamageRect;
 pub(crate) const MAX_IMAGES: usize = 64;
 const TEXTURE_FORMAT: vk::Format = vk::Format::B8G8R8A8_UNORM;
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -27,6 +28,10 @@ pub(crate) struct Resources {
     texture_memory: vk::DeviceMemory,
     texture_view: vk::ImageView,
     content_valid: bool,
+    /// Ring generation and publication the texture holds once `content_valid`.
+    content: (u64, u64),
+    /// Region the next software frame copies from staging.
+    upload: DamageRect,
     frame_slot: Option<usize>,
     sampler: vk::Sampler,
     descriptor_layout: vk::DescriptorSetLayout,
@@ -337,6 +342,10 @@ impl Resources {
     pub(crate) fn can_redraw(&self) -> bool {
         self.content_valid && !self.broken
     }
+    /// Publication of ring `generation` the texture holds, for damage uploads.
+    pub(crate) fn uploaded(&self, generation: u64) -> Option<u64> {
+        (self.content_valid && self.content.0 == generation).then_some(self.content.1)
+    }
     pub(crate) fn disable(&mut self) {
         self.broken = true;
     }
@@ -398,10 +407,14 @@ impl Resources {
         }
     }
 
+    /// Stages `region` of `bytes` (all of it if None or the texture is not
+    /// yet valid) and records which publication the texture will hold.
     pub(crate) unsafe fn copy_staging(
         &mut self,
         device: &ash::Device,
         bytes: &[u8],
+        region: Option<DamageRect>,
+        content: (u64, u64),
     ) -> Result<(), vk::Result> {
         if bytes.len() != self.staging_size
             || self.staging_mapped == 0
@@ -410,9 +423,24 @@ impl Resources {
         {
             return Err(vk::Result::ERROR_INITIALIZATION_FAILED);
         }
-        unsafe {
-            ptr::copy_nonoverlapping(bytes.as_ptr(), self.staging_mapped as *mut u8, bytes.len())
-        };
+        let (width, height) = (self.extent.width, self.extent.height);
+        let region = region
+            .filter(|_| self.content_valid)
+            .and_then(|region| region.clipped(width, height))
+            .unwrap_or_else(|| DamageRect::full(width, height));
+        // Rows keep their frame offsets; the copy reads only this region.
+        let stride = width as usize * 4;
+        let length = region.width as usize * 4;
+        for row in region.y as usize..(region.y + region.height) as usize {
+            let offset = row * stride + region.x as usize * 4;
+            unsafe {
+                ptr::copy_nonoverlapping(
+                    bytes.as_ptr().add(offset),
+                    (self.staging_mapped as *mut u8).add(offset),
+                    length,
+                )
+            };
+        }
         if !self.staging_coherent {
             unsafe {
                 device.flush_mapped_memory_ranges(slice::from_ref(
@@ -423,6 +451,8 @@ impl Resources {
                 ))?
             };
         }
+        self.upload = region;
+        self.content = content;
         Ok(())
     }
     unsafe fn write_descriptor(&self, device: &ash::Device, view: vk::ImageView) {
@@ -510,9 +540,12 @@ impl Resources {
                     vk::QUEUE_FAMILY_IGNORED,
                 )
             };
+            let region = self.upload;
             let copy = vk::BufferImageCopy::default()
-                .buffer_offset(0)
-                .buffer_row_length(0)
+                .buffer_offset(
+                    (u64::from(region.y) * u64::from(self.extent.width) + u64::from(region.x)) * 4,
+                )
+                .buffer_row_length(self.extent.width)
                 .buffer_image_height(0)
                 .image_subresource(vk::ImageSubresourceLayers {
                     aspect_mask: vk::ImageAspectFlags::COLOR,
@@ -520,9 +553,14 @@ impl Resources {
                     base_array_layer: 0,
                     layer_count: 1,
                 })
+                .image_offset(vk::Offset3D {
+                    x: region.x as i32,
+                    y: region.y as i32,
+                    z: 0,
+                })
                 .image_extent(vk::Extent3D {
-                    width: self.extent.width,
-                    height: self.extent.height,
+                    width: region.width,
+                    height: region.height,
                     depth: 1,
                 });
             unsafe {
@@ -692,6 +730,8 @@ impl Resources {
             texture_memory: vk::DeviceMemory::null(),
             texture_view: vk::ImageView::null(),
             content_valid: false,
+            content: (0, 0),
+            upload: DamageRect::full(extent.width, extent.height),
             frame_slot: None,
             sampler: vk::Sampler::null(),
             descriptor_layout: vk::DescriptorSetLayout::null(),
