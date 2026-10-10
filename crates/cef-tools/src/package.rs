@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use serde::Serialize;
 use std::{
     collections::BTreeMap,
@@ -19,6 +19,65 @@ struct Manifest<'a> {
     archive: &'a str,
     archive_sha256: &'a str,
     runtime_sha256: BTreeMap<String, String>,
+}
+
+const WINDOWS_ICON: &[u8] = include_bytes!("../../../assets/branding/vosulay.ico");
+
+/// CEF's prebuilt sandbox bootstrap becomes the app executable, and Windows
+/// names a process after its version resource, so Task Manager listed vosulay
+/// as "CEF Bootstrap Application". CEF documents editing the bootstrap's icon
+/// and file information. Its copyright line is kept: the code is still CEF's.
+pub(crate) fn brand_windows_bootstrap(path: &Path) -> Result<()> {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .context("bootstrap path has no UTF-8 basename")?;
+    let bytes = fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+    let mut image =
+        editpe::Image::parse(bytes.as_slice()).context("parsing bootstrap executable")?;
+    let mut resources = image
+        .resource_directory()
+        .cloned()
+        .context("bootstrap has no resources")?;
+    let mut version = resources
+        .get_version_info()?
+        .context("bootstrap has no version resource")?;
+    let numeric = |index: usize| -> Result<u32> {
+        let part = PRODUCT_VERSION
+            .split(['.', '-', '+'])
+            .nth(index)
+            .unwrap_or("0");
+        let value: u32 = part
+            .parse()
+            .with_context(|| format!("version part {part:?}"))?;
+        ensure!(value <= 0xffff, "version part {value} exceeds 65535");
+        Ok(value)
+    };
+    let numbers = editpe::types::VersionU32 {
+        major: (numeric(0)? << 16) | numeric(1)?,
+        minor: numeric(2)? << 16,
+    };
+    version.info.file_version = numbers;
+    version.info.product_version = numbers;
+    for table in &mut version.strings {
+        for (key, value) in [
+            ("CompanyName", "sxlvia"),
+            ("FileDescription", "Vosulay"),
+            ("ProductName", "Vosulay"),
+            ("InternalName", "vosulay"),
+            ("OriginalFilename", file_name),
+            ("FileVersion", PRODUCT_VERSION),
+            ("ProductVersion", PRODUCT_VERSION),
+        ] {
+            table.strings.insert(key.to_owned(), value.to_owned());
+        }
+    }
+    resources.set_version_info(&version)?;
+    resources.set_main_icon(WINDOWS_ICON)?;
+    image.set_resource_directory(resources)?;
+    let mut branded = Vec::new();
+    image.write_writer(&mut branded)?;
+    fs::write(path, branded).with_context(|| format!("writing {}", path.display()))
 }
 
 pub fn package_runtime(
@@ -92,10 +151,11 @@ pub fn package_runtime(
                 .to_os_string();
             for (source, basename) in [
                 (client.to_path_buf(), client_name.to_os_string()),
-                (cef.join("Release/bootstrap.exe"), bootstrap_name),
+                (cef.join("Release/bootstrap.exe"), bootstrap_name.clone()),
             ] {
                 copy_file(&source, &output.join(basename))?;
             }
+            brand_windows_bootstrap(&output.join(&bootstrap_name))?;
         }
         for overlay in overlays {
             check_input(overlay)?;

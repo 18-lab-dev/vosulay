@@ -14,6 +14,8 @@ path = "src/main.rs"
 anyhow = "1.0"
 bzip2 = "0.6"
 crc32fast = "1.5"
+# Brands CEF's prebuilt Windows bootstrap; the image feature is unnecessary for .ico input.
+editpe = { version = "0.2.4", default-features = false, features = ["std"] }
 flate2 = "1.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
