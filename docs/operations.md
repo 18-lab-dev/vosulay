@@ -190,7 +190,7 @@ On Linux `--cef-dir` also selects adjacent compositor/lookup libraries. Windows 
 
 Linux refreshes recognized osu shortcuts with absolute injection paths, preserving foreign preloads, arguments, and OBS flags. System shortcuts receive user overrides; changes affect the next game launch. It also attempts live attachment to same-user native games. Where policy prevents injection, restart through the refreshed shortcut or use the manual preload/Vulkan commands in the [README](../README.md).
 
-For a missing overlay, check game focus, backend reachability, loaded compositor/runtime files, hidden state, enabled placement, and viewport position. Selection follows focus, not process order. Do not change ptrace policy or request elevation just to bypass attachment restrictions.
+For a missing overlay, check game focus, backend reachability, loaded compositor/runtime files, hidden state, enabled placement, and viewport position. Selection follows focus, not process order. On Windows with tosu, confirm tosu's in-game overlay is disabled; it injects its own asdf-overlay into the same game. Do not change ptrace policy or request elevation just to bypass attachment restrictions.
 
 Input failure releases capture within the five-second safety bound; Windows may exit. Restart the host if needed. If a remote bind fails, the local backend broker remains available. Listener/allowlist changes and remote security are described in [integrations](integrations.md).
 

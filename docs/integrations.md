@@ -4,9 +4,11 @@
 
 [src/api.rs](../src/api.rs) fetches `/api/counters/search/` with a 10-second deadline and 2 MiB body limit. It recognizes vosu, tosu 4.26, legacy, and empty-state markup rather than trusting a product name; missing/invalid resolutions fall back to 500×300. [Fixtures](../tests/fixtures/backend/) protect this contract. The backend defaults to `http://127.0.0.1:24050/`; `--vosu-url` accepts HTTP(S) without credentials, query, or fragment.
 
-Counters keep public backend API paths. [assets/backend.js](../assets/backend.js) routes matching fetch, XMLHttpRequest, and WebSocket calls through vosulay. [src/backend.rs](../src/backend.rs) shares one upstream telemetry socket per active schema (`/ws`, `/tokens`, `/websocket/v2`, `/websocket/v2/precise`). Filters stay client-local; matching HTTP JSON can reuse the newest snapshot, with backend HTTP fallback when unavailable. Slow consumers skip stale telemetry instead of queueing it.
+Counters keep public backend API paths. [assets/backend.js](../assets/backend.js) routes matching fetch, XMLHttpRequest, and WebSocket calls through vosulay. [src/backend.rs](../src/backend.rs) shares one upstream telemetry socket per active schema (`/ws`, `/tokens`, `/websocket/v2`, `/websocket/v2/precise`). Filters stay client-local; projections keep the backend's object key order (serde_json `preserve_order`), because counters that iterate keys render rows in that order. Matching HTTP JSON can reuse the newest snapshot, with backend HTTP fallback when unavailable. Slow consumers skip stale telemetry instead of queueing it.
 
 `/websocket/v2/subscribe` is relayed per client to preserve backend precise cadence; it is not projected from the slower shared V2 stream. Settings and command channels remain separate with original query/identity because authorization and replies are client-specific. The loopback broker is independent of the remote listener, so a busy remote port does not break in-game counters.
+
+tosu serves the shared schemas, commands, settings pushes, and file/JSON routes through the broker as it does directly. It has no `/websocket/v2/subscribe`; the relay's upstream handshake times out and vosu-only counters reconnect. On Windows, tosu's optional in-game overlay (`ENABLE_INGAME_OVERLAY`, `tosu-ingame-overlay.exe`) injects a second asdf-overlay into the game; users must disable it (see the [README](../README.md#windows-1)).
 
 ## Local overlay capabilities
 

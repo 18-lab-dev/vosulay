@@ -211,6 +211,14 @@ Vosulay does not request elevation. If explicitly launched elevated, its browser
 host keeps the selected privileges for native attachment instead of Chromium
 relaunching it; CEF renderer and GPU processes remain sandboxed.
 
+If you use tosu, turn off tosu's own in-game overlay before starting vosulay:
+in the tosu dashboard open **Settings → Overlay** and disable **In-Game
+Overlay**, or set `ENABLE_INGAME_OVERLAY=false` in the `tosu.env` beside
+`tosu.exe`. When enabled, tosu launches `tosu-ingame-overlay.exe`, which injects
+its own asdf-overlay into the same osu! process; vosulay does not support two
+overlay hosts hooking one game's Present and input. tosu's in-game overlay is
+Windows-only, so Linux needs no change.
+
 On Windows, OBS's **Capture third-party overlays** setting controls when OBS
 copies the swapchain; it is not a guaranteed exclusion switch. Vosulay's pinned
 asdf-overlay draws before forwarding `Present`/`Present1`, so exclusion with that
@@ -354,6 +362,8 @@ There is one upstream telemetry WebSocket per active schema (`/ws`, `/tokens`,
 filters remain client-local. Matching HTTP JSON requests use that snapshot when
 available and otherwise retain the backend's HTTP behavior. Slow consumers skip
 stale telemetry instead of building a queue.
+Filtered snapshots keep the backend's field order, so counters that iterate
+object keys render the same rows in the same order as with a direct connection.
 
 Selected-field subscriptions (`/websocket/v2/subscribe`) are relayed per client
 to the backend, which publishes them at its precise cadence. Projecting them from
@@ -364,6 +374,10 @@ Settings and other commands retain separate upstream channels with each
 counter's original query/identity. They are not shared: upstream authorization
 and replies are client-specific. vosulay exposes no private telemetry API, and
 vosu remains independent.
+
+Endpoints that only vosu provides, such as `/websocket/v2/subscribe`, are not
+available from tosu; counters written for them stay empty there and reconnect
+periodically.
 
 The in-game browser uses a separate loopback listener, so an occupied remote
 server port does not prevent local counters from loading.
@@ -405,7 +419,9 @@ clear **Hide vosulay**, and verify placements are enabled and in view.
 On Linux, restart the game through its refreshed shortcut if live attachment
 is restricted. Keep the host, injected libraries, and CEF runtime from the same
 package. If a shortcut is already registered by another Windows app, choose
-another chord. See the [operations runbook](docs/operations.md) for more detail.
+another chord. On Windows with tosu, disable tosu's in-game overlay as described
+[above](#windows-1). See the [operations runbook](docs/operations.md) for more
+detail.
 
 
 
