@@ -74,8 +74,11 @@ the binaries' glibc floor to that host's version.
 ### Arch source package / AUR
 
 [`packaging/arch/PKGBUILD`](../packaging/arch/PKGBUILD) builds from source, unlike
-the prebuilt Arch release artifact. It uses `rustup` as a make dependency and
-the pinned CEF archive as a source, installs the setuid sandbox, and specifies
+the prebuilt Arch release artifact. Its make dependency is `cargo`, so either
+Arch's `rust` or `rustup` satisfies it (they conflict with each other); with
+rustup it builds with the pinned toolchain, otherwise with the system Rust,
+which must meet the crates' `rust-version`. It uses the pinned CEF archive as a
+source, installs the setuid sandbox, and specifies
 `!lto !strip !debug`. After tagging, bump `pkgver` and run `updpkgsums`; the
 source tarball checksum is `SKIP` until then. Keep the CEF source and checksum
 aligned with `tools/cef/pins.json`.
