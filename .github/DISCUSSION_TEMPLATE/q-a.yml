@@ -1,0 +1,18 @@
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The [README](https://github.com/shiruviaa/vosulay#readme) covers installation, launching on Linux and Windows, shortcuts and troubleshooting. If something is clearly broken, a [bug report](https://github.com/shiruviaa/vosulay/issues/new/choose) is the better place.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+    validations:
+      required: true
+  - type: input
+    id: setup
+    attributes:
+      label: Your setup
+      description: vosulay version, Windows or Linux distribution, osu!stable or lazer, and vosu or tosu.
+      placeholder: "vosulay 1.2.0, Windows 11, osu!lazer, tosu 4.26.2"

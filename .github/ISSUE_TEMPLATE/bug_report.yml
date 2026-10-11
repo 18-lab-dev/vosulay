@@ -1,0 +1,112 @@
+name: Bug report
+description: vosulay crashes, does not attach to the game, draws wrongly, or loses settings.
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please check the [troubleshooting section](https://github.com/shiruviaa/vosulay#troubleshooting) and [existing issues](https://github.com/shiruviaa/vosulay/issues?q=is%3Aissue) first.
+
+        - A counter that works on its own but not inside vosulay? Use **Counter or overlay doesn't work** instead.
+        - A security problem? Do not open an issue: [report it privately](https://github.com/shiruviaa/vosulay/security/advisories/new).
+  - type: input
+    id: version
+    attributes:
+      label: vosulay version
+      description: On Linux run `vosulay --version`; on Windows use the version in the installer or ZIP file name.
+      placeholder: "1.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install vosulay?
+      options:
+        - Windows installer (setup.exe)
+        - Windows ZIP
+        - Debian/Ubuntu package (.deb)
+        - Fedora/openSUSE package (.rpm)
+        - Arch package (.pkg.tar.zst)
+        - AUR
+        - Linux tarball (.tar.gz)
+        - Built from source
+        - Other (describe below)
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Windows version, or Linux distribution and desktop (and whether it is Wayland or X11).
+      placeholder: "Windows 11 24H2 / CachyOS, KDE Plasma 6.4 on Wayland"
+    validations:
+      required: true
+  - type: dropdown
+    id: game
+    attributes:
+      label: Game
+      options:
+        - osu!lazer
+        - osu!stable on Windows
+        - osu!stable under Wine (for example osu-winello)
+        - Not game-related
+        - Other (describe below)
+    validations:
+      required: true
+  - type: input
+    id: game-details
+    attributes:
+      label: Game version and renderer
+      description: osu! version, and the renderer selected in osu! settings (for example Direct3D 11, OpenGL, Vulkan).
+      placeholder: "lazer 2026.1005.0, Vulkan"
+  - type: input
+    id: backend
+    attributes:
+      label: Backend
+      description: vosu or tosu, and its version.
+      placeholder: "vosu 0.4.0 / tosu 4.26.2"
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and driver
+      placeholder: "NVIDIA RTX 4070, driver 580.82"
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected instead. Screenshots or a short video help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start vosu, then vosulay
+        2. Launch osu!lazer from the desktop shortcut
+        3. Press Ctrl+Shift+Space
+        4. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        - Output of `vosulay` when started from a terminal (Linux), including lines starting with `Vosulay:`.
+        - On Linux, the game's own terminal output can also contain `Vosulay:` lines from the in-game library.
+        - The browser log `cef.log`, in the `cef-cache` folder next to your `config.json` (`~/.config/vosulay/` on Linux, `%APPDATA%\vosulay\` on Windows).
+
+        Remove anything private before posting.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I am using the latest release, or I said above why not.
+          required: true

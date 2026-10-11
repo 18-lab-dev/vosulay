@@ -11,7 +11,7 @@
 
 vosulay renders existing tosu-compatible counters inside osu! and preserves the editor and profile model. Use a separately running vosu or tosu-compatible backend at `http://127.0.0.1:24050/` by default; change it in **Settings → Advanced → vosu URL**. Compatibility is detected from the public counter API, not the server's product name. Vosu remains completely independent from vosulay.
 
-Contributing? Start with [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites and verification on one Linux or Windows machine.
+Need help? See [SUPPORT.md](SUPPORT.md) for where to ask questions and report bugs. Contributing? Start with [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites and verification on one Linux or Windows machine.
 
 ## Features
 

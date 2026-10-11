@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or help with setup
+    url: https://github.com/shiruviaa/vosulay/discussions/categories/q-a
+    about: Ask how to install, configure or use vosulay.
+  - name: Report a security vulnerability
+    url: https://github.com/shiruviaa/vosulay/security/advisories/new
+    about: Please report vulnerabilities privately, not in a public issue.

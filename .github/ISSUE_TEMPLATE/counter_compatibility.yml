@@ -1,0 +1,74 @@
+name: Counter or overlay doesn't work
+description: A counter or custom overlay works on its own (in a browser or OBS) but not inside vosulay.
+labels: ["counter compatibility", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        First open the counter directly from your backend in a normal browser (for example `http://127.0.0.1:24050/<counter folder>/`). If it is broken there too, the problem is in the counter or the backend, not vosulay.
+
+        Note that counters written for vosu-only features (such as `/websocket/v2/subscribe`) cannot work with tosu; see [Backend connections](https://github.com/shiruviaa/vosulay#backend-connections).
+  - type: input
+    id: counter
+    attributes:
+      label: Counter or overlay
+      description: Name, author and version, plus a download link if it is public.
+      placeholder: "OffsetSuggester 1.0 by Pinossaur, https://..."
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: How is it added?
+      options:
+        - Installed counter from the backend
+        - Custom URL
+        - Local HTML file
+    validations:
+      required: true
+  - type: input
+    id: backend
+    attributes:
+      label: Backend
+      description: vosu or tosu, and its version.
+      placeholder: "tosu 4.26.2"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: vosulay version and platform
+      placeholder: "1.2.0 on Windows 11 / 1.2.0 on Arch, Wayland"
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it fail?
+      multiple: true
+      options:
+        - In game
+        - On the remote profile page (/overlay), e.g. in OBS
+        - In the editor's catalog (missing or wrong size)
+    validations:
+      required: true
+  - type: checkboxes
+    id: direct
+    attributes:
+      label: Direct check
+      options:
+        - label: The counter works when opened directly from the backend in a browser.
+          required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happens?
+      description: What you see instead (blank, frozen values, wrong layout, settings not applied, ...). Screenshots help.
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors
+      description: If you can, open the profile page (`http://127.0.0.1:5050/overlay`) in a browser, then copy errors from its developer console.
+      render: text
