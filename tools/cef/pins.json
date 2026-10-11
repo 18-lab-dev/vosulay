@@ -29,20 +29,31 @@
   },
   "asdf_overlay": {
     "version": "2.1.0",
-    "digest_provenance": "GitHub release asset SHA-256, release ID 398736731.",
-    "assets": [
+    "source": {
+      "name": "asdf-overlay-c925244c8d14ca36d82585834cdfebf13d6ce86b.tar.gz",
+      "commit": "c925244c8d14ca36d82585834cdfebf13d6ce86b",
+      "url": "https://codeload.github.com/storycraft/asdf-overlay/tar.gz/c925244c8d14ca36d82585834cdfebf13d6ce86b",
+      "size": 882839,
+      "sha256": "ae413f0ed484f268a9237573a7eb1bafdde4e1d5a6cabd600ebd986818c6573b"
+    },
+    "frida_version": "17.17.0",
+    "frida_devkits": [
       {
-        "name": "asdf_overlay-x64.dll",
-        "url": "https://github.com/storycraft/asdf-overlay/releases/download/v2.1.0/asdf_overlay-x64.dll",
-        "size": 3751744,
-        "sha256": "f65507608cb7a9b5d371c3ce03e9157527eb467e7ea598ac34cd3363249ff118"
+        "name": "frida-gum-devkit-17.17.0-windows-x86_64.tar.xz",
+        "url": "https://github.com/frida/frida/releases/download/17.17.0/frida-gum-devkit-17.17.0-windows-x86_64.tar.xz",
+        "size": 7792236,
+        "sha256": "7c0166afe681395acb523fc3044a8b9434c9166997f6fdba43fd3631abaa6ca0"
       },
       {
-        "name": "asdf_overlay-x86.dll",
-        "url": "https://github.com/storycraft/asdf-overlay/releases/download/v2.1.0/asdf_overlay-x86.dll",
-        "size": 3558720,
-        "sha256": "a846dd6583cf40c93df2c91b683380fe87c3d11f9522d908e62391ef970008d2"
+        "name": "frida-gum-devkit-17.17.0-windows-x86.tar.xz",
+        "url": "https://github.com/frida/frida/releases/download/17.17.0/frida-gum-devkit-17.17.0-windows-x86.tar.xz",
+        "size": 7509432,
+        "sha256": "ee208077ac38d28cd8f262374fc4ff11ebfce138c4b0d782d9f767b9ff49711e"
       }
+    ],
+    "dlls": [
+      { "name": "asdf_overlay-x64.dll", "target": "x86_64-pc-windows-msvc" },
+      { "name": "asdf_overlay-x86.dll", "target": "i686-pc-windows-msvc" }
     ]
   }
 }

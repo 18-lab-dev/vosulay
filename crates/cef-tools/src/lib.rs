@@ -12,7 +12,10 @@ use std::{
     time::Duration,
 };
 
+mod asdf;
 pub mod package;
+
+pub use asdf::build_asdf;
 
 pub const PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const PINS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tools/cef/pins.json");
@@ -40,10 +43,23 @@ pub struct PlatformPin {
     pub package_resources: Vec<String>,
 }
 
+/// asdf-overlay is built from source; see [`build_asdf`].
 #[derive(Deserialize)]
 pub struct AsdfPin {
     pub version: String,
-    pub assets: Vec<AssetPin>,
+    pub source: SourcePin,
+    pub frida_version: String,
+    pub frida_devkits: Vec<AssetPin>,
+    pub dlls: Vec<DllPin>,
+}
+
+#[derive(Deserialize)]
+pub struct SourcePin {
+    pub name: String,
+    pub commit: String,
+    pub url: String,
+    pub size: u64,
+    pub sha256: String,
 }
 
 #[derive(Deserialize)]
@@ -52,6 +68,12 @@ pub struct AssetPin {
     pub url: String,
     pub size: u64,
     pub sha256: String,
+}
+
+#[derive(Deserialize)]
+pub struct DllPin {
+    pub name: String,
+    pub target: String,
 }
 
 /// Verification record for an extracted CEF SDK. The tree depends only on the
@@ -445,16 +467,27 @@ fn safe_archive_path(name: &str, root_name: &str) -> Result<PathBuf> {
 }
 
 fn extract_archive(archive: &Path, staging: &Path, pin: &PlatformPin) -> Result<()> {
-    let decoder = BzDecoder::new(regular_file(archive)?);
-    let mut archive = tar::Archive::new(decoder);
+    extract_tar(
+        BzDecoder::new(regular_file(archive)?),
+        staging,
+        &pin.cef_path_subdir,
+    )
+}
+
+fn extract_tar(reader: impl Read, staging: &Path, root_name: &str) -> Result<()> {
+    let mut archive = tar::Archive::new(reader);
     let mut total = 0_u64;
     for (index, entry) in archive.entries()?.enumerate() {
         ensure!(index < MAX_MEMBERS, "archive member limit exceeded");
         let mut entry = entry?;
-        let name = entry.path_bytes();
-        let relative = safe_archive_path(std::str::from_utf8(&name)?, &pin.cef_path_subdir)?;
-        let destination = staging.join(relative);
         let kind = entry.header().entry_type();
+        // GitHub source archives open with a pax global header carrying the commit.
+        if matches!(kind, tar::EntryType::XGlobalHeader) {
+            continue;
+        }
+        let name = entry.path_bytes();
+        let relative = safe_archive_path(std::str::from_utf8(&name)?, root_name)?;
+        let destination = staging.join(relative);
         if kind.is_dir() {
             fs::create_dir_all(destination)?;
         } else if kind.is_file() {
@@ -534,21 +567,6 @@ pub fn acquire_verified(platform: &str, cache: &Path) -> Result<(PathBuf, Receip
         }
         Err(error) => Err(error.into()),
     }
-}
-
-pub fn acquire_asdf(cache: &Path) -> Result<PathBuf> {
-    let pins = pins()?;
-    let _lock = cache_lock(cache)?;
-    let root = cache.join(&pins.asdf_overlay.version);
-    fs::create_dir_all(&root)?;
-    ensure!(
-        fs::symlink_metadata(&root)?.file_type().is_dir(),
-        "unsafe native injection cache directory"
-    );
-    for pin in &pins.asdf_overlay.assets {
-        acquire_file(&root.join(&pin.name), &pin.url, pin.size, None, &pin.sha256)?;
-    }
-    Ok(root.canonicalize()?)
 }
 
 #[cfg(test)]

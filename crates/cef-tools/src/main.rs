@@ -4,7 +4,7 @@ use std::{
     ffi::{OsStr, OsString},
     path::PathBuf,
 };
-use vosulay_cef_tools::{acquire, acquire_asdf, default_cache, verify_runtime};
+use vosulay_cef_tools::{acquire, build_asdf, default_cache, verify_runtime};
 
 #[cfg(target_os = "windows")]
 use std::{path::Path, process::Command};
@@ -66,7 +66,7 @@ fn run() -> Result<()> {
     };
     let allowed: &[&str] = match command {
         "acquire" => &["--platform", "--cache"],
-        "acquire-asdf" => &["--cache"],
+        "build-asdf" => &["--cache"],
         "verify" => &["--platform", "--cef-path"],
         "package" => &[
             "--platform",
@@ -97,13 +97,13 @@ fn run() -> Result<()> {
             let path = acquire(platform, &cache)?;
             println!("{}", path.canonicalize()?.display());
         }
-        "acquire-asdf" => {
+        "build-asdf" => {
             let cache = match option_path(&options, "--cache") {
                 Some(path) => path,
                 None => default_cache("asdf")?,
             };
-            let path = acquire_asdf(&cache)?;
-            println!("{}", path.canonicalize()?.display());
+            let path = build_asdf(&cache)?;
+            println!("{}", path.display());
         }
         "verify" => {
             let platform = one("--platform")?
@@ -158,7 +158,7 @@ fn option_path(options: &[(OsString, OsString)], name: &str) -> Option<PathBuf> 
 fn usage() {
     eprintln!(
         "vosulay-cef acquire --platform PLATFORM [--cache PATH]\n\
-        vosulay-cef acquire-asdf [--cache PATH]\n\
+        vosulay-cef build-asdf [--cache PATH]   (native Windows; MSVC x64 and x86)\n\
         vosulay-cef verify --platform PLATFORM --cef-path PATH\n\
         vosulay-cef package --platform PLATFORM --cef-path PATH --output PATH [--exe PATH]* [--overlay PATH]* [--client PATH]\n\
         vosulay-cef package-windows OUTPUT_DIRECTORY [--client vosulay.dll]"
@@ -192,7 +192,7 @@ fn package_windows(output: PathBuf, client: Option<PathBuf>) -> Result<()> {
     } else {
         acquire(platform, &default_cache("cef")?)?.canonicalize()?
     };
-    let overlay = acquire_asdf(&default_cache("asdf")?)?;
+    let overlay = build_asdf(&default_cache("asdf")?)?;
     if let Some(env_file) = env::var_os("GITHUB_ENV") {
         let mut file = fs::OpenOptions::new()
             .create(true)
@@ -250,9 +250,9 @@ fn package_windows(output: PathBuf, client: Option<PathBuf>) -> Result<()> {
     let pins = vosulay_cef_tools::pins()?;
     let overlays = pins
         .asdf_overlay
-        .assets
+        .dlls
         .iter()
-        .map(|asset| overlay.join(&asset.name))
+        .map(|dll| overlay.join(&dll.name))
         .collect::<Vec<_>>();
     let output = if output.is_absolute() {
         output

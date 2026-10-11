@@ -42,7 +42,7 @@ Upstream binaries may ship unsigned inside a signed installer.
 | `vosulay-<version>-windows-x86_64-setup.exe` | Inno Setup compiling [`packaging/windows/vosulay.iss`](../packaging/windows/vosulay.iss) | yes |
 | `vosulay.exe` | CEF's prebuilt `bootstrap.exe`; only its icon and version resources are changed | no: upstream binary |
 | `libcef.dll` and the other CEF runtime files | CEF's prebuilt distribution | no: upstream |
-| `asdf_overlay-x64.dll`, `asdf_overlay-x86.dll` | asdf-overlay's release prebuilts | no: upstream |
+| `asdf_overlay-x64.dll`, `asdf_overlay-x86.dll` | asdf-overlay 2.1.0's pinned upstream source, built by the Packages workflow (`vosulay-cef build-asdf`) | no: third-party code |
 
 Origins and licences for every shipped file are in [provenance](provenance.md).
 All three vosulay-named files carry product name `Vosulay` and the release
@@ -76,7 +76,8 @@ Unsigned runs use the same steps without submissions and verify without
 Release jobs use fresh GitHub-hosted runners and do not restore Cargo `target`
 or other build-output caches from any ref. This keeps signing inputs built from
 the checked-out source rather than reused build outputs. Dependency downloads
-are checked against Cargo.lock or the pinned CEF/asdf digests before use.
+are checked against Cargo.lock or the pinned CEF, asdf-overlay source and
+Frida devkit digests before use.
 
 ## Enabling signing
 

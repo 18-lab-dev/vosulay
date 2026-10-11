@@ -300,7 +300,9 @@ Rust 1.96.1 and the native MSVC toolchain:
 cargo run --locked -p vosulay-cef-tools -- package-windows dist/package
 ```
 
-The helper acquires and verifies cached pinned CEF/asdf assets **before** building
+The helper acquires and verifies cached pinned CEF assets, builds both
+asdf-overlay DLLs from their pinned source (this needs rustup's
+`i686-pc-windows-msvc` target and the MSVC x86 tools as well as x64), then builds
 the native client DLL and writes `dist/vosulay-<version>-windows-x86_64.zip`.
 Both platform packages use the version in `Cargo.toml`.
 

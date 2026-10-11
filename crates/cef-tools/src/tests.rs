@@ -133,6 +133,39 @@ fn extraction_rejects_links_and_special_nodes() {
 }
 
 #[test]
+fn extraction_skips_github_pax_global_header() {
+    // codeload.github.com source archives (the pinned asdf-overlay source) start
+    // with a global header named outside the root that carries the commit.
+    let temp = tempfile::tempdir().unwrap();
+    let input = temp.path().join("archive");
+    archive(
+        &input,
+        &[
+            (
+                "pax_global_header",
+                tar::EntryType::XGlobalHeader,
+                b"52 comment=c925244c8d14ca36d82585834cdfebf13d6ce86b\n",
+                0o666,
+            ),
+            (
+                "sdk/Cargo.toml",
+                tar::EntryType::Regular,
+                b"[workspace]",
+                0o644,
+            ),
+        ],
+    );
+    let output = temp.path().join("output");
+    fs::create_dir(&output).unwrap();
+    extract_archive(&input, &output, &fixture_pin()).unwrap();
+    assert_eq!(
+        fs::read(output.join("sdk/Cargo.toml")).unwrap(),
+        b"[workspace]"
+    );
+    assert!(!output.join("pax_global_header").exists());
+}
+
+#[test]
 fn extraction_does_not_overwrite_duplicate_files() {
     let temp = tempfile::tempdir().unwrap();
     let input = temp.path().join("archive");

@@ -12,7 +12,7 @@ Pinned CEF: `152.0.8+g1ce985c+chromium-152.0.7977.134`. The accompanying `LICENS
 
 Source: https://github.com/storycraft/asdf-overlay/tree/c925244c8d14ca36d82585834cdfebf13d6ce86b
 
-Upstream offers MIT OR Apache-2.0; the MIT option is reproduced below. DLL dependency licenses below are enumerated from the pinned upstream lockfile; this is not proof of source-to-prebuilt equivalence. Native Frida devkit obligations are recorded separately in docs/provenance.md.
+Upstream offers MIT OR Apache-2.0; the MIT option is reproduced below. vosulay builds the shipped DLLs from this source; DLL dependency licenses below are enumerated from its lockfile. Native Frida devkit obligations are recorded separately in docs/provenance.md.
 
 ```text
 MIT License
@@ -5286,7 +5286,7 @@ License/notice texts: [Text 43](#license-text-43)
 
 ## asdf-overlay DLL dependencies
 
-Release construction: deploy.yml runs npm ci:deploy / pnpm recursive build; packages/core/package.json invokes cargo xtask build-dll -- --release. xtask builds asdf-overlay-dll with default features, no extra feature flags, for x86_64/i686/aarch64 MSVC. Only x64/x86 DLLs are shipped by vosulay. The pinned .gitmodules is empty: no compiled submodules.
+Release construction: vosulay's Packages workflow runs `cargo build --release --locked -p asdf-overlay-dll` on the pinned source for x86_64 and i686 MSVC with default features and no extra feature flags, linking hash-pinned stock Frida Gum devkits (see tools/cef/pins.json). The pinned .gitmodules is empty: no compiled submodules.
 
 Graph counts (including upstream workspace crates, build dependencies and proc macros; excluding dev-only edges):
 
@@ -5505,7 +5505,7 @@ crates/hook/build.rs statically links gum devkit 17.17.0. Component revisions be
 
 Pinned dependency manifest: https://raw.githubusercontent.com/frida/releng/c9cc18138b364f691573c695e1fe47ddc4c56f26/deps.toml
 
-Corresponding source for the LGPL components and the application's rebuild/relink route: [vosulay-1.1.1-third-party-sources.tar](https://github.com/shiruviaa/vosulay/releases/download/v1.1.1/vosulay-1.1.1-third-party-sources.tar), published alongside every GitHub release. Extract the plain tar and read its README.md and SHA256SUMS before rebuilding. It preserves original pinned source archives for asdf-overlay, Gum, releng, native components and non-system build tooling. Rust crates resolve via the bundled Cargo.lock checksums. Source-to-upstream-prebuilt correspondence and the native-source devkit rebuild remain unverified; the source bundle is not a compliance attestation.
+Corresponding source for the LGPL components and the application's rebuild/relink route: [vosulay-1.1.1-third-party-sources.tar](https://github.com/shiruviaa/vosulay/releases/download/v1.1.1/vosulay-1.1.1-third-party-sources.tar), published alongside every GitHub release. Extract the plain tar and read its README.md and SHA256SUMS before rebuilding. It preserves original pinned source archives for asdf-overlay, Gum, releng, native components and non-system build tooling. Rust crates resolve via the bundled Cargo.lock checksums. vosulay builds the shipped asdf-overlay DLLs from the bundled asdf-overlay archive with Frida's stock Gum devkits; rebuilding those devkits from the bundled native sources remains unverified, and the source bundle is not a compliance attestation.
 
 - **glib** revision `790ffa82e80d99fba8a3db494e46f907d560893c` — LGPL-2.1-or-later (plus per-file permissive terms); [source](https://github.com/frida/glib/tree/790ffa82e80d99fba8a3db494e46f907d560893c); [Text 10](#license-text-10), [Text 180](#license-text-180), [Text 208](#license-text-208), [Text 213](#license-text-213), [Text 249](#license-text-249), [Text 261](#license-text-261), [Text 274](#license-text-274), [Text 276](#license-text-276)
 - **capstone** revision `d536b1577fd033a31d75f48fd183aa425256cc18` — BSD-3-Clause and LLVM legacy license; [source](https://github.com/frida/capstone/tree/d536b1577fd033a31d75f48fd183aa425256cc18); [Text 56](#license-text-56), [Text 115](#license-text-115), [Text 245](#license-text-245)

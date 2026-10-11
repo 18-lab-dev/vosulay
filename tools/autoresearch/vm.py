@@ -7,6 +7,7 @@ import fcntl
 import gzip
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -15,9 +16,10 @@ from offline import locked_registry
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / "target/autoresearch-vm"
-WINDOWS_VM = Path("/home/user/.local/bin/windows-vm")
-CUA_WINDOWS = Path("/home/user/workspaces/manager/cua-integration/windows.py")
-WINDOWS_ROOT = r"V:\agent-workspaces\vosulay-autoresearch-20261007"
+# Maintainer-environment locations come from the environment, not this checkout.
+WINDOWS_VM = os.environ.get("VOSULAY_WINDOWS_VM", "windows-vm")
+CUA_WINDOWS = os.environ.get("VOSULAY_CUA_WINDOWS", "")
+WINDOWS_ROOT = os.environ.get("VOSULAY_WINDOWS_ROOT", "")
 EXCLUDED = {".git", ".claude", ".agents", ".omp", ".herdr", "target", "node_modules", ".venv", "__pycache__"}
 
 
@@ -85,6 +87,9 @@ def launched_pid(result):
 def run_windows(args, status, state, archive):
     if select_guest(status) != "windows":
         raise RuntimeError("Windows guest is not selected")
+    if not CUA_WINDOWS or not WINDOWS_ROOT:
+        raise RuntimeError("set VOSULAY_CUA_WINDOWS (guest Cua adapter script) and "
+                           "VOSULAY_WINDOWS_ROOT (task-owned guest directory)")
     run([WINDOWS_VM, "doctor"])
     digest = sha256(archive)
     task = WINDOWS_ROOT

@@ -16,7 +16,7 @@ The exact CEF file lists, versions, sizes and digests are in [tools/cef/pins.jso
 | Linux CEF `chrome-sandbox`, `libcef.so`, `libEGL.so`, `libGLESv2.so`, `libvk_swiftshader.so`, `libvulkan.so.1` | Official minimal CEF archive; Linux packager strips ELF debug/unneeded symbols | CEF `LICENSE.txt` and Chromium component `CREDITS.html` | Third-party prebuilt; not an own-binary signing target |
 | Windows CEF `libcef.dll`, `chrome_elf.dll`, `d3dcompiler_47.dll`, `dxcompiler.dll`, `dxil.dll`, `libEGL.dll`, `libGLESv2.dll`, `vk_swiftshader.dll`, `vulkan-1.dll` | Official minimal CEF archive | `LICENSE.txt` and `CREDITS.html` (not all component code is CEF's BSD license) | Upstream DLLs ship unsigned by vosulay; preserve upstream signatures if any |
 | CEF `v8_context_snapshot.bin`, `vk_swiftshader_icd.json`, `chrome_100_percent.pak`, `chrome_200_percent.pak`, `icudtl.dat`, `resources.pak`, entire `locales/` tree | Copied from pinned archive | `LICENSE.txt` and `CREDITS.html` | Third-party runtime data |
-| Windows `asdf_overlay-x64.dll`, `asdf_overlay-x86.dll` | GitHub release v2.1.0 prebuilts; pinned source `c925244c8d14ca36d82585834cdfebf13d6ce86b`, not built by vosulay CI | Upstream `MIT OR Apache-2.0`; dependency notices enumerated from pinned lockfile (205 crates per x64/x86 graph) plus pinned native Frida Gum 17.17.0 SDK component sources; GLib LGPL static-link compliance requires maintainer action below | Third-party prebuilt DLLs ship unsigned by vosulay; source-to-binary equivalence unproven |
+| Windows `asdf_overlay-x64.dll`, `asdf_overlay-x86.dll` | Built by vosulay's Packages workflow (`vosulay-cef build-asdf`) from asdf-overlay source `c925244c8d14ca36d82585834cdfebf13d6ce86b`, linking Frida's stock Gum 17.17.0 devkits; source archive and devkits pinned by SHA-256 | Upstream `MIT OR Apache-2.0`; dependency notices enumerated from the pinned lockfile (205 crates per x64/x86 graph) plus pinned native Frida Gum 17.17.0 SDK component sources; GLib LGPL static-link route described below | Third-party code ships unsigned by vosulay |
 | Embedded `assets/manager.html`, `.css`, `.js`, `assets/backend.js` | Repository frontend/broker source compiled into host | Repository MIT, retaining original copyright (see history below) | Part of source-built host |
 | `assets/branding/*` (SVG/PNG/ICO), inline UI SVG/glyphs | Repository branding; first-party UI commit `0164a66`, Windows ICO commit `53d83db`; icon embedded in Windows bootstrap and Linux desktop integration | Repository MIT; no separately declared asset license | Artwork, not independently signed code |
 | Fonts | **No font files bundled**. CSS names Inter/system fonts; uses fonts installed on the user's system | No redistributed font license needed | Not shipped |
@@ -35,10 +35,13 @@ CEF is pinned to `152.0.8+g1ce985c+chromium-152.0.7977.134`. Official [Spotify-h
 | --- | --- |
 | Linux minimal CEF archive | `7f47eeb1c297099ffb9e12d0dea6a0d4eabd255135d114ff0ace8780bdb3feeb` |
 | Windows minimal CEF archive | `c78fd85d4c604007e199d1abf749bf2ca6d10c1e81d32d22ea0c8f9dfcf7ea92` |
-| asdf-overlay 2.1.0 x64 DLL | `f65507608cb7a9b5d371c3ce03e9157527eb467e7ea598ac34cd3363249ff118` |
-| asdf-overlay 2.1.0 x86 DLL | `a846dd6583cf40c93df2c91b683380fe87c3d11f9522d908e62391ef970008d2` |
+| asdf-overlay `c925244` source archive (codeload) | `ae413f0ed484f268a9237573a7eb1bafdde4e1d5a6cabd600ebd986818c6573b` |
+| Frida Gum devkit 17.17.0 windows-x86_64 | `7c0166afe681395acb523fc3044a8b9434c9166997f6fdba43fd3631abaa6ca0` |
+| Frida Gum devkit 17.17.0 windows-x86 | `ee208077ac38d28cd8f262374fc4ff11ebfce138c4b0d782d9f767b9ff49711e` |
 
-The asdf digests originate from GitHub release asset metadata, release ID `398736731`. Acquisition validates expected sizes and SHA-256 before use. CEF cache receipts bind the platform/version/archive digest and retained file digests; `package_runtime` verifies the runtime before copying. The package manifest hashes the resulting files after branding/stripping, so transformed binaries need not equal archive members. Hashes detect different bytes; they do **not** establish which source/dependencies produced a prebuilt. Cargo uses `Cargo.lock` registry checksums for source archives.
+The Frida devkit digests match GitHub's release asset metadata for `frida/frida` 17.17.0 (release ID `365221638`) and were recomputed from downloads. Acquisition validates expected sizes and SHA-256 before use. CEF cache receipts bind the platform/version/archive digest and retained file digests; `package_runtime` verifies the runtime before copying. The package manifest hashes the resulting files after branding/stripping, so transformed binaries need not equal archive members. Hashes detect different bytes; they do **not** establish which source/dependencies produced a prebuilt. Cargo uses `Cargo.lock` registry checksums for source archives.
+
+The asdf-overlay DLLs have no fixed digest: they are compiled per release. `build-asdf` extracts the pinned source archive, serves only the two pinned devkits to upstream's unmodified `frida-build` script over loopback (`FRIDA_DOWNLOAD_CDN`), runs `cargo build --release --locked -p asdf-overlay-dll` for `x86_64-pc-windows-msvc` and `i686-pc-windows-msvc` with the repository's Rust toolchain, and logs each served devkit request and each output DLL's SHA-256 in the Packages run. Upstream's own v2.1.0 release DLLs are no longer shipped.
 
 ## Reproducing notices
 
@@ -86,21 +89,23 @@ The initial `src/api.rs`, `src/config.rs`, `src/ui.rs`, `assets/manager.*` belon
 
 ## Signing boundary and open maintainer items
 
-[SignPath's terms, “Sign your own binaries only”](https://signpath.org/terms.html), distinguish own builds from upstream binaries. The signing policy is **`vosulay.dll` and the Inno Setup installer only** on Windows. `vosulay.exe` is CEF's prebuilt bootstrap with resource-only edits and ships unsigned; renaming/rebranding does not make it an own-source binary. CEF/asdf upstream DLLs ship unsigned by vosulay inside the signed installer, as permitted for embedded third-party binaries. This policy does not claim that an upstream file never carried its upstream publisher's signature. The full policy is in [code signing](code-signing.md).
+[SignPath's terms, “Sign your own binaries only”](https://signpath.org/terms.html), distinguish own builds from upstream binaries. The signing policy is **`vosulay.dll` and the Inno Setup installer only** on Windows. `vosulay.exe` is CEF's prebuilt bootstrap with resource-only edits and ships unsigned; renaming/rebranding does not make it an own-source binary. CEF's upstream DLLs and the asdf-overlay DLLs (built by vosulay from third-party source) ship unsigned inside the signed installer, as permitted for embedded third-party code. This policy does not claim that an upstream file never carried its upstream publisher's signature. The full policy is in [code signing](code-signing.md).
 
 Before applying with a claim that *all* distributed provenance/licensing is resolved, maintainers must:
 
-1. **asdf-overlay prebuilt correspondence and static-linked GLib compliance remain open.**
+1. **asdf-overlay DLLs: correspondence resolved by building from source; native devkit rebuild unverified.**
 
-   DLL dependency licenses are enumerated from `Cargo.lock` at source commit
-   `c925244c8d14ca36d82585834cdfebf13d6ce86b`: upstream `deploy.yml` → recursive
-   package build → `cargo xtask build-dll -- --release` → `asdf-overlay-dll`,
-   default features, targets `x86_64-pc-windows-msvc` and `i686-pc-windows-msvc`.
-   Each graph contains 205 crates (8 upstream workspace and 197 external);
-   `.gitmodules` is empty. The notices generator verifies the source archive's
-   pinned SHA-256, walks both non-dev graphs and deduplicates their license texts
-   with vosulay's notices. Source-to-binary equivalence of the GitHub prebuilts
-   remains unproven; rebuilding both DLLs from the audited source is an alternative.
+   vosulay no longer ships upstream's v2.1.0 release DLLs. The Packages workflow
+   builds both from the asdf-overlay archive at commit
+   `c925244c8d14ca36d82585834cdfebf13d6ce86b` (the same archive, by SHA-256, that
+   the third-party source bundle contains) with
+   `cargo build --release --locked -p asdf-overlay-dll`, default features,
+   targets `x86_64-pc-windows-msvc` and `i686-pc-windows-msvc`
+   ([pins and integrity](#pins-and-integrity)). Each graph contains 205 crates
+   (8 upstream workspace and 197 external); `.gitmodules` is empty. The notices
+   generator verifies the source archive's pinned SHA-256, checks that the build
+   pin and notices pin agree, walks both non-dev graphs and deduplicates their
+   license texts with vosulay's notices.
 
    `crates/hook/build.rs` statically links Frida Gum devkit 17.17.0 outside Cargo.
    Gum source is `ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c`; the pinned
@@ -118,7 +123,7 @@ Before applying with a claim that *all* distributed provenance/licensing is reso
    Generate the corresponding-source release asset with:
 
    ```sh
-   python3 tools/notices/source_bundle.py dist/vosulay-1.1.0-third-party-sources.tar
+   python3 tools/notices/source_bundle.py dist/vosulay-<version>-third-party-sources.tar
    ```
 
    The versioned asset is linked in shipped notices and published alongside
@@ -128,31 +133,16 @@ Before applying with a claim that *all* distributed provenance/licensing is reso
    and Rust dependencies are not embedded; Cargo uses the bundled upstream
    lockfile's registry checksums. Repeating bundle generation produced identical
    bytes. The documented source-tree preparation was exercised successfully on
-   Linux, including preservation of GLib's symbolic license aliases.
+   Linux, including preservation of GLib's symbolic license aliases. Its relink
+   route (b) is the route the release build itself runs for both architectures.
+   A Linux cargo-xwin build is not a substitute: upstream winres selects the
+   nonexistent `/bin\x64\rc.exe` resource compiler.
 
-   **Verified x64 replacement-devkit route:** unmodified bundled asdf source
-   built natively on Windows with Rust/Cargo 1.96.1 and MSVC BuildTools using
-   `cargo build --release --locked -p asdf-overlay-dll --target x86_64-pc-windows-msvc`.
-   A fresh target directory and `FRIDA_DOWNLOAD_CDN=http://127.0.0.1:18765`
-   forced a stock Frida 17.17.0 devkit download through a PowerShell HttpListener,
-   which recorded `/17.17.0/frida-gum-devkit-17.17.0-windows-x86_64.tar.xz`.
-   Cargo exited 0 and produced a 3,734,528-byte DLL (SHA-256
-   `a49a3b06e9c1b918bcdc5ea54593e78a6a1d3ea6e809fb32b6244bd24d081706`).
-   Its exported names matched the pinned x64 DLL exactly: `DllMain` and
-   `vkNegotiateLoaderLayerInterfaceVersion` (dumpbin 14.44.35228.0).
-   The task-owned VM workspace was removed. An earlier Linux cargo-xwin attempt
-   failed before downloading a devkit because upstream winres selected the
-   nonexistent `/bin\x64\rc.exe` resource compiler; no upstream patch or bypass
-   was used.
-
-   **Unverified:** building the native Frida devkit from the bundled sources,
-   the x86 relink route, behavior with a modified library, and correspondence
-   between supplied source inputs and upstream's actual prebuilt release inputs.
-   The successful stock-devkit build proves the x64 download/relink mechanism,
-   not full LGPL compliance or byte equivalence. Maintainers must ensure the
-   source/relink materials correspond to the actual distributed DLLs or obtain
-   verified upstream compliance materials. **Notices and source links alone
-   do not establish compliance.**
+   **Unverified:** building the native Frida devkit from the bundled sources
+   (route (a)) and behavior with a modified library. The GLib object code in the
+   shipped DLLs comes from Frida's stock devkits, whose component revisions are
+   the bundled sources. **Notices and source links alone do not establish
+   compliance.**
 
    The Cargo graph has no GPL/LGPL/MPL declarations; `frida-build` carries
    wxWindows terms. Native GLib is LGPL. XZ GPL scripts/build-system files and

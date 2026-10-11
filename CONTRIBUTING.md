@@ -43,7 +43,7 @@ Resolve any `not found` dependencies first. Expose only `libcef.so`, not the ent
 
 ### Native Windows
 
-Install rustup's `x86_64-pc-windows-msvc` toolchain and Visual Studio Build Tools with **Desktop development with C++**, the MSVC x64 compiler/linker, and Windows SDK. Use a developer PowerShell/command prompt with those tools available. Native packaging acquires verified CEF and asdf-overlay assets, builds the client DLL, and assembles a complete portable ZIP:
+Install rustup's `x86_64-pc-windows-msvc` toolchain plus the `i686-pc-windows-msvc` target (`rustup target add i686-pc-windows-msvc`), and Visual Studio Build Tools with **Desktop development with C++**, the MSVC x64 and x86 compilers/linkers, and Windows SDK. Use a developer PowerShell/command prompt with those tools available. Native packaging acquires verified CEF assets, builds both asdf-overlay DLLs from pinned source, builds the client DLL, and assembles a complete portable ZIP:
 
 ```powershell
 cargo run --locked -p vosulay-cef-tools -- package-windows dist/package

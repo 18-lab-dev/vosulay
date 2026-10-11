@@ -23,7 +23,7 @@ together.
 | CEF wrapper | [`crates/browser-cef`](../crates/browser-cef) (`src/lib.rs`, `bridge.rs`, `scheme.rs`, `glib.rs`) | OSR browser, native manager bridge, `vosulay://` scheme, permission policy, Linux GLib dispatch beside the external pump; build script links the pinned CEF. |
 | CEF smoke | [`crates/cef-smoke`](../crates/cef-smoke), [`tools/cef/private-smoke.py`](../tools/cef/private-smoke.py) | Standalone OSR/WebGL/bridge smoke binary and its private-Xvfb runner. |
 | Editor preview | [`tools/manager-preview.py`](../tools/manager-preview.py) | Builds the editor page with a stub host for any Chromium; no CEF or game needed. |
-| CEF acquisition and packaging | [`crates/cef-tools`](../crates/cef-tools), [`tools/cef/pins.json`](../tools/cef/pins.json) | Pinned download/verification, runtime retention, Linux/Windows packaging. |
+| CEF acquisition and packaging | [`crates/cef-tools`](../crates/cef-tools) (`asdf.rs` builds asdf-overlay), [`tools/cef/pins.json`](../tools/cef/pins.json) | Pinned download/verification, runtime retention, asdf-overlay DLL source builds, Linux/Windows packaging. |
 | Frame model | [`crates/frame`](../crates/frame) | Browser-independent frame, damage, and editor input types. |
 | Linux frame transport | [`crates/frame-transport`](../crates/frame-transport) (`ring.rs`, `ipc.rs`, `protocol.rs`) | Sealed three-slot memfd ring and authenticated `SOCK_SEQPACKET` control. |
 | Linux host platform | [`crates/platform-linux`](../crates/platform-linux) | Focus-driven game selection, discovery, explicit live attachment. |

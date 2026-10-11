@@ -67,7 +67,8 @@ jobs:
 
   windows:
     runs-on: windows-latest
-    timeout-minutes: 60
+    # Includes building both asdf-overlay DLLs from source (vosulay-cef build-asdf).
+    timeout-minutes: 90
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,6 +76,7 @@ jobs:
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install 1.96.1 --profile minimal --target x86_64-pc-windows-msvc
+          rustup target add i686-pc-windows-msvc --toolchain 1.96.1
           rustup default 1.96.1
 
       # Signing stays off until SignPath approves the project and the

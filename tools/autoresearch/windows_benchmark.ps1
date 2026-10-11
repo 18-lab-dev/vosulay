@@ -63,7 +63,8 @@ if ($Mode -in @('All','Build')) {
    foreach($f in @('LICENSE.txt','CREDITS.html')){Copy-Item -LiteralPath (Join-Path $cef $f) -Destination $directory -Force}
   }
   $injectionDir=Join-Path (Split-Path $base -Parent) 'runtime-acceptance-final-20261005'
-  foreach($asset in $pinDoc.asdf_overlay.assets){$source=Join-Path $injectionDir $asset.name;if((Get-Item -LiteralPath $source).Length -ne [long]$asset.size -or (Get-FileHash -Algorithm SHA256 -LiteralPath $source).Hash.ToLowerInvariant() -ne $asset.sha256){throw "Pinned injection asset digest mismatch: $($asset.name)"};Copy-Item -LiteralPath $source (Join-Path $runtime $asset.name) -Force}
+  # DLLs are built from source (vosulay-cef build-asdf), so no fixed digest exists; the directory supplies a prior package's pair.
+  foreach($dll in $pinDoc.asdf_overlay.dlls){$source=Join-Path $injectionDir $dll.name;if(-not (Test-Path -LiteralPath $source -PathType Leaf)){throw "Injection DLL missing: $source"};Copy-Item -LiteralPath $source (Join-Path $runtime $dll.name) -Force}
   $objDir=Join-Path $state 'obj';New-Item -ItemType Directory -Force -Path $objDir|Out-Null
   $game=Join-Path $Root 'tools\autoresearch\windows_game.cpp';$gameExe=Join-Path $runtime 'windows_game.exe'
   & cl.exe /nologo /O2 /W4 /WX /EHsc /std:c++20 "/Fo$objDir\\" "/Fd$(Join-Path $state 'windows_game.pdb')" $game "/Fe:$gameExe" /link /SUBSYSTEM:WINDOWS /PDB:"$(Join-Path $state 'windows_game-link.pdb')" d3d11.lib dxgi.lib user32.lib;if($LASTEXITCODE){throw "DX11 game build failed: $LASTEXITCODE"}

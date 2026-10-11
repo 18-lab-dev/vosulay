@@ -96,7 +96,11 @@ ISCC /DAppVersion=<v> /DSourceDir=<dist/package> /DOutputDir=<dist> packaging/wi
 ```
 
 `package-windows` builds `vosulay.dll` itself; pass `--client <path>` to package
-an already built (for example, signed) DLL instead. See the
+an already built (for example, signed) DLL instead. It also builds both
+asdf-overlay DLLs from the source pinned in `tools/cef/pins.json`
+(`vosulay-cef build-asdf`), serving the hash-pinned Frida Gum devkits to the
+unmodified upstream build over loopback; this needs the `i686-pc-windows-msvc`
+Rust target and MSVC x86 tools. See the
 [code signing policy](code-signing.md) for the release signing flow.
 
 Outputs are `vosulay-<v>-windows-x86_64.zip` and

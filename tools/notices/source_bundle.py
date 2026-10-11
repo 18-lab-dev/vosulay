@@ -20,12 +20,12 @@ def readme(pins):
 
 This bundle supplies the source inputs and a rebuild/relink route for the
 LGPL-covered GLib component statically linked through Frida Gum into the
-upstream asdf-overlay 2.1.0 DLLs. It is not a claim that legal compliance is
-fully established: the native devkit rebuild below is NOT verified by vosulay,
-and correspondence between these sources and the upstream prebuilt DLLs
-vosulay ships remains UNVERIFIED. The local-HTTP replacement-devkit route was
-verified natively on Windows for x64 with a stock devkit (section (c)); this
-does not verify rebuilding the native devkit from source.
+asdf-overlay 2.1.0 DLLs shipped with vosulay. vosulay's release workflow builds
+both shipped DLLs from the asdf-overlay archive in this bundle using route (b)
+below with Frida's stock 17.17.0 Gum devkits, pinned by SHA-256 in vosulay's
+tools/cef/pins.json; it does not ship upstream's prebuilt DLLs. Rebuilding the
+native Gum devkits themselves from the bundled sources (route (a)) is NOT
+verified by vosulay. This is not a claim that legal compliance is established.
 
 Verify the original compressed archives and this README using SHA256SUMS.
 The outer tar is plain/uncompressed; its members retain downloaded archive
@@ -167,21 +167,21 @@ try {{
 ```
 
 In a Windows Rust 1.96.1/MSVC developer terminal in `work/asdf-overlay`
-(ensure the compiler, SDK `rc.exe` and standalone Rust installation are on
-PATH; standalone Cargo ignores upstream's `rust-toolchain.toml`):
+(ensure the compiler and SDK `rc.exe` are on PATH). Upstream's
+`rust-toolchain.toml` names targets but no channel; with rustup, select the
+toolchain explicitly:
 
 ```powershell
+$env:RUSTUP_TOOLCHAIN = '1.96.1'
 $env:FRIDA_DOWNLOAD_CDN = 'http://127.0.0.1:18765'
 $env:CARGO_TARGET_DIR = Join-Path $PWD 'target-relinked'
 cargo build --release --locked -p asdf-overlay-dll --target x86_64-pc-windows-msvc
-```
-
-The x64 command above was verified. For the separately unverified x86 route,
-provide an x86 devkit and the i686 compiler/target, then run:
-
-```powershell
 cargo build --release --locked -p asdf-overlay-dll --target i686-pc-windows-msvc
 ```
+
+These are the commands vosulay's release build runs (through
+`vosulay-cef build-asdf`, which serves the pinned stock devkits the same way).
+The i686 build needs the `i686-pc-windows-msvc` Rust target and MSVC x86 tools.
 
 When redirecting native-command output in Windows PowerShell 5.1, temporarily
 set `$ErrorActionPreference = 'Continue'` and explicitly check `$LASTEXITCODE`.
@@ -202,34 +202,19 @@ Modified DLLs are not signed by vosulay and will not match original package
 receipt hashes. You are permitted to modify/rebuild the library and relink;
 no assertion of compatible runtime behavior follows from compilation alone.
 
-## (c) Verification and remaining correspondence gap
+## (c) Verification and remaining gap
 
-The stock-devkit local HTTP override plus Linux cargo-xwin x64 DLL build was
-attempted with cargo-xwin 0.23.0 and Rust 1.96.1. It failed (exit 101) before
-any HTTP request or DLL output: upstream crates/dll/build.rs invokes winres
-0.1.12, which on Linux selects the literal path /bin\\\\x64\\\\rc.exe and returns
-ENOENT. winres has no environment override for that compiler path, and the
-unmodified upstream build script does not configure one. No resource-build
-bypass, upstream patch, or system-path changes were used.
+A Linux cargo-xwin build is not a substitute: upstream crates/dll/build.rs
+invokes winres 0.1.12, which on Linux selects the literal path
+/bin\\\\x64\\\\rc.exe and fails before any devkit download. Use native Windows.
 
-The same route then succeeded natively on Windows using Rust/Cargo 1.96.1
-and MSVC BuildTools (COFF/PE Dumper 14.44.35228.0), building unmodified bundled
-asdf source with `cargo build --release --locked -p asdf-overlay-dll --target
-x86_64-pc-windows-msvc`, a fresh target directory, and a loopback HttpListener
-serving the stock 17.17.0 x64 devkit. Cargo exited 0; the listener recorded
-`/17.17.0/frida-gum-devkit-17.17.0-windows-x86_64.tar.xz`.
-The resulting DLL was 3,734,528 bytes with SHA-256
-`a49a3b06e9c1b918bcdc5ea54593e78a6a1d3ea6e809fb32b6244bd24d081706`.
-Both it and pinned asdf_overlay-x64.dll exported exactly `DllMain` and
-`vkNegotiateLoaderLayerInterfaceVersion`; exported names matched, not bytes.
-This verifies replacement-devkit downloading, static relinking and x64 DLL
-generation with a stock devkit, not native-source devkit generation or behavior
-after modifying GLib. The task-owned VM build directory was removed afterward.
-
-Step (a), the x86 relink route, modified-library behavior and a complete native
-source-to-upstream-prebuilt equivalence check remain unverified. This bundle
-contains source and rebuild instructions, not precompiled application object
-files or an attestation that upstream's release inputs were identical.
+The shipped DLLs are built from the bundled asdf-overlay archive by vosulay's
+release workflow on a GitHub-hosted Windows runner; the run log records each
+devkit request served to the build and each produced DLL's SHA-256. GLib and
+the other Gum components inside those DLLs come from Frida's stock devkits,
+whose sources at the pinned revisions are in this bundle. Route (a), and
+behavior after modifying GLib, remain unverified by vosulay. This bundle
+contains source and rebuild instructions, not precompiled object files.
 '''.encode('utf-8')
 
 
