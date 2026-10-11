@@ -199,10 +199,11 @@ fn read_json(request: &Request) -> std::result::Result<Value, HttpError> {
 mod tests {
     use super::super::RemoteServer;
     use super::*;
+    use parking_lot::Mutex;
     use std::io::{Read, Write};
     use std::net::{Shutdown, TcpListener, TcpStream};
+    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Arc, Mutex};
 
     #[derive(Default)]
     struct FakeEditor {
@@ -216,10 +217,7 @@ mod tests {
             )
         }
         fn save(&self, profile_id: &str, request: Value) -> Result<Value> {
-            self.saves
-                .lock()
-                .unwrap()
-                .push((profile_id.to_owned(), request));
+            self.saves.lock().push((profile_id.to_owned(), request));
             Ok(json!({"type": "saved", "revision": 8}))
         }
         fn open_settings(&self, _: &str) -> Result<()> {
@@ -297,10 +295,10 @@ mod tests {
             ))
             .starts_with("HTTP/1.1 415 ")
         );
-        assert!(editor.saves.lock().unwrap().is_empty());
+        assert!(editor.saves.lock().is_empty());
 
         assert!(save(&json_post).starts_with("HTTP/1.1 200 OK\r\n"));
-        let saves = editor.saves.lock().unwrap();
+        let saves = editor.saves.lock();
         assert_eq!(saves.len(), 1);
         assert_eq!(saves[0].0, "default");
         assert_eq!(saves[0].1["base_revision"], 7);
