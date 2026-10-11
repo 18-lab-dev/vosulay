@@ -51,6 +51,8 @@ pub struct AppSettings {
     pub fps_limit: u32,
     pub allow_unrestricted_shared_array_buffer: bool,
     pub allowed_ips: String,
+    /// Lets remote profile pages opened on this machine edit the profile they show.
+    pub allow_local_profile_editing: bool,
 
     pub remote_listen_host: String,
     pub remote_listen_port: u16,
@@ -131,6 +133,7 @@ impl Default for AppSettings {
             fps_limit: 0,
             allow_unrestricted_shared_array_buffer: false,
             allowed_ips: DEFAULT_ALLOWED_IPS.to_owned(),
+            allow_local_profile_editing: false,
 
             remote_listen_host: DEFAULT_REMOTE_LISTEN_HOST.to_owned(),
             remote_listen_port: DEFAULT_REMOTE_LISTEN_PORT,

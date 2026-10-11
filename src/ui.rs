@@ -11,14 +11,37 @@ const BOOTSTRAP_MARKER: &str = "__VOSULAY_BOOTSTRAP__";
 /// inserted into the document. In particular, `<` is encoded as `\u003c`, so
 /// embedded `</script>` text cannot terminate the bootstrap script early.
 pub fn manager_document() -> String {
+    manager_document_with("")
+}
+
+/// The manager page with trusted `prelude` JavaScript run before the manager
+/// script, as remote profile pages use to install their HTTP host bridge.
+pub(crate) fn manager_document_with(prelude: &str) -> String {
     let css = javascript_string(MANAGER_CSS);
     let javascript = javascript_string(MANAGER_JS);
     let bootstrap = format!(
-        "(()=>{{const style=document.createElement(\"style\");style.textContent={css};document.head.appendChild(style);(0,eval)({javascript});}})();"
+        "(()=>{{{prelude}const style=document.createElement(\"style\");style.textContent={css};document.head.appendChild(style);(0,eval)({javascript});}})();"
     );
 
     debug_assert_eq!(MANAGER_HTML.matches(BOOTSTRAP_MARKER).count(), 1);
     MANAGER_HTML.replacen(BOOTSTRAP_MARKER, &bootstrap, 1)
+}
+
+/// JSON for an inline `<script>`: the same escapes as [`javascript_string`],
+/// so embedded values cannot close the script element.
+pub(crate) fn script_json(value: &serde_json::Value) -> String {
+    let mut encoded = String::new();
+    for character in value.to_string().chars() {
+        match character {
+            '<' => encoded.push_str("\\u003c"),
+            '>' => encoded.push_str("\\u003e"),
+            '&' => encoded.push_str("\\u0026"),
+            '\u{2028}' => encoded.push_str("\\u2028"),
+            '\u{2029}' => encoded.push_str("\\u2029"),
+            other => encoded.push(other),
+        }
+    }
+    encoded
 }
 
 fn javascript_string(source: &str) -> String {

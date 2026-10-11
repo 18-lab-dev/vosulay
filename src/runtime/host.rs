@@ -57,9 +57,18 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         .vosu_url
         .clone()
         .unwrap_or_else(|| config.settings.vosu_url());
-    let remote =
-        crate::remote::RemoteServer::start_from_path(backend.clone(), options.config.clone())
-            .context("could not start overlay backend broker")?;
+    let mut worker = EditorWorker::start(
+        config.clone(),
+        options.config.clone(),
+        backend.clone(),
+        resources.clone(),
+    )?;
+    let remote = crate::remote::RemoteServer::start_from_path(
+        backend.clone(),
+        options.config.clone(),
+        Some(worker.profile_editor()),
+    )
+    .context("could not start overlay backend broker")?;
     #[cfg(windows)]
     let mut platform = PlatformController::start(
         WindowsOptions {
@@ -79,12 +88,6 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         },
         edit_hotkey(&config.settings.hotkeys.toggle_edit),
         NativeHotkey::parse(&config.settings.hotkeys.toggle_visibility),
-    )?;
-    let mut worker = EditorWorker::start(
-        config.clone(),
-        options.config.clone(),
-        backend.clone(),
-        resources.clone(),
     )?;
     let initial_fps = super::frame_rate(options.fps_limit, config.settings.fps_limit, 60.0);
     let mut host = Host {
@@ -552,6 +555,13 @@ impl Host<'_> {
                 }
             }
             while let Some(reply) = self.worker.next_reply() {
+                if reply.broadcast {
+                    // A remote profile page saved; the open editor shows its result.
+                    if self.ready {
+                        self.receive(&reply.envelope)?;
+                    }
+                    continue;
+                }
                 if reply.document != self.document {
                     continue;
                 }

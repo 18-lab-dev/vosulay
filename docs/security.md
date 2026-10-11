@@ -278,6 +278,13 @@ read-only backend security boundary. Restrict the listener and allowlist to
 trusted clients/networks. Sources: [`src/remote.rs`](../src/remote.rs),
 [`src/backend.rs`](../src/backend.rs).
 
+**Settings → Advanced → Allow editing on this computer** (off by default) lets
+loopback clients edit the profile a page shows through same-origin JSON POSTs.
+Other websites cannot drive those routes (Sec-Fetch-Site/Origin checks and
+non-simple requests), but installed counters run on the page's origin and can.
+Remote saves cannot introduce new local-overlay capabilities, so they cannot
+widen local file access. Source: [`src/remote/editing.rs`](../src/remote/editing.rs).
+
 Counters and custom web pages execute JavaScript in CEF's sandboxed renderer
 infrastructure. The sandbox is not an outbound-network allowlist. Only
 `vosulay://manager` receives the explicit Chromium local/loopback-network

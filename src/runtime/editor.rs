@@ -29,17 +29,67 @@ pub(super) struct Reply {
     pub document: String,
     pub envelope: Value,
     pub dialog_closed: bool,
+    /// For whichever manager document is open (a remote profile page saved).
+    pub broadcast: bool,
     task_finished: bool,
 }
 
+enum Task {
+    Manager(Work),
+    Remote(RemoteCall, SyncSender<Result<Value>>),
+}
+
+enum RemoteCall {
+    State(String),
+    Save(String, Value),
+    OpenSettings(String),
+}
+
+/// Shared with remote profile pages, which stop reaching the worker when it stops.
+type TaskSender = Arc<Mutex<Option<SyncSender<Task>>>>;
+
 pub(super) struct EditorWorker {
-    tx: Option<SyncSender<Work>>,
+    tx: TaskSender,
     rx: Receiver<Reply>,
     thread: Option<JoinHandle<()>>,
     counters: Arc<CounterQueue>,
     counter_tx: Option<CounterSender>,
     counter_thread: Option<JoinHandle<()>>,
     pending: Cell<usize>,
+}
+
+// Remote pages wait at most this long for the worker (a save waits behind queued manager tasks).
+const REMOTE_TIMEOUT: Duration = Duration::from_secs(5);
+
+struct RemoteEditor(TaskSender);
+
+impl RemoteEditor {
+    fn call(&self, call: RemoteCall) -> Result<Value> {
+        let (reply, response) = mpsc::sync_channel(1);
+        self.0
+            .lock()
+            .map_err(|_| anyhow::anyhow!("manager worker poisoned"))?
+            .as_ref()
+            .context("vosulay is shutting down")?
+            .try_send(Task::Remote(call, reply))
+            .map_err(|_| anyhow::anyhow!("vosulay is busy; try again"))?;
+        response
+            .recv_timeout(REMOTE_TIMEOUT)
+            .context("vosulay did not answer in time")?
+    }
+}
+
+impl crate::remote::ProfileEditor for RemoteEditor {
+    fn state(&self, profile_id: &str) -> Result<Value> {
+        self.call(RemoteCall::State(profile_id.to_owned()))
+    }
+    fn save(&self, profile_id: &str, request: Value) -> Result<Value> {
+        self.call(RemoteCall::Save(profile_id.to_owned(), request))
+    }
+    fn open_settings(&self, counter_id: &str) -> Result<()> {
+        self.call(RemoteCall::OpenSettings(counter_id.to_owned()))
+            .map(drop)
+    }
 }
 
 // At shutdown there can be one active fetch and one coalesced fetch to drain.
@@ -96,6 +146,7 @@ fn counter_worker(queue: Arc<CounterQueue>, backend: Url) {
                     document,
                     envelope,
                     dialog_closed: false,
+                    broadcast: false,
                     task_finished: false,
                 },
             ));
@@ -111,7 +162,7 @@ impl EditorWorker {
         backend: Url,
         resources: Arc<ProductResources>,
     ) -> Result<Self> {
-        let (tx, requests) = mpsc::sync_channel::<Work>(64);
+        let (tx, requests) = mpsc::sync_channel::<Task>(64);
         let (replies, rx) = mpsc::sync_channel(64);
         let host = thread::current();
         let counters = Arc::new(CounterQueue {
@@ -136,7 +187,20 @@ impl EditorWorker {
                 #[cfg(target_os = "linux")]
                 clipboard: super::clipboard::Clipboard::connect(),
             };
-            while let Ok(work) = requests.recv() {
+            while let Ok(task) = requests.recv() {
+                let work = match task {
+                    Task::Manager(work) => work,
+                    Task::Remote(call, reply) => {
+                        let (result, saved) = state.remote(call);
+                        // The page may have timed out and gone; the open manager still updates.
+                        let _ = reply.send(result);
+                        if let Some(envelope) = saved {
+                            if replies.send(Reply { document: String::new(), envelope, dialog_closed: false, broadcast: true, task_finished: false }).is_err() { return; }
+                            host.unpark();
+                        }
+                        continue;
+                    }
+                };
                 let kind = work.message.get("type").and_then(Value::as_str).unwrap_or("");
                 let dialog_closed = matches!(kind, "choose-overlay-file" | "import-profile" | "export-profile" | "import-tosu-layout");
                 let result = state.dispatch(&work.message);
@@ -150,11 +214,11 @@ impl EditorWorker {
                 };
                 let count = envelopes.len();
                 if count == 0 {
-                    if replies.send(Reply { document: work.document, envelope: Value::Null, dialog_closed, task_finished: true }).is_err() { break; }
+                    if replies.send(Reply { document: work.document, envelope: Value::Null, dialog_closed, broadcast: false, task_finished: true }).is_err() { break; }
                     host.unpark();
                 } else {
                     for (index, envelope) in envelopes.into_iter().enumerate() {
-                        if replies.send(Reply { document: work.document.clone(), envelope, dialog_closed: dialog_closed && index == 0, task_finished: index + 1 == count }).is_err() { return; }
+                        if replies.send(Reply { document: work.document.clone(), envelope, dialog_closed: dialog_closed && index == 0, broadcast: false, task_finished: index + 1 == count }).is_err() { return; }
                         host.unpark();
                     }
                 }
@@ -170,7 +234,7 @@ impl EditorWorker {
             }
         };
         Ok(Self {
-            tx: Some(tx),
+            tx: Arc::new(Mutex::new(Some(tx))),
             rx,
             thread: Some(thread),
             counters,
@@ -181,7 +245,11 @@ impl EditorWorker {
     }
 
     pub fn submit(&self, work: Work) -> Result<()> {
-        let tx = self.tx.as_ref().context("manager worker is stopping")?;
+        let tx = self
+            .tx
+            .lock()
+            .map_err(|_| anyhow::anyhow!("manager worker poisoned"))?;
+        let tx = tx.as_ref().context("manager worker is stopping")?;
         let kind = work
             .message
             .get("type")
@@ -201,7 +269,7 @@ impl EditorWorker {
         }
         let document = (kind == "ready").then(|| work.document.clone());
         self.pending.set(self.pending.get() + 1);
-        if let Err(error) = tx.try_send(work) {
+        if let Err(error) = tx.try_send(Task::Manager(work)) {
             self.pending.set(self.pending.get() - 1);
             bail!("manager task queue unavailable: {error}");
         }
@@ -232,8 +300,15 @@ impl EditorWorker {
             .and_then(|(generation, reply)| (generation == state.generation).then_some(reply))
     }
     pub fn stop(&mut self) {
-        self.tx.take();
+        // Also disconnects remote profile pages, so the task thread can finish.
+        if let Ok(mut tx) = self.tx.lock() {
+            tx.take();
+        }
         self.counter_tx.take();
+    }
+    /// Remote profile pages' route into this worker (see `crate::remote::ProfileEditor`).
+    pub fn profile_editor(&self) -> Arc<dyn crate::remote::ProfileEditor> {
+        Arc::new(RemoteEditor(self.tx.clone()))
     }
     pub fn finished(&self) -> bool {
         self.thread.as_ref().is_none_or(JoinHandle::is_finished)
@@ -273,6 +348,109 @@ impl State {
         return self.clipboard.is_some();
         #[cfg(not(target_os = "linux"))]
         false
+    }
+
+    /// This configuration as a remote profile page sees it: only its profile.
+    fn scoped(&self, profile_id: &str) -> Result<AppConfig> {
+        let profile = self
+            .config
+            .profiles
+            .iter()
+            .find(|profile| profile.id == profile_id)
+            .context("this profile no longer exists; reload the page")?;
+        Ok(AppConfig {
+            active_profile: profile.id.clone(),
+            profiles: vec![profile.clone()],
+            ..self.config.clone()
+        })
+    }
+
+    /// Returns the page's reply and, after a save, the configuration for the open manager.
+    fn remote(&mut self, call: RemoteCall) -> (Result<Value>, Option<Value>) {
+        match call {
+            RemoteCall::State(id) => (
+                self.scoped(&id)
+                    .map(|config| json!({"config": config, "revision": self.revision})),
+                None,
+            ),
+            RemoteCall::OpenSettings(counter) => (
+                self.dispatch(&json!({"type": "open-settings", "counter_id": counter}))
+                    .map(|_| Value::Null),
+                None,
+            ),
+            RemoteCall::Save(id, request) => {
+                let save_id = request.get("save_id").cloned().unwrap_or(Value::Null);
+                let conflict =
+                    request.get("base_revision").and_then(Value::as_u64) != Some(self.revision);
+                let result = if conflict {
+                    Err((
+                        "conflict",
+                        "Configuration changed before this save".to_owned(),
+                    ))
+                } else {
+                    self.save_profile(&id, request.get("profile"))
+                        .map_err(|error| ("save", format!("{error:#}")))
+                };
+                match result {
+                    Ok(()) => (
+                        Ok(json!({"type": "saved", "save_id": save_id, "revision": self.revision})),
+                        Some(
+                            json!({"type": "config", "config": self.config, "revision": self.revision}),
+                        ),
+                    ),
+                    Err((code, message)) => (
+                        self.scoped(&id).map(|config| {
+                            json!({
+                                "type": "save-error", "save_id": save_id, "message": message,
+                                "code": code, "config": config, "revision": self.revision,
+                            })
+                        }),
+                        None,
+                    ),
+                }
+            }
+        }
+    }
+
+    /// Replaces one profile's placements; its name, other profiles and settings are not
+    /// a remote page's to change.
+    fn save_profile(&mut self, id: &str, profile: Option<&Value>) -> Result<()> {
+        let profile: Profile = serde_json::from_value(profile.context("missing profile")?.clone())?;
+        ensure!(profile.id == id, "the page edited a different profile");
+        let index = self
+            .config
+            .profiles
+            .iter()
+            .position(|candidate| candidate.id == id)
+            .context("this profile no longer exists; reload the page")?;
+        // Pages cannot pick files, so any local-overlay capability they send must already
+        // exist; otherwise a page script could grant itself a new filesystem root.
+        let known: std::collections::HashSet<&str> = self
+            .config
+            .profiles
+            .iter()
+            .flat_map(|profile| &profile.overlays)
+            .filter_map(|overlay| overlay.url.as_ref())
+            .filter(|url| url.scheme() == "vosulay-overlay")
+            .map(Url::as_str)
+            .collect();
+        ensure!(
+            profile
+                .overlays
+                .iter()
+                .filter_map(|overlay| overlay.url.as_ref())
+                .filter(|url| url.scheme() == "vosulay-overlay")
+                .all(|url| known.contains(url.as_str())),
+            "local HTML overlays can only be added in game"
+        );
+        let mut config = self.config.clone();
+        config.profiles[index].overlays = profile.overlays;
+        config.normalize();
+        self.resources.authorize_profiles(&config.profiles)?;
+        save_to_path(&config, &self.path)?;
+        self.config = config;
+        self.revision += 1;
+        Ok(())
     }
 
     fn dispatch(&mut self, message: &Value) -> Result<Vec<Value>> {
@@ -573,6 +751,97 @@ mod tests {
         assert_eq!(reply.envelope["type"], "saved");
         assert_eq!(reply.envelope["save_id"], "change");
         assert_eq!(crate::config::load_from_path(&path).unwrap(), config);
+    }
+
+    #[test]
+    fn remote_profile_save_changes_only_that_profiles_placements() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.json");
+        let placement = crate::config::Placement {
+            counter_id: "accuracy".into(),
+            ..crate::config::Placement::default()
+        };
+        let mut config = AppConfig::default();
+        config.profiles[0].overlays.push(placement.clone());
+        config.profiles.push(Profile {
+            id: "other".into(),
+            name: "Other".into(),
+            overlays: vec![placement.clone()],
+        });
+        config.normalize();
+        let resources = Arc::new(ProductResources::new(&config).unwrap());
+        let mut worker = EditorWorker::start(
+            config.clone(),
+            path.clone(),
+            Url::parse("http://127.0.0.1:9/").unwrap(),
+            resources,
+        )
+        .unwrap();
+        let editor = worker.profile_editor();
+
+        let state = editor.state("default").unwrap();
+        assert_eq!(state["revision"], 0);
+        assert_eq!(state["config"]["profiles"].as_array().unwrap().len(), 1);
+
+        let mut moved = placement.clone();
+        moved.left = 321.0;
+        let page_profile = json!({"id": "default", "name": "Renamed by page", "overlays": [moved]});
+        let reply = editor
+            .save(
+                "default",
+                json!({"save_id": "a", "base_revision": 0, "profile": page_profile}),
+            )
+            .unwrap();
+        assert_eq!(reply["type"], "saved");
+        assert_eq!(reply["revision"], 1);
+        let saved = crate::config::load_from_path(&path).unwrap();
+        assert_eq!(saved.profiles[0].overlays[0].left, 321.0);
+        assert_eq!(saved.profiles[0].name, config.profiles[0].name);
+        assert_eq!(saved.profiles[1], config.profiles[1]);
+        assert_eq!(saved.settings, config.settings);
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let broadcast = loop {
+            if let Some(reply) = worker.next_reply() {
+                break reply;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the open manager must hear about remote saves"
+            );
+            thread::sleep(Duration::from_millis(1));
+        };
+        assert!(broadcast.broadcast);
+        assert_eq!(broadcast.envelope["type"], "config");
+        assert_eq!(broadcast.envelope["revision"], 1);
+
+        let stale = editor
+            .save(
+                "default",
+                json!({"save_id": "b", "base_revision": 0, "profile": page_profile}),
+            )
+            .unwrap();
+        assert_eq!(stale["type"], "save-error");
+        assert_eq!(stale["code"], "conflict");
+
+        let mut local = placement;
+        local.url = Some(
+            Url::parse("vosulay-overlay://0123456789abcdef0123456789abcdef/Lw/x.html").unwrap(),
+        );
+        let grant = editor
+            .save(
+                "default",
+                json!({"save_id": "c", "base_revision": 1, "profile": {"id": "default", "name": "", "overlays": [local]}}),
+            )
+            .unwrap();
+        assert_eq!(grant["type"], "save-error");
+        assert_eq!(crate::config::load_from_path(&path).unwrap(), saved);
+
+        worker.stop();
+        while !worker.finished() {
+            while worker.next_reply().is_some() {}
+            thread::sleep(Duration::from_millis(1));
+        }
+        worker.join().unwrap();
     }
 
     #[test]

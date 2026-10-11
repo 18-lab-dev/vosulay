@@ -432,3 +432,7 @@ body.context-inspector .inspector {
   .settings-grid, .hotkey-grid { grid-template-columns: minmax(0, 1fr); }
   .settings-action-field { flex-direction: column; align-items: stretch; }
 }
+/* Remote profile pages edit one profile: hide profile management, app settings and native pickers. */
+html[data-vosulay-scope="profile"] #profile-actions,
+html[data-vosulay-scope="profile"] #open-settings,
+html[data-vosulay-scope="profile"] #add-html-file { display: none; }

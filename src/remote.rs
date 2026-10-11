@@ -16,6 +16,10 @@ use crate::{
     config::{AppConfig, AppSettings, Placement, Profile},
 };
 
+mod editing;
+
+pub use editing::ProfileEditor;
+
 const TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_REQUEST: usize = 16 * 1024;
 const MAX_CONNECTIONS: usize = 32;
@@ -31,14 +35,20 @@ struct Backend {
     upstream: Url,
     broker: Broker,
     http: ureq::Agent,
+    editor: Option<Arc<dyn ProfileEditor>>,
 }
 
 impl RemoteServer {
     pub fn start(base_url: Url) -> Result<Self> {
-        Self::start_from_path(base_url, crate::config::config_path()?)
+        Self::start_from_path(base_url, crate::config::config_path()?, None)
     }
 
-    pub fn start_from_path(base_url: Url, config_path: PathBuf) -> Result<Self> {
+    /// `editor` enables Settings → Advanced → Allow editing on this computer.
+    pub fn start_from_path(
+        base_url: Url,
+        config_path: PathBuf,
+        editor: Option<Arc<dyn ProfileEditor>>,
+    ) -> Result<Self> {
         let config = crate::config::load_from_path(&config_path)
             .context("failed to load configuration for overlay server")?;
         // Browser routing must work even when the optional LAN port is occupied.
@@ -54,6 +64,7 @@ impl RemoteServer {
             listeners,
             base_url,
             Arc::new(move || crate::config::load_from_path(&config_path)),
+            editor,
         )
     }
 
@@ -67,13 +78,14 @@ impl RemoteServer {
         base_url: Url,
         loader: Arc<ConfigLoader>,
     ) -> Result<Self> {
-        Self::start_with_listeners(vec![listener], base_url, loader)
+        Self::start_with_listeners(vec![listener], base_url, loader, None)
     }
 
     fn start_with_listeners(
         listeners: Vec<TcpListener>,
         base_url: Url,
         loader: Arc<ConfigLoader>,
+        editor: Option<Arc<dyn ProfileEditor>>,
     ) -> Result<Self> {
         let browser_url = Url::parse(&format!("http://{}/", listeners[0].local_addr()?))?;
         let backend = Arc::new(Backend {
@@ -87,6 +99,7 @@ impl RemoteServer {
                     .timeout_global(Some(TIMEOUT))
                     .build(),
             ),
+            editor,
         });
         let mut server = Self {
             stop: Arc::new(AtomicBool::new(false)),
@@ -206,19 +219,22 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
                 .map_err(Into::into);
         }
     };
-    if request.method != "GET" && request.method != "HEAD" {
+    let path = request
+        .target
+        .split_once('?')
+        .map_or(request.target.as_str(), |parts| parts.0);
+    let route = path.strip_prefix('/').expect("validated request target");
+    let edit_action = route.strip_prefix("__vosulay/edit/");
+    let post_allowed = request.method == "POST" && edit_action.is_some();
+    if request.method != "GET" && request.method != "HEAD" && !post_allowed {
         let mut response = Response::plain(405, "Method Not Allowed", "Use GET or HEAD\n");
         response
             .headers
             .push(("Allow".into(), "GET, HEAD".to_owned()));
         return response.write(stream, false).map_err(Into::into);
     }
-    let path = request
-        .target
-        .split_once('?')
-        .map_or(request.target.as_str(), |parts| parts.0);
-    let route = path.strip_prefix('/').expect("validated request target");
     let local_address = stream.local_addr()?;
+    let peer = stream.peer_addr()?;
     let config = match loader() {
         Ok(config) => config,
         Err(error) => {
@@ -236,7 +252,7 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
         &request,
         local_address,
         route.starts_with("local/") || request.is_frame_navigation(),
-    ) || !peer_is_allowed(stream.peer_addr()?.ip(), &config.settings.allowed_ips)
+    ) || !peer_is_allowed(peer.ip(), &config.settings.allowed_ips)
     {
         return Response::plain(403, "Forbidden", "Request is not authorized\n")
             .write(stream, request.method == "HEAD")
@@ -254,7 +270,11 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
         "http://{}/",
         request.host.as_deref().expect("authorized authority")
     ))?;
+    let local_editing = editing::enabled(&config, backend, peer);
     let result = match route {
+        "overlay" if local_editing => parse_profile(&request.target)
+            .and_then(|number| select_profile(&config, number))
+            .and_then(|profile| editing::page(profile, &serving_url, &backend.upstream)),
         "overlay" => overlay_response(&serving_url, &backend.upstream, &config, &request.target),
         route if route.starts_with("local/") => local_response(&config, route),
         "__vosulay/backend.js" => {
@@ -269,6 +289,21 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
                 .push(("Cache-Control".into(), "no-store".into()));
             Ok(response)
         }
+        route if route.starts_with("__vosulay/edit/") => match edit_action {
+            Some(action) if local_editing => editing::api(
+                stream,
+                &request,
+                backend,
+                action,
+                &serving_url,
+                local_address,
+            ),
+            _ => Err(HttpError::new(
+                403,
+                "Forbidden",
+                "Editing is limited to this computer and must be enabled in Settings → Advanced\n",
+            )),
+        },
         route if route.starts_with("__vosulay/") => {
             Err(HttpError::new(404, "Not Found", "Route not found\n"))
         }
@@ -585,6 +620,8 @@ struct Request {
     fetch_site: Option<String>,
     version: http::Version,
     headers: Vec<(String, String)>,
+    /// Declared body length; only local profile-editing POSTs may have one.
+    content_length: usize,
     prefetched: Vec<u8>,
 }
 
@@ -663,6 +700,7 @@ fn read_request(stream: &mut TcpStream) -> std::result::Result<Request, HttpErro
     let mut origin = None;
     let mut fetch_site = None;
     let mut headers = Vec::new();
+    let mut content_length = None;
     for line in lines.filter(|line| !line.is_empty()) {
         let Some((name, value)) = line.split_once(':') else {
             return Err(request_error(
@@ -685,15 +723,45 @@ fn read_request(stream: &mut TcpStream) -> std::result::Result<Request, HttpErro
                 "Invalid header\n",
             ));
         }
-        if name.eq_ignore_ascii_case("transfer-encoding")
-            || (name.eq_ignore_ascii_case("content-length") && value.trim() != "0")
-        {
+        if name.eq_ignore_ascii_case("transfer-encoding") {
             return Err(request_error(
                 &bytes,
                 400,
                 "Bad Request",
                 "Request bodies are not supported\n",
             ));
+        }
+        if name.eq_ignore_ascii_case("content-length") {
+            let declared = value.trim();
+            let length = (!declared.is_empty()
+                && declared.bytes().all(|byte| byte.is_ascii_digit()))
+            .then(|| declared.parse::<usize>().ok())
+            .flatten();
+            let Some(length) = length.filter(|_| content_length.is_none()) else {
+                return Err(request_error(
+                    &bytes,
+                    400,
+                    "Bad Request",
+                    "Invalid Content-Length\n",
+                ));
+            };
+            if length != 0 && method != "POST" {
+                return Err(request_error(
+                    &bytes,
+                    400,
+                    "Bad Request",
+                    "Request bodies are not supported\n",
+                ));
+            }
+            if length > editing::MAX_BODY {
+                return Err(request_error(
+                    &bytes,
+                    413,
+                    "Content Too Large",
+                    "Request body is too large\n",
+                ));
+            }
+            content_length = Some(length);
         }
         let target = if name.eq_ignore_ascii_case("host") {
             Some((&mut host, "Invalid Host header\n"))
@@ -725,6 +793,7 @@ fn read_request(stream: &mut TcpStream) -> std::result::Result<Request, HttpErro
             http::Version::HTTP_10
         },
         headers,
+        content_length: content_length.unwrap_or(0),
         prefetched: bytes[end + 2..].to_vec(),
     })
 }
@@ -1655,6 +1724,7 @@ mod tests {
             listeners,
             base(),
             Arc::new(|| Ok(AppConfig::default())),
+            None,
         )
         .expect("server");
         let (stopped, completion) = std::sync::mpsc::channel();

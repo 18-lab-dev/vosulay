@@ -42,4 +42,4 @@ Input capture/release and browser-heartbeat failures have a five-second safety b
 
 ## Remote service
 
-[src/remote.rs](../src/remote.rs) always provides a separate loopback backend broker; failure to bind the configurable remote listener is non-fatal. View-only remote pages use the same profiles and broker semantics. See [integrations](integrations.md) for authorization and precise-subscription behavior.
+[src/remote.rs](../src/remote.rs) always provides a separate loopback backend broker; failure to bind the configurable remote listener is non-fatal. Remote pages use the same profiles and broker semantics; with local editing enabled, loopback clients get the manager page scoped to one profile and save through the same editor worker as the in-game editor. See [integrations](integrations.md) for authorization and precise-subscription behavior.

@@ -23,7 +23,7 @@ Contributing? Start with [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites an
 - Use Chromium GPU compositing, WebGL, WebGPU where supported, and overlay audio.
 - Render inside Vulkan, EGL/OpenGL, and GLX/OpenGL games on Linux, including native Wayland and X11/XWayland games and osu!stable under Wine (for example osu-winello).
 - Render inside osu!stable and osu!lazer on Windows through native asdf-overlay 2.1.0.
-- Serve view-only profile pages to browsers and streaming clients on the local network.
+- Serve profile pages to browsers and streaming clients on the local network, and optionally edit them from OBS or a browser on the same computer.
 
 ## Install
 
@@ -413,6 +413,23 @@ vosulay host rather than every remote viewing device. Custom HTTP(S) overlay
 URLs on unrelated origins still load directly. Local HTML resources remain
 confined to their authorized roots and are served only to allowed clients;
 authority/origin checks and path/symlink confinement remain in place.
+
+### Editing from OBS or a browser on this computer
+
+Enable **Settings → Advanced → Allow editing on this computer** to edit a
+profile from its page, for example inside an OBS browser source's **Interact**
+window or a browser tab. Open the page through a loopback address
+(`http://127.0.0.1:<port>/overlay` or `localhost`), press the edit shortcut
+(`Ctrl+Shift+Space` by default) inside the page, and use the same editor as in
+game. Edits save to the profile the page shows; the in-game editor picks them up
+at once and other open pages within about two seconds. Profile management, app
+settings and adding local HTML files stay in the in-game editor. Other devices
+keep a view-only page.
+
+The switch takes effect without a restart. Pages on other websites cannot use
+the editing routes, but counters installed in vosu or tosu run on the page's own
+address and could make the same edits, so enable this only with counters you
+trust.
 
 ## Troubleshooting
 

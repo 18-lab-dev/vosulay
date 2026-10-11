@@ -2,6 +2,9 @@
   "use strict";
 
   const $ = (id) => document.getElementById(id);
+  // A remote profile page edits only the profile it shows: no other profiles,
+  // app settings or native file pickers, and in-page edit/interaction chords.
+  const PROFILE_SCOPED = document.documentElement.dataset.vosulayScope === "profile";
   const stage = $("stage");
   const editor = $("editor");
   const inspector = $("inspector");
@@ -9,6 +12,7 @@
   const sidePanels = document.querySelectorAll(".sidebar, #inspector");
   const sidePanelClearance = 24;
   const profileSelect = $("profile-select");
+  if (PROFILE_SCOPED) profileSelect.disabled = true;
   const profileSelectLabel = $("profile-select-label");
   const profileMenu = $("profile-menu");
   const profilePicker = profileSelect.closest(".profile-picker");
@@ -70,6 +74,7 @@
   const fpsLimitModes = settingsForm.querySelectorAll('input[name="fps-limit-mode"]');
   const fpsLimit = $("fps-limit");
   const allowUnrestrictedSharedArrayBuffer = $("allow-unrestricted-shared-array-buffer");
+  const allowLocalProfileEditing = $("allow-local-profile-editing");
   const allowedIps = $("allowed-ips");
   const remoteListenHost = $("remote-listen-host");
   const remoteListenPort = $("remote-listen-port");
@@ -361,6 +366,7 @@
         always_keep_overlays_in_view: Boolean(sourceSettings.always_keep_overlays_in_view),
         exit_edit_mode_on_focus_loss: sourceSettings.exit_edit_mode_on_focus_loss !== false,
         allow_unrestricted_shared_array_buffer: Boolean(sourceSettings.allow_unrestricted_shared_array_buffer),
+        allow_local_profile_editing: Boolean(sourceSettings.allow_local_profile_editing),
         allowed_ips: typeof sourceSettings.allowed_ips === "string" ? sourceSettings.allowed_ips : DEFAULT_ALLOWED_IPS,
         remote_listen_host: typeof sourceSettings.remote_listen_host === "string"
           ? sourceSettings.remote_listen_host : DEFAULT_REMOTE_LISTEN_HOST,
@@ -2550,6 +2556,7 @@
     keepOverlaysInView.checked = state.settingsDraft.always_keep_overlays_in_view;
     exitEditOnFocusLoss.checked = state.settingsDraft.exit_edit_mode_on_focus_loss;
     allowUnrestrictedSharedArrayBuffer.checked = state.settingsDraft.allow_unrestricted_shared_array_buffer;
+    allowLocalProfileEditing.checked = state.settingsDraft.allow_local_profile_editing;
     for (const radio of fpsLimitModes) radio.checked = radio.value === state.settingsDraft.fps_mode;
     if (fpsLimit.value !== state.settingsDraft.fps_value) fpsLimit.value = state.settingsDraft.fps_value;
     fpsLimit.disabled = state.settingsDraft.fps_mode !== "fixed";
@@ -2632,6 +2639,7 @@
       fps_mode: settings.fps_limit === 0 ? "auto" : "fixed",
       fps_value: settings.fps_limit ? String(settings.fps_limit) : "",
       allow_unrestricted_shared_array_buffer: settings.allow_unrestricted_shared_array_buffer,
+      allow_local_profile_editing: settings.allow_local_profile_editing,
       allowed_ips: settings.allowed_ips,
       remote_listen_host: settings.remote_listen_host,
       remote_listen_port: String(settings.remote_listen_port),
@@ -2727,6 +2735,9 @@
   });
   allowUnrestrictedSharedArrayBuffer.addEventListener("change", () => {
     if (state.settingsDraft) state.settingsDraft.allow_unrestricted_shared_array_buffer = allowUnrestrictedSharedArrayBuffer.checked;
+  });
+  allowLocalProfileEditing.addEventListener("change", () => {
+    if (state.settingsDraft) state.settingsDraft.allow_local_profile_editing = allowLocalProfileEditing.checked;
   });
   for (const radio of fpsLimitModes) {
     radio.addEventListener("change", () => {
@@ -2879,6 +2890,7 @@
       exit_edit_mode_on_focus_loss: draft.exit_edit_mode_on_focus_loss,
       fps_limit: fpsValue,
       allow_unrestricted_shared_array_buffer: draft.allow_unrestricted_shared_array_buffer,
+      allow_local_profile_editing: draft.allow_local_profile_editing,
       allowed_ips: draft.allowed_ips,
       remote_listen_host: listenHost,
       remote_listen_port: listenPort,
@@ -3090,6 +3102,22 @@
   window.addEventListener("keydown", (event) => {
     if (event.key === "Tab") releaseToolbarHold(NaN, NaN);
     const editable = isEditableTarget(event.target);
+    if (PROFILE_SCOPED && state.config && !editable && !menuOrModalOpen() && !event.repeat) {
+      // In game these chords are native; a browser page receives them itself.
+      const shortcut = eventHotkey(event);
+      const hotkeys = state.config.settings.hotkeys;
+      if (shortcut && shortcut === hotkeys.toggle_edit) {
+        event.preventDefault();
+        setEditing(!state.editing);
+        return;
+      }
+      if (shortcut && state.editing && shortcut === hotkeys.toggle_interaction) {
+        event.preventDefault();
+        state.interacting = !state.interacting;
+        requestRender("chrome");
+        return;
+      }
+    }
     if (state.editing && !editable && !menuOrModalOpen() && state.config) {
       const shortcut = eventHotkey(event);
       const action = shortcut && PAGE_HOTKEY_KEYS.find((key) => state.config.settings.hotkeys[key] === shortcut);
