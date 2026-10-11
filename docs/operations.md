@@ -111,7 +111,10 @@ trigger SmartScreen.
 ### Release process
 
 1. Bump `[workspace.package].version` in `Cargo.toml` and keep the lockfile's
-   workspace package versions consistent.
+   workspace package versions consistent. Update `pkgver` in
+   `packaging/arch/PKGBUILD`, and regenerate the notices with
+   `python3 tools/notices/generate.py`: they link the versioned source asset,
+   and Linux CI fails while they are stale.
 2. Commit the release changes.
 3. Create `v<v>` for that version: `git tag v<v>`.
 4. Push the release commit and tag: `git push` and `git push origin v<v>`.
@@ -127,8 +130,8 @@ trigger SmartScreen.
    upstream archives, and a changed upstream archive fails publication. A
    branch run with `publish=false` builds artifacts only; never publish for
    routine verification.
-7. Update AUR `pkgver` in `packaging/arch/PKGBUILD`, run `updpkgsums` against the
-   published tag, and update the AUR package metadata.
+7. Run `updpkgsums` for `packaging/arch/PKGBUILD` against the published tag and
+   update the AUR package metadata.
 8. Update the Windows package-manager manifests with the new version, release
    date and the hashes from `SHA256SUMS`:
    [`packaging/winget/`](../packaging/winget/) (`PackageVersion`, `ReleaseDate`,
