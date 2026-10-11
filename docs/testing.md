@@ -51,7 +51,7 @@ Use a fresh output directory. The wrapper isolates PID/IPC/network namespaces an
 
 - `src/config.rs`, `tests/tosu_migration.rs`: defaults, normalization, persistence, safe/idempotent imports.
 - `src/api.rs`, `tests/fixtures/backend/`: supported markup, metadata, deadlines, resolution fallback.
-- `src/backend/tests.rs`, `src/remote/tests_broker.rs`: shared schemas, independent filters/commands, precise subscription relays, HTTP snapshot/proxy behavior.
+- `src/backend/tests.rs`, `src/remote/tests_broker.rs`: shared schemas, independent filters/commands, backend key order in filtered projections, precise subscription relays, HTTP snapshot/proxy behavior.
 - `src/remote.rs`, `src/shell_policy.rs`: peer/authority/origin restrictions, local capability/path confinement.
 - `crates/frame-transport/`, `crates/overlay-linux/tests/`: transport ownership and loader/input fixtures.
 - `crates/platform-windows/src/target_selection.rs`: focus-driven target selection, including tests available on Linux.

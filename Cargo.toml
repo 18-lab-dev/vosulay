@@ -34,7 +34,8 @@ futures-util = { version = "0.3", features = ["sink"] }
 getrandom = "0.4"
 scraper = { version = "0.24", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# Filtered telemetry is re-serialized; counters that iterate keys rely on backend order.
+serde_json = { version = "1.0", features = ["preserve_order"] }
 tempfile = "3.20"
 tokio = { version = "=1.53.2", features = ["rt", "net", "sync", "time", "macros"] }
 tokio-tungstenite = { version = "=0.29.0", features = ["rustls-tls-webpki-roots"] }

@@ -337,3 +337,21 @@ fn legacy_nested_filters_do_not_erase_a_prior_whole_field_null() {
     let filtered: Value = serde_json::from_str(&snapshot.filtered(&filters).unwrap()).unwrap();
     assert_eq!(filtered, json!({"beatmap":null}));
 }
+
+#[test]
+fn whole_field_filters_keep_backend_key_order() {
+    // Counters that iterate object keys render rows in backend order (tosu emits
+    // `beatmap.stats` as stars, ar, cs, ...), so the projection must not sort them.
+    let filters: Arc<[Filter]> = parse_filters(r#"[{"field":"beatmap","keys":["stats"]}]"#)
+        .unwrap()
+        .into();
+    let snapshot = Snapshot {
+        text: r#"{"beatmap":{"title":"Song","stats":{"stars":5.1,"ar":9,"cs":4,"od":8}}}"#.into(),
+        document: OnceLock::new(),
+        projections: Mutex::new(HashMap::new()),
+    };
+    assert_eq!(
+        snapshot.filtered(&filters).unwrap().as_str(),
+        r#"{"beatmap":{"stats":{"stars":5.1,"ar":9,"cs":4,"od":8}}}"#
+    );
+}
