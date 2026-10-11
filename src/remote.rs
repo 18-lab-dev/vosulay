@@ -290,14 +290,9 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
             Ok(response)
         }
         route if route.starts_with("__vosulay/edit/") => match edit_action {
-            Some(action) if local_editing => editing::api(
-                stream,
-                &request,
-                backend,
-                action,
-                &serving_url,
-                local_address,
-            ),
+            Some(action) if local_editing => {
+                editing::api(&request, backend, action, &serving_url, local_address)
+            }
             _ => Err(HttpError::new(
                 403,
                 "Forbidden",
@@ -620,8 +615,8 @@ struct Request {
     fetch_site: Option<String>,
     version: http::Version,
     headers: Vec<(String, String)>,
-    /// Declared body length; only local profile-editing POSTs may have one.
-    content_length: usize,
+    /// Only local profile-editing POSTs may have a body.
+    body: Vec<u8>,
     prefetched: Vec<u8>,
 }
 
@@ -781,6 +776,43 @@ fn read_request(stream: &mut TcpStream) -> std::result::Result<Request, HttpErro
         }
         headers.push((name.to_owned(), value.trim().to_owned()));
     }
+    let mut prefetched = bytes[end + 2..].to_vec();
+    let content_length = content_length.unwrap_or(0);
+    let body = if content_length == 0 {
+        Vec::new()
+    } else {
+        // Read the whole body before routing: answering early with unread request
+        // bytes can make the client see a connection reset instead of the response.
+        if prefetched.len() > content_length {
+            return Err(request_error(
+                &bytes,
+                400,
+                "Bad Request",
+                "Request body is longer than declared\n",
+            ));
+        }
+        let missing = (content_length - prefetched.len()) as u64;
+        Read::by_ref(stream)
+            .take(missing)
+            .read_to_end(&mut prefetched)
+            .map_err(|_| {
+                request_error(
+                    &bytes,
+                    408,
+                    "Request Timeout",
+                    "Request body was not completed\n",
+                )
+            })?;
+        if prefetched.len() != content_length {
+            return Err(request_error(
+                &bytes,
+                400,
+                "Bad Request",
+                "Incomplete request body\n",
+            ));
+        }
+        std::mem::take(&mut prefetched)
+    };
     Ok(Request {
         method: method.to_owned(),
         target: target.to_owned(),
@@ -793,8 +825,8 @@ fn read_request(stream: &mut TcpStream) -> std::result::Result<Request, HttpErro
             http::Version::HTTP_10
         },
         headers,
-        content_length: content_length.unwrap_or(0),
-        prefetched: bytes[end + 2..].to_vec(),
+        body,
+        prefetched,
     })
 }
 

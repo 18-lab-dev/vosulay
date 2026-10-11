@@ -3,8 +3,7 @@
 //! manager editor scoped to the profile they show; edits go through the app's
 //! editor worker so the in-game editor and the saved file stay consistent.
 
-use std::io::Read;
-use std::net::{SocketAddr, TcpStream};
+use std::net::SocketAddr;
 
 use anyhow::Result;
 use serde_json::{Value, json};
@@ -81,7 +80,6 @@ fn local_urls(profile: &Profile, serving_url: &Url, upstream: &Url) -> Value {
 }
 
 pub(super) fn api(
-    stream: &mut TcpStream,
     request: &Request,
     backend: &Backend,
     action: &str,
@@ -126,10 +124,10 @@ pub(super) fn api(
             Err(error) => json!({"type": "error", "message": format!("{error:#}")}),
         },
         ("save", true) => editor
-            .save(&profile_id, read_json(stream, request)?)
+            .save(&profile_id, read_json(request)?)
             .map_err(failed)?,
         ("open-settings", true) => {
-            let body = read_json(stream, request)?;
+            let body = read_json(request)?;
             let counter = body
                 .get("counter_id")
                 .and_then(Value::as_str)
@@ -192,29 +190,8 @@ fn profile_id(target: &str) -> std::result::Result<String, HttpError> {
         .ok_or_else(|| HttpError::new(400, "Bad Request", "Missing profile id\n"))
 }
 
-fn read_json(stream: &mut TcpStream, request: &Request) -> std::result::Result<Value, HttpError> {
-    let length = request.content_length;
-    let mut body = request.prefetched.clone();
-    if body.len() > length {
-        return Err(HttpError::new(
-            400,
-            "Bad Request",
-            "Request body is longer than declared\n",
-        ));
-    }
-    let remaining = length - body.len();
-    stream
-        .take(remaining as u64)
-        .read_to_end(&mut body)
-        .map_err(|_| HttpError::new(408, "Request Timeout", "Request body was not completed\n"))?;
-    if body.len() != length {
-        return Err(HttpError::new(
-            400,
-            "Bad Request",
-            "Incomplete request body\n",
-        ));
-    }
-    serde_json::from_slice(&body)
+fn read_json(request: &Request) -> std::result::Result<Value, HttpError> {
+    serde_json::from_slice(&request.body)
         .map_err(|_| HttpError::new(400, "Bad Request", "Request body is not JSON\n"))
 }
 
@@ -222,8 +199,8 @@ fn read_json(stream: &mut TcpStream, request: &Request) -> std::result::Result<V
 mod tests {
     use super::super::RemoteServer;
     use super::*;
-    use std::io::Write;
-    use std::net::{Shutdown, TcpListener};
+    use std::io::{Read, Write};
+    use std::net::{Shutdown, TcpListener, TcpStream};
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
 
