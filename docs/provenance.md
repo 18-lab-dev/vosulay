@@ -107,6 +107,16 @@ Before applying with a claim that *all* distributed provenance/licensing is reso
    pin and notices pin agree, walks both non-dev graphs and deduplicates their
    license texts with vosulay's notices.
 
+   Verified 2026-10-11: Packages run `38166976289` (branch `main`, `publish=false`)
+   built both DLLs on a hosted Windows runner; its log records both pinned devkit
+   requests. Exported names (`DllMain`, `vkNegotiateLoaderLayerInterfaceVersion`)
+   and imported DLL sets match upstream's v2.1.0 prebuilts for both
+   architectures. In a Windows 11 guest, the packaged DLLs injected into x64 and
+   x86 Direct3D 11 test windows and drew a tosu counter, and the x86 DLL loaded
+   into osu!stable. osu!lazer and osu!stable frames were not checked in that
+   guest (lazer exited in its startup auth module before injection; stable's
+   captured frame did not update).
+
    `crates/hook/build.rs` statically links Frida Gum devkit 17.17.0 outside Cargo.
    Gum source is `ddc10c5559cbb41a3dd72866bfba6ff3945ffa5c`; the pinned
    [releng dependency manifest](https://github.com/frida/releng/blob/c9cc18138b364f691573c695e1fe47ddc4c56f26/deps.toml)
