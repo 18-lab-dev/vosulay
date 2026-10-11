@@ -31,6 +31,15 @@ Download an x86_64 package from [GitHub Releases](https://github.com/shiruviaa/v
 Replace `<v>` below with the release version. Published releases include
 `SHA256SUMS` for checking the downloads.
 
+### Code signing policy
+
+Free code signing provided by [SignPath.io](https://signpath.io/), certificate by
+[SignPath Foundation](https://signpath.org/).
+See the [Code signing policy](docs/code-signing.md) for signing status, team roles,
+and the [privacy policy](docs/code-signing.md#privacy-policy). Before installing,
+read the [security and installation disclosure](docs/security.md) for injection,
+input hooks, listeners, autostart, registry/files, and complete removal instructions.
+
 ### Linux
 
 Choose the package for your distribution:

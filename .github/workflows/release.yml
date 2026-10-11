@@ -168,6 +168,9 @@ jobs:
           wait-for-completion: true
           output-artifact-directory: dist/signed-installer
 
+      - name: Test signature verification policy
+        run: ./packaging/windows/test-verify-release.ps1
+
       - name: Verify Windows packages
         run: |
           $ErrorActionPreference = 'Stop'
@@ -196,15 +199,19 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Only the final package artifacts: signing also uploads unsigned-*
+      # artifacts, and the unsigned installer has the signed one's filename.
       - name: Download packages
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist
+          pattern: vosulay-*-x86_64
           merge-multiple: true
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          SIGNED: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
           if [ "$GITHUB_REF_NAME" != "v$version" ]; then
@@ -214,6 +221,30 @@ jobs:
           # Corresponding source for the LGPL components statically linked into
           # the shipped asdf-overlay DLLs; see docs/provenance.md.
           python3 tools/notices/source_bundle.py "dist/vosulay-$version-third-party-sources.tar"
+          expected="$(printf '%s\n' \
+            "vosulay-$version-1-x86_64.pkg.tar.zst" \
+            "vosulay-$version-1.x86_64.rpm" \
+            "vosulay-$version-linux-x86_64.tar.gz" \
+            "vosulay-$version-third-party-sources.tar" \
+            "vosulay-$version-windows-x86_64-setup.exe" \
+            "vosulay-$version-windows-x86_64.zip" \
+            "vosulay_$version-1_amd64.deb" | sort)"
+          actual="$(cd dist && find . -type f -printf '%P\n' | sort)"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::release assets differ from the expected set"
+            diff <(echo "$expected") <(echo "$actual") || true
+            exit 1
+          fi
           (cd dist && sha256sum -- * > SHA256SUMS)
+          # --notes prepends this policy without discarding generated release notes.
+          # The SignPath attribution appears only when the release was signed.
+          policy="https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/docs/code-signing.md"
+          disclosure="https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/docs/security.md"
+          if [ "$SIGNED" = true ]; then
+            signing='Free code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).'
+          else
+            signing='The Windows binaries in this release are not code-signed.'
+          fi
+          notes="$(printf '## Code signing policy\n\n%s\n\n[Code signing policy](%s) · [Privacy policy](%s#privacy-policy) · [Security and installation disclosure](%s)\n' "$signing" "$policy" "$policy" "$disclosure")"
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "vosulay $version" \
-            --generate-notes dist/*
+            --generate-notes --notes "$notes" dist/*

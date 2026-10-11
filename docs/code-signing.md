@@ -15,9 +15,10 @@ packages it always has.
 - Committers, reviewers and approvers: [qt715](https://github.com/qt715)
 
 K4zoku, the author of the prototypes vosulay grew from, also holds repository
-administrator access. Every team member uses multi-factor authentication for
-GitHub and SignPath. Changes from anyone else are reviewed by qt715 before they
-are merged, and qt715 approves each signing request.
+administrator access. Every team member must use multi-factor authentication for
+GitHub and SignPath. Changes from anyone else must be reviewed by qt715 before
+they are merged. Every release signing request must be manually approved by
+qt715 through the `release-signing` policy; automated approval is not permitted.
 
 ## Privacy policy
 
@@ -63,13 +64,19 @@ signs only when it runs on a `v<version>` tag and the repository variable
 3. compiles the installer and submits it (artifact configuration `installer`);
 4. runs [`packaging/windows/verify-release.ps1`](../packaging/windows/verify-release.ps1)
    with `-RequireSignature`, which checks product name and version on all three
-   files, valid Authenticode signatures on the DLL and installer, and that the
+   files, valid Authenticode signatures with signer subject `SignPath Foundation`
+   and a timestamp countersignature on the DLL and installer, and that the
    ZIP's DLL matches the staged `dist/package/vosulay.dll` the installer is
    compiled from. It does not unpack the installer, so the installer's embedded
    copy is not compared independently.
 
 Unsigned runs use the same steps without submissions and verify without
 `-RequireSignature`.
+
+Release jobs use fresh GitHub-hosted runners and do not restore Cargo `target`
+or other build-output caches from any ref. This keeps signing inputs built from
+the checked-out source rather than reused build outputs. Dependency downloads
+are checked against Cargo.lock or the pinned CEF/asdf digests before use.
 
 ## Enabling signing
 
@@ -114,3 +121,32 @@ Prerequisites outside this repository, for maintainers:
    `SIGNPATH_API_TOKEN`.
 
 The next tagged **Packages** run then requests both signatures.
+
+## Maintainer pre-release checklist
+
+The following service-side settings are **unverified from this repository**.
+The workflow's wait-for-completion option does not prove manual approval,
+trusted origin verification, or metadata restrictions. Before the first signed
+release, maintainers must confirm and record:
+
+- [ ] SignPath Foundation acceptance, public repository/download visibility,
+  and eligibility of the disclosed injection/hooks and compatibility settings.
+- [ ] `release-signing` requires manual approval by qt715 for **each** DLL and
+  installer request; no automatic approval path is enabled.
+- [ ] SignPath trusts this repository's GitHub Actions origin and verifies the
+  submitted artifact's originating workflow/commit/tag.
+- [ ] Both artifact configurations restrict the product name to `Vosulay`,
+  match the intended filenames, and enforce release-version metadata consistent
+  with the tag (including acceptance of Inno Setup's padded strings).
+- [ ] All team members have GitHub and SignPath MFA enabled. GitHub reported
+  MFA enabled for K4zoku and qt715 on 2026-10-10, but the shiruviaa organization
+  did not require it; the owner must enforce it. SignPath MFA remains unverified.
+- [ ] A real signed DLL and installer pass `verify-release.ps1 -RequireSignature`
+  on Windows; authorized native install/upgrade/uninstall checks pass.
+- [ ] The unresolved upstream provenance/licensing items in
+  [provenance](provenance.md#signing-boundary-and-open-maintainer-items) are settled,
+  private vulnerability reporting is enabled, and release notes include the
+  Code signing policy, attribution, and privacy/disclosure links.
+
+Checking in this policy is not evidence that any of these service-side settings
+has been configured or that Foundation eligibility has been approved.

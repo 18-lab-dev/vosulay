@@ -2,7 +2,7 @@
 # under its own name carries the product name and version that code signing
 # enforces, the ZIP holds the same client DLL as the staged package directory
 # the installer is compiled from (the installer itself is not unpacked), and
-# with -RequireSignature the files vosulay signs have valid signatures.
+# with -RequireSignature the signed files have valid Foundation signatures and timestamps.
 #
 # vosulay.exe is CEF's prebuilt bootstrap with rebranded resources. It is an
 # upstream binary, so it is never signed by this project (docs/code-signing.md).
@@ -51,9 +51,19 @@ function Assert-Metadata([string]$Path, [string]$OriginalFilename) {
 
 function Assert-Signature([string]$Path) {
     $signature = Get-AuthenticodeSignature -LiteralPath $Path
-    if ($RequireSignature -and
-        $signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-        throw "$Path signature is $($signature.Status)"
+    if ($RequireSignature) {
+        if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+            throw "$Path signature is $($signature.Status)"
+        }
+        if ($null -eq $signature.SignerCertificate -or
+            $signature.SignerCertificate.GetNameInfo(
+                [System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName,
+                $false) -ne "SignPath Foundation") {
+            throw "$Path signer certificate subject is not SignPath Foundation"
+        }
+        if ($null -eq $signature.TimeStamperCertificate) {
+            throw "$Path signature has no timestamp countersignature"
+        }
     }
     Write-Output "signature $($signature.Status): $Path"
 }

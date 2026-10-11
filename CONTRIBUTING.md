@@ -95,6 +95,18 @@ Hosted safety net: [linux-ci](.github/workflows/linux-ci.yml) runs on pull reque
 
 Maintainers changing packaging should follow [operations](docs/operations.md#packaging-verification-and-tested-on-list): build in the Ubuntu 22.04 container and install-test DEB/RPM/Arch packages in disposable distro containers, checking version output, libcef dependencies, setuid sandbox ownership/mode, sustained startup and no duplicate user launcher. Windows installer changes require separate authorized native install/upgrade/uninstall checks.
 
+For Windows release-verifier changes, run the isolated policy regression tests
+(PowerShell 7, also run by the Windows packaging job):
+
+```powershell
+./packaging/windows/test-verify-release.ps1
+```
+
+These tests parse the verifier and mock Authenticode results to exercise policy
+acceptance/rejection; they do not validate Windows trust, actual timestamps or
+installation. Real signed packages must separately pass the workflow's
+`verify-release.ps1 -RequireSignature` check.
+
 ### Tier 3 — editor UI without the game
 
 The shared frontend is `assets/manager.html`, `assets/manager.css`, and `assets/manager.js`. Any Chromium-based browser on either platform can run it without CEF or a game:

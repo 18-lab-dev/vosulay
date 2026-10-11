@@ -35,6 +35,13 @@ CEF itself initializes lazily when a game view opens. Sources:
   `UninstallDelete` cleanup is specified. Installation, upgrade, and uninstall
   behavior has not been exercised for this disclosure. Source:
   [`packaging/windows/vosulay.iss`](../packaging/windows/vosulay.iss).
+- Inno Setup's standard per-user uninstall registration adds an entry under
+  `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall` for
+  the installer's AppId and writes its uninstaller into the install directory.
+  The script has no custom `[Registry]` entries, service, scheduled task, or
+  firewall-rule installation. Autostart uses only the optional Startup shortcut
+  above, not a registry Run key. Source:
+  [`packaging/windows/vosulay.iss`](../packaging/windows/vosulay.iss).
 
 ### Linux
 
@@ -91,6 +98,41 @@ falling back to the user's cache directory. Sources:
 [`crates/cef-tools/src/lib.rs`](../crates/cef-tools/src/lib.rs),
 [`src/runtime/instance.rs`](../src/runtime/instance.rs).
 
+### How to remove vosulay completely
+
+1. Choose **tray → Exit vosulay** (Hide is not Exit), and close games that loaded
+   the overlay before replacing/removing libraries. Exit stops the host and its
+   listeners; restarting the game without vosulay integration is the way to
+   ensure no previously injected code remains loaded.
+2. **Windows installer:** use **Settings → Apps → Installed apps / Apps & features
+   → Vosulay → Uninstall**, or the installed Inno uninstaller. It tracks installed
+   files, shortcuts, and uninstall registration. **Windows ZIP:** delete the
+   extracted directory and remove the self-created
+   `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Vosulay.lnk`.
+   Remove any optional Desktop/Startup shortcuts left from an earlier install
+   to prevent attempts to start a removed executable.
+3. **Linux package:** use `sudo apt remove vosulay`, `sudo dnf remove vosulay`,
+   or `sudo pacman -R vosulay`. **Linux tarball:** remove the extracted directory.
+   For Cargo installs use `cargo uninstall vosulay`.
+4. **Linux user integration remains:** inspect recognized osu! desktop entries
+   under `$XDG_DATA_HOME/applications` (normally `~/.local/share/applications`).
+   Remove only vosulay's preload paths and Vulkan environment additions,
+   preserving foreign preloads, arguments, and other layers. Delete a generated
+   system-entry override only if no other customization needs preserving.
+   Remove the self-created `com.vosu.vosulay.desktop` entry, the
+   `icons/hicolor/scalable/apps/com.vosu.vosulay.svg` icon and
+   `vosulay/vulkan/VkLayer_vosulay_overlay.json` under `$XDG_DATA_HOME` if present.
+5. Settings/profiles and CEF cache/logs are deliberately retained. For full data
+   removal, delete only the selected configuration directory and its `cef-cache`
+   after saving any profiles you want to keep (default paths above; portable
+   storage is `data` beside the executable). Optional build-tool assets under
+   `$XDG_CACHE_HOME/vosulay` / `$HOME/.cache/vosulay` can be removed separately
+   when no source-built install still depends on them. Do not delete unrelated
+   overlay directories or backend data.
+
+These instructions describe the implementation and package-manager removal
+paths; they are not a claim of native uninstall testing.
+
 ## Changes to games and other software
 
 **Linux startup automatically rewrites recognized osu! desktop launch commands.**
@@ -133,6 +175,23 @@ helper redirects relevant explicit symbol lookups to the compositor. Sources:
 [`crates/overlay-linux/src/sdl.rs`](../crates/overlay-linux/src/sdl.rs),
 [`crates/overlay-linux/src/x11input.rs`](../crates/overlay-linux/src/x11input.rs),
 [`crates/overlay-lookup/src/lib.rs`](../crates/overlay-lookup/src/lib.rs).
+
+The injection and hooks are for rendering user-selected counters and routing
+editor gestures in the selected game, not for bypassing attachment restrictions.
+Starting vosulay enables automatic discovery/attachment; there is no per-target
+consent dialog. Default targets are supported osu! processes; on Linux, explicit
+`--pid` or `--process-name` selections widen that scope. The user controls counters,
+edit mode and interaction through the UI and can stop the host through **Exit
+vosulay**. Hiding the overlay does **not** stop attachment or listeners; quitting
+does not undo Linux launcher edits. Close/relaunch the game after quitting to
+clear already loaded overlay code. Do not use attachment against software whose
+rules prohibit it, or weaken OS security policy to make attachment succeed.
+
+Foundation eligibility for process injection, graphics/input/symbol hooks and
+the unrestricted SharedArrayBuffer compatibility opt-in must be confirmed with
+SignPath before claiming approval. In particular, the opt-in below weakens a
+browser security protection; explaining its purpose is not evidence that it
+meets the Foundation's prohibition on circumventing security measures.
 
 ## Privileges and input access
 
