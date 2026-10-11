@@ -9,7 +9,7 @@ priority: optional
 maintainer: sxlvia <qt715@proton.me>
 vendor: vosulay contributors
 homepage: https://github.com/shiruviaa/vosulay
-license: MIT AND BSD-3-Clause
+license: MIT AND BSD-3-Clause AND CC-BY-4.0
 description: |
   In-game overlay for vosu and tosu-compatible counters.
   Renders tosu-compatible counters inside osu! with an in-game editor,

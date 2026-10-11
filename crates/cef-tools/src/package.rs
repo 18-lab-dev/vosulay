@@ -205,6 +205,7 @@ pub fn package_runtime(
         let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         for (source, name) in [
             ("LICENSE", "LICENSE-vosulay.txt"),
+            ("assets/branding/LICENSE.md", "LICENSE-branding.txt"),
             ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
         ] {
             copy_file(&repository.join(source), &output.join(name))?;

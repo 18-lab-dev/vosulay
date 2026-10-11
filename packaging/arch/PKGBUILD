@@ -9,7 +9,7 @@ _cef=cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_linux64_minimal.tar.bz2
 pkgdesc='In-game overlay for vosu and tosu-compatible counters'
 arch=('x86_64')
 url='https://github.com/shiruviaa/vosulay'
-license=('MIT' 'BSD-3-Clause')
+license=('MIT' 'BSD-3-Clause' 'CC-BY-4.0')
 depends=(
   'alsa-lib' 'at-spi2-core' 'cairo' 'dbus' 'expat' 'glib2' 'libcups' 'libx11'
   'libxcb' 'libxcomposite' 'libxdamage' 'libxext' 'libxfixes' 'libxkbcommon'

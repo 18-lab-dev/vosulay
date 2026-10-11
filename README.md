@@ -492,5 +492,7 @@ conversion, malformed/unsafe input, persistence, idempotence, and no-overwrite.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) for the source code. The vosulay logo and icons are © 2026
+sxlvia under [CC BY 4.0](assets/branding/LICENSE.md); showing them while using
+or talking about vosulay (streams, videos, screenshots) needs no credit.
 Third-party terms and artifact origins: [notices](THIRD_PARTY_NOTICES.md) and [provenance](docs/provenance.md).
