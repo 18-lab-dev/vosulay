@@ -15,7 +15,9 @@ depends=(
   'libxcb' 'libxcomposite' 'libxdamage' 'libxext' 'libxfixes' 'libxkbcommon'
   'libxrandr' 'mesa' 'nspr' 'nss' 'pango' 'systemd-libs' 'wayland'
 )
-makedepends=('rustup')
+# Arch's rust and rustup packages conflict and both provide cargo. Requiring
+# rustup made the package uninstallable for everyone using the rust package.
+makedepends=('cargo')
 # CEF ships prebuilt and stripped; the injected overlay libraries must keep
 # their default link options.
 options=('!lto' '!strip' '!debug')
@@ -37,8 +39,12 @@ prepare() {
   # instead of downloading it.
   mkdir -p "$(_cache)/vosulay/cef"
   cp -L "$srcdir/${_cef//+/%2B}" "$(_cache)/vosulay/cef/$_cef"
+  # With rustup, build with the repository's pinned toolchain. System Rust
+  # ignores RUSTUP_TOOLCHAIN and only has to meet the crates' rust-version.
   export RUSTUP_TOOLCHAIN="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
-  rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+  if command -v rustup >/dev/null; then
+    rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+  fi
   cargo fetch --locked --target x86_64-unknown-linux-gnu
 }
 
