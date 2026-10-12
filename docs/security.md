@@ -288,7 +288,10 @@ counters and local files load from the listener's own address, so counter
 scripts, like other websites, fail the same-origin (Sec-Fetch-Site/Origin)
 checks on its routes, and POSTs must be JSON. Page saves cannot introduce new
 local-overlay capabilities unless the user chose the file in a native dialog
-during this run, so a page script cannot widen local file access. Source:
+during this run, so a page script cannot widen local file access. The page sends
+`frame-ancestors 'none'` and `X-Frame-Options: DENY`, and refuses `/overlay`
+requests whose `Sec-Fetch-Dest` is not `document`, so a counter or website
+cannot frame it to trick clicks into same-origin edits. Source:
 [`src/remote/manage.rs`](../src/remote/manage.rs).
 
 `vosulay --toggle-edit` and `--quit` reach the running instance only through a

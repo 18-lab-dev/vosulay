@@ -16,7 +16,10 @@ use crate::config::AppConfig;
 
 pub(super) const HOST: &str = "manage.localhost";
 pub(super) const MAX_BODY: usize = 1024 * 1024;
-const PAGE_POLICY: &str = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' http: https:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors *";
+// The editor must never render inside another page: a counter or website framing it
+// could trick clicks into same-origin edits that the API's Origin checks would allow.
+// Host windows and OBS sources load it top-level, so no embedding is needed.
+const PAGE_POLICY: &str = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' http: https:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 const DISABLED: &str =
     "The editor is limited to this computer and must be enabled in Settings → Advanced\n";
 
@@ -56,6 +59,17 @@ pub(super) fn respond(
         return Err(HttpError::new(403, "Forbidden", DISABLED));
     }
     if route == "overlay" {
+        // Refused before rendering too, for clients that ignore frame-ancestors.
+        if request
+            .header("sec-fetch-dest")
+            .is_some_and(|destination| destination != "document")
+        {
+            return Err(HttpError::new(
+                403,
+                "Forbidden",
+                "The editor cannot be embedded; open it directly\n",
+            ));
+        }
         return page(&view_url(local_address)?, &backend.upstream);
     }
     match route.strip_prefix("__vosulay/manage/") {
@@ -92,6 +106,7 @@ fn page(view: &Url, upstream: &Url) -> std::result::Result<Response, HttpError> 
         ("Referrer-Policy".into(), "no-referrer".to_owned()),
         ("X-Content-Type-Options".into(), "nosniff".to_owned()),
         ("Content-Security-Policy".into(), PAGE_POLICY.to_owned()),
+        ("X-Frame-Options".into(), "DENY".to_owned()),
     ]);
     Ok(response)
 }
@@ -254,6 +269,12 @@ mod tests {
         assert!(page.contains("/__vosulay/manage/"));
         // Counters on the editor load from the listener address, not the manage origin.
         assert!(page.contains(&format!("http://{view}/")));
+        assert!(page.contains("frame-ancestors 'none'"));
+        // A counter or website framing the editor (cross-site iframe navigation) is refused.
+        let framed = "GET /overlay HTTP/1.1\r\nSec-Fetch-Site: cross-site\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: iframe";
+        assert!(send(address, &manage, framed, "").starts_with("HTTP/1.1 403 "));
+        let opened = "GET /overlay HTTP/1.1\r\nSec-Fetch-Site: none\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document";
+        assert!(send(address, &manage, opened, "").starts_with("HTTP/1.1 200 OK\r\n"));
         let reply = send(address, &manage, &state, "");
         assert!(reply.starts_with("HTTP/1.1 200 OK\r\n"));
         assert!(reply.contains(r#""revision":7"#));

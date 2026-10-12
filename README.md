@@ -470,18 +470,27 @@ only to this computer, and only under the `manage.localhost` name; the normal
 editor take no clicks outside edit mode, so the page keeps the keyboard for the
 edit shortcut; use the interaction shortcut (`Ctrl+I`) while editing to use them.
 
-Overlay hosts that show the editor in their own window, such as a Linux overlay
-window built for tosu's in-game page, can switch edit mode the way tosu's
-in-game overlay does: run `window.postMessage('editingStarted')` or
-`window.postMessage('editingEnded')` in the page. The page posts the same
-strings when it enters or leaves edit mode itself (shortcut, Escape, **Done**),
-so a host can listen for `message` events to restore click-through. Messages
-from counter frames are ignored.
+#### Using vosulay as the frontend of other overlay software
+
+Overlay renderers that draw a web page over the game themselves (for example
+idk-overlay, or a Linux window built for tosu's in-game page) can use vosulay's
+editor as their whole UI, with `vosulay --server-only` if vosulay should not
+draw in game too. Load `http://manage.localhost:<port>/overlay` as a top-level
+page sized to the game: outside edit mode it shows only the counters on a
+transparent background, and in edit mode it is the full in-game editor. Switch
+edit mode the way tosu's in-game overlay does: run
+`window.postMessage('editingStarted')` or `window.postMessage('editingEnded')`
+in the page. The page posts the same strings when it enters or leaves edit mode
+itself (shortcut, Escape, **Done**), so the host can listen for `message`
+events to capture input or restore click-through. Messages from counter frames
+are ignored.
 
 The switch takes effect without a restart. Counters on the editor load from the
 normal listener address, a different origin than `manage.localhost`, so neither
 they nor pages on other websites can use the editing routes, and the editor
-cannot add a local HTML file unless you chose it in a file dialog.
+cannot add a local HTML file unless you chose it in a file dialog. The editor
+refuses to load inside another page's frame, so it cannot be overlaid with
+deceptive content to trick clicks.
 
 ## Troubleshooting
 
