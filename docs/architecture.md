@@ -8,6 +8,21 @@ One Rust host uses the pinned precompiled CEF runtime on Linux and Windows. CEF 
 
 Linux's [entrypoint](../src/main.rs) re-executes Cargo-built binaries beside the retained CEF assets. Windows enters through the pinned CEF sandbox bootstrap and loads the application client DLL.
 
+After claiming per-user instance ownership, startup binds
+[src/runtime/control.rs](../src/runtime/control.rs)'s local control channel
+before loading configuration, migrating tosu layouts, preparing resources and
+starting the editor worker and remote server. A second launch with `--toggle-edit`
+or `--quit` sends a bounded line-protocol request; the listener forwards it to the
+host and unparks its event loop. Normal-mode requests reuse the tray's edit
+arming and graceful-exit/flush paths. No running instance means a failed command,
+not an implicit launch.
+
+`--server-only` branches after the shared worker/server startup and before Linux
+launcher refresh, platform discovery/attachment, tray startup or lazy CEF
+initialization. Its loop discards manager replies, rejects in-game edit toggles,
+and drains/stops/joins the worker on `--quit`. Backend and configuration overrides
+still apply. Game-selection and frame-pacing CLI options are rejected.
+
 On Linux, CEF's external message pump runs only Chromium's task queue, so [crates/browser-cef](../crates/browser-cef/src/glib.rs) also dispatches the default GLib main context, where Chromium watches its display connection; a waker thread unparks the host when those descriptors become ready. GLib's "work due now" timeout is trusted only when a source is actually ready: Chromium's GLib work source reports it permanently under CEF's external pump, which otherwise kept the host loop and waker spinning at full CPU and delivered paints in bursts. Windowless Chromium never holds keyboard focus, and Wayland compositors only share the clipboard with a focused client, so the page's text fields use the host's clipboard: [src/runtime/clipboard.rs](../src/runtime/clipboard.rs) reads and owns the selection through wlr data-control (wlroots compositors, Hyprland, KWin), or else as an X11 `CLIPBOARD` client ([x11.rs](../src/runtime/clipboard/x11.rs)). GNOME's Xwayland bridge mirrors the clipboard without focus checks, so the X11 path covers GNOME and plain X11 sessions; Hyprland's bridge does check focus, which is why data-control comes first. The page inserts pasted text with `insertText`, and a cut deletes its selection only after the host confirms the write. INCR transfers are not implemented; text beyond one X request fails rather than truncating. CEF keeps Chromium's own Wayland/X11 choice; forcing X11 lost the WebGPU adapter on NVIDIA. Windows, or Linux without data-control or an X display, uses Chromium's own clipboard.
 
 ## Browser trust boundary
@@ -42,4 +57,4 @@ Input capture/release and browser-heartbeat failures have a five-second safety b
 
 ## Remote service
 
-[src/remote.rs](../src/remote.rs) always provides a separate loopback backend broker; failure to bind the configurable remote listener is non-fatal. Remote pages use the same profiles and broker semantics; with local editing enabled, loopback clients get the manager page scoped to one profile and save through the same editor worker as the in-game editor. See [integrations](integrations.md) for authorization and precise-subscription behavior.
+[src/remote.rs](../src/remote.rs) always provides a separate loopback backend broker; failure to bind the configurable remote listener is non-fatal. Remote pages use the same profiles and broker semantics and are always view-only; with local editing enabled, loopback clients that open `manage.localhost:<port>/overlay` get the full manager, which sends its messages through the same editor worker as the in-game editor. See [integrations](integrations.md) for authorization and precise-subscription behavior.

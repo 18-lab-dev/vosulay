@@ -7,14 +7,18 @@ pub struct InstanceGuard {
 
 #[cfg(target_os = "linux")]
 impl InstanceGuard {
-    pub fn acquire() -> Result<Option<Self>> {
+    pub fn runtime_directory() -> Result<std::path::PathBuf> {
         use anyhow::Context;
         let base = std::env::var_os("XDG_RUNTIME_DIR")
             .filter(|value| !value.is_empty())
             .map(std::path::PathBuf::from)
             .or_else(|| directories::BaseDirs::new().map(|dirs| dirs.cache_dir().to_owned()))
             .context("could not find a directory for the instance lock")?;
-        Self::acquire_at(&base.join("vosulay/instance.lock"))
+        Ok(base.join("vosulay"))
+    }
+
+    pub fn acquire() -> Result<Option<Self>> {
+        Self::acquire_at(&Self::runtime_directory()?.join("instance.lock"))
     }
 
     fn acquire_at(path: &std::path::Path) -> Result<Option<Self>> {
@@ -68,6 +72,19 @@ impl Drop for InstanceGuard {
     fn drop(&mut self) {
         let _ = unsafe { windows::Win32::Foundation::CloseHandle(self.handle) };
     }
+}
+
+#[cfg(windows)]
+pub fn user_suffix() -> Result<u64> {
+    use anyhow::Context;
+    // The account's profile directory is stable across sessions. Use fixed
+    // FNV-1a rather than RandomState so pipe names agree across launches.
+    let directory = directories::BaseDirs::new().context("could not find user profile")?;
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in directory.home_dir().as_os_str().as_encoded_bytes() {
+        hash = (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3);
+    }
+    Ok(hash)
 }
 
 #[cfg(all(test, target_os = "linux"))]

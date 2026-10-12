@@ -23,7 +23,7 @@ Need help? See [SUPPORT.md](SUPPORT.md) for where to ask questions and report bu
 - Use Chromium GPU compositing, WebGL, WebGPU where supported, and overlay audio.
 - Render inside Vulkan, EGL/OpenGL, and GLX/OpenGL games on Linux, including native Wayland and X11/XWayland games and osu!stable under Wine (for example osu-winello).
 - Render inside osu!stable and osu!lazer on Windows through native asdf-overlay 2.1.0.
-- Serve profile pages to browsers and streaming clients on the local network, and optionally edit them from OBS or a browser on the same computer.
+- Serve view-only profile pages to browsers and streaming clients on the local network, and optionally the full editor to OBS or a browser on the same computer.
 
 ## Install
 
@@ -330,8 +330,31 @@ lives in `data\config.json`. An existing `data\config.json` also selects that
 location.
 
 Shared command-line options are `--vosu-url`/`-t`, `--fps-limit`/`-f`,
-repeatable `--pid` and `--process-name`, `--config`, and `--cef-dir`.
-Run `vosulay --help` (Windows: `vosulay.exe --help`) for details.
+repeatable `--pid` and `--process-name`, `--config`, `--cef-dir`, and
+`--server-only`. Run `vosulay --help` (Windows: `vosulay.exe --help`) for details.
+
+Use `vosulay --toggle-edit` from a compositor keybind to toggle editing in the
+running instance, or `vosulay --quit` to save and exit gracefully. These two
+commands are mutually exclusive, communicate only through a per-user local
+control channel, and exit with status 1 if no instance is running or the command
+is rejected. A plain second launch still exits successfully without starting
+another instance.
+
+For browser/OBS overlays without a game, run:
+
+```sh
+vosulay --server-only --config /path/to/config.json
+```
+
+This keeps the backend broker, remote `/overlay` pages and editor worker, but
+does not discover, inject into or attach to games, rewrite Linux game launchers,
+create a tray, or initialize CEF. The startup message identifies the configured
+listener and local editor URLs. `--vosu-url` still overrides the backend for this
+run; `--pid`, `--process-name`, `--fps-limit` and `--benchmark-uncapped` are
+rejected in server-only mode. `--toggle-edit` is rejected there because no
+in-game overlay exists; use the editor at `http://manage.localhost:<port>/overlay`
+instead (see below). Remote access and local editing still follow the configured
+default-deny policies, so allow editing on this computer first.
 
 ## Frame rate
 
@@ -434,31 +457,31 @@ authority/origin checks and path/symlink confinement remain in place.
 
 ### Editing from OBS or a browser on this computer
 
-Enable **Settings → Advanced → Allow editing on this computer** to edit a
-profile from its page, for example inside an OBS browser source's **Interact**
-window or a browser tab. Open the page through a loopback address
-(`http://127.0.0.1:<port>/overlay` or `localhost`), press the edit shortcut
-(`Ctrl+Shift+Space` by default) inside the page, and use the same editor as in
-game. Edits save to the profile the page shows; the in-game editor picks them up
-at once and other open pages within about two seconds. As in game, counters on
-an editable page take no clicks outside edit mode, so the page keeps the
-keyboard for the edit shortcut; use the interaction shortcut (`Ctrl+I`) while
-editing to use them. Profile management, app settings and adding local HTML
-files stay in the in-game editor. Other devices keep a view-only page.
+Enable **Settings → Advanced → Allow editing on this computer** (off by default)
+to get vosulay's full editor at `http://manage.localhost:<port>/overlay`, for
+example inside an OBS browser source's **Interact** window, a browser tab, or an
+overlay window of your own. Press the edit shortcut (`Ctrl+Shift+Space` by
+default) inside the page and use the same editor as in game: profiles, settings,
+HTML files and imports included (file choices open native dialogs on this
+computer). Changes apply as they do in game; the in-game editor picks them up at
+once and other open editor pages within about two seconds. The editor is served
+only to this computer, and only under the `manage.localhost` name; the normal
+`/overlay` address stays view-only for everyone. As in game, counters on the
+editor take no clicks outside edit mode, so the page keeps the keyboard for the
+edit shortcut; use the interaction shortcut (`Ctrl+I`) while editing to use them.
 
-Overlay hosts that show the page in their own window, such as a Linux overlay
+Overlay hosts that show the editor in their own window, such as a Linux overlay
 window built for tosu's in-game page, can switch edit mode the way tosu's
 in-game overlay does: run `window.postMessage('editingStarted')` or
 `window.postMessage('editingEnded')` in the page. The page posts the same
 strings when it enters or leaves edit mode itself (shortcut, Escape, **Done**),
 so a host can listen for `message` events to restore click-through. Messages
-from counter frames are ignored, and the API only exists on the editable page,
-so it stays off unless editing on this computer is allowed.
+from counter frames are ignored.
 
-The switch takes effect without a restart. Pages on other websites cannot use
-the editing routes, but counters installed in vosu or tosu run on the page's own
-address and could make the same edits, so enable this only with counters you
-trust.
+The switch takes effect without a restart. Counters on the editor load from the
+normal listener address, a different origin than `manage.localhost`, so neither
+they nor pages on other websites can use the editing routes, and the editor
+cannot add a local HTML file unless you chose it in a file dialog.
 
 ## Troubleshooting
 

@@ -280,12 +280,25 @@ read-only backend security boundary. Restrict the listener and allowlist to
 trusted clients/networks. Sources: [`src/remote.rs`](../src/remote.rs),
 [`src/backend.rs`](../src/backend.rs).
 
-**Settings → Advanced → Allow editing on this computer** (off by default) lets
-loopback clients edit the profile a page shows through same-origin JSON POSTs.
-Other websites cannot drive those routes (Sec-Fetch-Site/Origin checks and
-non-simple requests), but installed counters run on the page's origin and can.
-Remote saves cannot introduce new local-overlay capabilities, so they cannot
-widen local file access. Source: [`src/remote/editing.rs`](../src/remote/editing.rs).
+**Settings → Advanced → Allow editing on this computer** (off by default) serves
+the full editor to loopback clients, and only under the Host
+`manage.localhost:<port>` (accepted only on loopback listeners); the plain
+listener address stays view-only. The manage origin serves nothing else: its
+counters and local files load from the listener's own address, so counter
+scripts, like other websites, fail the same-origin (Sec-Fetch-Site/Origin)
+checks on its routes, and POSTs must be JSON. Page saves cannot introduce new
+local-overlay capabilities unless the user chose the file in a native dialog
+during this run, so a page script cannot widen local file access. Source:
+[`src/remote/manage.rs`](../src/remote/manage.rs).
+
+`vosulay --toggle-edit` and `--quit` reach the running instance only through a
+per-user local channel, never TCP/HTTP. On Linux it is `control.sock` beside the
+instance lock, mode 0600, and the listener drops peers whose `SO_PEERCRED` uid is
+not its own. On Windows it is a named pipe whose name carries a per-user hash,
+created with `PIPE_REJECT_REMOTE_CLIENTS`, `FILE_FLAG_FIRST_PIPE_INSTANCE` and
+the default security descriptor (other users cannot write commands); if the
+pipe cannot be created, vosulay starts without it. Command lines and replies are
+bounded in size and time. Source: [`src/runtime/control.rs`](../src/runtime/control.rs).
 
 Counters and custom web pages execute JavaScript in CEF's sandboxed renderer
 infrastructure. The sandbox is not an outbound-network allowlist. Only

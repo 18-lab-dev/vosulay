@@ -228,7 +228,7 @@
             <fieldset id="settings-section-remote" class="settings-section" tabindex="-1">
               <legend>Remote overlay server</legend>
               <p class="settings-note">
-                Serves your overlays to devices allowed by the client IP list (view-only unless editing on this computer is allowed under Advanced).
+                Serves your overlays to devices allowed by the client IP list, always view-only.
                 Those devices open <code>http://&lt;this computer&gt;:&lt;port&gt;/overlay</code> for the active profile, or add <code>?profile=N</code> for the profile at position N.
               </p>
               <div class="settings-grid">
@@ -279,7 +279,7 @@
               <label class="checkbox-row" for="allow-local-profile-editing">
                 <span>
                   <strong>Allow editing on this computer</strong>
-                  <small>Profile pages from the remote overlay server (for example an OBS browser source) become editable when opened on this computer: press the edit shortcut inside the page. Changes apply to the profile the page shows. Other devices stay view-only. Installed counters on the page share its address and can also make these edits.</small>
+                  <small>Serves the full editor at <code>http://manage.localhost:&lt;port&gt;/overlay</code> to this computer only, for example in an OBS browser source's Interact window or a browser tab: press the edit shortcut inside the page. Changes apply as they do in game, and the remote server's own address stays view-only. Counters on the editor load from that address, so they cannot make edits. Off by default.</small>
                 </span>
                 <input id="allow-local-profile-editing" type="checkbox">
               </label>

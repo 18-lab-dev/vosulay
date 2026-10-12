@@ -1,8 +1,19 @@
 fn main() {
     #[cfg(target_os = "linux")]
-    if let Err(error) = launch_cached_runtime() {
-        eprintln!("Vosulay: {error:#}");
-        std::process::exit(1);
+    {
+        // Keybind-driven commands skip the retained-runtime re-exec, which hashes the binary.
+        match vosulay::runtime::control_command() {
+            Ok(Some(code)) => std::process::exit(code),
+            Ok(None) => {}
+            Err(error) => {
+                eprintln!("Vosulay: {error:#}");
+                std::process::exit(1);
+            }
+        }
+        if let Err(error) = launch_cached_runtime() {
+            eprintln!("Vosulay: {error:#}");
+            std::process::exit(1);
+        }
     }
     // Linux dispatches CEF subprocesses through this executable. The Windows
     // package instead invokes RunWinMain through CEF's sandbox bootstrap.

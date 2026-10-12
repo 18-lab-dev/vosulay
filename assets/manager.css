@@ -442,10 +442,6 @@ body.context-inspector .inspector {
   .settings-grid, .hotkey-grid { grid-template-columns: minmax(0, 1fr); }
   .settings-action-field { flex-direction: column; align-items: stretch; }
 }
-/* Remote profile pages edit one profile: hide profile management, app settings and native pickers. */
-html[data-vosulay-scope="profile"] #profile-actions,
-html[data-vosulay-scope="profile"] #open-settings,
-html[data-vosulay-scope="profile"] #add-html-file { display: none; }
 /* A click into a counter's frame would take keyboard focus from the page, and with it the
    edit shortcut, which in game is native. Counters stay reachable through edit-mode interaction. */
-html[data-vosulay-scope="profile"] body:not(.editing) .overlay-frame { pointer-events: none; }
+html[data-vosulay-host="page"] body:not(.editing) .overlay-frame { pointer-events: none; }

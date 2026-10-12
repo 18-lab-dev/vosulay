@@ -2,9 +2,9 @@
   "use strict";
 
   const $ = (id) => document.getElementById(id);
-  // A remote profile page edits only the profile it shows: no other profiles,
-  // app settings or native file pickers, and in-page edit/interaction chords.
-  const PROFILE_SCOPED = document.documentElement.dataset.vosulayScope === "profile";
+  // The manage page runs in a browser, which receives the edit and interaction
+  // chords itself; in game they are native.
+  const PAGE_HOSTED = document.documentElement.dataset.vosulayHost === "page";
   const stage = $("stage");
   const editor = $("editor");
   const inspector = $("inspector");
@@ -12,7 +12,6 @@
   const sidePanels = document.querySelectorAll(".sidebar, #inspector");
   const sidePanelClearance = 24;
   const profileSelect = $("profile-select");
-  if (PROFILE_SCOPED) profileSelect.disabled = true;
   const profileSelectLabel = $("profile-select-label");
   const profileMenu = $("profile-menu");
   const profilePicker = profileSelect.closest(".profile-picker");
@@ -3108,7 +3107,7 @@
   window.addEventListener("keydown", (event) => {
     if (event.key === "Tab") releaseToolbarHold(NaN, NaN);
     const editable = isEditableTarget(event.target);
-    if (PROFILE_SCOPED && state.config && !editable && !menuOrModalOpen() && !event.repeat) {
+    if (PAGE_HOSTED && state.config && !editable && !menuOrModalOpen() && !event.repeat) {
       // In game these chords are native; a browser page receives them itself.
       const shortcut = eventHotkey(event);
       const hotkeys = state.config.settings.hotkeys;

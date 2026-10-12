@@ -35,7 +35,12 @@ fn edit_hotkey(text: &str) -> NativeHotkey {
 /// Main-thread entry. Windows supplies the live packaged CEF sandbox context;
 /// Linux supplies null and uses the packaged CEF subprocess executable.
 pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
-    if let Some(code) = unsafe { execute_subprocess(sandbox_info) } {
+    if std::env::args().any(|argument| argument.starts_with("--type="))
+        && let Some(code) = unsafe { execute_subprocess(sandbox_info) }
+    {
+        return Ok(code);
+    }
+    if let Some(code) = super::control_command()? {
         return Ok(code);
     }
     let Some(options) = Options::parse()? else {
@@ -45,10 +50,18 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         eprintln!("Vosulay is already running; exiting this second instance.");
         return Ok(0);
     };
+    #[cfg(target_os = "linux")]
+    let control = Some(super::control::Server::start()?);
+    #[cfg(windows)]
+    let control = match super::control::Server::start() {
+        Ok(server) => Some(server),
+        Err(error) => {
+            eprintln!("Vosulay: local control channel unavailable: {error:#}");
+            None
+        }
+    };
     super::desktop_entry::register();
     let mut config = crate::config::load_from_path(&options.config)?;
-    #[cfg(target_os = "linux")]
-    super::launchers::refresh(&options.overlay, &options.lookup);
     super::tosu::migrate(&mut config, &options.config);
     let resources = Arc::new(ProductResources::new(&config)?);
     // The URL is read once: the broker, catalog worker and browser views all
@@ -66,9 +79,52 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
     let remote = crate::remote::RemoteServer::start_from_path(
         backend.clone(),
         options.config.clone(),
-        Some(worker.profile_editor()),
+        Some(worker.manage_editor()),
     )
     .context("could not start overlay backend broker")?;
+    if options.server_only {
+        let address = std::net::SocketAddr::new(
+            config.settings.remote_listen_host.parse()?,
+            config.settings.remote_listen_port,
+        );
+        eprintln!(
+            "vosulay server-only: http://{address}/overlay (local editor: http://manage.localhost:{}/overlay)",
+            config.settings.remote_listen_port
+        );
+        loop {
+            while worker.next_reply().is_some() {}
+            if let Some(request) = control
+                .as_ref()
+                .and_then(super::control::Server::next_request)
+            {
+                match request.command {
+                    super::control::Command::Quit => {
+                        request.answer(Ok(()));
+                        break;
+                    }
+                    super::control::Command::ToggleEdit => request.answer(Err(format!(
+                        "there is no in-game overlay in server-only mode; edit on http://manage.localhost:{}/overlay",
+                        config.settings.remote_listen_port
+                    ))),
+                }
+                continue;
+            }
+            thread::park();
+        }
+        worker.stop();
+        let until = Instant::now() + Duration::from_secs(5);
+        while !worker.finished() {
+            while worker.next_reply().is_some() {}
+            if Instant::now() >= until {
+                bail!("manager tasks did not stop within five seconds");
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        worker.join()?;
+        return Ok(0);
+    }
+    #[cfg(target_os = "linux")]
+    super::launchers::refresh(&options.overlay, &options.lookup);
     #[cfg(windows)]
     let mut platform = PlatformController::start(
         WindowsOptions {
@@ -99,6 +155,7 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         backend,
         platform: &mut platform,
         worker: &mut worker,
+        control: control.as_ref(),
         options: &options,
         document: String::new(),
         ready: false,
@@ -169,6 +226,7 @@ struct Host<'a> {
     backend: url::Url,
     platform: &'a mut PlatformController,
     worker: &'a mut EditorWorker,
+    control: Option<&'a super::control::Server>,
     options: &'a Options,
     document: String,
     ready: bool,
@@ -373,7 +431,18 @@ impl Host<'_> {
             } else if let Some(runtime) = self.runtime.as_ref() {
                 runtime.pump();
             }
-            while let Some(event) = self.platform.poll() {
+            while let Some(event) = {
+                if let Some(request) = self.control.and_then(super::control::Server::next_request) {
+                    let event = match request.command {
+                        super::control::Command::ToggleEdit => PlatformEvent::ToggleEdit,
+                        super::control::Command::Quit => PlatformEvent::Exit,
+                    };
+                    request.answer(Ok(()));
+                    Some(event)
+                } else {
+                    self.platform.poll()
+                }
+            } {
                 match event {
                     PlatformEvent::Attached { .. } => {
                         self.attached = true;
@@ -555,14 +624,9 @@ impl Host<'_> {
                 }
             }
             while let Some(reply) = self.worker.next_reply() {
-                if reply.broadcast {
-                    // A remote profile page saved; the open editor shows its result.
-                    if self.ready {
-                        self.receive(&reply.envelope)?;
-                    }
-                    continue;
-                }
-                if reply.document != self.document {
+                // A manage-page change is broadcast: its settings apply here as well,
+                // and the open in-game editor shows the result.
+                if !reply.broadcast && reply.document != self.document {
                     continue;
                 }
                 let settings = reply
@@ -639,7 +703,7 @@ impl Host<'_> {
                         self.apply_fps()?;
                     }
                 }
-                if !reply.envelope.is_null() {
+                if !reply.envelope.is_null() && (self.ready || !reply.broadcast) {
                     self.receive(&reply.envelope)?;
                 }
                 if reply.dialog_closed {

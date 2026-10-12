@@ -16,9 +16,9 @@ use crate::{
     config::{AppConfig, AppSettings, Placement, Profile},
 };
 
-mod editing;
+mod manage;
 
-pub use editing::ProfileEditor;
+pub use manage::ManageEditor;
 
 const TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_REQUEST: usize = 16 * 1024;
@@ -35,7 +35,7 @@ struct Backend {
     upstream: Url,
     broker: Broker,
     http: ureq::Agent,
-    editor: Option<Arc<dyn ProfileEditor>>,
+    editor: Option<Arc<dyn ManageEditor>>,
 }
 
 impl RemoteServer {
@@ -43,11 +43,11 @@ impl RemoteServer {
         Self::start_from_path(base_url, crate::config::config_path()?, None)
     }
 
-    /// `editor` enables Settings → Advanced → Allow editing on this computer.
+    /// `editor` serves the manage page (Settings → Advanced → Allow editing on this computer).
     pub fn start_from_path(
         base_url: Url,
         config_path: PathBuf,
-        editor: Option<Arc<dyn ProfileEditor>>,
+        editor: Option<Arc<dyn ManageEditor>>,
     ) -> Result<Self> {
         let config = crate::config::load_from_path(&config_path)
             .context("failed to load configuration for overlay server")?;
@@ -85,7 +85,7 @@ impl RemoteServer {
         listeners: Vec<TcpListener>,
         base_url: Url,
         loader: Arc<ConfigLoader>,
-        editor: Option<Arc<dyn ProfileEditor>>,
+        editor: Option<Arc<dyn ManageEditor>>,
     ) -> Result<Self> {
         let browser_url = Url::parse(&format!("http://{}/", listeners[0].local_addr()?))?;
         let backend = Arc::new(Backend {
@@ -224,8 +224,9 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
         .split_once('?')
         .map_or(request.target.as_str(), |parts| parts.0);
     let route = path.strip_prefix('/').expect("validated request target");
-    let edit_action = route.strip_prefix("__vosulay/edit/");
-    let post_allowed = request.method == "POST" && edit_action.is_some();
+    let local_address = stream.local_addr()?;
+    let manage = manage::is_manage_host(request.host.as_deref(), local_address);
+    let post_allowed = request.method == "POST" && manage && route == "__vosulay/manage/message";
     if request.method != "GET" && request.method != "HEAD" && !post_allowed {
         let mut response = Response::plain(405, "Method Not Allowed", "Use GET or HEAD\n");
         response
@@ -233,7 +234,6 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
             .push(("Allow".into(), "GET, HEAD".to_owned()));
         return response.write(stream, false).map_err(Into::into);
     }
-    let local_address = stream.local_addr()?;
     let peer = stream.peer_addr()?;
     let config = match loader() {
         Ok(config) => config,
@@ -258,6 +258,18 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
             .write(stream, request.method == "HEAD")
             .map_err(Into::into);
     }
+    if manage {
+        // Only the editor lives on the manage origin: no backend proxy, local files or sockets.
+        let response = if request.header("upgrade").is_some() {
+            Response::plain(404, "Not Found", "WebSocket route not found\n")
+        } else {
+            manage::respond(&request, route, &config, backend, peer, local_address)
+                .unwrap_or_else(|error| Response::plain(error.status, error.reason, &error.message))
+        };
+        return response
+            .write(stream, request.method == "HEAD")
+            .map_err(Into::into);
+    }
     if request.header("upgrade").is_some() {
         if request.method != "GET" || !supports_websocket(&request.target) {
             return Response::plain(404, "Not Found", "WebSocket route not found\n")
@@ -270,11 +282,7 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
         "http://{}/",
         request.host.as_deref().expect("authorized authority")
     ))?;
-    let local_editing = editing::enabled(&config, backend, peer);
     let result = match route {
-        "overlay" if local_editing => parse_profile(&request.target)
-            .and_then(|number| select_profile(&config, number))
-            .and_then(|profile| editing::page(profile, &serving_url, &backend.upstream)),
         "overlay" => overlay_response(&serving_url, &backend.upstream, &config, &request.target),
         route if route.starts_with("local/") => local_response(&config, route),
         "__vosulay/backend.js" => {
@@ -289,16 +297,6 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
                 .push(("Cache-Control".into(), "no-store".into()));
             Ok(response)
         }
-        route if route.starts_with("__vosulay/edit/") => match edit_action {
-            Some(action) if local_editing => {
-                editing::api(&request, backend, action, &serving_url, local_address)
-            }
-            _ => Err(HttpError::new(
-                403,
-                "Forbidden",
-                "Editing is limited to this computer and must be enabled in Settings → Advanced\n",
-            )),
-        },
         route if route.starts_with("__vosulay/") => {
             Err(HttpError::new(404, "Not Found", "Route not found\n"))
         }
@@ -599,7 +597,8 @@ fn request_authority(host: &str, local_address: SocketAddr) -> Option<Url> {
     let local_ip = normalize_ip(local_address.ip());
     let matches = match url.host()? {
         url::Host::Domain(domain) => {
-            domain.eq_ignore_ascii_case("localhost") && local_ip.is_loopback()
+            (domain.eq_ignore_ascii_case("localhost") || domain.eq_ignore_ascii_case(manage::HOST))
+                && local_ip.is_loopback()
         }
         url::Host::Ipv4(address) => normalize_ip(IpAddr::V4(address)) == local_ip,
         url::Host::Ipv6(address) => normalize_ip(IpAddr::V6(address)) == local_ip,
@@ -615,7 +614,7 @@ struct Request {
     fetch_site: Option<String>,
     version: http::Version,
     headers: Vec<(String, String)>,
-    /// Only local profile-editing POSTs may have a body.
+    /// Only the manage page's message POSTs may have a body.
     body: Vec<u8>,
     prefetched: Vec<u8>,
 }
@@ -748,7 +747,7 @@ fn read_request(stream: &mut TcpStream) -> std::result::Result<Request, HttpErro
                     "Request bodies are not supported\n",
                 ));
             }
-            if length > editing::MAX_BODY {
+            if length > manage::MAX_BODY {
                 return Err(request_error(
                     &bytes,
                     413,
@@ -1584,7 +1583,11 @@ mod tests {
         assert!(html.contains("http://127.0.0.1:24050/a%2Fb/"));
         assert!(html.contains("allow=\"autoplay\""));
         assert!(html.contains("<div style=\"left:12.5px;top:-3px;width:500px;height:340px;transform:scale(1.25) rotate(-15deg);opacity:0.75;z-index:7\">"));
-        assert!(html.contains("style=\"left:-100px;top:-20px;width:640px;height:360px\"></iframe></div>"));
+        assert!(
+            html.contains(
+                "style=\"left:-100px;top:-20px;width:640px;height:360px\"></iframe></div>"
+            )
+        );
     }
 
     #[test]
@@ -1738,17 +1741,21 @@ mod tests {
         drop(server);
     }
     #[test]
-    fn request_authority_accepts_destination_ip_and_localhost_alias_only() {
+    fn request_authority_accepts_destination_ip_and_loopback_names_only() {
         let local = "127.0.0.1:5050".parse().expect("socket address");
 
         assert!(request_authority("127.0.0.1:5050", local).is_some());
         assert!(request_authority("localhost:5050", local).is_some());
+        assert!(request_authority("manage.localhost:5050", local).is_some());
+        assert!(request_authority("other.localhost:5050", local).is_none());
         assert!(request_authority("attacker.example:5050", local).is_none());
         assert!(request_authority("127.0.0.1:5051", local).is_none());
 
+        // A LAN client reaching the LAN address cannot name the loopback-only hosts.
         let lan = "192.168.1.20:5050".parse().expect("socket address");
         assert!(request_authority("192.168.1.20:5050", lan).is_some());
         assert!(request_authority("localhost:5050", lan).is_none());
+        assert!(request_authority("manage.localhost:5050", lan).is_none());
         assert!(request_authority("192.168.1.21:5050", lan).is_none());
     }
 

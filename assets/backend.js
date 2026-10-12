@@ -1,4 +1,4 @@
-function (configuredBackend, brokerBase) {
+function (configuredBackend, brokerBase, managerPage) {
   if (typeof window.__VOSULAY_BACKEND_URL__ === 'function') return;
   const backend = new URL(configuredBackend);
   const broker = brokerBase ? new URL(brokerBase) : null;
@@ -6,7 +6,8 @@ function (configuredBackend, brokerBase) {
       (broker && (!['http:', 'https:'].includes(broker.protocol) || broker.username || broker.password))) {
     throw new TypeError('Invalid Vosulay backend routing URL');
   }
-  const manager = location.protocol === 'vosulay:' && location.host === 'manager';
+  // The manage page, like the in-game manager, routes the counters it frames.
+  const manager = managerPage === true || (location.protocol === 'vosulay:' && location.host === 'manager');
   if (!manager && location.origin !== backend.origin && location.origin !== broker?.origin) return;
   const loopback = host => host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
   const equivalent = candidate => {

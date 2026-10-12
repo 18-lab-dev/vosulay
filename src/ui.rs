@@ -15,7 +15,7 @@ pub fn manager_document() -> String {
 }
 
 /// The manager page with trusted `prelude` JavaScript run before the manager
-/// script, as remote profile pages use to install their HTTP host bridge.
+/// script, as the manage page uses to install its HTTP host bridge.
 pub(crate) fn manager_document_with(prelude: &str) -> String {
     let css = javascript_string(MANAGER_CSS);
     let javascript = javascript_string(MANAGER_JS);

@@ -1,5 +1,6 @@
 #[cfg(target_os = "linux")]
 mod clipboard;
+mod control;
 mod desktop_entry;
 mod editor;
 mod host;
@@ -28,10 +29,16 @@ struct Options {
     fps_limit: Option<u32>,
     pids: Vec<u32>,
     process_names: Vec<String>,
+    control: Option<control::Command>,
+    server_only: bool,
 }
 
 impl Options {
     fn parse() -> Result<Option<Self>> {
+        Self::parse_arguments(std::env::args().skip(1))
+    }
+
+    fn parse_arguments(mut arguments: impl Iterator<Item = String>) -> Result<Option<Self>> {
         let executable = std::env::current_exe()?;
         let directory = executable
             .parent()
@@ -72,14 +79,15 @@ impl Options {
             fps_limit: None,
             pids: Vec::new(),
             process_names: Vec::new(),
+            control: None,
+            server_only: false,
         };
         let mut benchmark_uncapped = false;
-        let mut arguments = std::env::args().skip(1);
         while let Some(argument) = arguments.next() {
             match argument.as_str() {
                 "--help" | "-h" => {
                     println!(
-                        "vosulay {}\n\nUsage: vosulay [options]\n  --vosu-url, -t URL    vosu or tosu-compatible backend for this run (default: Settings → Advanced → vosu URL)\n  --fps-limit, -f FPS   auto/0 or a positive cap (default display refresh)\n  --benchmark-uncapped  Disable Chromium pacing; use minimum positive OSR interval\n  --pid PID            Additional supported game process; repeatable\n  --process-name NAME  Additional supported game executable; repeatable\n  --config PATH        Configuration file (default user configuration directory)\n  --cef-dir PATH       Runtime package directory (default beside executable or build-time cache)\n  --version            Product version\n\nToggle editing in game with Ctrl+Shift+Space by default; configure it in Settings → Shortcuts. Escape leaves edit mode.",
+                        "vosulay {}\n\nUsage: vosulay [options]\n  --vosu-url, -t URL    vosu or tosu-compatible backend for this run (default: Settings → Advanced → vosu URL)\n  --server-only        Serve remote overlays and editing without game attachment, tray or CEF\n  --toggle-edit        Ask the running instance to toggle in-game editing\n  --quit               Ask the running instance to save and exit gracefully\n  --fps-limit, -f FPS   auto/0 or a positive cap (default display refresh)\n  --benchmark-uncapped  Disable Chromium pacing; use minimum positive OSR interval\n  --pid PID            Additional supported game process; repeatable\n  --process-name NAME  Additional supported game executable; repeatable\n  --config PATH        Configuration file (default user configuration directory)\n  --cef-dir PATH       Runtime package directory (default beside executable or build-time cache)\n  --version            Product version\n\n--toggle-edit and --quit are mutually exclusive and fail if vosulay is not running.\n--server-only rejects --pid, --process-name, --fps-limit and --benchmark-uncapped.\nToggle editing in game with Ctrl+Shift+Space by default; configure it in Settings → Shortcuts. Escape leaves edit mode.",
                         env!("CARGO_PKG_VERSION")
                     );
                     return Ok(None);
@@ -93,6 +101,18 @@ impl Options {
                         &arguments.next().context("vosu URL is required")?,
                     )?);
                 }
+                "--toggle-edit" | "--quit" => {
+                    ensure!(
+                        options.control.is_none(),
+                        "--toggle-edit and --quit are mutually exclusive"
+                    );
+                    options.control = Some(if argument == "--quit" {
+                        control::Command::Quit
+                    } else {
+                        control::Command::ToggleEdit
+                    });
+                }
+                "--server-only" => options.server_only = true,
                 "--benchmark-uncapped" => benchmark_uncapped = true,
                 "--fps-limit" | "-f" => {
                     let value = arguments.next().context("FPS limit is required")?;
@@ -131,6 +151,14 @@ impl Options {
                 _ => bail!("unknown option {argument}; use --help"),
             }
         }
+        ensure!(
+            !options.server_only
+                || (options.pids.is_empty()
+                    && options.process_names.is_empty()
+                    && options.fps_limit.is_none()
+                    && !benchmark_uncapped),
+            "--server-only cannot be combined with --pid, --process-name, --fps-limit or --benchmark-uncapped"
+        );
         if benchmark_uncapped {
             // CEF has no unlimited OSR sentinel: one microsecond is its smallest
             // positive interval. This benchmark-only ceiling is not a prod cap.
@@ -138,6 +166,32 @@ impl Options {
         }
         Ok(Some(options))
     }
+}
+
+/// Runs `--toggle-edit` / `--quit` against the running instance and returns the exit
+/// code, or `None` for any other invocation. It needs no CEF runtime, so Linux runs it
+/// before re-executing from the retained runtime directory (which hashes the binary).
+pub fn control_command() -> Result<Option<i32>> {
+    if !std::env::args().any(|argument| argument == "--toggle-edit" || argument == "--quit") {
+        return Ok(None);
+    }
+    let Some(options) = Options::parse()? else {
+        return Ok(Some(0));
+    };
+    let Some(command) = options.control else {
+        return Ok(None);
+    };
+    if instance::InstanceGuard::acquire()?.is_some() {
+        eprintln!("vosulay is not running");
+        return Ok(Some(1));
+    }
+    Ok(Some(match control::send(command) {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("{error:#}");
+            1
+        }
+    }))
 }
 
 fn parse_fps_limit(value: &str) -> Result<u32> {
@@ -201,6 +255,34 @@ pub unsafe extern "C" fn RunWinMain(
 #[cfg(test)]
 mod fps_tests {
     use super::*;
+    #[test]
+    fn control_and_server_only_argument_conflicts() {
+        for arguments in [
+            vec!["--toggle-edit", "--quit"],
+            vec!["--server-only", "--pid", "123"],
+            vec!["--server-only", "--process-name", "osu!"],
+            vec!["--server-only", "--fps-limit", "auto"],
+            vec!["--server-only", "--benchmark-uncapped"],
+        ] {
+            assert!(Options::parse_arguments(arguments.into_iter().map(str::to_owned)).is_err());
+        }
+        let options = Options::parse_arguments(
+            [
+                "--server-only",
+                "--vosu-url",
+                "http://localhost:24050",
+                "--config",
+                "example.json",
+            ]
+            .into_iter()
+            .map(str::to_owned),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(options.server_only);
+        assert_eq!(options.config, PathBuf::from("example.json"));
+        assert!(options.vosu_url.is_some());
+    }
 
     #[test]
     fn explicit_auto_overrides_persisted_fixed_rate_and_tracks_monitor_changes() {

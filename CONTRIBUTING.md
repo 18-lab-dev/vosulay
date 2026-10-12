@@ -153,6 +153,8 @@ For UI/input changes, check:
 - Lose/regain game focus; editing exits by default, and the configurable keep-editing setting behaves as documented.
 - Tray **Edit mode**, **Hide vosulay**, and **Exit vosulay** work and show the expected checked state.
 - Open `http://127.0.0.1:5050/overlay` and verify the active profile; do not widen listener access just for a local test.
+- With **Allow editing on this computer** on, open `http://manage.localhost:5050/overlay`; edit a placement and a setting, then confirm the in-game editor and config file follow and the plain `/overlay` address stays view-only.
+- `vosulay --toggle-edit` toggles in-game editing like the tray item; `vosulay --quit` exits gracefully; both fail with status 1 when nothing is running. `vosulay --server-only` serves pages without touching the game.
 
 Document OS/game/backend versions and any skipped checks. See [testing](docs/testing.md) for coverage boundaries.
 

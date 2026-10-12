@@ -52,7 +52,7 @@ pub struct AppSettings {
     pub fps_limit: u32,
     pub allow_unrestricted_shared_array_buffer: bool,
     pub allowed_ips: String,
-    /// Lets remote profile pages opened on this machine edit the profile they show.
+    /// Serves the full editor at `manage.localhost:<port>/overlay` to this machine only.
     pub allow_local_profile_editing: bool,
 
     pub remote_listen_host: String,
