@@ -248,5 +248,7 @@ jobs:
             signing='The Windows binaries in this release are not code-signed.'
           fi
           notes="$(printf '## Code signing policy\n\n%s\n\n[Code signing policy](%s) · [Privacy policy](%s#privacy-policy) · [Security and installation disclosure](%s)\n' "$signing" "$policy" "$policy" "$disclosure")"
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "vosulay $version" \
+          # Releases are immutable once published, so create a draft: the
+          # maintainer signs and publishes it with tools/release/sign-release.py --publish.
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "vosulay $version" \
             --generate-notes --notes "$notes" dist/*

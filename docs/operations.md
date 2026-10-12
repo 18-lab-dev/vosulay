@@ -73,15 +73,22 @@ the binaries' glibc floor to that host's version.
 
 ### Arch source package / AUR
 
-[`packaging/arch/PKGBUILD`](../packaging/arch/PKGBUILD) builds from source, unlike
-the prebuilt Arch release artifact. Its make dependency is `cargo`, so either
-Arch's `rust` or `rustup` satisfies it (they conflict with each other); with
-rustup it builds with the pinned toolchain, otherwise with the system Rust,
-which must meet the crates' `rust-version`. It uses the pinned CEF archive as a
-source, installs the setuid sandbox, and specifies
-`!lto !strip !debug`. After tagging, bump `pkgver` and run `updpkgsums`; the
-source tarball checksum is `SKIP` until then. Keep the CEF source and checksum
-aligned with `tools/cef/pins.json`.
+[`packaging/arch/PKGBUILD`](../packaging/arch/PKGBUILD) is the `vosulay-git` AUR
+package: it builds the current `main` branch from source, unlike the prebuilt
+Arch release artifact, and takes its version from `git describe`. Its make
+dependencies are `git` and `cargo`, so either Arch's `rust` or `rustup`
+satisfies it (they conflict with each other); with rustup it builds with the
+pinned toolchain, otherwise with the system Rust, which must meet the crates'
+`rust-version`. The build downloads the CEF archive named in
+`tools/cef/pins.json` and checks its pinned size and hashes, so the PKGBUILD
+needs no change when the pin moves. It installs the setuid sandbox, specifies
+`!lto !strip !debug`, installs the branding license, and links the CEF license
+and third-party notices into `/usr/share/licenses/vosulay-git/`. makepkg warns
+that the executable references `$srcdir`: those are the build-cache fallback
+paths, which a packaged binary never uses because `libcef.so` sits beside it.
+After changing the PKGBUILD, build it in a clean Arch container, run `namcap`,
+regenerate `.SRCINFO` with `makepkg --printsrcinfo`, and hand both files to the
+AUR maintainer.
 
 ### Windows packages
 
@@ -118,8 +125,7 @@ trigger SmartScreen.
 ### Release process
 
 1. Bump `[workspace.package].version` in `Cargo.toml` and keep the lockfile's
-   workspace package versions consistent. Update `pkgver` in
-   `packaging/arch/PKGBUILD`, and regenerate the notices with
+   workspace package versions consistent, and regenerate the notices with
    `python3 tools/notices/generate.py`: they link the versioned source asset,
    and Linux CI fails while they are stale.
 2. Commit the release changes.
@@ -129,16 +135,21 @@ trigger SmartScreen.
    that tag with `publish=true`. The Linux job builds in `ubuntu:22.04`; the
    Windows job produces the ZIP and installer. Every run uploads
    `vosulay-linux-x86_64` and `vosulay-windows-x86_64` artifacts.
-6. Publication verifies the tag matches `Cargo.toml`, then creates the GitHub
-   release with all six packages, `vosulay-<v>-third-party-sources.tar` and
-   `SHA256SUMS`. The source archive is the corresponding source for the LGPL
+6. Publication verifies the tag matches `Cargo.toml`, then creates a **draft**
+   GitHub release with all six packages, `vosulay-<v>-third-party-sources.tar`
+   and `SHA256SUMS`. The source archive is the corresponding source for the LGPL
    components inside the asdf-overlay DLLs
    ([provenance](provenance.md)); it is assembled from pinned, hash-checked
    upstream archives, and a changed upstream archive fails publication. A
    branch run with `publish=false` builds artifacts only; never publish for
    routine verification.
-7. Run `updpkgsums` for `packaging/arch/PKGBUILD` against the published tag and
-   update the AUR package metadata.
+7. Sign and publish the draft locally with the OpenPGP release key
+   (`6F0F 0D30 C09D 3A03 6246  A810 2CB6 524B B54B 2CDA`):
+   `python3 tools/release/sign-release.py --tag v<v> --publish`. It checks every
+   asset against GitHub's recorded digest, uploads `<asset>.sig` for each one,
+   and only then publishes. Releases are immutable once published, so
+   signatures cannot be added afterwards; v1.2.0 predates this and carries
+   none. The same key signs commits and tags.
 8. Update the Windows package-manager manifests with the new version, release
    date and the hashes from `SHA256SUMS`:
    [`packaging/winget/`](../packaging/winget/) (`PackageVersion`, `ReleaseDate`,

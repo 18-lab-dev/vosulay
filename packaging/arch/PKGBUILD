@@ -1,11 +1,12 @@
 # Maintainer: sxlvia <qt715 at proton dot me>
 #
-# Source build for the AUR. After tagging a release, set pkgver and run
-# `updpkgsums`. The pinned CEF archive must match tools/cef/pins.json.
-pkgname=vosulay
-pkgver=1.2.0
+# Builds the current main branch. Commits are signed with the release key
+# 6F0F0D30C09D3A036246A8102CB6524BB54B2CDA, but the source is not fetched with
+# `?signed`: a HEAD merged through GitHub's web UI carries GitHub's signature
+# instead, and verification would then fail the build.
+pkgname=vosulay-git
+pkgver=1.2.0.r3.g27f0d39
 pkgrel=1
-_cef=cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_linux64_minimal.tar.bz2
 pkgdesc='In-game overlay for vosu and tosu-compatible counters'
 arch=('x86_64')
 url='https://github.com/shiruviaa/vosulay'
@@ -14,44 +15,48 @@ depends=(
   'alsa-lib' 'at-spi2-core' 'cairo' 'dbus' 'expat' 'glib2' 'libcups' 'libx11'
   'libxcb' 'libxcomposite' 'libxdamage' 'libxext' 'libxfixes' 'libxkbcommon'
   'libxrandr' 'mesa' 'nspr' 'nss' 'pango' 'systemd-libs' 'wayland'
+  'hicolor-icon-theme'
 )
 # Arch's rust and rustup packages conflict and both provide cargo. Requiring
 # rustup made the package uninstallable for everyone using the rust package.
-makedepends=('cargo')
+makedepends=('git' 'cargo')
+provides=('vosulay')
+conflicts=('vosulay')
 # CEF ships prebuilt and stripped; the injected overlay libraries must keep
 # their default link options.
 options=('!lto' '!strip' '!debug')
-source=(
-  "$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
-  "https://cef-builds.spotifycdn.com/${_cef//+/%2B}"
-)
-noextract=("${_cef//+/%2B}")
-sha256sums=('SKIP'
-            '7f47eeb1c297099ffb9e12d0dea6a0d4eabd255135d114ff0ace8780bdb3feeb')
+# The CEF archive is not a source entry: its version follows
+# tools/cef/pins.json on main, and the build downloads it and checks the pinned
+# size, SHA-1 and SHA-256.
+source=('git+https://github.com/shiruviaa/vosulay.git')
+sha256sums=('SKIP')
 
-_cache() {
-  echo "$srcdir/cache"
+_toolchain() {
+  sed -n 's/^channel *= *"\(.*\)"/\1/p' "$srcdir/vosulay/rust-toolchain.toml"
+}
+
+pkgver() {
+  cd vosulay
+  git describe --long --tags --abbrev=7 --match 'v[0-9]*' \
+    | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
 }
 
 prepare() {
-  cd "$pkgname-$pkgver"
-  # The build verifies and extracts the pinned CEF archive from this cache
-  # instead of downloading it.
-  mkdir -p "$(_cache)/vosulay/cef"
-  cp -L "$srcdir/${_cef//+/%2B}" "$(_cache)/vosulay/cef/$_cef"
+  cd vosulay
   # With rustup, build with the repository's pinned toolchain. System Rust
   # ignores RUSTUP_TOOLCHAIN and only has to meet the crates' rust-version.
-  export RUSTUP_TOOLCHAIN="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
+  export RUSTUP_TOOLCHAIN="$(_toolchain)"
   if command -v rustup >/dev/null; then
     rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
   fi
-  cargo fetch --locked --target x86_64-unknown-linux-gnu
+  cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
 }
 
 build() {
-  cd "$pkgname-$pkgver"
-  export XDG_CACHE_HOME="$(_cache)"
-  export RUSTUP_TOOLCHAIN="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
+  cd vosulay
+  # Keeps the downloaded CEF archive between rebuilds of this package.
+  export XDG_CACHE_HOME="$srcdir/cache"
+  export RUSTUP_TOOLCHAIN="$(_toolchain)"
   export CARGO_TARGET_DIR=target
   # libcef ships beside the executable; do not embed the build cache RPATH.
   export VOSULAY_PACKAGE_BUILD=1
@@ -60,9 +65,9 @@ build() {
   cargo build --frozen --release -p vosulay
   cargo build --frozen --release -p vosulay-overlay -p vosulay-lookup
   local cef
-  cef="$(cargo run --frozen --quiet --release -p vosulay-cef-tools -- acquire --platform linux-x86_64)"
+  cef="$(cargo run --frozen --quiet --release -p vosulay-cef-tools -- acquire --platform "linux-$CARCH")"
   rm -rf "$srcdir/stage"
-  cargo run --frozen --quiet --release -p vosulay-cef-tools -- package --platform linux-x86_64 \
+  cargo run --frozen --quiet --release -p vosulay-cef-tools -- package --platform "linux-$CARCH" \
     --cef-path "$cef" --output "$srcdir/stage" \
     --exe target/release/vosulay \
     --overlay target/release/libvosulay_overlay.so \
@@ -71,7 +76,7 @@ build() {
 }
 
 package() {
-  cd "$pkgname-$pkgver"
+  cd vosulay
   install -d "$pkgdir/usr/lib/vosulay" "$pkgdir/usr/bin"
   cp -a "$srcdir/stage/." "$pkgdir/usr/lib/vosulay/"
   # Chromium's setuid sandbox, used when unprivileged user namespaces are unavailable.
@@ -82,4 +87,8 @@ package() {
   install -Dm644 assets/branding/vosulay-app-icon.svg \
     "$pkgdir/usr/share/icons/hicolor/scalable/apps/com.vosu.vosulay.svg"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 assets/branding/LICENSE.md "$pkgdir/usr/share/licenses/$pkgname/LICENSE-branding.md"
+  ln -s /usr/lib/vosulay/LICENSE.txt "$pkgdir/usr/share/licenses/$pkgname/LICENSE-CEF.txt"
+  ln -s /usr/lib/vosulay/THIRD_PARTY_NOTICES.md \
+    "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
 }

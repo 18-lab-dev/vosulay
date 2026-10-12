@@ -32,7 +32,7 @@ together.
 | Windows host platform | [`crates/platform-windows`](../crates/platform-windows) | asdf-overlay attachment, D3D11 GPU copies, foreground target selection, tray. |
 | Native build | [`build.rs`](../build.rs), [`Cargo.toml`](../Cargo.toml), [`rust-toolchain.toml`](../rust-toolchain.toml) | Root crate links the retained CEF runtime and embeds retained compositor/lookup paths. |
 | Linux release packaging | [`packaging/linux/`](../packaging/linux/) | Ubuntu 22.04 container/dependencies, runtime build, nfpm DEB/RPM/Arch metadata and system desktop entry. |
-| Arch source packaging | [`packaging/arch/PKGBUILD`](../packaging/arch/PKGBUILD) | AUR source build with pinned CEF and setuid sandbox. |
+| Arch source packaging | [`packaging/arch/PKGBUILD`](../packaging/arch/PKGBUILD) | `vosulay-git` AUR build of `main`; downloads the CEF archive pinned in `tools/cef/pins.json`; setuid sandbox. |
 | Windows package-manager manifests | [`packaging/winget/`](../packaging/winget/), [`packaging/scoop/vosulay.json`](../packaging/scoop/vosulay.json) | Prepared winget and Scoop manifests for the latest release (not yet submitted). |
 | Third-party notices | [`tools/notices/`](../tools/notices/), [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) | Generated licence notices shipped in every package; `generate.py --check` runs in Linux CI. |
 | Windows installer | [`packaging/windows/vosulay.iss`](../packaging/windows/vosulay.iss), [`packaging/windows/verify-release.ps1`](../packaging/windows/verify-release.ps1) | Per-user Inno Setup installer for the complete Windows runtime; release checks for metadata, signatures, and the ZIP's DLL against the staged package the installer is built from. |

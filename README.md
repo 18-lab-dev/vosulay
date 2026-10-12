@@ -29,7 +29,12 @@ Need help? See [SUPPORT.md](SUPPORT.md) for where to ask questions and report bu
 
 Download an x86_64 package from [GitHub Releases](https://github.com/shiruviaa/vosulay/releases).
 Replace `<v>` below with the release version. Published releases include
-`SHA256SUMS` for checking the downloads.
+`SHA256SUMS` for checking the downloads. Releases after v1.2.0 also carry a
+detached OpenPGP signature `<file>.sig` for every file, made with sxlvia's
+release key `6F0F 0D30 C09D 3A03 6246  A810 2CB6 524B B54B 2CDA`
+([public key](packaging/release-signing-key.asc)); check one with
+`gpg --import packaging/release-signing-key.asc` and
+`gpg --verify <file>.sig <file>`.
 
 ### Code signing policy
 
@@ -78,9 +83,10 @@ or `sudo pacman -R vosulay`.
 No apt, dnf, or pacman repository is configured, so a system upgrade does not
 pick up new versions. To upgrade, quit vosulay from the tray, download the newer
 release package, and install it with the same command; the package manager
-replaces the old version. Arch users can alternatively build
-`packaging/arch/PKGBUILD` from source, or the `vosulay` AUR package once it is
-published, and rebuild it after each release.
+replaces the old version. Arch users can alternatively install the
+`vosulay-git` AUR package once it is published; it builds the current `main`
+branch from [`packaging/arch/PKGBUILD`](packaging/arch/PKGBUILD), and an AUR
+helper rebuilds it when `main` moves.
 
 ### Windows
 
