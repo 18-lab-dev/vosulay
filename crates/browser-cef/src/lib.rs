@@ -361,9 +361,12 @@ wrap_life_span_handler! {
 wrap_display_handler! {
     struct Console { state: ViewState }
     impl DisplayHandler {
-        fn on_console_message(&self, _browser: Option<&mut Browser>, _level: LogSeverity, message: Option<&CefString>, _source: Option<&CefString>, _line: i32) -> i32 {
+        fn on_console_message(&self, _browser: Option<&mut Browser>, _level: LogSeverity, message: Option<&CefString>, source: Option<&CefString>, line: i32) -> i32 {
             if let Some(message) = message {
-                let message = message.to_string();
+                let mut message = message.to_string();
+                if let Some(origin) = source.and_then(|source| console_origin(&source.to_string(), line)) {
+                    message = format!("{message} [{origin}]");
+                }
                 eprintln!("CEF: {message}");
                 let mut state = self.state.borrow_mut();
                 // Diagnostics are bounded even if an untrusted counter floods console.
@@ -372,6 +375,51 @@ wrap_display_handler! {
             1
         }
     }
+}
+
+/// Where a console message came from, for attributing it to a page. Queries,
+/// fragments and credentials are dropped, and local-overlay capabilities and
+/// roots are masked: these logs get pasted into bug reports.
+fn console_origin(source: &str, line: i32) -> Option<String> {
+    let mut url = url::Url::parse(source).ok()?;
+    if url.cannot_be_a_base() {
+        // data:, about: and javascript: sources carry content, not a location.
+        return Some(format!("{}:", url.scheme()));
+    }
+    url.set_query(None);
+    url.set_fragment(None);
+    let _ = url.set_username("");
+    let _ = url.set_password(None);
+    let segments: Vec<String> = url
+        .path_segments()
+        .map(|segments| segments.map(str::to_owned).collect())
+        .unwrap_or_default();
+    let masked = if url.scheme() == scheme::OVERLAY_SCHEME {
+        url.set_host(Some("capability")).ok()?;
+        Some(0)
+    } else if segments.first().is_some_and(|first| first == "local") {
+        Some(1)
+    } else {
+        None
+    };
+    if let Some(index) = masked.filter(|index| *index < segments.len()) {
+        let replacement = if index == 0 { "root" } else { "capability" };
+        url.path_segments_mut()
+            .ok()?
+            .clear()
+            .extend(segments.iter().enumerate().map(|(position, segment)| {
+                if position == index {
+                    replacement
+                } else {
+                    segment
+                }
+            }));
+    }
+    Some(if line > 0 {
+        format!("{url}:{line}")
+    } else {
+        url.to_string()
+    })
 }
 
 wrap_client! {
@@ -954,5 +1002,44 @@ mod permission_tests {
         assert!(!allowed("vosulay://manager/", 0));
         assert!(!allowed("vosulay://manager/", camera));
         assert!(!allowed("vosulay://manager/", loopback | camera));
+    }
+}
+
+#[cfg(test)]
+mod console_tests {
+    use super::console_origin;
+
+    #[test]
+    fn console_origins_locate_pages_without_leaking_capabilities() {
+        let token = "0123456789abcdef0123456789abcdef";
+        assert_eq!(
+            console_origin(
+                &format!("vosulay-overlay://{token}/L2hvbWUvdXNlcg/js/app.js?x=1#y"),
+                42
+            )
+            .as_deref(),
+            Some("vosulay-overlay://capability/root/js/app.js:42")
+        );
+        assert_eq!(
+            console_origin(
+                &format!("http://127.0.0.1:5050/local/{token}/index.html"),
+                7
+            )
+            .as_deref(),
+            Some("http://127.0.0.1:5050/local/capability/index.html:7")
+        );
+        assert_eq!(
+            console_origin(
+                "http://user:secret@127.0.0.1:24050/counter/main.js?token=s",
+                0
+            )
+            .as_deref(),
+            Some("http://127.0.0.1:24050/counter/main.js")
+        );
+        assert_eq!(
+            console_origin("data:text/javascript,secret()", 1).as_deref(),
+            Some("data:")
+        );
+        assert_eq!(console_origin("", 3), None);
     }
 }
