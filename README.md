@@ -435,9 +435,11 @@ window or a browser tab. Open the page through a loopback address
 (`http://127.0.0.1:<port>/overlay` or `localhost`), press the edit shortcut
 (`Ctrl+Shift+Space` by default) inside the page, and use the same editor as in
 game. Edits save to the profile the page shows; the in-game editor picks them up
-at once and other open pages within about two seconds. Profile management, app
-settings and adding local HTML files stay in the in-game editor. Other devices
-keep a view-only page.
+at once and other open pages within about two seconds. As in game, counters on
+an editable page take no clicks outside edit mode, so the page keeps the
+keyboard for the edit shortcut; use the interaction shortcut (`Ctrl+I`) while
+editing to use them. Profile management, app settings and adding local HTML
+files stay in the in-game editor. Other devices keep a view-only page.
 
 The switch takes effect without a restart. Pages on other websites cannot use
 the editing routes, but counters installed in vosu or tosu run on the page's own
