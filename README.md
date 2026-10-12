@@ -273,18 +273,20 @@ General → Leave edit mode when the game loses focus** to keep the editor on
 screen while another window, such as a screenshot tool, is focused; input
 returns to the editor when the game is focused again.
 
-The mouse wheel acts on the counter under the pointer while editing: over its
-middle it changes the layer, over an edge it grows (wheel up) or shrinks (wheel
-down) that side by 10 px, and over a corner it changes the scale by 0.05 while
-the opposite corner stays fixed. Continued scrolling keeps targeting the same
-edge or corner until the wheel pauses, so the pointer can stay in place. Each
-scroll gesture is one undo step. The right-click menu also offers **Refresh**.
+Drag a counter to move it. Drag a selected counter's corner handles, or the
+edge and corner bands just inside its border, to change it: a plain drag
+resizes, **Ctrl**+drag scales it while the opposite corner (or the middle of the
+opposite side) stays fixed, and **Shift**+drag crops that side while the
+counter's content stays in place. The band under the pointer is highlighted in
+the color of the edit it would make. The bands also work for counters flush
+with the screen edge, whose handles fall off-screen. The first press on an
+unselected counter only selects and moves it.
 
-Drag a selected counter's corner handles, or the edge and corner bands just
-inside its border, to resize it; the bands also work for counters flush with
-the screen edge, whose handles fall off-screen. The first press on an
-unselected counter only selects and moves it. In the properties panel, the
-wheel steps the focused field by its step; hold Shift for ten steps.
+Right-click a counter for its properties, which include the crop of each side
+in counter pixels. The mouse wheel changes the field under the pointer by its
+step, without clicking into it; hold Shift for ten steps. Scrolling one field is
+one undo step. **Reset size** restores the counter's size, scale 1 and no crop.
+The right-click menu also offers **Refresh**.
 
 The Linux editor shows the native system cursor and temporarily disables
 relative mouse mode. Leaving editing, losing focus, disconnecting, or destroying
@@ -495,7 +497,7 @@ executable directories, including the legacy `static/__ingame__/settings.values.
 The imported native configuration preserves the selected in-game profile,
 profile identities/names, repeated counters, geometry, scale, z-order, safe
 custom HTTP(S) URLs, and enabled state. New opacity/rotation values default to
-`1.0`/`0.0`. A saved migration marker makes automatic import idempotent.
+`1.0`/`0.0`, and imported counters are uncropped. A saved migration marker makes automatic import idempotent.
 Existing user-created profiles or settings are never overwritten automatically.
 
 To import intentionally, enter edit mode with `Ctrl+Shift+Space`, open

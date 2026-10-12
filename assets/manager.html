@@ -116,13 +116,17 @@
         <label>Layer<input id="field-z" type="number" min="0" max="999" step="1" aria-describedby="field-z-warning"><small id="field-z-warning" class="field-warning" hidden></small></label>
         <label>Opacity %<input id="field-opacity" type="number" min="0" max="100" step="1" aria-describedby="field-opacity-warning"><small id="field-opacity-warning" class="field-warning" hidden></small></label>
         <label>Rotation<input id="field-rotation" type="number" min="-180" max="180" step="1" aria-describedby="field-rotation-warning"><small id="field-rotation-warning" class="field-warning" hidden></small></label>
+        <label>Crop left<input id="field-crop-left" type="number" min="0" step="1" aria-describedby="field-crop-left-warning"><small id="field-crop-left-warning" class="field-warning" hidden></small></label>
+        <label>Crop right<input id="field-crop-right" type="number" min="0" step="1" aria-describedby="field-crop-right-warning"><small id="field-crop-right-warning" class="field-warning" hidden></small></label>
+        <label>Crop top<input id="field-crop-top" type="number" min="0" step="1" aria-describedby="field-crop-top-warning"><small id="field-crop-top-warning" class="field-warning" hidden></small></label>
+        <label>Crop bottom<input id="field-crop-bottom" type="number" min="0" step="1" aria-describedby="field-crop-bottom-warning"><small id="field-crop-bottom-warning" class="field-warning" hidden></small></label>
       </div>
       <div class="inspector-actions">
-        <button id="reset" class="quiet-button">Reset size</button>
+        <button id="reset" class="quiet-button" title="Restore the counter's size, scale 1 and no crop">Reset size</button>
         <button id="refresh-overlay" class="quiet-button" type="button">Refresh</button>
         <button id="settings" class="quiet-button">Settings</button>
       </div>
-      <small class="hint">Drag move · handles resize · wheel: middle layer, edges resize, corners scale · right-click overlap cycles settings<span id="interaction-hint"> · Ctrl+I interacts</span></small>
+      <small class="hint">Drag moves · drag an edge or handle to resize, Ctrl+drag to scale, Shift+drag to crop · wheel over a field changes it · right-click overlap cycles settings<span id="interaction-hint"> · Ctrl+I interacts</span></small>
     </aside>
     <div id="url-modal" class="modal-backdrop" hidden>
       <form id="url-form" class="url-dialog" role="dialog" aria-modal="true" aria-labelledby="url-dialog-title" novalidate>

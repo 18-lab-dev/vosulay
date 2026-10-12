@@ -56,7 +56,7 @@ Use a fresh output directory. The wrapper isolates PID/IPC/network namespaces an
 - `crates/frame-transport/`, `crates/overlay-linux/tests/`: transport ownership and loader/input/late-attach fixtures.
 - `crates/platform-windows/src/target_selection.rs`: focus-driven target selection, including tests available on Linux.
 
-Tier 4's checklist covers edit/interaction toggles, drag/resize/wheel, focus loss, tray actions and the remote `/overlay` page on your own machine. Native GPU composition, real game input release, OBS capture, desktop tray integration, and delivered-pixel performance need explicit platform checks. Never label an unsupported/failed game-surface launch as a compositor pass.
+Tier 4's checklist covers edit/interaction toggles, drag/resize/scale/crop, field wheel stepping, focus loss, tray actions and the remote `/overlay` page on your own machine. Native GPU composition, real game input release, OBS capture, desktop tray integration, and delivered-pixel performance need explicit platform checks. Never label an unsupported/failed game-surface launch as a compositor pass.
 
 ## Maintainer environment (optional)
 

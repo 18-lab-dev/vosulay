@@ -34,7 +34,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-stro
   transform-origin: top left;
   contain: layout style;
 }
-.overlay-frame { width: 100%; height: 100%; border: 0; display: block; opacity: var(--overlay-opacity, 1); background: transparent; }
+.overlay-clip { position: absolute; inset: 0; overflow: hidden; }
+.overlay-frame {
+  position: absolute; left: var(--frame-left, 0px); top: var(--frame-top, 0px);
+  width: var(--frame-width, 100%); height: var(--frame-height, 100%);
+  border: 0; display: block; opacity: var(--overlay-opacity, 1); background: transparent;
+}
 .overlay.missing .overlay-frame { display: none; }
 .missing-card {
   display: none;
@@ -85,28 +90,33 @@ body.editing .overlay.selected .resize-handle { display: block; }
 .resize-handle[data-edge="ne"] { right: -7px; top: -7px; cursor: nesw-resize; }
 .resize-handle[data-edge="sw"] { left: -7px; bottom: -7px; cursor: nesw-resize; }
 .resize-handle[data-edge="se"] { right: -7px; bottom: -7px; cursor: nwse-resize; }
-body.editing .overlay[data-wheel-zone]::before {
-  --wheel-fill: rgba(169, 159, 255, .34);
+/* The side or corner a press would drag, colored by the edit: resize, Ctrl scale, Shift crop. */
+body.editing .overlay[data-edge-zone]::before {
+  --edge-color: var(--accent-strong);
+  --edge-fill: rgba(169, 159, 255, .34);
   content: ""; position: absolute; z-index: 4; pointer-events: none;
-  border: 0 solid var(--accent-strong);
 }
-body.editing.interacting .overlay[data-wheel-zone]::before { display: none; }
-.overlay[data-wheel-zone="n"]::before { left: 0; right: 0; top: 0; height: var(--wheel-band-y); border-top-width: var(--wheel-line); background: linear-gradient(to bottom, var(--wheel-fill), transparent); }
-.overlay[data-wheel-zone="s"]::before { left: 0; right: 0; bottom: 0; height: var(--wheel-band-y); border-bottom-width: var(--wheel-line); background: linear-gradient(to top, var(--wheel-fill), transparent); }
-.overlay[data-wheel-zone="w"]::before { top: 0; bottom: 0; left: 0; width: var(--wheel-band-x); border-left-width: var(--wheel-line); background: linear-gradient(to right, var(--wheel-fill), transparent); }
-.overlay[data-wheel-zone="e"]::before { top: 0; bottom: 0; right: 0; width: var(--wheel-band-x); border-right-width: var(--wheel-line); background: linear-gradient(to left, var(--wheel-fill), transparent); }
-.overlay[data-wheel-zone="nw"]::before,
-.overlay[data-wheel-zone="ne"]::before,
-.overlay[data-wheel-zone="sw"]::before,
-.overlay[data-wheel-zone="se"]::before { width: calc(var(--wheel-band-x) * 2); height: calc(var(--wheel-band-y) * 2); }
-.overlay[data-wheel-zone="nw"]::before { left: 0; top: 0; border-left-width: var(--wheel-line); border-top-width: var(--wheel-line); background: radial-gradient(farthest-corner at top left, var(--wheel-fill), transparent 70%); }
-.overlay[data-wheel-zone="ne"]::before { right: 0; top: 0; border-right-width: var(--wheel-line); border-top-width: var(--wheel-line); background: radial-gradient(farthest-corner at top right, var(--wheel-fill), transparent 70%); }
-.overlay[data-wheel-zone="sw"]::before { left: 0; bottom: 0; border-left-width: var(--wheel-line); border-bottom-width: var(--wheel-line); background: radial-gradient(farthest-corner at bottom left, var(--wheel-fill), transparent 70%); }
-.overlay[data-wheel-zone="se"]::before { right: 0; bottom: 0; border-right-width: var(--wheel-line); border-bottom-width: var(--wheel-line); background: radial-gradient(farthest-corner at bottom right, var(--wheel-fill), transparent 70%); }
-body.editing:not(.interacting) .overlay.selected:is([data-wheel-zone="n"], [data-wheel-zone="s"]) { cursor: ns-resize; }
-body.editing:not(.interacting) .overlay.selected:is([data-wheel-zone="e"], [data-wheel-zone="w"]) { cursor: ew-resize; }
-body.editing:not(.interacting) .overlay.selected:is([data-wheel-zone="nw"], [data-wheel-zone="se"]) { cursor: nwse-resize; }
-body.editing:not(.interacting) .overlay.selected:is([data-wheel-zone="ne"], [data-wheel-zone="sw"]) { cursor: nesw-resize; }
+/* Same specificity as the per-zone rules below, so their border widths win. */
+.overlay[data-edge-zone]::before { border: 0 solid var(--edge-color); }
+body.editing .overlay[data-edge-mode="scale"]::before { --edge-color: #6fd3ff; --edge-fill: rgba(111, 211, 255, .3); }
+body.editing .overlay[data-edge-mode="crop"]::before { --edge-color: #ffc46f; --edge-fill: rgba(255, 196, 111, .3); }
+body.editing.interacting .overlay[data-edge-zone]::before { display: none; }
+.overlay[data-edge-zone="n"]::before { left: 0; right: 0; top: 0; height: var(--edge-band-y); border-top-width: var(--edge-line); background: linear-gradient(to bottom, var(--edge-fill), transparent); }
+.overlay[data-edge-zone="s"]::before { left: 0; right: 0; bottom: 0; height: var(--edge-band-y); border-bottom-width: var(--edge-line); background: linear-gradient(to top, var(--edge-fill), transparent); }
+.overlay[data-edge-zone="w"]::before { top: 0; bottom: 0; left: 0; width: var(--edge-band-x); border-left-width: var(--edge-line); background: linear-gradient(to right, var(--edge-fill), transparent); }
+.overlay[data-edge-zone="e"]::before { top: 0; bottom: 0; right: 0; width: var(--edge-band-x); border-right-width: var(--edge-line); background: linear-gradient(to left, var(--edge-fill), transparent); }
+.overlay[data-edge-zone="nw"]::before,
+.overlay[data-edge-zone="ne"]::before,
+.overlay[data-edge-zone="sw"]::before,
+.overlay[data-edge-zone="se"]::before { width: calc(var(--edge-band-x) * 2); height: calc(var(--edge-band-y) * 2); }
+.overlay[data-edge-zone="nw"]::before { left: 0; top: 0; border-left-width: var(--edge-line); border-top-width: var(--edge-line); background: radial-gradient(farthest-corner at top left, var(--edge-fill), transparent 70%); }
+.overlay[data-edge-zone="ne"]::before { right: 0; top: 0; border-right-width: var(--edge-line); border-top-width: var(--edge-line); background: radial-gradient(farthest-corner at top right, var(--edge-fill), transparent 70%); }
+.overlay[data-edge-zone="sw"]::before { left: 0; bottom: 0; border-left-width: var(--edge-line); border-bottom-width: var(--edge-line); background: radial-gradient(farthest-corner at bottom left, var(--edge-fill), transparent 70%); }
+.overlay[data-edge-zone="se"]::before { right: 0; bottom: 0; border-right-width: var(--edge-line); border-bottom-width: var(--edge-line); background: radial-gradient(farthest-corner at bottom right, var(--edge-fill), transparent 70%); }
+body.editing:not(.interacting) .overlay.selected:is([data-edge-zone="n"], [data-edge-zone="s"]) { cursor: ns-resize; }
+body.editing:not(.interacting) .overlay.selected:is([data-edge-zone="e"], [data-edge-zone="w"]) { cursor: ew-resize; }
+body.editing:not(.interacting) .overlay.selected:is([data-edge-zone="nw"], [data-edge-zone="se"]) { cursor: nwse-resize; }
+body.editing:not(.interacting) .overlay.selected:is([data-edge-zone="ne"], [data-edge-zone="sw"]) { cursor: nesw-resize; }
 
 #editor { position: fixed; inset: 0; z-index: 10000; pointer-events: none; }
 .toolbar, .sidebar, .inspector { pointer-events: auto; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); backdrop-filter: blur(18px); }

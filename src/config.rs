@@ -22,6 +22,7 @@ pub const DEFAULT_VOSU_URL: &str = "http://127.0.0.1:24050/";
 
 const DEFAULT_WIDTH: f64 = 500.0;
 const DEFAULT_HEIGHT: f64 = 300.0;
+const MIN_SIZE: f64 = 10.0;
 const DEFAULT_OPACITY: f64 = 1.0;
 const DEFAULT_ROTATION: f64 = 0.0;
 
@@ -108,6 +109,16 @@ pub struct Placement {
     pub opacity: f64,
     #[serde(default = "default_rotation")]
     pub rotation: f64,
+    /// Counter pixels hidden from each side of the frame (before scaling). The
+    /// placement's position is the top-left corner of the remaining region.
+    #[serde(default)]
+    pub crop_top: f64,
+    #[serde(default)]
+    pub crop_right: f64,
+    #[serde(default)]
+    pub crop_bottom: f64,
+    #[serde(default)]
+    pub crop_left: f64,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
     pub z_index: i32,
@@ -192,6 +203,10 @@ impl Default for Placement {
             scale: 1.0,
             opacity: DEFAULT_OPACITY,
             rotation: DEFAULT_ROTATION,
+            crop_top: 0.0,
+            crop_right: 0.0,
+            crop_bottom: 0.0,
+            crop_left: 0.0,
             enabled: true,
             z_index: 0,
         }
@@ -306,11 +321,18 @@ impl Placement {
             .filter(|name| !name.is_empty());
         self.top = finite_or(self.top, 0.0);
         self.left = finite_or(self.left, 0.0);
-        self.width = finite_or(self.width, DEFAULT_WIDTH).max(10.0);
-        self.height = finite_or(self.height, DEFAULT_HEIGHT).max(10.0);
+        self.width = finite_or(self.width, DEFAULT_WIDTH).max(MIN_SIZE);
+        self.height = finite_or(self.height, DEFAULT_HEIGHT).max(MIN_SIZE);
         self.scale = finite_or(self.scale, 1.0).max(0.1);
         self.opacity = finite_or(self.opacity, DEFAULT_OPACITY).clamp(0.0, 1.0);
         self.rotation = finite_or(self.rotation, DEFAULT_ROTATION).clamp(-180.0, 180.0);
+        // At least MIN_SIZE of the frame stays visible on each axis.
+        self.crop_left = finite_or(self.crop_left, 0.0).clamp(0.0, self.width - MIN_SIZE);
+        self.crop_right =
+            finite_or(self.crop_right, 0.0).clamp(0.0, self.width - MIN_SIZE - self.crop_left);
+        self.crop_top = finite_or(self.crop_top, 0.0).clamp(0.0, self.height - MIN_SIZE);
+        self.crop_bottom =
+            finite_or(self.crop_bottom, 0.0).clamp(0.0, self.height - MIN_SIZE - self.crop_top);
         self.z_index = self.z_index.clamp(0, 999);
     }
 }
@@ -523,6 +545,10 @@ mod tests {
                     scale: 0.0,
                     opacity: f64::NAN,
                     rotation: f64::INFINITY,
+                    crop_top: 100.0,
+                    crop_right: 50.0,
+                    crop_bottom: 500.0,
+                    crop_left: f64::NAN,
                     enabled: true,
                     z_index: 10_000,
                 }],
@@ -553,6 +579,10 @@ mod tests {
                         scale: 0.1,
                         opacity: DEFAULT_OPACITY,
                         rotation: DEFAULT_ROTATION,
+                        crop_top: 100.0,
+                        crop_right: 0.0,
+                        crop_bottom: DEFAULT_HEIGHT - MIN_SIZE - 100.0,
+                        crop_left: 0.0,
                         enabled: true,
                         z_index: 999,
                     }],
@@ -637,6 +667,10 @@ mod tests {
                     scale: 1.25,
                     opacity: 0.75,
                     rotation: -45.0,
+                    crop_top: 4.0,
+                    crop_right: 8.0,
+                    crop_bottom: 0.0,
+                    crop_left: 16.5,
                     enabled: true,
                     z_index: 4,
                 }],
@@ -664,7 +698,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_json_defaults_opacity_and_rotation() {
+    fn legacy_json_defaults_opacity_rotation_and_crop() {
         let config: AppConfig = serde_json::from_str(
             r#"{
                 "version": 1,
@@ -689,6 +723,15 @@ mod tests {
         let placement = &config.profiles[0].overlays[0];
         assert_eq!(placement.opacity, DEFAULT_OPACITY);
         assert_eq!(placement.rotation, DEFAULT_ROTATION);
+        assert_eq!(
+            [
+                placement.crop_top,
+                placement.crop_right,
+                placement.crop_bottom,
+                placement.crop_left
+            ],
+            [0.0; 4]
+        );
         assert!(placement.enabled);
         assert_eq!(placement.url, None);
         assert_eq!(placement.name, None);

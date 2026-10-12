@@ -6,7 +6,9 @@
 
 `AppConfig` has schema version `1`, an active profile ID, a non-empty profile list, settings, and a tosu migration-completed marker. The default profile is `default` / `Default`, with no placements. Profiles have an ID, name, and ordered placements. Repeated placements of one counter are valid and must not be deduplicated.
 
-A placement identifies an installed `counter_id` or custom `url`, with optional name, geometry, scale, opacity, rotation, enabled state, and z-order. Disabling keeps placement data. Supported custom schemes are `http`, `https`, and `vosulay-overlay`.
+A placement identifies an installed `counter_id` or custom `url`, with optional name, geometry, scale, opacity, rotation, crop, enabled state, and z-order. Disabling keeps placement data. Supported custom schemes are `http`, `https`, and `vosulay-overlay`.
+
+`width`/`height` size the counter's frame. `crop_top`, `crop_right`, `crop_bottom` and `crop_left` (default `0`) hide that many unscaled counter pixels from each side; `left`/`top` place the top-left corner of the remaining region, which is what scale and rotation apply to. Renderers ([assets/manager.js](../assets/manager.js), the static page in [src/remote.rs](../src/remote.rs)) clip a full-size frame offset by the left/top crop.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -43,7 +45,7 @@ Default storage is the user configuration directory's `vosulay/config.json` (Win
 
 Missing files receive defaults; malformed/unreadable files and unsupported schema versions produce errors. Missing fields receive defaults. Unknown fields, including obsolete remote credential/host fields, are ignored on load and omitted by subsequent saves. There is no remote access token.
 
-Normalization repairs missing/duplicate profile IDs and invalid active-profile selection, preserves placement order and duplicates, trims optional names, and replaces non-finite geometry values. Width/height are at least 10, scale at least 0.1; opacity is clamped to 0–1, rotation to −180–180, and z-order to 0–999. Invalid listener IPs return to loopback and port zero returns to 5050.
+Normalization repairs missing/duplicate profile IDs and invalid active-profile selection, preserves placement order and duplicates, trims optional names, and replaces non-finite geometry values. Width/height are at least 10, scale at least 0.1; opacity is clamped to 0–1, rotation to −180–180, and z-order to 0–999. Crops are at least 0 and leave at least 10 px of the frame visible on each axis (left/top take precedence over right/bottom). Invalid listener IPs return to loopback and port zero returns to 5050.
 
 The editor worker revision-checks saves and reauthorizes local-overlay capabilities before persistence. Pretty JSON is written to a temporary file in the target directory, synced, and atomically replaces the target. Unix also syncs the parent directory.
 

@@ -54,7 +54,9 @@
   const fields = {
     left: $("field-left"), top: $("field-top"), width: $("field-width"),
     height: $("field-height"), scale: $("field-scale"), z_index: $("field-z"),
-    opacity: $("field-opacity"), rotation: $("field-rotation")
+    opacity: $("field-opacity"), rotation: $("field-rotation"),
+    crop_left: $("field-crop-left"), crop_right: $("field-crop-right"),
+    crop_top: $("field-crop-top"), crop_bottom: $("field-crop-bottom")
   };
   const enabledField = $("field-enabled");
   enabledField.addEventListener("change", () => {
@@ -241,10 +243,30 @@
     return id || fallback;
   }
 
+  const MIN_VISIBLE = 10;
+  const CROP_SIDES = ["crop_top", "crop_right", "crop_bottom", "crop_left"];
+
+  // Mirrors Placement::normalize: at least MIN_VISIBLE of the frame stays visible per axis.
+  function clampCrop(overlay) {
+    overlay.crop_left = clamp(finite(overlay.crop_left, 0), 0, overlay.width - MIN_VISIBLE);
+    overlay.crop_right = clamp(finite(overlay.crop_right, 0), 0, overlay.width - MIN_VISIBLE - overlay.crop_left);
+    overlay.crop_top = clamp(finite(overlay.crop_top, 0), 0, overlay.height - MIN_VISIBLE);
+    overlay.crop_bottom = clamp(finite(overlay.crop_bottom, 0), 0, overlay.height - MIN_VISIBLE - overlay.crop_top);
+  }
+
+  // The placement's box: the frame minus its crop, before scale and rotation.
+  function visibleWidth(overlay) {
+    return overlay.width - overlay.crop_left - overlay.crop_right;
+  }
+
+  function visibleHeight(overlay) {
+    return overlay.height - overlay.crop_top - overlay.crop_bottom;
+  }
+
   function normalizeOverlay(input) {
     const overlay = input && typeof input === "object" ? input : {};
-    const width = Math.max(10, finite(overlay.width, 500));
-    const height = Math.max(10, finite(overlay.height, 300));
+    const width = Math.max(MIN_VISIBLE, finite(overlay.width, 500));
+    const height = Math.max(MIN_VISIBLE, finite(overlay.height, 300));
     const scale = Math.max(0.1, finite(overlay.scale, 1));
     const opacity = clamp(finite(overlay.opacity, 1), 0, 1);
     const rotation = clamp(finite(overlay.rotation, 0), -180, 180);
@@ -258,8 +280,10 @@
       scale,
       opacity,
       rotation,
+      ...Object.fromEntries(CROP_SIDES.map((side) => [side, overlay[side]])),
       z_index: Math.round(clamp(finite(overlay.z_index, 0), 0, 999))
     };
+    clampCrop(normalized);
     if (typeof overlay.url === "string" && overlay.url.trim()) normalized.url = overlay.url.trim();
     if (typeof overlay.name === "string" && overlay.name.trim()) normalized.name = overlay.name.trim();
     return normalized;
@@ -405,9 +429,9 @@
     const localX = (deltaX * cosine + deltaY * sine) / scale;
     const localY = (-deltaX * sine + deltaY * cosine) / scale;
     return localX >= 0
-      && localX <= finite(overlay.width, 0)
+      && localX <= visibleWidth(overlay)
       && localY >= 0
-      && localY <= finite(overlay.height, 0);
+      && localY <= visibleHeight(overlay);
   }
 
   function overlaysAtPoint(x, y) {
@@ -507,10 +531,12 @@
     const angle = overlay.rotation * Math.PI / 180;
     const cosine = Math.cos(angle);
     const sine = Math.sin(angle);
-    const widthX = overlay.scale * overlay.width * cosine;
-    const widthY = overlay.scale * overlay.width * sine;
-    const heightX = -overlay.scale * overlay.height * sine;
-    const heightY = overlay.scale * overlay.height * cosine;
+    const width = visibleWidth(overlay);
+    const height = visibleHeight(overlay);
+    const widthX = overlay.scale * width * cosine;
+    const widthY = overlay.scale * width * sine;
+    const heightX = -overlay.scale * height * sine;
+    const heightY = overlay.scale * height * cosine;
     return {
       minX: Math.min(0, widthX, heightX, widthX + heightX),
       maxX: Math.max(0, widthX, heightX, widthX + heightX),
@@ -522,10 +548,10 @@
   function overlayPositionRange(overlay) {
     if (!state.config?.settings.always_keep_overlays_in_view) {
       const angle = overlay.rotation * Math.PI / 180;
-      const centerX = overlay.scale
-        * (overlay.width * Math.cos(angle) - overlay.height * Math.sin(angle)) / 2;
-      const centerY = overlay.scale
-        * (overlay.width * Math.sin(angle) + overlay.height * Math.cos(angle)) / 2;
+      const width = visibleWidth(overlay);
+      const height = visibleHeight(overlay);
+      const centerX = overlay.scale * (width * Math.cos(angle) - height * Math.sin(angle)) / 2;
+      const centerY = overlay.scale * (width * Math.sin(angle) + height * Math.cos(angle)) / 2;
       return {
         minLeft: -centerX,
         maxLeft: window.innerWidth - centerX,
@@ -555,16 +581,19 @@
     overlay.scale = Math.max(0.1, finite(overlay.scale, 1));
     overlay.opacity = clamp(finite(overlay.opacity, 1), 0, 1);
     overlay.rotation = clamp(finite(overlay.rotation, 0), -180, 180);
-    overlay.width = Math.max(10, finite(overlay.width, 500));
-    overlay.height = Math.max(10, finite(overlay.height, 300));
+    overlay.width = Math.max(MIN_VISIBLE, finite(overlay.width, 500));
+    overlay.height = Math.max(MIN_VISIBLE, finite(overlay.height, 300));
+    clampCrop(overlay);
     overlay.z_index = Math.round(clamp(finite(overlay.z_index, 0), 0, 999));
 
     const angle = overlay.rotation * Math.PI / 180;
     const cosine = Math.cos(angle);
     const sine = Math.sin(angle);
+    const width = visibleWidth(overlay);
+    const height = visibleHeight(overlay);
     if (!state.config?.settings.always_keep_overlays_in_view) {
-      const centerX = overlay.scale * (overlay.width * cosine - overlay.height * sine) / 2;
-      const centerY = overlay.scale * (overlay.width * sine + overlay.height * cosine) / 2;
+      const centerX = overlay.scale * (width * cosine - height * sine) / 2;
+      const centerY = overlay.scale * (width * sine + height * cosine) / 2;
       if (document.activeElement !== fields.left) {
         overlay.left = clamp(finite(overlay.left, 0), -centerX, window.innerWidth - centerX);
       }
@@ -574,8 +603,8 @@
       return;
     }
 
-    const boundWidthAtScaleOne = Math.abs(cosine) * overlay.width + Math.abs(sine) * overlay.height;
-    const boundHeightAtScaleOne = Math.abs(sine) * overlay.width + Math.abs(cosine) * overlay.height;
+    const boundWidthAtScaleOne = Math.abs(cosine) * width + Math.abs(sine) * height;
+    const boundHeightAtScaleOne = Math.abs(sine) * width + Math.abs(cosine) * height;
     const fittingScale = Math.min(
       boundWidthAtScaleOne ? window.innerWidth / boundWidthAtScaleOne : overlay.scale,
       boundHeightAtScaleOne ? window.innerHeight / boundHeightAtScaleOne : overlay.scale
@@ -590,12 +619,19 @@
     }
   }
 
+  const GEOMETRY = ["left", "top", "width", "height", "scale", "rotation", ...CROP_SIDES];
+
+  function geometryKey(overlay) {
+    return GEOMETRY.map((key) => overlay[key]).join("\n");
+  }
+
   function applyOverlayStyle(root, overlay) {
     const next = {
       left: `${overlay.left}px`,
       top: `${overlay.top}px`,
-      width: `${overlay.width}px`,
-      height: `${overlay.height}px`,
+      width: `${visibleWidth(overlay)}px`,
+      height: `${visibleHeight(overlay)}px`,
+      frame: `${overlay.width}px\n${overlay.height}px\n${-overlay.crop_left}px\n${-overlay.crop_top}px`,
       transform: `rotate(${overlay.rotation}deg) scale(${overlay.scale})`,
       opacity: String(overlay.opacity),
       zIndex: String(overlay.z_index)
@@ -605,6 +641,13 @@
     if (applied.top !== next.top) root.style.top = next.top;
     if (applied.width !== next.width) root.style.width = next.width;
     if (applied.height !== next.height) root.style.height = next.height;
+    if (applied.frame !== next.frame) {
+      const [width, height, left, top] = next.frame.split("\n");
+      root.style.setProperty("--frame-width", width);
+      root.style.setProperty("--frame-height", height);
+      root.style.setProperty("--frame-left", left);
+      root.style.setProperty("--frame-top", top);
+    }
     if (applied.transform !== next.transform) root.style.transform = next.transform;
     if (applied.opacity !== next.opacity) root.style.setProperty("--overlay-opacity", next.opacity);
     if (applied.zIndex !== next.zIndex) root.style.zIndex = next.zIndex;
@@ -701,7 +744,7 @@
 
   // Records `before` as one undo step when the edit changed profiles or the
   // active profile. Repeated edits sharing `coalesceKey` within a short window
-  // (wheel layering, profile position stepping) fold into the first step.
+  // (wheel steps on a field, profile position stepping) fold into the first step.
   function commitHistory(before, coalesceKey = "") {
     if (!before || !state.config) return false;
     if (before.active_profile === state.config.active_profile
@@ -893,7 +936,9 @@
         frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
       }
       frame.setAttribute("loading", "eager");
-      root.append(frame);
+      const clip = makeElement("div", "overlay-clip");
+      clip.append(frame);
+      root.append(clip);
     } else {
       const missing = makeElement("div", "missing-card");
       missing.append(makeElement("strong", "", enabled ? "Counter unavailable" : "Disabled"));
@@ -956,10 +1001,10 @@
       for (const overlay of overlays) {
         const soleSelected = state.selected.size === 1 && state.selected.has(overlay);
         if (soleSelected) {
-          const previous = `${overlay.left}\n${overlay.top}\n${overlay.width}\n${overlay.height}\n${overlay.scale}`;
+          const previous = geometryKey(overlay);
           clampOverlay(overlay);
           // Persist the pull-into-view so the saved placement matches the screen.
-          if (previous !== `${overlay.left}\n${overlay.top}\n${overlay.width}\n${overlay.height}\n${overlay.scale}`) scheduleSave();
+          if (previous !== geometryKey(overlay)) scheduleSave();
         }
         const root = overlayRoots.get(overlay);
         if (!root) continue;
@@ -1222,9 +1267,29 @@
     };
   }
 
+  const OPPOSITE_CROP = { crop_left: "crop_right", crop_right: "crop_left", crop_top: "crop_bottom", crop_bottom: "crop_top" };
+
+  // Like a crop drag, a typed crop keeps the counter's content where it is on
+  // screen, and never takes from the opposite side's crop to fit.
+  function setCrop(overlay, side, value) {
+    const size = side === "crop_left" || side === "crop_right" ? overlay.width : overlay.height;
+    const x = overlay.crop_left;
+    const y = overlay.crop_top;
+    overlay[side] = clamp(value, 0, size - MIN_VISIBLE - overlay[OPPOSITE_CROP[side]]);
+    const angle = overlay.rotation * Math.PI / 180;
+    const shiftX = overlay.crop_left - x;
+    const shiftY = overlay.crop_top - y;
+    overlay.left += (Math.cos(angle) * shiftX - Math.sin(angle) * shiftY) * overlay.scale;
+    overlay.top += (Math.sin(angle) * shiftX + Math.cos(angle) * shiftY) * overlay.scale;
+  }
+
   function applyInspectorFieldValue(name, overlay, value) {
     if (name === "z_index") overlay.z_index = Math.round(value);
     else if (name === "opacity") overlay.opacity = value / 100;
+    else if (name in OPPOSITE_CROP) setCrop(overlay, name, value);
+    // A typed size never eats into the crop.
+    else if (name === "width") overlay.width = Math.max(value, MIN_VISIBLE + overlay.crop_left + overlay.crop_right);
+    else if (name === "height") overlay.height = Math.max(value, MIN_VISIBLE + overlay.crop_top + overlay.crop_bottom);
     else overlay[name] = value;
     clampOverlay(overlay);
   }
@@ -1278,7 +1343,7 @@
     refreshOverlayButton.disabled = overlay.enabled === false || !details.available;
     if (state.inspectorPoint) {
       // Opens beside the pointer instead of under it (flipping near viewport
-      // edges) so wheel input at the right-click point still reaches the overlay.
+      // edges) so it does not cover the counter that was right-clicked.
       const { x, y } = state.inspectorPoint;
       const offset = 2;
       inspector.style.right = "auto";
@@ -1557,7 +1622,7 @@
   function abandonGestures() {
     const hadPointer = Boolean(state.pointer);
     finishPointerOperation();
-    endWheelGesture(false);
+    setEdgeHover(null, "", "");
     if (hadPointer) scheduleSave(true);
     requestRender("stageGeometry", "inspector");
     updateToolbarAvoidance();
@@ -1688,7 +1753,7 @@
       closeProfileCreator();
       closeProfileDeleteConfirm();
       closeInspectorPopup();
-      endWheelGesture(false);
+      setEdgeHover(null, "", "");
     }
     if (!next) flushEditingChanges();
     if (changed) {
@@ -1737,21 +1802,88 @@
       placements,
       movementBounds,
       edge,
+      mode: edgeDragMode(event),
       x: event.clientX,
       y: event.clientY,
       latestX: event.clientX,
       latestY: event.clientY,
-      left: overlay.left,
-      top: overlay.top,
-      width: overlay.width,
-      height: overlay.height,
-      scale: overlay.scale,
+      base: Object.fromEntries(GEOMETRY.map((key) => [key, overlay[key]])),
       cosine: Math.cos(angle),
       sine: Math.sin(angle),
       inverseScale: 1 / overlay.scale,
       frame: 0
     };
+    updateEdgeHover();
   }
+
+  // Fixed for the whole drag: pressing or releasing a modifier mid-drag must not
+  // reinterpret the distance already dragged as a different edit.
+  function edgeDragMode(event) {
+    if (event.shiftKey) return "crop";
+    if (event.ctrlKey) return "scale";
+    return "resize";
+  }
+
+  // Moves the box origin by (x, y) counter pixels along its own rotated axes.
+  function shiftOrigin(overlay, operation, x, y) {
+    overlay.left += (operation.cosine * x - operation.sine * y) * operation.base.scale;
+    overlay.top += (operation.sine * x + operation.cosine * y) * operation.base.scale;
+  }
+
+  // dx/dy: drag distance in counter pixels along the box's axes. Each edit keeps
+  // the opposite side (or corner) where it is on screen.
+  const EDGE_DRAGS = {
+    resize(overlay, operation, dx, dy) {
+      const { base, edge } = operation;
+      const minimumWidth = MIN_VISIBLE + base.crop_left + base.crop_right;
+      const minimumHeight = MIN_VISIBLE + base.crop_top + base.crop_bottom;
+      if (edge.includes("e")) overlay.width = Math.max(minimumWidth, base.width + dx);
+      if (edge.includes("s")) overlay.height = Math.max(minimumHeight, base.height + dy);
+      if (edge.includes("w")) {
+        overlay.width = Math.max(minimumWidth, base.width - dx);
+        shiftOrigin(overlay, operation, base.width - overlay.width, 0);
+      }
+      if (edge.includes("n")) {
+        overlay.height = Math.max(minimumHeight, base.height - dy);
+        shiftOrigin(overlay, operation, 0, base.height - overlay.height);
+      }
+      return ["left", "top", "width", "height"];
+    },
+    // Like OBS's Alt+drag: the counter's content stays put while the side moves.
+    crop(overlay, operation, dx, dy) {
+      const { base, edge } = operation;
+      const spareWidth = base.width - MIN_VISIBLE;
+      const spareHeight = base.height - MIN_VISIBLE;
+      if (edge.includes("e")) overlay.crop_right = clamp(base.crop_right - dx, 0, spareWidth - base.crop_left);
+      if (edge.includes("s")) overlay.crop_bottom = clamp(base.crop_bottom - dy, 0, spareHeight - base.crop_top);
+      if (edge.includes("w")) {
+        overlay.crop_left = clamp(base.crop_left + dx, 0, spareWidth - base.crop_right);
+        shiftOrigin(overlay, operation, overlay.crop_left - base.crop_left, 0);
+      }
+      if (edge.includes("n")) {
+        overlay.crop_top = clamp(base.crop_top + dy, 0, spareHeight - base.crop_bottom);
+        shiftOrigin(overlay, operation, 0, overlay.crop_top - base.crop_top);
+      }
+      return ["left", "top", ...CROP_SIDES];
+    },
+    // Scales by how far the grabbed side or corner moved along its line from
+    // the anchor: the opposite corner, or the middle of the opposite side.
+    scale(overlay, operation, dx, dy) {
+      const { base, edge } = operation;
+      const width = visibleWidth(base);
+      const height = visibleHeight(base);
+      const anchorX = edge.includes("w") ? width : edge.includes("e") ? 0 : width / 2;
+      const anchorY = edge.includes("n") ? height : edge.includes("s") ? 0 : height / 2;
+      const reachX = (edge.includes("w") ? 0 : edge.includes("e") ? width : width / 2) - anchorX;
+      const reachY = (edge.includes("n") ? 0 : edge.includes("s") ? height : height / 2) - anchorY;
+      const ratio = 1 + (dx * reachX + dy * reachY) / (reachX * reachX + reachY * reachY);
+      overlay.scale = Math.max(0.1, Math.round(base.scale * ratio * 10000) / 10000);
+      const change = base.scale - overlay.scale;
+      overlay.left = base.left + (operation.cosine * anchorX - operation.sine * anchorY) * change;
+      overlay.top = base.top + (operation.sine * anchorX + operation.cosine * anchorY) * change;
+      return ["left", "top", "scale"];
+    }
+  };
 
   function flushPointer(operation) {
     if (!operation || state.pointer !== operation) return;
@@ -1790,26 +1922,8 @@
     } else {
       const dx = (operation.cosine * screenX + operation.sine * screenY) * operation.inverseScale;
       const dy = (-operation.sine * screenX + operation.cosine * screenY) * operation.inverseScale;
-      overlay.left = operation.left;
-      overlay.top = operation.top;
-      overlay.width = operation.width;
-      overlay.height = operation.height;
-
-      if (operation.edge.includes("e")) overlay.width = Math.max(10, operation.width + dx);
-      if (operation.edge.includes("s")) overlay.height = Math.max(10, operation.height + dy);
-      if (operation.edge.includes("w")) {
-        overlay.width = Math.max(10, operation.width - dx);
-        const shift = (operation.width - overlay.width) * operation.scale;
-        overlay.left += operation.cosine * shift;
-        overlay.top += operation.sine * shift;
-      }
-      if (operation.edge.includes("n")) {
-        overlay.height = Math.max(10, operation.height - dy);
-        const shift = (operation.height - overlay.height) * operation.scale;
-        overlay.left -= operation.sine * shift;
-        overlay.top += operation.cosine * shift;
-      }
-      affected = ["left", "top", "width", "height"];
+      Object.assign(overlay, operation.base);
+      affected = EDGE_DRAGS[operation.mode](overlay, operation, dx, dy);
       clampOverlay(overlay);
       applyOverlayStyle(operation.root, overlay);
     }
@@ -1852,6 +1966,7 @@
     requestRender("stageGeometry", "inspector");
     updateToolbarAvoidance();
     releaseToolbarHold(event.clientX, event.clientY);
+    updateEdgeHover();
   }
 
   stage.addEventListener("pointerdown", (event) => {
@@ -1881,9 +1996,9 @@
     let edge = event.target.closest(".resize-handle")?.dataset.edge || null;
     // Corner handles sit on the corners, so an overlay flush with the screen
     // edge has handles off-screen. The border bands of an already selected
-    // overlay resize too; a first click still only selects and moves.
+    // overlay drag like handles; a first click still only selects and moves.
     if (!edge && wasSoleSelected && !event.target.closest(".overlay-tag")) {
-      edge = wheelZone(overlay, event.clientX, event.clientY) || null;
+      edge = edgeZone(overlay, event.clientX, event.clientY) || null;
     }
     startPointer(event, root, edge);
   });
@@ -1922,28 +2037,21 @@
   editor.addEventListener("contextmenu", (event) => {
     if (inspector.contains(event.target)) showContextInspector(event);
   });
-  const WHEEL_STICKY_MS = 400;
-  const WHEEL_EDGE_STEP = 10;
-  const WHEEL_SCALE_STEP = 0.05;
-  // Placements have no upper scale bound elsewhere; this only caps the wheel.
-  const WHEEL_SCALE_MAX = 10;
-  const WHEEL_GEOMETRY = ["left", "top", "width", "height", "scale"];
-  let wheelGesture = null;
-  let wheelGestureSerial = 0;
-  let wheelHover = null;
-  let wheelPointer = null;
+  let edgeHover = null;
+  let edgePointer = null;
+  let edgeModifiers = { shiftKey: false, ctrlKey: false };
 
   // Bands are screen pixels in the overlay's unrotated frame: the "w"/"e" band
   // follows its on-screen width and the "n"/"s" band its on-screen height.
-  function wheelBands(overlay) {
+  function edgeBands(overlay) {
     const scale = Math.max(0.0001, finite(overlay.scale, 1));
     return {
-      x: clamp(overlay.width * scale * 0.2, 8, 20),
-      y: clamp(overlay.height * scale * 0.2, 8, 20)
+      x: clamp(visibleWidth(overlay) * scale * 0.2, 8, 20),
+      y: clamp(visibleHeight(overlay) * scale * 0.2, 8, 20)
     };
   }
 
-  function wheelZone(overlay, x, y) {
+  function edgeZone(overlay, x, y) {
     const scale = Math.max(0.0001, finite(overlay.scale, 1));
     const angle = finite(overlay.rotation, 0) * Math.PI / 180;
     const cosine = Math.cos(angle);
@@ -1952,9 +2060,9 @@
     const deltaY = y - overlay.top;
     const localX = deltaX * cosine + deltaY * sine;
     const localY = -deltaX * sine + deltaY * cosine;
-    const width = overlay.width * scale;
-    const height = overlay.height * scale;
-    const bands = wheelBands(overlay);
+    const width = visibleWidth(overlay) * scale;
+    const height = visibleHeight(overlay) * scale;
+    const bands = edgeBands(overlay);
     let vertical = "";
     let horizontal = "";
     if (Math.min(localY, height - localY) <= bands.y) vertical = localY <= height - localY ? "n" : "s";
@@ -1962,207 +2070,63 @@
     return vertical + horizontal;
   }
 
-  function wheelTarget(target, x, y) {
-    if (!(target instanceof Element) || !stage.contains(target)) return null;
-    const root = target.closest(".overlay");
-    let overlay = root ? root._vosulayOverlay : null;
-    if (!overlay) return null;
-    const selected = selectedOverlay();
-    // Right-click cycling can open the menu for a lower overlay; the wheel keeps
-    // acting on that overlay while the pointer is over it.
-    if (state.inspectorPopup && selected && selected !== overlay && overlayContainsPoint(selected, x, y)) overlay = selected;
-    const layerOnly = state.pointer || state.interacting
-      || (overlay === root._vosulayOverlay && target.closest(".overlay-tag"));
-    return { overlay, zone: layerOnly ? "" : wheelZone(overlay, x, y) };
-  }
-
-  function setWheelHover(overlay, zone) {
+  function setEdgeHover(overlay, zone, mode) {
     const root = overlay && zone ? overlayRoots.get(overlay) : null;
-    if (wheelHover && wheelHover.root !== root) {
-      delete wheelHover.root.dataset.wheelZone;
-      wheelHover = null;
+    if (edgeHover && edgeHover.root !== root) {
+      delete edgeHover.root.dataset.edgeZone;
+      delete edgeHover.root.dataset.edgeMode;
+      edgeHover = null;
     }
     if (!root) return;
     const scale = Math.max(0.0001, finite(overlay.scale, 1));
-    const bands = wheelBands(overlay);
-    const key = `${zone}\n${bands.x / scale}\n${bands.y / scale}\n${scale}`;
-    if (wheelHover && wheelHover.key === key) return;
-    root.style.setProperty("--wheel-band-x", `${bands.x / scale}px`);
-    root.style.setProperty("--wheel-band-y", `${bands.y / scale}px`);
-    root.style.setProperty("--wheel-line", `${3 / scale}px`);
-    root.dataset.wheelZone = zone;
-    wheelHover = { root, key };
+    const bands = edgeBands(overlay);
+    const key = `${zone}\n${mode}\n${bands.x / scale}\n${bands.y / scale}\n${scale}`;
+    if (edgeHover && edgeHover.key === key) return;
+    root.style.setProperty("--edge-band-x", `${bands.x / scale}px`);
+    root.style.setProperty("--edge-band-y", `${bands.y / scale}px`);
+    root.style.setProperty("--edge-line", `${3 / scale}px`);
+    root.dataset.edgeZone = zone;
+    root.dataset.edgeMode = mode;
+    edgeHover = { root, key };
   }
 
-  function updateWheelHover(target = null) {
-    if (wheelGesture) {
-      setWheelHover(wheelGesture.overlay, wheelGesture.zone);
+  // Highlights the side or corner a press would drag, and with which edit, on
+  // the sole selected counter (the only one whose edges drag).
+  function updateEdgeHover(target = null) {
+    const operation = state.pointer;
+    if (operation && operation.kind === "overlay" && operation.edge) {
+      setEdgeHover(operation.overlay, operation.edge, operation.mode);
       return;
     }
-    if (!state.editing || state.interacting || state.pointer || !wheelPointer) {
-      setWheelHover(null, "");
+    const overlay = selectedOverlay();
+    if (!state.editing || state.interacting || operation || !edgePointer || !overlay) {
+      setEdgeHover(null, "", "");
       return;
     }
-    const element = target || document.elementFromPoint(wheelPointer.x, wheelPointer.y);
-    const hit = wheelTarget(element, wheelPointer.x, wheelPointer.y);
-    setWheelHover(hit && hit.overlay, hit ? hit.zone : "");
+    const element = target || document.elementFromPoint(edgePointer.x, edgePointer.y);
+    const root = element instanceof Element && stage.contains(element) ? element.closest(".overlay") : null;
+    const handle = root && element.closest(".resize-handle");
+    const zone = !root || root._vosulayOverlay !== overlay || element.closest(".overlay-tag") ? ""
+      : handle ? handle.dataset.edge : edgeZone(overlay, edgePointer.x, edgePointer.y);
+    setEdgeHover(overlay, zone, edgeDragMode(edgeModifiers));
   }
 
-  function endWheelGesture(refreshHover = true) {
-    if (wheelGesture) clearTimeout(wheelGesture.timer);
-    wheelGesture = null;
-    if (refreshHover) updateWheelHover();
-    else setWheelHover(null, "");
-  }
-
-  function activeWheelGesture() {
-    const gesture = wheelGesture;
-    if (!gesture) return null;
-    const profile = activeProfile();
-    if (profile && profile.overlays.includes(gesture.overlay) && overlayRoots.has(gesture.overlay)) return gesture;
-    endWheelGesture(false);
-    return null;
-  }
-
-  // Signed steps for one wheel event: a mouse notch arrives as one large pixel
-  // delta (100 from Chromium, 120 from some hosts) and counts once, while
-  // trackpad pixels accumulate to one step per 100px.
-  function wheelSteps(gesture, event) {
-    const direction = Math.sign(event.deltaY);
-    if (!direction) return 0;
-    if (direction !== gesture.direction) {
-      gesture.direction = direction;
-      gesture.remainder = 0;
-    }
-    const magnitude = Math.abs(event.deltaY);
-    let units = magnitude;
-    if (event.deltaMode === WheelEvent.DOM_DELTA_PIXEL) {
-      if (magnitude >= 50) {
-        gesture.remainder = 0;
-        return direction * Math.max(1, Math.round(magnitude / 120));
-      }
-      units = magnitude / 100;
-    }
-    gesture.remainder += units;
-    const steps = Math.floor(gesture.remainder);
-    gesture.remainder -= steps;
-    return direction * steps;
-  }
-
-  function applyWheelGeometry(overlay, base, zone, amount, fraction) {
-    Object.assign(overlay, base);
-    const angle = overlay.rotation * Math.PI / 180;
-    const cosine = Math.cos(angle);
-    const sine = Math.sin(angle);
-    if (zone.length === 2) {
-      const target = clamp(Math.round((base.scale + amount * WHEEL_SCALE_STEP) * 10000) / 10000,
-        0.1, Math.max(WHEEL_SCALE_MAX, base.scale));
-      const scale = base.scale + (target - base.scale) * fraction;
-      // Pins the local corner diagonally opposite the hovered one: its screen
-      // point left + scale * R(rotation) * corner must not change.
-      const cornerX = zone.includes("w") ? base.width : 0;
-      const cornerY = zone.includes("n") ? base.height : 0;
-      const change = base.scale - scale;
-      overlay.scale = scale;
-      overlay.left = base.left + (cosine * cornerX - sine * cornerY) * change;
-      overlay.top = base.top + (sine * cornerX + cosine * cornerY) * change;
-      return;
-    }
-    const delta = amount * WHEEL_EDGE_STEP * fraction / base.scale;
-    if (zone === "e") overlay.width = Math.max(10, base.width + delta);
-    else if (zone === "s") overlay.height = Math.max(10, base.height + delta);
-    else if (zone === "w") {
-      overlay.width = Math.max(10, base.width + delta);
-      const shift = (base.width - overlay.width) * base.scale;
-      overlay.left = base.left + cosine * shift;
-      overlay.top = base.top + sine * shift;
-    } else if (zone === "n") {
-      overlay.height = Math.max(10, base.height + delta);
-      const shift = (base.height - overlay.height) * base.scale;
-      overlay.left = base.left - sine * shift;
-      overlay.top = base.top + cosine * shift;
-    }
-  }
-
-  // Applies one wheel resize/scale; returns whether the placement changed.
-  function applyConstrainedWheelGeometry(overlay, zone, amount) {
-    const original = WHEEL_GEOMETRY.map((key) => overlay[key]);
-    clampOverlay(overlay);
-    const base = Object.fromEntries(WHEEL_GEOMETRY.map((key) => [key, overlay[key]]));
-    const fits = (fraction) => {
-      applyWheelGeometry(overlay, base, zone, amount, fraction);
-      const wanted = WHEEL_GEOMETRY.map((key) => overlay[key]);
-      clampOverlay(overlay);
-      return WHEEL_GEOMETRY.every((key, index) => Math.abs(overlay[key] - wanted[index]) < 1e-6);
-    };
-    if (!fits(1)) {
-      // Keep-in-view would move the side or corner that must stay fixed; stop
-      // at the largest part of the step that still fits instead.
-      let low = 0;
-      let high = 1;
-      for (let iteration = 0; iteration < 12; iteration += 1) {
-        const middle = (low + high) / 2;
-        if (fits(middle)) low = middle;
-        else high = middle;
-      }
-      fits(low);
-    }
-    return WHEEL_GEOMETRY.some((key, index) => overlay[key] !== original[index]);
-  }
-
-  document.addEventListener("wheel", (event) => {
-    if (event.ctrlKey || !state.editing || !settingsModal.hidden || !urlModal.hidden) return;
-    wheelPointer = { x: event.clientX, y: event.clientY };
-    let gesture = activeWheelGesture();
-    if (!gesture) {
-      const hit = wheelTarget(event.target, event.clientX, event.clientY);
-      if (!hit) return;
-      gesture = wheelGesture = { ...hit, direction: 0, remainder: 0, before: null, key: "", committed: false, timer: 0 };
-    }
-    event.preventDefault();
-    clearTimeout(gesture.timer);
-    gesture.timer = window.setTimeout(() => endWheelGesture(), WHEEL_STICKY_MS);
-    updateWheelHover();
-    const steps = wheelSteps(gesture, event);
-    if (!steps) return;
-    const overlay = gesture.overlay;
-    const amount = -steps;
-    if (selectedOverlay() !== overlay) selectOverlay(overlay, { keepPopup: state.inspectorPopup });
-    const root = overlayRoots.get(overlay);
-
-    if (!gesture.zone) {
-      const before = historySnapshot();
-      overlay.z_index = clamp(overlay.z_index + amount, 0, 999);
-      if (root) applyOverlayStyle(root, overlay);
-      renderInspectorNumbers(overlay, ["z_index"]);
-      commitHistory(before, `layer:${activeProfile().overlays.indexOf(overlay)}`);
-      scheduleSave();
-      return;
-    }
-    if (state.pointer) return;
-    // One sticky gesture is one undo step; an undo or another edit made during
-    // it starts a fresh step from the current state.
-    if (!gesture.before || (gesture.committed && history.lastKey !== gesture.key)) {
-      gesture.before = historySnapshot();
-      gesture.key = `wheel:${++wheelGestureSerial}`;
-      gesture.committed = false;
-    }
-    if (!applyConstrainedWheelGeometry(overlay, gesture.zone, amount)) return;
-    if (root) applyOverlayStyle(root, overlay);
-    renderInspectorNumbers(overlay, WHEEL_GEOMETRY);
-    updatePanelAvoidance();
-    updateWheelHover();
-    if (!gesture.committed) gesture.committed = commitHistory(gesture.before, gesture.key);
-    scheduleSave();
-  }, { passive: false });
   document.addEventListener("pointermove", (event) => {
     if (!state.editing) return;
-    wheelPointer = { x: event.clientX, y: event.clientY };
-    updateWheelHover(event.target);
+    edgePointer = { x: event.clientX, y: event.clientY };
+    edgeModifiers = { shiftKey: event.shiftKey, ctrlKey: event.ctrlKey };
+    updateEdgeHover(event.target);
   }, { passive: true });
+  for (const type of ["keydown", "keyup"]) {
+    window.addEventListener(type, (event) => {
+      if (event.key !== "Shift" && event.key !== "Control") return;
+      edgeModifiers = { shiftKey: event.shiftKey, ctrlKey: event.ctrlKey };
+      if (state.editing) updateEdgeHover();
+    });
+  }
   document.documentElement.addEventListener("pointerleave", () => {
-    wheelPointer = null;
-    updateWheelHover();
+    edgePointer = null;
+    updateEdgeHover();
   });
 
   catalog.addEventListener("click", (event) => {
@@ -2422,6 +2386,31 @@
   urlField.addEventListener("change", commitUrl);
   urlField.addEventListener("keydown", (event) => commitInspectorOnEnter(event, commitUrl));
 
+  // Signed steps for one wheel event: a mouse notch arrives as one large pixel
+  // delta (100 from Chromium, 120 from some hosts) and counts once, while
+  // trackpad pixels accumulate to one step per 100px.
+  function wheelSteps(gesture, event, delta) {
+    const direction = Math.sign(delta);
+    if (!direction) return 0;
+    if (direction !== gesture.direction) {
+      gesture.direction = direction;
+      gesture.remainder = 0;
+    }
+    const magnitude = Math.abs(delta);
+    let units = magnitude;
+    if (event.deltaMode === WheelEvent.DOM_DELTA_PIXEL) {
+      if (magnitude >= 50) {
+        gesture.remainder = 0;
+        return direction * Math.max(1, Math.round(magnitude / 120));
+      }
+      units = magnitude / 100;
+    }
+    gesture.remainder += units;
+    const steps = Math.floor(gesture.remainder);
+    gesture.remainder -= steps;
+    return direction * steps;
+  }
+
   function commitInspectorNumber(name, input) {
     const overlay = selectedOverlay();
     if (!overlay) return;
@@ -2444,6 +2433,7 @@
     const adjusted = clamp(value, minimum, maximum);
     applyInspectorFieldValue(name, overlay, adjusted);
     const positionAdjusted = (name === "left" || name === "top") && overlay[name] !== value;
+    const cropAdjusted = (name in OPPOSITE_CROP || name === "width" || name === "height") && overlay[name] !== adjusted;
     input.value = inspectorFieldValue(name, overlay);
     scheduleSave();
     requestRender("stageGeometry", "inspector");
@@ -2453,6 +2443,8 @@
       showFieldWarning(input, `Value must be at most ${input.max}. Adjusted to ${input.max}.`);
     } else if (positionAdjusted) {
       showFieldWarning(input, `Value was adjusted to ${input.value} to keep the overlay in view.`);
+    } else if (cropAdjusted) {
+      showFieldWarning(input, `Value was adjusted to ${input.value} to keep ${MIN_VISIBLE} px of the counter visible.`);
     } else {
       clearFieldWarning(input);
     }
@@ -2491,18 +2483,31 @@
       commitInspectorNumber(name, input);
       endInspectorEdit();
     });
-    // Like the native wheel stepping this replaces, only the focused field
-    // reacts, so scrolling past the panel never edits a value. Chromium turns
-    // Shift+wheel into horizontal scrolling, which number fields ignore.
-    input.addEventListener("wheel", (event) => {
-      if (document.activeElement !== input || event.ctrlKey) return;
-      const delta = event.deltaY || event.deltaX;
-      if (!delta) return;
+    // The wheel steps the field under the pointer, focused or not; Shift steps
+    // ten at a time (Chromium reports Shift+wheel as horizontal scrolling).
+    const wheel = { direction: 0, remainder: 0 };
+    input.closest("label").addEventListener("wheel", (event) => {
+      const overlay = selectedOverlay();
+      if (event.ctrlKey || !overlay) return;
       event.preventDefault();
-      const steps = event.shiftKey ? 10 : 1;
-      if (delta < 0) input.stepUp(steps);
-      else input.stepDown(steps);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
+      const steps = wheelSteps(wheel, event, -(event.deltaY || event.deltaX));
+      if (!steps) return;
+      const count = Math.abs(steps) * (event.shiftKey ? 10 : 1);
+      const step = () => (steps > 0 ? input.stepUp(count) : input.stepDown(count));
+      if (document.activeElement === input) {
+        step();
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        return;
+      }
+      // A field still being typed in would skip this step's re-render and later
+      // reapply its stale value on blur, so it commits (as its own undo step) first.
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && inspector.contains(active)) active.blur();
+      // Unfocused, each notch commits; one field's notches fold into one undo step.
+      const before = historySnapshot();
+      step();
+      commitInspectorNumber(name, input);
+      commitHistory(before, `field:${name}:${activeProfile().overlays.indexOf(overlay)}`);
     }, { passive: false });
   }
 
@@ -2933,6 +2938,7 @@
     overlay.width = Math.max(10, finite(counter && counter.width, 500));
     overlay.height = Math.max(10, finite(counter && counter.height, 300));
     overlay.scale = 1;
+    for (const side of CROP_SIDES) overlay[side] = 0;
     clampOverlay(overlay);
     commitHistory(before);
     scheduleSave(true);
@@ -3175,9 +3181,9 @@
       if (!profileMoreMenu.hidden && profileMore.getClientRects().length === 0) closeProfileMoreMenu();
       const overlay = state.editing ? selectedOverlay() : null;
       if (!overlay) return;
-      const before = `${overlay.left}\n${overlay.top}\n${overlay.width}\n${overlay.height}\n${overlay.scale}\n${overlay.rotation}`;
+      const before = geometryKey(overlay);
       clampOverlay(overlay);
-      const after = `${overlay.left}\n${overlay.top}\n${overlay.width}\n${overlay.height}\n${overlay.scale}\n${overlay.rotation}`;
+      const after = geometryKey(overlay);
       if (state.inspectorPopup) requestRender("inspector");
       if (before === after) return;
       scheduleSave();

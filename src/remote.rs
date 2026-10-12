@@ -958,7 +958,7 @@ fn render_profile(
 ) -> std::result::Result<String, HttpError> {
     let title = escape_html(&profile.name);
     let mut html = format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title}</title><style>html,body{{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}}body{{position:relative}}iframe{{display:block;border:0}}</style></head><body>"
+        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title}</title><style>html,body{{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}}body{{position:relative}}div{{position:absolute;overflow:hidden;transform-origin:0 0}}iframe{{position:absolute;display:block;border:0}}</style></head><body>"
     );
     for item in &profile.overlays {
         if !item.enabled {
@@ -976,7 +976,13 @@ fn render_profile(
             _ => "",
         };
         use std::fmt::Write as _;
-        write!(html, "<iframe src=\"{source}\" title=\"{frame_title}\" allow=\"autoplay\" loading=\"eager\"{sandbox} referrerpolicy=\"no-referrer\" style=\"position:absolute;left:{}px;top:{}px;width:{}px;height:{}px;transform-origin:0 0;transform:scale({}) rotate({}deg);opacity:{};z-index:{}\"></iframe>", item.left, item.top, item.width, item.height, item.scale, item.rotation, item.opacity, item.z_index)
+        // The wrapper is the visible (cropped) region; the frame keeps its full size behind it.
+        write!(html, "<div style=\"left:{}px;top:{}px;width:{}px;height:{}px;transform:scale({}) rotate({}deg);opacity:{};z-index:{}\"><iframe src=\"{source}\" title=\"{frame_title}\" allow=\"autoplay\" loading=\"eager\"{sandbox} referrerpolicy=\"no-referrer\" style=\"left:{}px;top:{}px;width:{}px;height:{}px\"></iframe></div>",
+            item.left, item.top,
+            item.width - item.crop_left - item.crop_right,
+            item.height - item.crop_top - item.crop_bottom,
+            item.scale, item.rotation, item.opacity, item.z_index,
+            0.0 - item.crop_left, 0.0 - item.crop_top, item.width, item.height)
             .map_err(|_| HttpError::new(500, "Internal Server Error", "Could not render profile\n"))?;
     }
     html.push_str("</body></html>");
@@ -1554,7 +1560,7 @@ mod tests {
         );
     }
     #[test]
-    fn rendering_preserves_geometry_and_counter_url() {
+    fn rendering_preserves_geometry_crop_and_counter_url() {
         let profile = Profile {
             id: "x".to_owned(),
             name: "X".to_owned(),
@@ -1567,6 +1573,9 @@ mod tests {
                 scale: 1.25,
                 opacity: 0.75,
                 rotation: -15.0,
+                crop_top: 20.0,
+                crop_right: 40.0,
+                crop_left: 100.0,
                 z_index: 7,
                 ..Placement::default()
             }],
@@ -1574,7 +1583,8 @@ mod tests {
         let html = render_profile(&profile, &base(), &base()).expect("render");
         assert!(html.contains("http://127.0.0.1:24050/a%2Fb/"));
         assert!(html.contains("allow=\"autoplay\""));
-        assert!(html.contains("left:12.5px;top:-3px;width:640px;height:360px;transform-origin:0 0;transform:scale(1.25) rotate(-15deg);opacity:0.75;z-index:7"));
+        assert!(html.contains("<div style=\"left:12.5px;top:-3px;width:500px;height:340px;transform:scale(1.25) rotate(-15deg);opacity:0.75;z-index:7\">"));
+        assert!(html.contains("style=\"left:-100px;top:-20px;width:640px;height:360px\"></iframe></div>"));
     }
 
     #[test]
