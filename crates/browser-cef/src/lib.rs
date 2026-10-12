@@ -382,9 +382,22 @@ wrap_client! {
         fn display_handler(&self) -> Option<DisplayHandler> { Some(Console::new(self.state.clone())) }
         fn request_handler(&self) -> Option<RequestHandler> { Some(FailureHandler::new(self.state.clone())) }
         fn permission_handler(&self) -> Option<PermissionHandler> { Some(NetworkAccess::new()) }
+        fn context_menu_handler(&self) -> Option<ContextMenuHandler> { Some(NoContextMenu::new()) }
         fn on_process_message_received(&self, browser: Option<&mut Browser>, frame: Option<&mut Frame>, source_process: ProcessId, message: Option<&mut ProcessMessage>) -> i32 {
             if self.state.borrow().closed { return 1; }
             self.inbox.dispatch(browser, frame, source_process, message)
+        }
+    }
+}
+
+wrap_context_menu_handler! {
+    struct NoContextMenu;
+    impl ContextMenuHandler {
+        fn on_before_context_menu(&self, _browser: Option<&mut Browser>, _frame: Option<&mut Frame>, _params: Option<&mut ContextMenuParams>, model: Option<&mut MenuModel>) {
+            // Windowless browsers have no native window to host CEF's default
+            // menu: it is cancelled after logging two errors per right-click.
+            // An empty model skips it; pages still receive `contextmenu`.
+            if let Some(model) = model { model.clear(); }
         }
     }
 }
