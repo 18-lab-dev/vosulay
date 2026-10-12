@@ -203,7 +203,7 @@ On Linux `--cef-dir` also selects adjacent compositor/lookup libraries. Windows 
 
 ## Attachment and troubleshooting
 
-Linux refreshes recognized osu shortcuts with absolute injection paths, preserving foreign preloads, arguments, and OBS flags. System shortcuts receive user overrides; changes affect the next game launch. It also attempts live attachment to same-user native games. Where policy prevents injection, restart through the refreshed shortcut or use the manual preload/Vulkan commands in the [README](../README.md).
+Linux refreshes recognized osu shortcuts with absolute injection paths, preserving foreign preloads, arguments, and OBS flags. System shortcuts receive user overrides; changes affect the next game launch. It also attempts live attachment once per process to same-user native games that did not already load the compositor at startup; Wine games are never live-attached and get one warning. Where policy prevents injection, restart through the refreshed shortcut or use the manual preload/Vulkan commands in the [README](../README.md).
 
 For a missing overlay, check game focus, backend reachability, loaded compositor/runtime files, hidden state, enabled placement, and viewport position. Selection follows focus, not process order. On Windows with tosu, confirm tosu's in-game overlay is disabled; it injects its own asdf-overlay into the same game. Do not change ptrace policy or request elevation just to bypass attachment restrictions.
 

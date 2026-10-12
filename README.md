@@ -184,6 +184,9 @@ osu!stable running through Wine's X11 driver (osu-winello, Lutris, or plain
 Wine) is supported with the same preload. Launch it through its refreshed
 shortcut or with the `LD_PRELOAD` line above; preloads added later by a launch
 script, such as osu-winello's OBS capture setting, may appear in any order.
+Live attachment does not reach Wine games: a game already started with the
+preload connects by itself, and one started without it gets a single warning
+asking for a relaunch.
 Wine draws into an offscreen window while the visible window holds focus, so
 vosulay treats the game as focused whenever any window of the game process has
 X input focus. Editing reads input from Wine's own X event queue: shortcuts

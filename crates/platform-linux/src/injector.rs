@@ -1,6 +1,7 @@
 //! Live attachment into a running process. The platform loop calls it for
 //! each newly discovered game process; this module never searches for targets.
-//! Linux support is deliberately narrow: same-UID native x86_64 processes.
+//! Linux support is deliberately narrow: same-UID native x86_64 processes that
+//! Wine does not host.
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::ffi::c_void;
@@ -38,6 +39,7 @@ pub enum AttachError {
     RemoteInit,
     SymbolIdentity,
     UnexpectedStop(i32),
+    Wine,
     Ptrace(&'static str, io::Error),
 }
 
@@ -71,6 +73,7 @@ impl fmt::Display for AttachError {
             Self::UnexpectedStop(signal) => {
                 write!(output, "target stopped with unexpected signal {signal}")
             }
+            Self::Wine => output.write_str("live attachment does not support Wine processes"),
             Self::Ptrace(operation, error) => write!(output, "ptrace {operation} failed: {error}"),
         }
     }
@@ -114,6 +117,48 @@ pub fn process_identity(pid: u32) -> Result<ProcessIdentity, AttachError> {
         pid,
         start_time,
         uid,
+    })
+}
+
+pub(crate) fn wine_loader(name: &str) -> bool {
+    ["wine", "wine64", "wine-preloader", "wine64-preloader"]
+        .iter()
+        .any(|loader| name.eq_ignore_ascii_case(loader))
+}
+
+/// Whether `value` names a compositor or lookup helper vosulay installs: a
+/// packaged library, or a content-addressed copy in the per-user build cache.
+pub fn managed_library(value: &str) -> bool {
+    if matches!(
+        value.rsplit(['/', '\\']).next().unwrap_or(value),
+        "libvosulay_overlay.so" | "libvosulay_lookup.so"
+    ) {
+        return true;
+    }
+    let Some((directory, name)) = value.rsplit_once('/') else {
+        return false;
+    };
+    directory.ends_with("/vosulay/overlay")
+        && name.strip_suffix(".so").is_some_and(|hash| {
+            hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+        })
+}
+
+/// Whether `pid` already maps a vosulay library, loaded at startup through
+/// `LD_PRELOAD` or the Vulkan layer. That compositor connects by itself, possibly
+/// only after the host's first discovery pass, so it must not be attached again.
+pub fn carries_overlay(pid: u32) -> bool {
+    std::fs::read_to_string(format!("/proc/{pid}/maps")).is_ok_and(|maps| maps_carry_overlay(&maps))
+}
+
+fn maps_carry_overlay(maps: &str) -> bool {
+    maps.lines().any(|line| {
+        // Only the path column can contain '/'; a replaced cache file stays
+        // mapped with a " (deleted)" suffix and is still a loaded compositor.
+        line.find('/').is_some_and(|start| {
+            let path = &line[start..];
+            managed_library(path.strip_suffix(" (deleted)").unwrap_or(path))
+        })
     })
 }
 
@@ -161,6 +206,16 @@ pub fn attach(
         return Err(AttachError::Unsupported(
             "live attachment requires a native x86_64 ELF process",
         ));
+    }
+    // Wine runs every thread, including the main one, on stacks it allocates
+    // itself, never on the `[stack]` mapping the remote call requires. Seizing
+    // could only pause the game before failing; Wine games load at startup.
+    if std::fs::read_link(format!("/proc/{pid}/exe"))?
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(wine_loader)
+    {
+        return Err(AttachError::Wine);
     }
     // SAFETY: geteuid has no preconditions and does not return borrowed state.
     let effective_uid = unsafe { libc::geteuid() as u32 };
@@ -721,4 +776,59 @@ fn remote_symbol(pid: libc::pid_t, local: *const c_void) -> Result<*const c_void
         })
         .ok_or(AttachError::SymbolIdentity)?;
     Ok((target_mapping.start + (local as u64 - local_mapping.start)) as *const c_void)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::maps_carry_overlay;
+
+    #[test]
+    fn preloaded_compositors_are_recognized_in_any_installed_form() {
+        let hash = "ab".repeat(32);
+        for path in [
+            format!("/home/user/.cache/vosulay/overlay/{hash}.so"),
+            format!("/home/user/.cache/vosulay/overlay/{hash}.so (deleted)"),
+            "/opt/vosulay/libvosulay_overlay.so".to_owned(),
+        ] {
+            let maps = format!(
+                "7f00-7f01 r-xp 00000000 00:24 7633423                    /usr/lib/libc.so.6\n\
+                 7f01-7f02 r-xp 00024000 00:24 7633424                    {path}\n"
+            );
+            assert!(maps_carry_overlay(&maps), "{path}");
+        }
+        for path in [
+            "/memfd:vosulay-frames (deleted)".to_owned(),
+            format!("/home/user/.cache/other/overlay/{hash}.so"),
+            "/home/user/.cache/vosulay/overlay/notahash.so".to_owned(),
+            "[stack]".to_owned(),
+        ] {
+            let maps = format!("7f01-7f02 rw-p 00000000 00:01 42 {path}\n");
+            assert!(!maps_carry_overlay(&maps), "{path}");
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn wine_processes_are_refused_before_ptrace() {
+        use std::process::{Command, Stdio};
+        let directory = std::env::temp_dir().join(format!("vosulay-wine-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let loader = directory.join("wine-preloader");
+        std::fs::copy("/bin/sleep", &loader).unwrap();
+        // spawn returns after exec, so /proc/<pid>/exe already names the loader.
+        // Without the Wine refusal this descendant is seized and fails later.
+        let mut child = Command::new(&loader)
+            .arg("30")
+            .stdin(Stdio::null())
+            .spawn()
+            .unwrap();
+        let result = super::attach(child.id(), &loader, "vosulay-test");
+        child.kill().unwrap();
+        child.wait().unwrap();
+        std::fs::remove_dir_all(&directory).unwrap();
+        assert!(
+            matches!(result, Err(super::AttachError::Wine)),
+            "{result:?}"
+        );
+    }
 }

@@ -738,18 +738,12 @@ fn supported(pid: u32, options: &LinuxOptions) -> bool {
     let Some(name) = executable.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
-    let command_line = if wine_loader(name) {
+    let command_line = if injector::wine_loader(name) {
         std::fs::read(path.join("cmdline")).unwrap_or_default()
     } else {
         Vec::new()
     };
     supported_image(name, &command_line, &options.process_names)
-}
-
-fn wine_loader(name: &str) -> bool {
-    ["wine", "wine64", "wine-preloader", "wine64-preloader"]
-        .iter()
-        .any(|loader| name.eq_ignore_ascii_case(loader))
 }
 
 fn supported_image(executable: &str, command_line: &[u8], process_names: &[String]) -> bool {
@@ -766,7 +760,7 @@ fn supported_image(executable: &str, command_line: &[u8], process_names: &[Strin
     }
     // A launcher/script mentioning a game is not the game. Wine may expose
     // its loader as /proc/exe; only its program argv can select a game.
-    wine_loader(executable)
+    injector::wine_loader(executable)
         && command_line
             .split(|byte| *byte == 0)
             .take(2)
@@ -806,8 +800,11 @@ fn discover_and_attach(
             continue;
         }
         attempted.push(key);
+        if injector::carries_overlay(pid) {
+            continue;
+        }
         if let Err(error) = injector::attach(pid, &options.library, endpoint) {
-            shared.event(PlatformEvent::Warning(format!("could not attach game {pid}: {error}; use LD_PRELOAD for restricted processes or the Vulkan layer at game startup")));
+            shared.event(PlatformEvent::Warning(format!("could not attach game {pid}: {error}; launch it with LD_PRELOAD or the Vulkan layer instead, as refreshed osu shortcuts do")));
         }
     }
     attempted.retain(|(pid, start)| {

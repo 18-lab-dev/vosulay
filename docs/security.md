@@ -159,9 +159,11 @@ Linux supports loading the compositor at game startup through `LD_PRELOAD` or
 its Vulkan layer. It also scans `/proc` and automatically attempts live attachment
 to supported processes not already connected, using `ptrace` to load the library
 and initialize its endpoint. `--pid` and `--process-name` can extend target
-selection. Live attachment requires a native x86_64 ELF process owned by the
-host's effective UID; it temporarily stops the target and restores registers and
-detaches afterward. Sources:
+selection. Processes that already map a vosulay compositor or lookup helper are
+skipped; they connect by themselves. Live attachment requires a native x86_64
+ELF process owned by the host's effective UID and not hosted by Wine (Wine games
+are refused before any `ptrace` call); it temporarily stops the target and
+restores registers and detaches afterward. Sources:
 [`crates/platform-linux/src/lib.rs`](../crates/platform-linux/src/lib.rs),
 [`crates/platform-linux/src/injector.rs`](../crates/platform-linux/src/injector.rs),
 [`src/runtime.rs`](../src/runtime.rs).

@@ -530,7 +530,7 @@ fn rewrite_exec(command: &str, integration: &Integration<'_>) -> Result<Option<S
             !entry.is_empty()
                 && *entry != integration.library
                 && *entry != integration.lookup
-                && !managed_library(entry)
+                && !vosulay_linux::injector::managed_library(entry)
         })
         .collect();
     libraries.insert(0, integration.lookup);
@@ -605,22 +605,6 @@ fn rewrite_exec(command: &str, integration: &Integration<'_>) -> Result<Option<S
         }
     }
     Ok(Some(output))
-}
-
-fn managed_library(value: &str) -> bool {
-    if matches!(
-        basename(value),
-        "libvosulay_overlay.so" | "libvosulay_lookup.so"
-    ) {
-        return true;
-    }
-    let Some((directory, name)) = value.rsplit_once('/') else {
-        return false;
-    };
-    directory.ends_with("/vosulay/overlay")
-        && name.strip_suffix(".so").is_some_and(|hash| {
-            hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
-        })
 }
 
 fn quoted_assignment(value: &str) -> String {
