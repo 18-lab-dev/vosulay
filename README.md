@@ -38,8 +38,15 @@ release key `6F0F 0D30 C09D 3A03 6246  A810 2CB6 524B B54B 2CDA`
 
 ### Code signing policy
 
+<!--
+SignPath signing is hidden until SignPath Foundation approves the project; until
+then every Windows release is unsigned. Restore this attribution once releases
+are signed through SignPath.
+
 Free code signing provided by [SignPath.io](https://signpath.io/), certificate by
 [SignPath Foundation](https://signpath.org/).
+-->
+Windows binaries are unsigned, so Windows SmartScreen may warn before they run.
 See the [Code signing policy](docs/code-signing.md) for signing status, team roles,
 and the [privacy policy](docs/code-signing.md#privacy-policy). Before installing,
 read the [security and installation disclosure](docs/security.md) for injection,
