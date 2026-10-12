@@ -86,11 +86,26 @@ function (profileId, localUrls) {
       case 'open-settings':
         call('open-settings', { counter_id: message.counter_id }).catch(fail);
         break;
+      case 'set-editing':
+        // The page left or entered edit mode itself (shortcut, Escape, Done).
+        window.postMessage(message.editing ? 'editingStarted' : 'editingEnded', '*');
+        break;
       default:
-        // Edit state is local to this page; native dialogs do not exist here.
+        // Native dialogs do not exist here.
         break;
     }
   };
+
+  // Edit-mode API for overlay hosts that load this page in their own window,
+  // in tosu's in-game overlay convention: the host runs
+  // `window.postMessage('editingStarted' | 'editingEnded')` in the page, and the
+  // page posts the same strings when it changes edit mode itself. Only posts
+  // from this window count: counter frames must not switch the editor.
+  window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+    if (event.data === 'editingStarted') deliver({ type: 'editing', editing: true });
+    else if (event.data === 'editingEnded') deliver({ type: 'editing', editing: false });
+  });
 
   // Follow edits made in game or in other pages while no save is in flight.
   setInterval(() => {

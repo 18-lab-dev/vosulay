@@ -443,6 +443,15 @@ keyboard for the edit shortcut; use the interaction shortcut (`Ctrl+I`) while
 editing to use them. Profile management, app settings and adding local HTML
 files stay in the in-game editor. Other devices keep a view-only page.
 
+Overlay hosts that show the page in their own window, such as a Linux overlay
+window built for tosu's in-game page, can switch edit mode the way tosu's
+in-game overlay does: run `window.postMessage('editingStarted')` or
+`window.postMessage('editingEnded')` in the page. The page posts the same
+strings when it enters or leaves edit mode itself (shortcut, Escape, **Done**),
+so a host can listen for `message` events to restore click-through. Messages
+from counter frames are ignored, and the API only exists on the editable page,
+so it stays off unless editing on this computer is allowed.
+
 The switch takes effect without a restart. Pages on other websites cannot use
 the editing routes, but counters installed in vosu or tosu run on the page's own
 address and could make the same edits, so enable this only with counters you
