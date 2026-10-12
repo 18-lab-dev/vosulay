@@ -213,7 +213,9 @@ unsafe fn patch_relocations(
         return;
     }
     let count = bytes / size_of::<Rela>();
-    if count > 65536 || !mapped(&state.regions, relocations, bytes) {
+    // NVIDIA's libnvidia-eglcore (84k) and libnvidia-gpucomp (156k entries)
+    // exceeded a 65536 bound, which failed every late attach under NVIDIA EGL.
+    if count > 1 << 20 || !mapped(&state.regions, relocations, bytes) {
         state.failed = true;
         return;
     }
@@ -256,9 +258,10 @@ unsafe fn patch_relocations(
                 (region.end - name_address).min(256),
             )
         };
+        // Mangled C++ names (libLLVM, loaded by Mesa) exceed this window; no
+        // hooked name does, so an unterminated window is simply not a target.
         let Some(end) = bytes.iter().position(|b| *b == 0) else {
-            state.failed = true;
-            break;
+            continue;
         };
         let name = &bytes[..end];
         let Some(target) = state.targets.iter().find(|target| target.name == name) else {

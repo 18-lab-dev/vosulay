@@ -21,10 +21,10 @@ For packaging changes, follow [packaging verification](operations.md#packaging-v
 ## Focused native fixtures
 
 ```sh
-cargo test --locked -p vosulay-overlay --test loader_scope --test sdl_filter -- --nocapture
+cargo test --locked -p vosulay-overlay --test loader_scope --test sdl_filter --test late_attach -- --nocapture
 ```
 
-These Linux tests compile C fixtures and locate injected libraries beside Cargo's test executables. They need no display/GPU; SDL uses its dummy driver. Loader tests protect native symbol scope; SDL tests protect event-filter callback/userdata across replacement and clearing. Verify `pkg-config --cflags --libs sdl2` and `pkg-config --cflags --libs sdl3`: a missing ABI can be skipped even when tests pass.
+These Linux tests compile C fixtures and locate injected libraries beside Cargo's test executables. They need no display/GPU; SDL uses its dummy driver. Loader tests protect native symbol scope; SDL tests protect event-filter callback/userdata across replacement and clearing; late-attach tests protect the GOT installer against loaded modules with over-long imported names (Mesa's libLLVM) or more than 65536 relocations (NVIDIA's EGL core). Verify `pkg-config --cflags --libs sdl2` and `pkg-config --cflags --libs sdl3`: a missing ABI can be skipped even when tests pass.
 
 ## Cross-platform and UI checks
 
@@ -53,7 +53,7 @@ Use a fresh output directory. The wrapper isolates PID/IPC/network namespaces an
 - `src/api.rs`, `tests/fixtures/backend/`: supported markup, metadata, deadlines, resolution fallback.
 - `src/backend/tests.rs`, `src/remote/tests_broker.rs`, `src/remote/editing.rs`: shared schemas, independent filters/commands, backend key order in filtered projections, precise subscription relays, HTTP snapshot/proxy behavior, local-editing gating.
 - `src/remote.rs`, `src/shell_policy.rs`: peer/authority/origin restrictions, local capability/path confinement.
-- `crates/frame-transport/`, `crates/overlay-linux/tests/`: transport ownership and loader/input fixtures.
+- `crates/frame-transport/`, `crates/overlay-linux/tests/`: transport ownership and loader/input/late-attach fixtures.
 - `crates/platform-windows/src/target_selection.rs`: focus-driven target selection, including tests available on Linux.
 
 Tier 4's checklist covers edit/interaction toggles, drag/resize/wheel, focus loss, tray actions and the remote `/overlay` page on your own machine. Native GPU composition, real game input release, OBS capture, desktop tray integration, and delivered-pixel performance need explicit platform checks. Never label an unsupported/failed game-surface launch as a compositor pass.
