@@ -1,13 +1,13 @@
 {
-    "version": "1.2.1",
+    "version": "1.3.0",
     "description": "Cross-platform in-game overlay manager for vosu or tosu-compatible backends",
     "homepage": "https://github.com/shiruviaa/vosulay",
     "license": "MIT",
     "notes": "Settings are kept in %APPDATA%\\vosulay, not in the Scoop directory.",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/shiruviaa/vosulay/releases/download/v1.2.1/vosulay-1.2.1-windows-x86_64.zip",
-            "hash": "805d6855aed141559fb5d0501361ebc32d30dd2963a6f13361d4f4e61cb1dd1d"
+            "url": "https://github.com/shiruviaa/vosulay/releases/download/v1.3.0/vosulay-1.3.0-windows-x86_64.zip",
+            "hash": "a00a4fe13349ca84eb0e10aa0dd3759f0bd2ac43336f72f172daffcab535415a"
         }
     },
     "extract_dir": "vosulay",
