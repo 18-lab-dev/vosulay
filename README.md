@@ -19,6 +19,8 @@ Need help? See [SUPPORT.md](SUPPORT.md) for where to ask questions and report bu
 - Disable individual overlays without removing their placement; re-enable them in the inspector.
 - Maintain multiple overlay profiles; rename the active one from the profile menu (☰ → Rename).
 - Discover installed counters from a local Vosu or Tosu instance, and search them by name, author or folder.
+- Edit a counter's vosu settings and settings profiles from the editor, and pin a placement to one vosu profile so it keeps its settings when vosu's active profile changes (vosu with settings profiles only).
+- Copy one or more selected overlays and paste them into another profile; the copies keep every property, including their vosu profile pin.
 - Add remote or local custom HTML overlays.
 - Use Chromium GPU compositing, WebGL, WebGPU where supported, and overlay audio.
 - Render inside Vulkan, EGL/OpenGL, and GLX/OpenGL games on Linux, including native Wayland and X11/XWayland games and osu!stable under Wine (for example osu-winello).
@@ -256,6 +258,21 @@ Ctrl+R refreshes the selected counter and Ctrl+Shift+R refreshes the active
 profile's counters. Interaction, profile, copy/paste, undo/redo, and refresh
 shortcuts are configurable. Interaction also requires Ctrl, Alt, or Meta.
 Text fields keep native undo/redo; normal mode leaves game input alone.
+
+With vosu's overlay settings profiles available, the inspector's **Settings**
+button opens the overlay settings dialog. It embeds vosu's own settings page for
+the counter, where values are edited and profiles created, copied, renamed,
+deleted or activated. **This placement uses** pins the selected placement to one
+vosu profile, or lets it follow whichever profile is active in vosu; pinned
+placements show the profile after their name. **Open in browser** opens the same
+page outside the editor. With tosu, or a vosu without settings profiles,
+**Settings** opens the counter's settings page in the browser as before. In
+game, vosu's page cannot open dropdown lists or colour pickers, because the
+off-screen editor has no native popups: pick the profile with **This placement
+uses**, and use **Open in browser** for such fields.
+
+Copy (`Ctrl+C`) keeps the selected overlays across profile switches; paste
+(`Ctrl+V`) adds them to the active profile at the same position.
 
 Both platforms provide **Edit mode**, **Hide vosulay**, and **Exit vosulay**
 in the tray; the first two are checkable. Linux requires StatusNotifierItem

@@ -100,6 +100,10 @@ pub struct Placement {
     pub url: Option<url::Url>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// vosu overlay settings profile this placement is pinned to; `None` follows
+    /// vosu's active profile. Only installed counters (no `url`) can be pinned.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vosu_profile: Option<String>,
     pub top: f64,
     pub left: f64,
     pub width: f64,
@@ -196,6 +200,7 @@ impl Default for Placement {
             counter_id: String::new(),
             url: None,
             name: None,
+            vosu_profile: None,
             top: 0.0,
             left: 0.0,
             width: DEFAULT_WIDTH,
@@ -319,6 +324,11 @@ impl Placement {
             .take()
             .map(|name| name.trim().to_owned())
             .filter(|name| !name.is_empty());
+        let catalog = self.url.is_none();
+        self.vosu_profile = self
+            .vosu_profile
+            .take()
+            .filter(|profile| catalog && valid_vosu_profile(profile));
         self.top = finite_or(self.top, 0.0);
         self.left = finite_or(self.left, 0.0);
         self.width = finite_or(self.width, DEFAULT_WIDTH).max(MIN_SIZE);
@@ -335,6 +345,14 @@ impl Placement {
             finite_or(self.crop_bottom, 0.0).clamp(0.0, self.height - MIN_SIZE - self.crop_top);
         self.z_index = self.z_index.clamp(0, 999);
     }
+}
+
+/// vosu's overlay settings profile names: 1–48 ASCII letters, digits, `_` or `-`.
+pub fn valid_vosu_profile(name: &str) -> bool {
+    (1..=48).contains(&name.len())
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
 }
 
 pub fn config_path() -> Result<PathBuf> {
@@ -538,6 +556,7 @@ mod tests {
                     counter_id: "counter".to_owned(),
                     url: None,
                     name: None,
+                    vosu_profile: Some("not a profile".to_owned()),
                     top: f64::NAN,
                     left: f64::INFINITY,
                     width: -5.0,
@@ -572,6 +591,7 @@ mod tests {
                         counter_id: "counter".to_owned(),
                         url: None,
                         name: None,
+                        vosu_profile: None,
                         top: 0.0,
                         left: 0.0,
                         width: 10.0,
@@ -660,6 +680,7 @@ mod tests {
                             .expect("custom overlay URL should parse"),
                     ),
                     name: Some("  Custom overlay  ".to_owned()),
+                    vosu_profile: None,
                     top: 12.5,
                     left: 20.0,
                     width: 640.0,
@@ -1103,6 +1124,49 @@ mod tests {
         assert_eq!(below.rotation, -180.0);
         assert_eq!(above.opacity, 1.0);
         assert_eq!(above.rotation, 180.0);
+    }
+
+    #[test]
+    fn vosu_profile_pin_survives_only_on_valid_catalog_placements() {
+        let pinned = serde_json::json!({
+            "counter_id": "accuracy",
+            "vosu_profile": "stream_2-B",
+            "top": 0, "left": 0, "width": 500, "height": 300, "scale": 1, "z_index": 0
+        });
+        let mut placement: Placement = serde_json::from_value(pinned.clone()).unwrap();
+        placement.normalize();
+        assert_eq!(placement.vosu_profile.as_deref(), Some("stream_2-B"));
+        assert_eq!(
+            serde_json::to_value(&placement).unwrap()["vosu_profile"],
+            "stream_2-B"
+        );
+
+        for name in ["", "with space", "ü", &"x".repeat(49)] {
+            let mut invalid = Placement {
+                vosu_profile: Some(name.to_owned()),
+                ..placement.clone()
+            };
+            invalid.normalize();
+            assert_eq!(invalid.vosu_profile, None, "{name:?}");
+        }
+        assert!(valid_vosu_profile(&"x".repeat(48)));
+
+        // A custom URL is not a vosu counter page, so a pin has nothing to select.
+        let mut custom = Placement {
+            url: Some(url::Url::parse("https://example.com/overlay.html").unwrap()),
+            ..placement.clone()
+        };
+        custom.normalize();
+        assert_eq!(custom.vosu_profile, None);
+
+        let mut following = placement;
+        following.vosu_profile = None;
+        assert!(
+            serde_json::to_value(&following)
+                .unwrap()
+                .get("vosu_profile")
+                .is_none()
+        );
     }
 
     #[test]

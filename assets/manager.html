@@ -142,6 +142,26 @@
       </form>
     </div>
 
+    <div id="overlay-settings-modal" class="modal-backdrop" hidden>
+      <section class="overlay-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="overlay-settings-title">
+        <div class="overlay-settings-header">
+          <div class="truncate"><strong id="overlay-settings-title">Overlay settings</strong><small id="overlay-settings-meta"></small></div>
+          <button id="overlay-settings-close" class="icon-button" type="button" title="Close" aria-label="Close overlay settings">×</button>
+        </div>
+        <div class="overlay-settings-pin">
+          <span id="overlay-settings-pin-label">This placement uses</span>
+          <div id="overlay-settings-profiles" class="overlay-settings-profiles" role="radiogroup" aria-labelledby="overlay-settings-pin-label"></div>
+          <button id="overlay-settings-reload" class="icon-button" type="button" title="Reload vosu profiles" aria-label="Reload vosu profiles">↻</button>
+        </div>
+        <iframe id="overlay-settings-frame" class="overlay-settings-frame" title="vosu overlay settings"></iframe>
+        <div class="overlay-settings-footer">
+          <small id="overlay-settings-note"></small>
+          <button id="overlay-settings-browser" class="quiet-button" type="button">Open in browser</button>
+          <button id="overlay-settings-done" class="primary-button" type="button">Done</button>
+        </div>
+      </section>
+    </div>
+
     <div id="settings-modal" class="modal-backdrop" hidden>
       <form id="settings-form" class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title" novalidate>
         <div class="settings-dialog-header">

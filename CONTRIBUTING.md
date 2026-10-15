@@ -121,6 +121,8 @@ Open `http://127.0.0.1:8765/` (or the printed `file://` URL without `--serve`). 
 
 The stub host logs every outbound message to the DevTools console (also kept in `window.__VOSULAY_SENT__`) and acknowledges saves so status and undo flows behave normally; nothing is persisted. Demo counters are a local placeholder page, not real counters. Send further host messages from DevTools with `window.__VOSULAY_RECEIVE__({...})` (see `receive()` in `assets/manager.js` for the message types). Native file pickers, host shortcuts, game focus, and compositor input are outside this tier.
 
+To exercise the overlay settings dialog, add `--vosu-url http://127.0.0.1:<port>/` pointing at a vosu with overlay settings profiles (run a test vosu with its own configuration and data directories, not your everyday one). The preview then marks every counter as having settings and snapshots that vosu's profile registry at build time, so profiles created later appear only after rebuilding. Use counter IDs that the vosu has installed (`--config`) for its settings page to show them.
+
 Off-screen CEF does **not** render native popup surfaces: avoid `window.confirm`, native `<select>` popup menus, and browser validation bubbles in the product UI. A normal Chromium preview can show them and therefore cannot prove off-screen compatibility.
 
 For a real isolated CEF smoke on Linux, install Python 3, Xvfb and bubblewrap (`xvfb` and `bubblewrap` on Ubuntu), with permission to create the namespaces used by `bwrap`. Then:

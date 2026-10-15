@@ -49,15 +49,15 @@ Use a fresh output directory. The wrapper isolates PID/IPC/network namespaces an
 
 ## Coverage and manual boundaries
 
-- `src/config.rs`, `tests/tosu_migration.rs`: defaults, normalization, persistence, safe/idempotent imports.
-- `src/api.rs`, `tests/fixtures/backend/`: supported markup, metadata, deadlines, resolution fallback.
+- `src/config.rs`, `tests/tosu_migration.rs`: defaults, normalization (including `vosu_profile` pins), persistence, safe/idempotent imports.
+- `src/api.rs`, `tests/fixtures/backend/`: supported markup, metadata, deadlines, resolution fallback, the vosu profile registry in the `counters` envelope and its absence on tosu.
 - `src/backend/tests.rs`, `src/remote/tests_broker.rs`, `src/remote/manage.rs`: shared schemas, independent filters/commands, backend key order in filtered projections, precise subscription relays, HTTP snapshot/proxy behavior, manage-host gating.
 - `src/runtime/editor.rs`, `src/runtime/control.rs`: manage-page message allowlist, local-file grant checks and broadcasts; control protocol bounds and peer credentials.
-- `src/remote.rs`, `src/shell_policy.rs`: peer/authority/origin restrictions, local capability/path confinement.
+- `src/remote.rs`, `src/shell_policy.rs`: peer/authority/origin restrictions, pinned counter URLs on the view-only page, local capability/path confinement.
 - `crates/frame-transport/`, `crates/overlay-linux/tests/`: transport ownership and loader/input/late-attach fixtures.
 - `crates/platform-windows/src/target_selection.rs`: focus-driven target selection, including tests available on Linux.
 
-Tier 4's checklist covers edit/interaction toggles, drag/resize/scale/crop, field wheel stepping, focus loss, tray actions and the remote `/overlay` page on your own machine. Native GPU composition, real game input release, OBS capture, desktop tray integration, and delivered-pixel performance need explicit platform checks. Never label an unsupported/failed game-surface launch as a compositor pass.
+Tier 4's checklist covers edit/interaction toggles, drag/resize/scale/crop, field wheel stepping, focus loss, tray actions and the remote `/overlay` page on your own machine. The overlay settings dialog (embedded vosu page, pins, profile refresh) and cross-profile paste have no automated JavaScript tests; exercise them in the Tier 3 preview with `--vosu-url` or on the manage page with a test vosu. In game, the dialog additionally depends on CEF framing vosu's origin and on the `/settings` exemption in `assets/backend.js`. Native GPU composition, real game input release, OBS capture, desktop tray integration, and delivered-pixel performance need explicit platform checks. Never label an unsupported/failed game-surface launch as a compositor pass.
 
 ## Maintainer environment (optional)
 

@@ -9,6 +9,8 @@ import argparse
 import functools
 import http.server
 import json
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -54,7 +56,7 @@ def javascript_string(source: str) -> str:
     return encoded
 
 
-def build(config: dict, counters: list) -> str:
+def build(config: dict, counters: list, vosu: dict | None = None) -> str:
     html = (ASSETS / "manager.html").read_text(encoding="utf-8")
     if html.count(MARKER) != 1:
         raise SystemExit(f"assets/manager.html must contain exactly one {MARKER}")
@@ -71,11 +73,16 @@ window.__VOSULAY_POST_MESSAGE__ = (payload) => {
     const revision = ++__previewRevision;
     setTimeout(() => window.__VOSULAY_RECEIVE__({ type: "saved", save_id: message.save_id, revision }), 5);
   }
+  if (message.type === "refresh-counters" && window.__VOSULAY_PREVIEW_COUNTERS__) {
+    setTimeout(() => window.__VOSULAY_RECEIVE__(window.__VOSULAY_PREVIEW_COUNTERS__), 5);
+  }
 };"""
     receive = (
         f"window.__VOSULAY_RECEIVE__({{type:'config',revision:0,config:JSON.parse({javascript_string(json.dumps(config))})}});"
         "window.__VOSULAY_RECEIVE__({type:'editing',editing:true});"
-        f"window.__VOSULAY_RECEIVE__({{type:'counters',counters:JSON.parse({javascript_string(json.dumps(counters))})}});"
+        f"window.__VOSULAY_PREVIEW_COUNTERS__={{type:'counters',counters:JSON.parse({javascript_string(json.dumps(counters))}),"
+        f"vosu:JSON.parse({javascript_string(json.dumps(vosu))})}};"
+        "window.__VOSULAY_RECEIVE__(window.__VOSULAY_PREVIEW_COUNTERS__);"
     )
     bootstrap = (
         f"(()=>{{{host}const style=document.createElement('style');style.textContent={css};"
@@ -91,6 +98,9 @@ def main() -> None:
     parser.add_argument("--config", type=Path, help="vosulay config.json to load instead of the demo profiles")
     parser.add_argument("--serve", type=int, metavar="PORT",
                         help="also serve the preview on http://127.0.0.1:PORT/ until interrupted")
+    parser.add_argument("--vosu-url", metavar="URL",
+                        help="vosu whose settings profiles the overlay settings dialog uses; "
+                             "every counter then has settings (snapshot taken at build time)")
     args = parser.parse_args()
 
     config = json.loads(args.config.read_text(encoding="utf-8")) if args.config else DEMO_CONFIG
@@ -101,8 +111,14 @@ def main() -> None:
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "counter.html").write_text(DEMO_COUNTER, encoding="utf-8")
     counters = [{"id": i, "name": i, "author": "preview", "version": "1", "width": 300, "height": 100,
-                 "has_settings": False, "url": f"counter.html?{i}"} for i in ids]
-    (args.output / "index.html").write_text(build(config, counters), encoding="utf-8")
+                 "has_settings": bool(args.vosu_url), "url": f"counter.html?{i}"} for i in ids]
+    vosu = None
+    if args.vosu_url:
+        with urllib.request.urlopen(urllib.parse.urljoin(args.vosu_url, "/api/counters/profiles"), timeout=10) as response:
+            registry = json.load(response)
+        vosu = {"settings_url": urllib.parse.urljoin(args.vosu_url, "/settings"),
+                "active": registry["active"], "profiles": registry["profiles"]}
+    (args.output / "index.html").write_text(build(config, counters, vosu), encoding="utf-8")
     index = (args.output / "index.html").resolve()
     print(f"Editor preview: {index.as_uri()}")
 

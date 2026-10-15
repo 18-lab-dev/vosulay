@@ -47,6 +47,10 @@
   const urlName = $("url-name");
   const urlInput = $("url-input");
   const urlCancel = $("url-cancel");
+  const overlaySettingsModal = $("overlay-settings-modal");
+  const overlaySettingsProfiles = $("overlay-settings-profiles");
+  const overlaySettingsFrame = $("overlay-settings-frame");
+  const overlaySettingsNote = $("overlay-settings-note");
   const nameField = $("field-name");
   const urlField = $("field-url");
   const urlFieldLabel = $("field-url-label");
@@ -145,6 +149,8 @@
   let statusFadeTimer = 0;
   const HISTORY_LIMIT = 100;
   const HISTORY_COALESCE_MS = 1000;
+  // vosu's overlay settings profile names (Placement::vosu_profile).
+  const VOSU_PROFILE_NAME = /^[A-Za-z0-9_-]{1,48}$/;
 
   const dirty = {
     stageGeometry: true,
@@ -159,6 +165,10 @@
   const state = {
     config: null,
     counters: null,
+    // vosu's profile registry and settings page, or null for tosu and older vosu.
+    vosu: null,
+    // The placement whose vosu settings are open.
+    overlaySettings: null,
     editing: false,
     interacting: false,
     selected: new Set(),
@@ -285,6 +295,9 @@
     clampCrop(normalized);
     if (typeof overlay.url === "string" && overlay.url.trim()) normalized.url = overlay.url.trim();
     if (typeof overlay.name === "string" && overlay.name.trim()) normalized.name = overlay.name.trim();
+    if (!normalized.url && typeof overlay.vosu_profile === "string" && VOSU_PROFILE_NAME.test(overlay.vosu_profile)) {
+      normalized.vosu_profile = overlay.vosu_profile;
+    }
     return normalized;
   }
 
@@ -497,7 +510,7 @@
   // in use; otherwise the user could be locked out of leaving the editor.
   function toolbarPinned() {
     return !profileMenu.hidden || !profileMoreMenu.hidden || !profileCreate.hidden || !profileDeleteConfirm.hidden
-      || !settingsModal.hidden || !urlModal.hidden || toolbar.contains(document.activeElement);
+      || !settingsModal.hidden || !urlModal.hidden || !overlaySettingsModal.hidden || toolbar.contains(document.activeElement);
   }
 
   function updateToolbarAvoidance() {
@@ -898,21 +911,44 @@
     return element;
   }
 
+  function parseVosuSettings(value) {
+    if (!value || typeof value !== "object" || typeof value.settings_url !== "string" || !Array.isArray(value.profiles)) return null;
+    const profiles = value.profiles.filter((name) => typeof name === "string" && VOSU_PROFILE_NAME.test(name));
+    if (!profiles.includes(value.active)) return null;
+    return { settings_url: value.settings_url, active: value.active, profiles };
+  }
+
+  // vosu serves a pinned instance's settings from that profile; tosu ignores the query.
+  function pinnedCounterUrl(url, profile) {
+    if (!profile) return url;
+    try {
+      const pinned = new URL(url, document.baseURI);
+      pinned.searchParams.set("vosuProfile", profile);
+      return pinned.href;
+    } catch (_) {
+      return url;
+    }
+  }
+
   function overlayDetails(overlay) {
     const counter = findCounter(overlay.counter_id);
     if (overlay.url) {
       const source = customSource(overlay);
+      const name = safeId(overlay.name, source ? source.hostname || "HTML overlay" : overlay.counter_id);
       return {
         available: Boolean(source),
-        name: safeId(overlay.name, source ? source.hostname || "HTML overlay" : overlay.counter_id),
+        name,
+        tag: name,
         url: source ? source.href : null,
         counter: null
       };
     }
+    const name = safeId(overlay.name, counter ? counter.name : `${overlay.counter_id} (missing)`);
     return {
       available: Boolean(counter),
-      name: safeId(overlay.name, counter ? counter.name : `${overlay.counter_id} (missing)`),
-      url: counter ? counter.url : null,
+      name,
+      tag: overlay.vosu_profile ? `${name} · ${overlay.vosu_profile}` : name,
+      url: counter ? pinnedCounterUrl(counter.url, overlay.vosu_profile) : null,
       counter
     };
   }
@@ -946,7 +982,7 @@
     }
 
     root.append(makeElement("div", "interaction-shield"));
-    root.append(makeElement("div", "overlay-tag", details.name));
+    root.append(makeElement("div", "overlay-tag", details.tag));
     for (const edge of ["nw", "ne", "sw", "se"]) {
       const handle = makeElement("div", "resize-handle");
       handle.dataset.edge = edge;
@@ -983,7 +1019,7 @@
           stage.append(root);
         }
         const tag = root.querySelector(".overlay-tag");
-        if (tag && tag.textContent !== details.name) tag.textContent = details.name;
+        if (tag && tag.textContent !== details.tag) tag.textContent = details.tag;
         const frame = root.querySelector(".overlay-frame");
         if (frame && frame.title !== details.name) frame.title = details.name;
       }
@@ -1330,7 +1366,10 @@
         ? `${source.protocol === "vosulay-overlay:" ? "HTML file" : "URL"} · ${overlay.url}`
         : `Unsupported source · ${overlay.url}`;
     } else {
-      $("selection-meta").textContent = counter ? [counter.author, counter.version].filter(Boolean).join(" · ") : "Counter is not installed";
+      const pin = overlay.vosu_profile ? `vosu profile ${overlay.vosu_profile}` : "";
+      $("selection-meta").textContent = counter
+        ? [counter.author, counter.version, pin].filter(Boolean).join(" · ")
+        : ["Counter is not installed", pin].filter(Boolean).join(" · ");
     }
 
     renderInspectorText(nameField, details.name);
@@ -1404,6 +1443,7 @@
     if (regions.profileList) renderProfiles();
     if (regions.catalog) renderCatalog();
     if (regions.inspector) renderInspector();
+    renderOverlaySettings();
     renderToolbarActions();
     updatePanelAvoidance();
   }
@@ -1643,6 +1683,92 @@
     urlInput.value = "https://";
     urlModal.hidden = false;
     urlName.focus();
+  }
+
+  function closeOverlaySettings(restoreFocus = true) {
+    if (overlaySettingsModal.hidden) return;
+    overlaySettingsModal.hidden = true;
+    state.overlaySettings = null;
+    // Unloads vosu's page, which holds its own connections while open.
+    overlaySettingsFrame.removeAttribute("src");
+    overlaySettingsProfiles.replaceChildren();
+    overlaySettingsProfiles._vosulaySignature = "";
+    // Profiles created, renamed or deleted in vosu's page become pin choices.
+    requestCatalogRefresh();
+    if (restoreFocus && !$("settings").disabled) $("settings").focus();
+  }
+
+  function openOverlaySettings(overlay) {
+    if (!state.vosu || !overlay || overlay.url) return;
+    closeProfileMenu();
+    closeProfileCreator();
+    closeProfileDeleteConfirm();
+    state.overlaySettings = overlay;
+    overlaySettingsModal.hidden = false;
+    renderOverlaySettings();
+    requestCatalogRefresh();
+    $("overlay-settings-close").focus();
+  }
+
+  function overlaySettingsSource(overlay, profiles) {
+    const url = new URL(state.vosu.settings_url);
+    url.searchParams.set("overlay", overlay.counter_id);
+    // vosu rejects an unknown explicit profile; without one its page shows the active profile,
+    // which is also what a placement pinned to a deleted profile loads.
+    if (overlay.vosu_profile && profiles.includes(overlay.vosu_profile)) url.searchParams.set("profile", overlay.vosu_profile);
+    return url.href;
+  }
+
+  function renderOverlaySettings() {
+    if (overlaySettingsModal.hidden) return;
+    const overlay = state.overlaySettings;
+    const profile = activeProfile();
+    if (!state.editing || !state.vosu || !overlay || overlay.url || !profile || !profile.overlays.includes(overlay)) {
+      closeOverlaySettings(false);
+      return;
+    }
+    const { active, profiles } = state.vosu;
+    const pin = overlay.vosu_profile || "";
+    $("overlay-settings-title").textContent = `${overlayDetails(overlay).name} settings`;
+    $("overlay-settings-meta").textContent = `vosu overlay ${overlay.counter_id}`;
+    const options = [["", `Active profile (${active})`], ...profiles.map((name) => [name, name])];
+    if (pin && !profiles.includes(pin)) options.push([pin, `${pin} (missing)`]);
+    // Rebuilding on every render would drop keyboard focus from the choice in use.
+    const signature = JSON.stringify([options, pin]);
+    if (overlaySettingsProfiles._vosulaySignature !== signature) {
+      overlaySettingsProfiles._vosulaySignature = signature;
+      const focused = overlaySettingsProfiles.contains(document.activeElement) ? document.activeElement.dataset.profile : null;
+      overlaySettingsProfiles.replaceChildren(...options.map(([value, label]) => {
+        const button = makeElement("button", value && !profiles.includes(value) ? "missing" : "", label);
+        button.type = "button";
+        button.setAttribute("role", "radio");
+        button.setAttribute("aria-checked", String(value === pin));
+        button.title = value ? `Always use vosu profile ${value}` : "Follow the profile active in vosu";
+        button.dataset.profile = value;
+        return button;
+      }));
+      if (focused !== null) {
+        const restored = [...overlaySettingsProfiles.children].find((button) => button.dataset.profile === focused);
+        if (restored) restored.focus();
+      }
+    }
+    overlaySettingsNote.textContent = !pin
+      ? `Follows the profile active in vosu (${active}).`
+      : profiles.includes(pin)
+        ? `Pinned to ${pin}; switching vosu's active profile does not change it.`
+        : `vosu has no profile ${pin}, so this placement uses ${active} until it is pinned again.`;
+    const source = overlaySettingsSource(overlay, profiles);
+    if (overlaySettingsFrame.getAttribute("src") !== source) overlaySettingsFrame.setAttribute("src", source);
+  }
+
+  function pinOverlay(overlay, value) {
+    if (!overlay || (overlay.vosu_profile || "") === value || (value && !VOSU_PROFILE_NAME.test(value))) return;
+    const before = historySnapshot();
+    if (value) overlay.vosu_profile = value;
+    else delete overlay.vosu_profile;
+    commitHistory(before);
+    scheduleSave(true);
+    requestRender("stageStructure", "inspector");
   }
 
   function closeProfileCreator(restoreFocus = false) {
@@ -2946,10 +3072,32 @@
   $("settings").addEventListener("click", () => {
     const overlay = selectedOverlay();
     const counter = overlay && !overlay.url && findCounter(overlay.counter_id);
-    if (counter && counter.has_settings) ipc({ type: "open-settings", counter_id: counter.id });
+    if (!counter || !counter.has_settings) return;
+    // tosu and vosu releases without settings profiles keep the browser page.
+    if (state.vosu) openOverlaySettings(overlay);
+    else ipc({ type: "open-settings", counter_id: counter.id });
   });
   addUrl.addEventListener("click", openUrlModal);
   urlCancel.addEventListener("click", () => closeUrlModal());
+  $("overlay-settings-close").addEventListener("click", () => closeOverlaySettings());
+  $("overlay-settings-done").addEventListener("click", () => closeOverlaySettings());
+  $("overlay-settings-reload").addEventListener("click", requestCatalogRefresh);
+  $("overlay-settings-browser").addEventListener("click", () => {
+    const overlay = state.overlaySettings;
+    if (!overlay || !state.vosu) return;
+    const message = { type: "open-settings", counter_id: overlay.counter_id };
+    if (overlay.vosu_profile && state.vosu.profiles.includes(overlay.vosu_profile)) message.profile = overlay.vosu_profile;
+    ipc(message);
+  });
+  overlaySettingsProfiles.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-profile]");
+    if (button) pinOverlay(state.overlaySettings, button.dataset.profile);
+  });
+  // Focus comes back from vosu's page when the user returns to the editor's own
+  // controls; profiles may have changed there.
+  window.addEventListener("focus", () => {
+    if (!overlaySettingsModal.hidden) requestCatalogRefresh();
+  });
   urlForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const name = urlName.value.trim();
@@ -3067,7 +3215,7 @@
   }
 
   function menuOrModalOpen() {
-    return !settingsModal.hidden || !urlModal.hidden || !profileMenu.hidden || !profileMoreMenu.hidden
+    return !settingsModal.hidden || !urlModal.hidden || !overlaySettingsModal.hidden || !profileMenu.hidden || !profileMoreMenu.hidden
       || !profileCreate.hidden || !profileDeleteConfirm.hidden || state.inspectorPopup;
   }
 
@@ -3151,6 +3299,9 @@
     } else if (!urlModal.hidden) {
       event.preventDefault();
       closeUrlModal();
+    } else if (!overlaySettingsModal.hidden) {
+      event.preventDefault();
+      closeOverlaySettings();
     } else if (!profileMenu.hidden) {
       event.preventDefault();
       closeProfileMenu(true);
@@ -3291,6 +3442,7 @@
         if (catalogRequest.error) setStatus("Counters loaded");
         catalogRequest.pending = false;
         catalogRequest.error = "";
+        state.vosu = parseVosuSettings(envelope.vosu);
         requestRender("stageStructure", "catalog", "inspector");
       } else if (envelope.type === "profile-exported") {
         setStatus("Profile exported");

@@ -1,11 +1,16 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use scraper::{ElementRef, Html, Selector};
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use url::Url;
 
+use crate::config::valid_vosu_profile;
+
 const MAX_COUNTER_PAGE_BYTES: usize = 2 * 1024 * 1024;
+const MAX_PROFILES_BYTES: usize = 64 * 1024;
+const MAX_VOSU_PROFILES: usize = 32;
 const FETCH_DEADLINE: Duration = Duration::from_secs(10);
 const DEFAULT_WIDTH: f64 = 500.0;
 const DEFAULT_HEIGHT: f64 = 300.0;
@@ -22,11 +27,91 @@ pub struct InstalledCounter {
     pub url: Url,
 }
 
-pub fn fetch_installed_counters(base_url: &Url) -> Result<Vec<InstalledCounter>> {
-    fetch_installed_counters_with_timeout(base_url, FETCH_DEADLINE)
+/// vosu's overlay settings profiles. tosu and earlier vosu releases have none.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct VosuSettings {
+    /// vosu's inline settings editor; it also manages the profiles.
+    pub settings_url: Url,
+    pub active: String,
+    pub profiles: Vec<String>,
 }
 
-pub(crate) fn fetch_installed_counters_with_timeout(
+/// The manager's catalog envelope: the installed counters and, when the backend
+/// offers them, vosu's overlay settings profiles (`vosu`, otherwise `null`).
+pub fn counters_envelope(base_url: &Url) -> Value {
+    counters_envelope_with_timeout(base_url, FETCH_DEADLINE)
+}
+
+/// Both requests share `timeout`, so callers keep one bound per refresh.
+pub(crate) fn counters_envelope_with_timeout(base_url: &Url, timeout: Duration) -> Value {
+    let deadline = Instant::now() + timeout;
+    match fetch_installed_counters_with_timeout(base_url, timeout) {
+        Ok(counters) => {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            // A backend without profiles is tosu or an older vosu, not a catalog
+            // failure: the editor then keeps its profile-less behaviour.
+            let vosu = (!remaining.is_zero())
+                .then(|| fetch_vosu_settings(base_url, remaining).ok())
+                .flatten();
+            json!({"type": "counters", "counters": counters, "vosu": vosu})
+        }
+        Err(error) => json!({"type": "error", "message": format!("{error:#}")}),
+    }
+}
+
+fn fetch_vosu_settings(base_url: &Url, timeout: Duration) -> Result<VosuSettings> {
+    let endpoint = base_url.join("/api/counters/profiles")?;
+    let mut response = ureq::get(endpoint.as_str())
+        .config()
+        .http_status_as_error(false)
+        .max_redirects(0)
+        .max_redirects_will_error(false)
+        .timeout_global(Some(timeout))
+        .build()
+        .call()
+        .with_context(|| format!("failed to request vosu profiles from {endpoint}"))?;
+    ensure!(
+        response.status().is_success(),
+        "vosu profiles at {endpoint} returned HTTP status {}",
+        response.status()
+    );
+    let bytes = response
+        .body_mut()
+        .with_config()
+        .limit(MAX_PROFILES_BYTES as u64 + 1)
+        .read_to_vec()
+        .with_context(|| format!("failed to read vosu profiles from {endpoint}"))?;
+    ensure!(
+        bytes.len() <= MAX_PROFILES_BYTES,
+        "vosu profiles at {endpoint} exceed the {MAX_PROFILES_BYTES} byte limit"
+    );
+    parse_vosu_settings(base_url, &bytes)
+}
+
+fn parse_vosu_settings(base_url: &Url, body: &[u8]) -> Result<VosuSettings> {
+    #[derive(Deserialize)]
+    struct Registry {
+        active: String,
+        profiles: Vec<String>,
+    }
+    // vosu reports failures as `{"error": ...}`, which lacks both fields.
+    let Registry { active, profiles } =
+        serde_json::from_slice(body).context("not a vosu profile registry")?;
+    ensure!(
+        profiles.len() <= MAX_VOSU_PROFILES
+            && profiles.iter().all(|name| valid_vosu_profile(name))
+            && profiles.iter().any(|name| name == "default")
+            && profiles.contains(&active),
+        "invalid vosu profile registry"
+    );
+    Ok(VosuSettings {
+        settings_url: base_url.join("/settings")?,
+        active,
+        profiles,
+    })
+}
+
+fn fetch_installed_counters_with_timeout(
     base_url: &Url,
     timeout: Duration,
 ) -> Result<Vec<InstalledCounter>> {
@@ -573,5 +658,89 @@ mod tests {
             Some(std::io::ErrorKind::WouldBlock),
             "the redirect target must never be contacted"
         );
+    }
+
+    /// Serves the counter search from `search`, and `/api/counters/profiles`
+    /// with `profiles` (`None` answers 404, as tosu does).
+    fn backend_fixture(search: &'static str, profiles: Option<&'static str>) -> Url {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("fixture server should bind");
+        let address = listener.local_addr().expect("fixture address");
+        thread::spawn(move || {
+            for stream in listener.incoming().take(2) {
+                let mut stream = stream.expect("fixture request should connect");
+                let mut request = [0_u8; 2048];
+                let read = stream.read(&mut request).expect("fixture request readable");
+                let request = String::from_utf8_lossy(&request[..read]);
+                let (status, kind, body) = if request.starts_with("GET /api/counters/search/ ") {
+                    ("200 OK", "text/html", search)
+                } else if let Some(body) =
+                    profiles.filter(|_| request.starts_with("GET /api/counters/profiles "))
+                {
+                    ("200 OK", "application/json", body)
+                } else {
+                    ("404 Not Found", "text/plain", "not found")
+                };
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("fixture response writable");
+            }
+        });
+        Url::parse(&format!("http://{address}/")).expect("fixture URL should parse")
+    }
+
+    #[test]
+    fn envelope_carries_vosu_profiles_and_their_settings_page() {
+        let base = backend_fixture(
+            include_str!("../tests/fixtures/backend/vosu-counter-search.html"),
+            Some(r#"{"active":"stream","profiles":["default","stream"]}"#),
+        );
+        let envelope = counters_envelope_with_timeout(&base, Duration::from_secs(2));
+        assert_eq!(envelope["type"], "counters");
+        assert_eq!(envelope["counters"].as_array().map(Vec::len), Some(1));
+        assert_eq!(
+            envelope["vosu"],
+            json!({
+                "settings_url": base.join("/settings").unwrap().as_str(),
+                "active": "stream",
+                "profiles": ["default", "stream"],
+            })
+        );
+    }
+
+    #[test]
+    fn envelope_without_a_profile_registry_keeps_the_catalog() {
+        let base = backend_fixture(
+            include_str!("../tests/fixtures/backend/tosu-4.26.0-counter-search.html"),
+            None,
+        );
+        let envelope = counters_envelope_with_timeout(&base, Duration::from_secs(2));
+        assert_eq!(envelope["type"], "counters");
+        assert!(
+            envelope["counters"]
+                .as_array()
+                .is_some_and(|c| !c.is_empty())
+        );
+        assert_eq!(envelope["vosu"], Value::Null);
+    }
+
+    #[test]
+    fn profile_registry_must_be_consistent() {
+        let base = Url::parse("http://127.0.0.1:24050/").unwrap();
+        for body in [
+            r#"{"error":"Unknown route"}"#,
+            "<html>not found</html>",
+            r#"{"active":"stream","profiles":["default"]}"#,
+            r#"{"active":"live","profiles":["live"]}"#,
+            r#"{"active":"default","profiles":["default","bad name"]}"#,
+        ] {
+            assert!(
+                parse_vosu_settings(&base, body.as_bytes()).is_err(),
+                "{body}"
+            );
+        }
     }
 }

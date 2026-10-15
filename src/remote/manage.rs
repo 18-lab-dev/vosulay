@@ -139,10 +139,7 @@ fn api(
         |error: anyhow::Error| HttpError::new(500, "Internal Server Error", format!("{error:#}\n"));
     let value = match (action, post) {
         ("state", false) => editor.state().map_err(failed)?,
-        ("counters", false) => match crate::api::fetch_installed_counters(&backend.upstream) {
-            Ok(counters) => json!({"type": "counters", "counters": counters}),
-            Err(error) => json!({"type": "error", "message": format!("{error:#}")}),
-        },
+        ("counters", false) => crate::api::counters_envelope(&backend.upstream),
         ("message", true) => {
             let message: Value = serde_json::from_slice(&request.body)
                 .map_err(|_| HttpError::new(400, "Bad Request", "Request body is not JSON\n"))?;

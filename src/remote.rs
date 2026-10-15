@@ -1015,6 +1015,9 @@ fn placement_url(
             .map_err(|()| HttpError::new(500, "Internal Server Error", "Invalid vosu URL\n"))?
             .push(&item.counter_id)
             .push("");
+        if let Some(profile) = &item.vosu_profile {
+            url.query_pairs_mut().append_pair("vosuProfile", profile);
+        }
         return Ok(url.into());
     };
     match custom.scheme() {
@@ -1588,6 +1591,28 @@ mod tests {
                 "style=\"left:-100px;top:-20px;width:640px;height:360px\"></iframe></div>"
             )
         );
+    }
+
+    #[test]
+    fn pinned_counter_loads_with_its_vosu_profile() {
+        let placement = Placement {
+            counter_id: "a/b".to_owned(),
+            ..Placement::default()
+        };
+        let profile = Profile {
+            id: "x".to_owned(),
+            name: "X".to_owned(),
+            overlays: vec![
+                Placement {
+                    vosu_profile: Some("stream".to_owned()),
+                    ..placement.clone()
+                },
+                placement,
+            ],
+        };
+        let html = render_profile(&profile, &base(), &base()).expect("render");
+        assert!(html.contains("src=\"http://127.0.0.1:24050/a%2Fb/?vosuProfile=stream\""));
+        assert!(html.contains("src=\"http://127.0.0.1:24050/a%2Fb/\""));
     }
 
     #[test]

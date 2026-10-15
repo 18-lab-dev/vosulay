@@ -1,6 +1,6 @@
 use super::resources::{ProductResources, read_bounded};
 use crate::{
-    api::fetch_installed_counters_with_timeout,
+    api::counters_envelope_with_timeout,
     config::{AppConfig, Profile, save_to_path},
     shell_policy::{overlay_url, profile_filename},
 };
@@ -113,7 +113,8 @@ impl crate::remote::ManageEditor for RemoteEditor {
 }
 
 // At shutdown there can be one active fetch and one coalesced fetch to drain.
-// Two two-second global HTTP deadlines leave headroom in the host's five-second drain.
+// Two two-second global HTTP deadlines leave headroom in the host's five-second
+// drain; the catalog and vosu profile requests share each deadline.
 const COUNTER_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Default)]
@@ -154,10 +155,7 @@ fn counter_worker(queue: Arc<CounterQueue>, backend: Url) {
                 state = queue.ready.wait(state).expect("counter queue poisoned");
             }
         };
-        let envelope = match fetch_installed_counters_with_timeout(&backend, COUNTER_TIMEOUT) {
-            Ok(counters) => json!({"type": "counters", "counters": counters}),
-            Err(error) => json!({"type": "error", "message": format!("{error:#}")}),
-        };
+        let envelope = counters_envelope_with_timeout(&backend, COUNTER_TIMEOUT);
         let mut state = queue.state.lock().expect("counter queue poisoned");
         if generation == state.generation {
             state.reply = Some((
@@ -664,6 +662,13 @@ impl State {
                     .context("missing counter identifier")?;
                 let mut url = self.backend.join("/settings")?;
                 url.query_pairs_mut().append_pair("overlay", id);
+                if let Some(profile) = message.get("profile").and_then(Value::as_str) {
+                    ensure!(
+                        crate::config::valid_vosu_profile(profile),
+                        "invalid vosu profile name"
+                    );
+                    url.query_pairs_mut().append_pair("profile", profile);
+                }
                 open::that_detached(url.as_str())?;
                 Ok(Vec::new())
             }

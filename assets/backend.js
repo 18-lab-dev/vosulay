@@ -9,6 +9,9 @@ function (configuredBackend, brokerBase, managerPage) {
   // The manage page, like the in-game manager, routes the counters it frames.
   const manager = managerPage === true || (location.protocol === 'vosulay:' && location.host === 'manager');
   if (!manager && location.origin !== backend.origin && location.origin !== broker?.origin) return;
+  // The editor embeds vosu's own settings page. vosu accepts its profile and
+  // settings writes only from its exact origin, so they must not go via the broker.
+  if (!manager && location.origin === backend.origin && location.pathname === '/settings') return;
   const loopback = host => host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
   const equivalent = candidate => {
     if (!broker || !['http:', 'https:', 'ws:', 'wss:'].includes(candidate.protocol)) return false;
