@@ -56,6 +56,21 @@ def javascript_string(source: str) -> str:
     return encoded
 
 
+def settings_origin(vosu_url: str) -> str:
+    """Mirrors src/api.rs: vosu's settings page is on the dashboard origin it reports at
+    /api/dashboard, or on vosu_url itself for tosu and vosu before the dashboard split."""
+    try:
+        with urllib.request.urlopen(urllib.parse.urljoin(vosu_url, "/api/dashboard"), timeout=10) as response:
+            origin = json.load(response).get("origin")
+    except (OSError, ValueError, AttributeError):
+        return vosu_url
+    parsed = urllib.parse.urlsplit(origin) if isinstance(origin, str) else None
+    if (parsed and parsed.scheme in ("http", "https") and parsed.hostname and not parsed.username
+            and parsed.path in ("", "/") and not parsed.query and not parsed.fragment):
+        return origin
+    return vosu_url
+
+
 def build(config: dict, counters: list, vosu: dict | None = None) -> str:
     html = (ASSETS / "manager.html").read_text(encoding="utf-8")
     if html.count(MARKER) != 1:
@@ -116,7 +131,7 @@ def main() -> None:
     if args.vosu_url:
         with urllib.request.urlopen(urllib.parse.urljoin(args.vosu_url, "/api/counters/profiles"), timeout=10) as response:
             registry = json.load(response)
-        vosu = {"settings_url": urllib.parse.urljoin(args.vosu_url, "/settings"),
+        vosu = {"settings_url": urllib.parse.urljoin(settings_origin(args.vosu_url), "/settings"),
                 "active": registry["active"], "profiles": registry["profiles"]}
     (args.output / "index.html").write_text(build(config, counters, vosu), encoding="utf-8")
     index = (args.output / "index.html").resolve()
