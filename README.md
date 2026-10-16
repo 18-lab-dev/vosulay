@@ -267,7 +267,10 @@ away. **This placement uses** pins the selected placement to one vosu profile,
 or lets it follow whichever profile is active in vosu; pinned placements show
 the profile after their name. **Open in browser** opens vosu's full settings
 page. With tosu, or a vosu without settings profiles, **Settings** opens the
-counter's settings page in the browser as before.
+counter's settings page in the browser as before. If you rename or delete a
+profile that placements are pinned to, the editor marks those pins as missing
+and reloads the counters, which then use vosu's active profile; refresh
+view-only pages in OBS or a browser yourself.
 
 Copy (`Ctrl+C`) keeps the selected overlays across profile switches; paste
 (`Ctrl+V`) adds them to the active profile at the same position.

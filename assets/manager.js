@@ -1614,6 +1614,19 @@
     return refreshed;
   }
 
+  // vosu resolves a pin only when the counter page loads, and its settings socket
+  // keeps that identity. A pin whose profile was deleted, renamed or (re)created
+  // therefore needs a reload to fall back to, or return from, the active profile.
+  function applyVosuSettings(next) {
+    const previous = state.vosu;
+    state.vosu = next;
+    const profile = activeProfile();
+    if (!previous || !next || !profile) return;
+    const listed = (registry, name) => registry.profiles.includes(name);
+    refreshOverlayFrames(profile.overlays.filter((overlay) => overlay.vosu_profile
+      && listed(previous, overlay.vosu_profile) !== listed(next, overlay.vosu_profile)));
+  }
+
   function refreshSelectedOverlays() {
     const profile = activeProfile();
     const selected = profile ? profile.overlays.filter((overlay) => state.selected.has(overlay)) : [];
@@ -1759,7 +1772,7 @@
       ? `Follows the profile active in vosu (${active}).`
       : profiles.includes(pin)
         ? `Pinned to ${pin}; switching vosu's active profile does not change it.`
-        : `vosu has no profile ${pin}, so this placement uses ${active} until it is pinned again.`;
+        : `vosu has no profile ${pin}, so this placement uses the profile that was active in vosu when it loaded. Pin it again to choose one.`;
     const source = overlaySettingsSource(overlay, profiles);
     if (overlaySettingsFrame.getAttribute("src") !== source) overlaySettingsFrame.setAttribute("src", source);
   }
@@ -3112,7 +3125,7 @@
       ? parseVosuSettings({ settings_url: state.vosu.settings_url, active: data.active, profiles: data.profiles })
       : null;
     if (!registry) return;
-    state.vosu = registry;
+    applyVosuSettings(registry);
     requestRender("inspector");
   });
   // Fallback for a page that sends no registry: focus returns from vosu's page
@@ -3464,7 +3477,7 @@
         if (catalogRequest.error) setStatus("Counters loaded");
         catalogRequest.pending = false;
         catalogRequest.error = "";
-        state.vosu = parseVosuSettings(envelope.vosu);
+        applyVosuSettings(parseVosuSettings(envelope.vosu));
         requestRender("stageStructure", "catalog", "inspector");
       } else if (envelope.type === "profile-exported") {
         setStatus("Profile exported");
