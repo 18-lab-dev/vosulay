@@ -260,16 +260,14 @@ shortcuts are configurable. Interaction also requires Ctrl, Alt, or Meta.
 Text fields keep native undo/redo; normal mode leaves game input alone.
 
 With vosu's overlay settings profiles available, the inspector's **Settings**
-button opens the overlay settings dialog. It embeds vosu's own settings page for
+button opens the overlay settings dialog. It embeds vosu's settings editor for
 the counter, where values are edited and profiles created, copied, renamed,
-deleted or activated. **This placement uses** pins the selected placement to one
-vosu profile, or lets it follow whichever profile is active in vosu; pinned
-placements show the profile after their name. **Open in browser** opens the same
-page outside the editor. With tosu, or a vosu without settings profiles,
-**Settings** opens the counter's settings page in the browser as before. In
-game, vosu's page cannot open dropdown lists or colour pickers, because the
-off-screen editor has no native popups: pick the profile with **This placement
-uses**, and use **Open in browser** for such fields.
+deleted or activated; changes to vosu's profiles show up in the dialog right
+away. **This placement uses** pins the selected placement to one vosu profile,
+or lets it follow whichever profile is active in vosu; pinned placements show
+the profile after their name. **Open in browser** opens vosu's full settings
+page. With tosu, or a vosu without settings profiles, **Settings** opens the
+counter's settings page in the browser as before.
 
 Copy (`Ctrl+C`) keeps the selected overlays across profile switches; paste
 (`Ctrl+V`) adds them to the active profile at the same position.

@@ -1716,6 +1716,9 @@
     // vosu rejects an unknown explicit profile; without one its page shows the active profile,
     // which is also what a placement pinned to a deleted profile loads.
     if (overlay.vosu_profile && profiles.includes(overlay.vosu_profile)) url.searchParams.set("profile", overlay.vosu_profile);
+    // Only the editor, with in-page listboxes and colour fields: off-screen CEF
+    // shows no native popups, and site navigation would leave the dialog.
+    url.searchParams.set("embed", "1");
     return url.href;
   }
 
@@ -3093,8 +3096,27 @@
     const button = event.target.closest("button[data-profile]");
     if (button) pinOverlay(state.overlaySettings, button.dataset.profile);
   });
-  // Focus comes back from vosu's page when the user returns to the editor's own
-  // controls; profiles may have changed there.
+  // vosu's embedded page reports its registry after loading, each profile action
+  // and each save. Only that frame, from vosu's origin, may update it.
+  window.addEventListener("message", (event) => {
+    const data = event.data;
+    if (overlaySettingsModal.hidden || !state.vosu || event.source !== overlaySettingsFrame.contentWindow
+        || !data || typeof data !== "object" || data.type !== "vosu-profiles") return;
+    let origin;
+    try {
+      origin = new URL(state.vosu.settings_url).origin;
+    } catch (_) {
+      return;
+    }
+    const registry = event.origin === origin
+      ? parseVosuSettings({ settings_url: state.vosu.settings_url, active: data.active, profiles: data.profiles })
+      : null;
+    if (!registry) return;
+    state.vosu = registry;
+    requestRender("inspector");
+  });
+  // Fallback for a page that sends no registry: focus returns from vosu's page
+  // when the user goes back to the editor's own controls.
   window.addEventListener("focus", () => {
     if (!overlaySettingsModal.hidden) requestCatalogRefresh();
   });
