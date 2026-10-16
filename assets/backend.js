@@ -8,9 +8,11 @@ function (configuredBackend, brokerBase, managerPage, brokerSecret) {
   }
   // The manage page, like the in-game manager, routes the counters it frames.
   const manager = managerPage === true || (location.protocol === 'vosulay:' && location.host === 'manager');
+  // Pages on any other origin, such as vosu's separate dashboard origin that serves the
+  // editor's embedded settings page, are left alone: nothing of theirs goes via the broker.
   if (!manager && location.origin !== backend.origin && location.origin !== broker?.origin) return;
-  // The editor embeds vosu's own settings page. vosu accepts its profile and
-  // settings writes only from its exact origin, so they must not go via the broker.
+  // vosu releases before the dashboard split serve the settings page on the backend origin
+  // and accept its writes only from that exact origin, so it must not go via the broker.
   if (!manager && location.origin === backend.origin && location.pathname === '/settings') return;
   const loopback = host => host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
   const equivalent = candidate => {

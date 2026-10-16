@@ -10,6 +10,7 @@ use crate::config::valid_vosu_profile;
 
 const MAX_COUNTER_PAGE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_PROFILES_BYTES: usize = 64 * 1024;
+const MAX_DASHBOARD_BYTES: usize = 4096;
 const MAX_VOSU_PROFILES: usize = 32;
 const FETCH_DEADLINE: Duration = Duration::from_secs(10);
 const DEFAULT_WIDTH: f64 = 500.0;
@@ -30,7 +31,8 @@ pub struct InstalledCounter {
 /// vosu's overlay settings profiles. tosu and earlier vosu releases have none.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct VosuSettings {
-    /// vosu's inline settings editor; it also manages the profiles.
+    /// vosu's inline settings editor, which also manages the profiles. It is on vosu's dashboard
+    /// origin when vosu reports one (`/api/dashboard`), otherwise on the backend origin.
     pub settings_url: Url,
     pub active: String,
     pub profiles: Vec<String>,
@@ -60,7 +62,62 @@ pub(crate) fn counters_envelope_with_timeout(base_url: &Url, timeout: Duration) 
 }
 
 fn fetch_vosu_settings(base_url: &Url, timeout: Duration) -> Result<VosuSettings> {
-    let endpoint = base_url.join("/api/counters/profiles")?;
+    let deadline = Instant::now() + timeout;
+    let registry = get_json(
+        &base_url.join("/api/counters/profiles")?,
+        timeout,
+        MAX_PROFILES_BYTES,
+    )?;
+    let mut settings = parse_vosu_settings(base_url, &registry)?;
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if let Some(dashboard) = (!remaining.is_zero())
+        .then(|| dashboard_origin(base_url, remaining))
+        .flatten()
+    {
+        settings.settings_url = dashboard.join("/settings")?;
+    }
+    Ok(settings)
+}
+
+/// vosu's settings page for the browser: on its dashboard origin when it reports one, otherwise
+/// on the backend origin (tosu and vosu releases before the dashboard split).
+pub(crate) fn settings_page(base_url: &Url, timeout: Duration) -> Result<Url> {
+    dashboard_origin(base_url, timeout)
+        .unwrap_or_else(|| base_url.clone())
+        .join("/settings")
+        .map_err(Into::into)
+}
+
+/// vosu serves its dashboard, settings page included, on a separate origin and reports it at
+/// `GET /api/dashboard` on the overlay origin.
+fn dashboard_origin(base_url: &Url, timeout: Duration) -> Option<Url> {
+    #[derive(Deserialize)]
+    struct Dashboard {
+        origin: String,
+    }
+    let body = get_json(
+        &base_url.join("/api/dashboard").ok()?,
+        timeout,
+        MAX_DASHBOARD_BYTES,
+    )
+    .ok()?;
+    parse_dashboard_origin(&serde_json::from_slice::<Dashboard>(&body).ok()?.origin)
+}
+
+fn parse_dashboard_origin(origin: &str) -> Option<Url> {
+    let url = Url::parse(origin).ok()?;
+    (matches!(url.scheme(), "http" | "https")
+        && url.host().is_some()
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.path() == "/"
+        && url.query().is_none()
+        && url.fragment().is_none())
+    .then_some(url)
+}
+
+/// A bounded JSON GET that, like the catalog fetch, never follows redirects.
+fn get_json(endpoint: &Url, timeout: Duration, limit: usize) -> Result<Vec<u8>> {
     let mut response = ureq::get(endpoint.as_str())
         .config()
         .http_status_as_error(false)
@@ -69,23 +126,23 @@ fn fetch_vosu_settings(base_url: &Url, timeout: Duration) -> Result<VosuSettings
         .timeout_global(Some(timeout))
         .build()
         .call()
-        .with_context(|| format!("failed to request vosu profiles from {endpoint}"))?;
+        .with_context(|| format!("failed to request {endpoint}"))?;
     ensure!(
         response.status().is_success(),
-        "vosu profiles at {endpoint} returned HTTP status {}",
+        "{endpoint} returned HTTP status {}",
         response.status()
     );
     let bytes = response
         .body_mut()
         .with_config()
-        .limit(MAX_PROFILES_BYTES as u64 + 1)
+        .limit(limit as u64 + 1)
         .read_to_vec()
-        .with_context(|| format!("failed to read vosu profiles from {endpoint}"))?;
+        .with_context(|| format!("failed to read {endpoint}"))?;
     ensure!(
-        bytes.len() <= MAX_PROFILES_BYTES,
-        "vosu profiles at {endpoint} exceed the {MAX_PROFILES_BYTES} byte limit"
+        bytes.len() <= limit,
+        "{endpoint} exceeds the {limit} byte limit"
     );
-    parse_vosu_settings(base_url, &bytes)
+    Ok(bytes)
 }
 
 fn parse_vosu_settings(base_url: &Url, body: &[u8]) -> Result<VosuSettings> {
@@ -660,22 +717,27 @@ mod tests {
         );
     }
 
-    /// Serves the counter search from `search`, and `/api/counters/profiles`
-    /// with `profiles` (`None` answers 404, as tosu does).
-    fn backend_fixture(search: &'static str, profiles: Option<&'static str>) -> Url {
+    /// Serves the counter search from `search`, `/api/counters/profiles` with `profiles` and
+    /// `/api/dashboard` with `dashboard` (`None` answers 404, as tosu and older vosu do).
+    fn backend_fixture(
+        search: &'static str,
+        profiles: Option<&'static str>,
+        dashboard: Option<&'static str>,
+    ) -> Url {
         let listener = TcpListener::bind("127.0.0.1:0").expect("fixture server should bind");
         let address = listener.local_addr().expect("fixture address");
         thread::spawn(move || {
-            for stream in listener.incoming().take(2) {
+            for stream in listener.incoming() {
                 let mut stream = stream.expect("fixture request should connect");
                 let mut request = [0_u8; 2048];
                 let read = stream.read(&mut request).expect("fixture request readable");
                 let request = String::from_utf8_lossy(&request[..read]);
-                let (status, kind, body) = if request.starts_with("GET /api/counters/search/ ") {
+                let route = |path: &str| request.starts_with(&format!("GET {path} "));
+                let (status, kind, body) = if route("/api/counters/search/") {
                     ("200 OK", "text/html", search)
-                } else if let Some(body) =
-                    profiles.filter(|_| request.starts_with("GET /api/counters/profiles "))
-                {
+                } else if let Some(body) = profiles.filter(|_| route("/api/counters/profiles")) {
+                    ("200 OK", "application/json", body)
+                } else if let Some(body) = dashboard.filter(|_| route("/api/dashboard")) {
                     ("200 OK", "application/json", body)
                 } else {
                     ("404 Not Found", "text/plain", "not found")
@@ -694,9 +756,11 @@ mod tests {
 
     #[test]
     fn envelope_carries_vosu_profiles_and_their_settings_page() {
+        // vosu before the dashboard split: the settings page is on the backend origin.
         let base = backend_fixture(
             include_str!("../tests/fixtures/backend/vosu-counter-search.html"),
             Some(r#"{"active":"stream","profiles":["default","stream"]}"#),
+            None,
         );
         let envelope = counters_envelope_with_timeout(&base, Duration::from_secs(2));
         assert_eq!(envelope["type"], "counters");
@@ -712,9 +776,50 @@ mod tests {
     }
 
     #[test]
+    fn settings_page_moves_to_the_dashboard_origin_vosu_reports() {
+        let base = backend_fixture(
+            include_str!("../tests/fixtures/backend/vosu-counter-search.html"),
+            Some(r#"{"active":"default","profiles":["default"]}"#),
+            Some(r#"{"origin":"http://127.0.0.1:24152"}"#),
+        );
+        let envelope = counters_envelope_with_timeout(&base, Duration::from_secs(2));
+        assert_eq!(
+            envelope["vosu"]["settings_url"],
+            "http://127.0.0.1:24152/settings"
+        );
+        assert_eq!(
+            settings_page(&base, Duration::from_secs(2))
+                .unwrap()
+                .as_str(),
+            "http://127.0.0.1:24152/settings"
+        );
+        let tosu = backend_fixture("", None, None);
+        assert_eq!(
+            settings_page(&tosu, Duration::from_secs(2)).unwrap(),
+            tosu.join("/settings").unwrap()
+        );
+    }
+
+    #[test]
+    fn dashboard_origin_must_be_a_bare_http_origin() {
+        assert!(parse_dashboard_origin("https://127.0.0.1:24052").is_some());
+        for origin in [
+            "http://127.0.0.1:24052/dashboard",
+            "http://user@127.0.0.1:24052",
+            "http://127.0.0.1:24052/?x=1",
+            "ftp://127.0.0.1:24052",
+            "javascript:alert(1)",
+            "",
+        ] {
+            assert!(parse_dashboard_origin(origin).is_none(), "{origin}");
+        }
+    }
+
+    #[test]
     fn envelope_without_a_profile_registry_keeps_the_catalog() {
         let base = backend_fixture(
             include_str!("../tests/fixtures/backend/tosu-4.26.0-counter-search.html"),
+            None,
             None,
         );
         let envelope = counters_envelope_with_timeout(&base, Duration::from_secs(2));

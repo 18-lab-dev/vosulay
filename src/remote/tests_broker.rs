@@ -58,6 +58,13 @@ impl Upstream {
                     )
                 } else if target.starts_with("GET /redirect") {
                     ("302 Found", "Location: ../next/page\r\n", "redirect")
+                } else if target.starts_with("GET /settings?") {
+                    // vosu moves its dashboard to a separate origin: another port of this host.
+                    (
+                        "302 Found",
+                        "Location: http://127.0.0.1:9/settings?overlay=x&embed=1\r\n",
+                        "dashboard",
+                    )
                 } else if target.starts_with("GET /missing") {
                     ("404 Not Found", "Content-Type: text/plain\r\n", "missing")
                 } else if target.starts_with("GET /range") {
@@ -192,13 +199,20 @@ fn proxy_injects_bootstrap_and_preserves_upstream_asset_and_redirect_semantics()
     let redirect = request(address, "GET", "/redirect", "");
     assert!(redirect.starts_with("HTTP/1.1 302 Found\r\n"));
     assert_eq!(header(&redirect, "Location"), Some("../next/page"));
+    // The broker never takes dashboard pages over: their redirect leaves it untouched.
+    let dashboard = request(address, "GET", "/settings?overlay=x&embed=1", "");
+    assert!(dashboard.starts_with("HTTP/1.1 302 Found\r\n"));
+    assert_eq!(
+        header(&dashboard, "Location"),
+        Some("http://127.0.0.1:9/settings?overlay=x&embed=1")
+    );
     let missing = request(address, "GET", "/missing", "");
     assert!(missing.starts_with("HTTP/1.1 404 Not Found\r\n"));
     let range = request(address, "GET", "/range", "Range: bytes=2-4\r\n");
     assert!(range.starts_with("HTTP/1.1 206 Partial Content\r\n"));
     assert_eq!(header(&range, "Content-Range"), Some("bytes 2-4/6"));
     assert_eq!(body(&range), "cde");
-    let seen: Vec<_> = (0..5)
+    let seen: Vec<_> = (0..6)
         .map(|_| {
             upstream
                 .requests

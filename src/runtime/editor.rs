@@ -660,7 +660,9 @@ impl State {
                     .get("counter_id")
                     .and_then(Value::as_str)
                     .context("missing counter identifier")?;
-                let mut url = self.backend.join("/settings")?;
+                // vosu's overlay origin redirects /settings to its dashboard, but the lookup keeps the
+                // opened address the one vosu reports. It shares the counter fetch's bound.
+                let mut url = crate::api::settings_page(&self.backend, COUNTER_TIMEOUT)?;
                 url.query_pairs_mut().append_pair("overlay", id);
                 if let Some(profile) = message.get("profile").and_then(Value::as_str) {
                     ensure!(

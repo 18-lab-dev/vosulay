@@ -3110,7 +3110,8 @@
     if (button) pinOverlay(state.overlaySettings, button.dataset.profile);
   });
   // vosu's embedded page reports its registry after loading, each profile action
-  // and each save. Only that frame, from vosu's origin, may update it.
+  // and each save. Only that frame, from the settings page's origin (vosu's
+  // dashboard origin where vosu has one, never its overlay origin), may update it.
   window.addEventListener("message", (event) => {
     const data = event.data;
     if (overlaySettingsModal.hidden || !state.vosu || event.source !== overlaySettingsFrame.contentWindow
