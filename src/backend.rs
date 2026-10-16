@@ -19,11 +19,17 @@ use tokio::{
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async_with_config,
     tungstenite::{
-        Message, Utf8Bytes,
+        self, Message, Utf8Bytes,
+        client::IntoClientRequest,
+        http::{HeaderValue, StatusCode, header::AUTHORIZATION},
         protocol::{CloseFrame, Role, WebSocketConfig},
     },
 };
 use url::Url;
+
+mod credential;
+
+pub(crate) use credential::BrokerCredential;
 
 const IO_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_MESSAGE: usize = 4 * 1024 * 1024;
@@ -121,6 +127,8 @@ struct Attach {
     prefetched: Vec<u8>,
     target: String,
     endpoint: Endpoint,
+    /// The downstream page may use vosu's broker token (see `remote::may_present_credential`).
+    credentialed: bool,
 }
 
 pub(crate) struct Broker {
@@ -131,7 +139,8 @@ pub(crate) struct Broker {
 }
 
 impl Broker {
-    pub(crate) fn new(upstream: Url) -> Result<Self> {
+    /// `credential` is presented on command sockets of credentialed attachments only.
+    pub(crate) fn new(upstream: Url, credential: Option<BrokerCredential>) -> Result<Self> {
         ensure!(
             matches!(upstream.scheme(), "http" | "https"),
             "unsupported backend URL scheme"
@@ -146,10 +155,11 @@ impl Broker {
         let (clients, receiver) = mpsc::channel(MAX_CLIENTS);
         let (stop, stopped) = oneshot::channel();
         let state = shared.clone();
+        let credential = credential.map(Arc::new);
         let thread = thread::Builder::new()
             .name("vosulay-backend".into())
             .spawn(move || {
-                runtime.block_on(run(upstream, state, receiver, stopped));
+                runtime.block_on(run(upstream, credential, state, receiver, stopped));
             })
             .context("starting backend broker")?;
         Ok(Self {
@@ -177,6 +187,7 @@ impl Broker {
         stream: TcpStream,
         prefetched: Vec<u8>,
         target: &str,
+        credentialed: bool,
     ) -> Result<()> {
         let endpoint = endpoint(target).context("unsupported websocket target")?;
         stream.set_nonblocking(true)?;
@@ -189,6 +200,7 @@ impl Broker {
                 prefetched,
                 target: target.into(),
                 endpoint,
+                credentialed,
             })
             .map_err(|_| anyhow!("backend broker is busy or stopped"))
     }
@@ -216,6 +228,7 @@ fn socket_config() -> WebSocketConfig {
 
 async fn run(
     base: Url,
+    credential: Option<Arc<BrokerCredential>>,
     shared: [Arc<Shared>; 4],
     mut incoming: mpsc::Receiver<Attach>,
     mut stop: oneshot::Receiver<()>,
@@ -237,7 +250,8 @@ async fn run(
                 // Subscribe before waking the producer, including before the client task is polled.
                 let frames = state.as_ref().map(|state| state.frames.subscribe());
                 if let Some(state) = state { state.demand.notify_one(); }
-                clients.spawn(client(attach, base.clone(), frames));
+                let credential = credential.clone().filter(|_| attach.credentialed);
+                clients.spawn(client(attach, base.clone(), frames, credential));
             },
             Some(result) = clients.join_next(), if !clients.is_empty() => {
                 if let Ok(Err(error)) = result { eprintln!("Overlay backend client disconnected: {error}"); }
@@ -265,12 +279,48 @@ fn upstream_url(base: &Url, path: &str, query: Option<&str>) -> Url {
 }
 
 async fn connect(url: &Url) -> Result<Upstream> {
+    open(url.as_str().into_client_request()?).await
+}
+
+async fn open(request: tungstenite::handshake::client::Request) -> Result<Upstream> {
     Ok(timeout(
         IO_TIMEOUT,
-        connect_async_with_config(url.as_str(), Some(socket_config()), true),
+        connect_async_with_config(request, Some(socket_config()), true),
     )
     .await??
     .0)
+}
+
+/// Opens a command socket, presenting vosu's broker token when there is one. A rejected token is
+/// read again once (vosu restarted); if that is rejected too, the socket opens without it and
+/// keeps vosu's read-only behaviour for pages outside its origin.
+async fn connect_commands(url: &Url, credential: Option<&BrokerCredential>) -> Result<Upstream> {
+    if let Some(credential) = credential {
+        let mut token = credential.token();
+        for first in [true, false] {
+            let Some(current) = token.take() else { break };
+            let mut request = url.as_str().into_client_request()?;
+            let mut value = HeaderValue::from_str(&format!("Bearer {current}"))?;
+            value.set_sensitive(true);
+            request.headers_mut().insert(AUTHORIZATION, value);
+            match open(request).await {
+                Err(error) if unauthorized(&error) => {
+                    if first {
+                        token = credential.reread();
+                    }
+                }
+                result => return result,
+            }
+        }
+    }
+    connect(url).await
+}
+
+fn unauthorized(error: &anyhow::Error) -> bool {
+    matches!(
+        error.downcast_ref::<tungstenite::Error>(),
+        Some(tungstenite::Error::Http(response)) if response.status() == StatusCode::UNAUTHORIZED
+    )
 }
 
 async fn send<S: AsyncRead + AsyncWrite + Unpin>(
@@ -327,6 +377,7 @@ async fn client(
     attach: Attach,
     base: Url,
     frames: Option<watch::Receiver<Option<Arc<Snapshot>>>>,
+    credential: Option<Arc<BrokerCredential>>,
 ) -> Result<()> {
     let stream = tokio::net::TcpStream::from_std(attach.stream)?;
     let mut socket = WebSocketStream::from_partially_read(
@@ -337,12 +388,15 @@ async fn client(
     )
     .await;
     let query = attach.target.split_once('?').map(|(_, query)| query);
+    let credential = credential.as_deref();
     if let Endpoint::Relay(path) = attach.endpoint {
-        return relay(
-            &mut socket,
-            connect(&upstream_url(&base, path, query)).await?,
-        )
-        .await;
+        let url = upstream_url(&base, path, query);
+        let upstream = if path == COMMANDS {
+            connect_commands(&url, credential).await?
+        } else {
+            connect(&url).await?
+        };
+        return relay(&mut socket, upstream).await;
     }
     let commands_url = upstream_url(&base, COMMANDS, query);
     let mut frames = frames.expect("telemetry receiver");
@@ -366,7 +420,7 @@ async fn client(
                         if let Some(source) = filter_command(&text, sc) {
                             if let Some(value) = parse_filters(source) { filters = value.into(); ready = true; }
                         } else if text.contains(':') {
-                            if commands.is_none() { commands = Some(connect(&commands_url).await?); }
+                            if commands.is_none() { commands = Some(connect_commands(&commands_url, credential).await?); }
                             send(commands.as_mut().expect("command channel"), Message::Text(text)).await?;
                         }
                     }

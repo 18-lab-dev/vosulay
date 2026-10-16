@@ -266,7 +266,7 @@ The host attempts a remote HTTP listener at `127.0.0.1:5050` by default, plus a
 separate loopback listener on an OS-assigned port for the in-game broker. The
 remote listener starts with the host even without a viewer; failure to bind its
 port does not disable the local broker. Settings can expose it to LAN interfaces.
-There is **no authentication token and no listener TLS**. Loopback peers are
+There is **no authentication token for viewers and no listener TLS**. Loopback peers are
 always allowed; other peers must match configured comma-separated exact IPs or
 four-component IPv4 wildcard patterns. Host/Origin and Sec-Fetch-Site validation
 are additional guards, not user authentication. Sources:
@@ -279,6 +279,19 @@ bidirectional command relays: “view-only profile” must not be interpreted as
 read-only backend security boundary. Restrict the listener and allowlist to
 trusted clients/networks. Sources: [`src/remote.rs`](../src/remote.rs),
 [`src/backend.rs`](../src/backend.rs).
+
+**vosu broker token.** When `vosu_url` is loopback, vosulay reads vosu's
+per-start `broker.json` token and presents it on upstream
+`/websocket/commands` upgrades, which gives those sockets vosu's same-origin
+write permission for counter settings. Only sockets opened from this machine
+by pages at the listener's own origin (the peer is loopback and the browser's
+`Origin` is exactly the listener's) get it; LAN viewers, other sites and local
+HTML files do not, and it is never sent with HTTP requests, to other routes, or
+to a non-loopback backend. A local program that claims the listener's origin
+can use it, but such a program can already claim vosu's origin to vosu
+directly. Details: [integrations](integrations.md#vosu-broker-token). Sources:
+[`src/backend/credential.rs`](../src/backend/credential.rs),
+[`src/backend.rs`](../src/backend.rs), [`src/remote.rs`](../src/remote.rs).
 
 **Settings → Advanced → Allow editing on this computer** (off by default) serves
 the full editor to loopback clients, and only under the Host

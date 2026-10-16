@@ -317,8 +317,11 @@ mod tests {
         config.settings.allow_local_profile_editing = true;
         let backend = Backend {
             upstream: Url::parse("http://127.0.0.1:24050/").unwrap(),
-            broker: crate::backend::Broker::new(Url::parse("http://127.0.0.1:24050/").unwrap())
-                .unwrap(),
+            broker: crate::backend::Broker::new(
+                Url::parse("http://127.0.0.1:24050/").unwrap(),
+                None,
+            )
+            .unwrap(),
             http: ureq::Agent::new_with_defaults(),
             editor: Some(Arc::new(FakeEditor::default())),
         };

@@ -163,6 +163,14 @@ fn serve_upstream(
 }
 
 fn downstream(broker: &Broker, target: &str) -> tungstenite::WebSocket<TcpStream> {
+    downstream_as(broker, target, false)
+}
+
+fn downstream_as(
+    broker: &Broker,
+    target: &str,
+    credentialed: bool,
+) -> tungstenite::WebSocket<TcpStream> {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let url = format!("ws://{address}{target}");
@@ -173,7 +181,9 @@ fn downstream(broker: &Broker, target: &str) -> tungstenite::WebSocket<TcpStream
     let (stream, _) = listener.accept().unwrap();
     // Complete the real handshake without consuming any downstream data frames.
     drop(accept(stream.try_clone().unwrap()).unwrap());
-    broker.attach(stream, Vec::new(), target).unwrap();
+    broker
+        .attach(stream, Vec::new(), target, credentialed)
+        .unwrap();
     let mut socket = client_thread.join().unwrap();
     socket
         .get_mut()
@@ -222,7 +232,7 @@ fn wait_for_snapshot(broker: &Broker, target: &str, expected: Option<&str>) {
 #[test]
 fn telemetry_clients_share_upstream_and_keep_filter_state_local() {
     let publisher = Publisher::start();
-    let broker = Broker::new(publisher.url.clone()).unwrap();
+    let broker = Broker::new(publisher.url.clone(), None).unwrap();
     let mut a = downstream(&broker, "/websocket/v2");
     let mut b = downstream(&broker, "/websocket/v2");
     publisher.wait_connections(1);
@@ -259,7 +269,7 @@ fn telemetry_clients_share_upstream_and_keep_filter_state_local() {
 #[test]
 fn sc_raw_array_filters_are_client_local_and_empty_array_resets() {
     let publisher = Publisher::start();
-    let broker = Broker::new(publisher.url.clone()).unwrap();
+    let broker = Broker::new(publisher.url.clone(), None).unwrap();
     let mut a = downstream(&broker, "/tokens");
     let mut b = downstream(&broker, "/tokens");
     publisher.wait_connections(1);
@@ -292,7 +302,7 @@ fn sc_raw_array_filters_are_client_local_and_empty_array_resets() {
 #[test]
 fn disconnect_clears_snapshot_and_later_publication_recovers() {
     let publisher = Publisher::start();
-    let broker = Broker::new(publisher.url.clone()).unwrap();
+    let broker = Broker::new(publisher.url.clone(), None).unwrap();
     let mut client = downstream(&broker, "/websocket/v2");
     publisher.wait_connections(1);
     publisher.publish(r#"{"state":1}"#);
@@ -309,7 +319,7 @@ fn disconnect_clears_snapshot_and_later_publication_recovers() {
 #[test]
 fn selected_subscription_relays_vosu_precise_stream_verbatim() {
     let publisher = Publisher::start();
-    let broker = Broker::new(publisher.url.clone()).unwrap();
+    let broker = Broker::new(publisher.url.clone(), None).unwrap();
     let mut client = downstream(&broker, "/websocket/v2/subscribe?l=overlay");
     publisher.wait_connections(1);
     assert_eq!(
@@ -353,5 +363,175 @@ fn whole_field_filters_keep_backend_key_order() {
     assert_eq!(
         snapshot.filtered(&filters).unwrap().as_str(),
         r#"{"beatmap":{"stats":{"stars":5.1,"ar":9,"cs":4,"od":8}}}"#
+    );
+}
+
+type Upgrades = Arc<parking_lot::Mutex<Vec<(String, Option<String>)>>>;
+
+/// A vosu stand-in that records each upgrade's target and `Authorization`, and answers 401 to a
+/// bearer token it does not currently accept, as vosu does for a stale broker token.
+struct TokenUpstream {
+    url: Url,
+    upgrades: Upgrades,
+    accepted: Arc<parking_lot::Mutex<Vec<String>>>,
+}
+
+impl TokenUpstream {
+    fn start() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
+        let upgrades = Upgrades::default();
+        let accepted = Arc::new(parking_lot::Mutex::new(Vec::<String>::new()));
+        let (recorded, tokens) = (upgrades.clone(), accepted.clone());
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(stream) = stream else { return };
+                let (recorded, tokens) = (recorded.clone(), tokens.clone());
+                thread::spawn(move || {
+                    #[allow(clippy::result_large_err)]
+                    let check = |request: &Request, response: Response| {
+                        let authorization = request
+                            .headers()
+                            .get("authorization")
+                            .map(|value| value.to_str().unwrap().to_owned());
+                        recorded
+                            .lock()
+                            .push((request.uri().to_string(), authorization.clone()));
+                        match authorization
+                            .as_deref()
+                            .map(|value| value.strip_prefix("Bearer "))
+                        {
+                            Some(Some(token)) if tokens.lock().iter().any(|t| t == token) => {
+                                Ok(response)
+                            }
+                            None => Ok(response),
+                            Some(_) => Err(tungstenite::http::Response::builder()
+                                .status(401)
+                                .body(None)
+                                .unwrap()),
+                        }
+                    };
+                    if let Ok(mut socket) = accept_hdr(stream, check) {
+                        while socket.read().is_ok() {}
+                    }
+                });
+            }
+        });
+        Self {
+            url,
+            upgrades,
+            accepted,
+        }
+    }
+
+    fn accept_only(&self, tokens: &[&str]) {
+        *self.accepted.lock() = tokens.iter().map(|token| (*token).to_owned()).collect();
+    }
+
+    /// The `Authorization` of each upgrade to `target`, in order, once there are `count`.
+    fn upgrades_to(&self, target: &str, count: usize) -> Vec<Option<String>> {
+        let until = Instant::now() + Duration::from_secs(3);
+        loop {
+            let seen: Vec<_> = self
+                .upgrades
+                .lock()
+                .iter()
+                .filter(|(uri, _)| uri == target)
+                .map(|(_, authorization)| authorization.clone())
+                .collect();
+            if seen.len() >= count {
+                return seen;
+            }
+            assert!(Instant::now() < until, "{target}: saw {seen:?}");
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+}
+
+const OLD_TOKEN: &str = "0000000000000000000000000000000000000000000000000000000000000001";
+const NEW_TOKEN: &str = "0000000000000000000000000000000000000000000000000000000000000002";
+
+fn write_token(path: &std::path::Path, upstream: &Url, token: &str) {
+    let origin = upstream.origin().ascii_serialization();
+    std::fs::write(
+        path,
+        format!(r#"{{"version":1,"origin":"{origin}","token":"{token}"}}"#),
+    )
+    .unwrap();
+}
+
+fn bearer(token: &str) -> Option<String> {
+    Some(format!("Bearer {token}"))
+}
+
+#[test]
+fn broker_token_goes_only_to_command_sockets_of_credentialed_pages() {
+    let upstream = TokenUpstream::start();
+    upstream.accept_only(&[OLD_TOKEN]);
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("broker.json");
+    write_token(&path, &upstream.url, OLD_TOKEN);
+    let credential = BrokerCredential::at(path, &upstream.url);
+    let broker = Broker::new(upstream.url.clone(), credential).unwrap();
+
+    let _counter = downstream_as(&broker, "/websocket/commands?l=counter", true);
+    let _foreign = downstream_as(&broker, "/websocket/commands?l=foreign", false);
+    let _subscription = downstream_as(&broker, "/websocket/v2/subscribe?l=counter", true);
+    // Telemetry sockets forward command frames over a command socket of their own.
+    let mut telemetry = downstream_as(&broker, "/ws?l=legacy", true);
+    telemetry
+        .send(Message::Text("getSettings:legacy".into()))
+        .unwrap();
+
+    let token = bearer(OLD_TOKEN);
+    assert_eq!(
+        upstream.upgrades_to("/websocket/commands?l=counter", 1),
+        std::slice::from_ref(&token)
+    );
+    assert_eq!(
+        upstream.upgrades_to("/websocket/commands?l=foreign", 1),
+        [None]
+    );
+    assert_eq!(
+        upstream.upgrades_to("/websocket/v2/subscribe?l=counter", 1),
+        [None]
+    );
+    assert_eq!(
+        upstream.upgrades_to("/websocket/commands?l=legacy", 1),
+        [token]
+    );
+    assert_eq!(upstream.upgrades_to("/ws", 1), [None]);
+}
+
+#[test]
+fn rejected_broker_token_is_reread_once_then_dropped() {
+    let upstream = TokenUpstream::start();
+    upstream.accept_only(&[OLD_TOKEN]);
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("broker.json");
+    write_token(&path, &upstream.url, OLD_TOKEN);
+    let credential = BrokerCredential::at(path.clone(), &upstream.url);
+    let broker = Broker::new(upstream.url.clone(), credential).unwrap();
+    let _first = downstream_as(&broker, "/websocket/commands?l=first", true);
+    assert_eq!(
+        upstream.upgrades_to("/websocket/commands?l=first", 1),
+        [bearer(OLD_TOKEN)]
+    );
+
+    // vosu restarted: a new token, and the cached one is refused.
+    upstream.accept_only(&[NEW_TOKEN]);
+    write_token(&path, &upstream.url, NEW_TOKEN);
+    let _restarted = downstream_as(&broker, "/websocket/commands?l=restarted", true);
+    assert_eq!(
+        upstream.upgrades_to("/websocket/commands?l=restarted", 2),
+        [bearer(OLD_TOKEN), bearer(NEW_TOKEN)]
+    );
+
+    // The file is stale too: one reread, then today's tokenless connection.
+    upstream.accept_only(&[]);
+    let _stale = downstream_as(&broker, "/websocket/commands?l=stale", true);
+    assert_eq!(
+        upstream.upgrades_to("/websocket/commands?l=stale", 3),
+        [bearer(NEW_TOKEN), bearer(NEW_TOKEN), None]
     );
 }

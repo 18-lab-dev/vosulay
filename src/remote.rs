@@ -89,7 +89,10 @@ impl RemoteServer {
     ) -> Result<Self> {
         let browser_url = Url::parse(&format!("http://{}/", listeners[0].local_addr()?))?;
         let backend = Arc::new(Backend {
-            broker: Broker::new(base_url.clone())?,
+            broker: Broker::new(
+                base_url.clone(),
+                crate::backend::BrokerCredential::for_backend(&base_url),
+            )?,
             upstream: base_url,
             http: ureq::Agent::new_with_config(
                 ureq::Agent::config_builder()
@@ -276,7 +279,8 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
                 .write(stream, request.method == "HEAD")
                 .map_err(Into::into);
         }
-        return upgrade(stream, backend, &request);
+        let credentialed = may_present_credential(&request, peer.ip(), local_address);
+        return upgrade(stream, backend, &request, credentialed);
     }
     let serving_url = Url::parse(&format!(
         "http://{}/",
@@ -321,7 +325,12 @@ fn backend_script(upstream: &Url, broker: &Url) -> String {
     )
 }
 
-fn upgrade(stream: &mut TcpStream, backend: &Backend, request: &Request) -> Result<()> {
+fn upgrade(
+    stream: &mut TcpStream,
+    backend: &Backend,
+    request: &Request,
+    credentialed: bool,
+) -> Result<()> {
     let mut handshake = http::Request::builder()
         .method(request.method.as_str())
         .uri(&request.target)
@@ -348,6 +357,7 @@ fn upgrade(stream: &mut TcpStream, backend: &Backend, request: &Request) -> Resu
         stream.try_clone()?,
         request.prefetched.clone(),
         &request.target,
+        credentialed,
     )
 }
 
@@ -581,6 +591,37 @@ fn request_metadata_is_allowed(
                     && url.origin() == authority.origin()
             })
     })
+}
+
+/// Whether a WebSocket upgrade may have vosu's broker token presented on its behalf: it comes
+/// from this machine, from a page served at this listener's own origin. Browsers always send
+/// `Origin` on WebSocket upgrades and pages cannot set it, so another site's page never
+/// qualifies, and LAN viewers never do. Everything served at this origin is vosulay's own page
+/// or content proxied from vosu, which vosu already trusts as its own origin (vosu ADR 0013).
+/// A local program can claim this `Origin`, but it could send the same header to vosu
+/// directly: vosu's provenance check is CSRF protection, not authentication of local programs.
+fn may_present_credential(request: &Request, peer: IpAddr, local_address: SocketAddr) -> bool {
+    let Some(authority) = request
+        .host
+        .as_deref()
+        .and_then(|host| request_authority(host, local_address))
+    else {
+        return false;
+    };
+    normalize_ip(peer).is_loopback()
+        && request
+            .fetch_site
+            .as_deref()
+            .is_none_or(|site| site == "same-origin")
+        && request
+            .origin
+            .as_deref()
+            .and_then(|origin| Url::parse(origin).ok())
+            .is_some_and(|origin| {
+                origin.scheme() == "http"
+                    && origin.path() == "/"
+                    && origin.origin() == authority.origin()
+            })
 }
 
 fn request_authority(host: &str, local_address: SocketAddr) -> Option<Url> {
@@ -1484,6 +1525,65 @@ mod tests {
 
     fn base() -> Url {
         Url::parse("http://127.0.0.1:24050/").expect("URL")
+    }
+
+    #[test]
+    fn only_this_machines_same_origin_pages_may_use_the_broker_token() {
+        let listener: SocketAddr = "127.0.0.1:5050".parse().unwrap();
+        let loopback: IpAddr = Ipv4Addr::LOCALHOST.into();
+        let request = |host: &str, origin: Option<&str>, site: Option<&str>| Request {
+            method: "GET".into(),
+            target: "/websocket/commands?l=counter".into(),
+            host: Some(host.into()),
+            origin: origin.map(Into::into),
+            fetch_site: site.map(Into::into),
+            version: http::Version::HTTP_11,
+            headers: Vec::new(),
+            body: Vec::new(),
+            prefetched: Vec::new(),
+        };
+        let own = request(
+            "127.0.0.1:5050",
+            Some("http://127.0.0.1:5050"),
+            Some("same-origin"),
+        );
+        assert!(may_present_credential(&own, loopback, listener));
+        assert!(may_present_credential(
+            &request("localhost:5050", Some("http://localhost:5050"), None),
+            loopback,
+            listener
+        ));
+        // A LAN viewer of the same page stays view-only.
+        assert!(!may_present_credential(
+            &own,
+            "192.168.1.20".parse().unwrap(),
+            listener
+        ));
+        for foreign in [
+            // No Origin: not a browser page.
+            request("127.0.0.1:5050", None, None),
+            // Another site, another port of this host (vosu itself), and sandboxed local files.
+            request(
+                "127.0.0.1:5050",
+                Some("http://evil.example"),
+                Some("cross-site"),
+            ),
+            request(
+                "127.0.0.1:5050",
+                Some("http://127.0.0.1:24050"),
+                Some("same-site"),
+            ),
+            request("127.0.0.1:5050", Some("null"), Some("cross-site")),
+            // A rebinding host name.
+            request("evil.example:5050", Some("http://evil.example:5050"), None),
+        ] {
+            assert!(
+                !may_present_credential(&foreign, loopback, listener),
+                "{:?} {:?}",
+                foreign.host,
+                foreign.origin
+            );
+        }
     }
 
     #[test]
