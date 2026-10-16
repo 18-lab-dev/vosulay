@@ -13,6 +13,7 @@ pub const MAX_PENDING_MESSAGES: usize = 64;
 const MESSAGE_NAME: &str = "vosulay.manager.post";
 const BACKEND_KEY: &str = "vosulay.backend_url";
 const BROKER_KEY: &str = "vosulay.broker_url";
+const BROKER_SECRET_KEY: &str = "vosulay.broker_secret";
 
 #[derive(Clone, Default)]
 pub struct BridgeInbox(Arc<Mutex<VecDeque<String>>>);
@@ -90,9 +91,17 @@ fn trusted_frame(frame: &Frame) -> bool {
 }
 
 /// Pass this dictionary as create_browser[_sync]'s extra_info. Only HTTP(S)
-/// backend configuration is transferred; it never enables the privileged bridge.
-pub fn renderer_extra_info(backend_url: &str, broker_url: Option<&str>) -> Option<DictionaryValue> {
-    if backend_url.len() > 8192 || broker_url.is_some_and(|url| url.len() > 8192) {
+/// backend configuration and the broker's session secret are transferred; neither
+/// enables the privileged bridge.
+pub fn renderer_extra_info(
+    backend_url: &str,
+    broker: Option<(&str, &str)>,
+) -> Option<DictionaryValue> {
+    let broker_url = broker.map(|(url, _)| url);
+    if backend_url.len() > 8192
+        || broker_url.is_some_and(|url| url.len() > 8192)
+        || broker.is_some_and(|(_, secret)| !valid_secret(secret))
+    {
         return None;
     }
     for value in std::iter::once(backend_url).chain(broker_url) {
@@ -109,8 +118,9 @@ pub fn renderer_extra_info(backend_url: &str, broker_url: Option<&str>) -> Optio
     if info.set_string(Some(&BACKEND_KEY.into()), Some(&backend_url.into())) == 0 {
         return None;
     }
-    if let Some(broker) = broker_url
-        && info.set_string(Some(&BROKER_KEY.into()), Some(&broker.into())) == 0
+    if let Some((url, secret)) = broker
+        && (info.set_string(Some(&BROKER_KEY.into()), Some(&url.into())) == 0
+            || info.set_string(Some(&BROKER_SECRET_KEY.into()), Some(&secret.into())) == 0)
     {
         return None;
     }
@@ -123,7 +133,8 @@ pub fn renderer_handler() -> RenderProcessHandler {
     RendererBridge::new(Shared::new(RefCell::new(HashMap::new())))
 }
 
-type RendererState = Shared<RefCell<HashMap<i32, (String, Option<String>)>>>;
+/// Backend URL, and the broker URL with its session secret.
+type RendererState = Shared<RefCell<HashMap<i32, (String, Option<(String, String)>)>>>;
 
 wrap_render_process_handler! {
     struct RendererBridge { state: RendererState }
@@ -133,11 +144,16 @@ wrap_render_process_handler! {
             let key: CefString = BACKEND_KEY.into();
             if info.get_type(Some(&key)) != ValueType::STRING { return; }
             let Some(backend) = crate::strings::decode(&info.string(Some(&key)), 8192) else { return };
-            let broker_key: CefString = BROKER_KEY.into();
-            let broker = if info.get_type(Some(&broker_key)) == ValueType::STRING {
-                crate::strings::decode(&info.string(Some(&broker_key)), 8192)
-            } else { None };
-            if !valid_http_url(&backend) || broker.as_deref().is_some_and(|url| !valid_http_url(url)) { return; }
+            let string = |name: &str| {
+                let key: CefString = name.into();
+                (info.get_type(Some(&key)) == ValueType::STRING)
+                    .then(|| crate::strings::decode(&info.string(Some(&key)), 8192))
+                    .flatten()
+            };
+            let broker = string(BROKER_KEY).zip(string(BROKER_SECRET_KEY));
+            if !valid_http_url(&backend)
+                || broker.as_ref().is_some_and(|(url, secret)| !valid_http_url(url) || !valid_secret(secret))
+            { return; }
             self.state.borrow_mut().insert(browser.identifier(), (backend, broker));
         }
         fn on_browser_destroyed(&self, browser: Option<&mut Browser>) {
@@ -149,8 +165,8 @@ wrap_render_process_handler! {
             let mut retval = None;
             let mut exception = None;
             if trusted_frame(frame) {
-                if let Some((backend, Some(broker))) = self.state.borrow().get(&browser.identifier()) {
-                    let script = backend_routing_script(backend, broker);
+                if let Some((backend, Some((broker, secret)))) = self.state.borrow().get(&browser.identifier()) {
+                    let script = backend_routing_script(backend, broker, secret);
                     context.eval(Some(&script.as_str().into()), None, 1, Some(&mut retval), Some(&mut exception));
                 }
                 let Some(global) = context.global() else { return };
@@ -158,8 +174,8 @@ wrap_render_process_handler! {
                 let Some(mut function) = v8_value_create_function(Some(&"__VOSULAY_NATIVE_POST__".into()), Some(&mut handler)) else { return };
                 if global.set_value_bykey(Some(&"__VOSULAY_NATIVE_POST__".into()), Some(&mut function), V8Propertyattribute::default()) == 0 { return; }
                 context.eval(Some(&MANAGER_SCRIPT.into()), Some(&MANAGER_URL.into()), 1, Some(&mut retval), Some(&mut exception));
-            } else if let Some((backend, Some(broker))) = self.state.borrow().get(&browser.identifier()) {
-                let script = backend_routing_script(backend, broker);
+            } else if let Some((backend, Some((broker, secret)))) = self.state.borrow().get(&browser.identifier()) {
+                let script = backend_routing_script(backend, broker, secret);
                 context.eval(Some(&script.as_str().into()), None, 1, Some(&mut retval), Some(&mut exception));
             }
         }
@@ -230,8 +246,16 @@ fn valid_http_url(value: &str) -> bool {
     })
 }
 
-fn backend_routing_script(backend: &str, broker: &str) -> String {
-    let args = serde_json::to_string(&[backend, broker]).expect("string serialization cannot fail");
+fn valid_secret(secret: &str) -> bool {
+    secret.len() == 64
+        && secret
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+fn backend_routing_script(backend: &str, broker: &str, secret: &str) -> String {
+    let args = serde_json::to_string(&serde_json::json!([backend, broker, null, secret]))
+        .expect("string serialization cannot fail");
     format!(
         "({})(...{})",
         include_str!("../../../assets/backend.js"),

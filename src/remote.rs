@@ -29,11 +29,15 @@ pub struct RemoteServer {
     stop: Arc<AtomicBool>,
     threads: Vec<(SocketAddr, JoinHandle<()>)>,
     browser_url: Url,
+    browser_secret: String,
 }
 
 struct Backend {
     upstream: Url,
     broker: Broker,
+    /// Per-run secret that only the in-game browser receives, never over HTTP. Command sockets
+    /// presenting it may use vosu's broker token (see `broker_upgrade_target`).
+    secret: String,
     http: ureq::Agent,
     editor: Option<Arc<dyn ManageEditor>>,
 }
@@ -60,16 +64,23 @@ impl RemoteServer {
             Ok(listener) => listeners.push(listener),
             Err(error) => eprintln!("Remote overlay hosting at {address} is unavailable: {error}"),
         }
+        let credential = crate::backend::BrokerCredential::for_backend(&base_url);
         Self::start_with_listeners(
             listeners,
             base_url,
             Arc::new(move || crate::config::load_from_path(&config_path)),
             editor,
+            credential,
         )
     }
 
     pub fn browser_url(&self) -> &Url {
         &self.browser_url
+    }
+
+    /// The in-game browser's broker secret, handed to its counter frames out of band.
+    pub fn browser_secret(&self) -> &str {
+        &self.browser_secret
     }
 
     #[cfg(test)]
@@ -78,7 +89,7 @@ impl RemoteServer {
         base_url: Url,
         loader: Arc<ConfigLoader>,
     ) -> Result<Self> {
-        Self::start_with_listeners(vec![listener], base_url, loader, None)
+        Self::start_with_listeners(vec![listener], base_url, loader, None, None)
     }
 
     fn start_with_listeners(
@@ -86,13 +97,15 @@ impl RemoteServer {
         base_url: Url,
         loader: Arc<ConfigLoader>,
         editor: Option<Arc<dyn ManageEditor>>,
+        credential: Option<crate::backend::BrokerCredential>,
     ) -> Result<Self> {
         let browser_url = Url::parse(&format!("http://{}/", listeners[0].local_addr()?))?;
+        let mut bytes = [0u8; 32];
+        getrandom::fill(&mut bytes).context("could not generate the broker secret")?;
+        let browser_secret: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
         let backend = Arc::new(Backend {
-            broker: Broker::new(
-                base_url.clone(),
-                crate::backend::BrokerCredential::for_backend(&base_url),
-            )?,
+            broker: Broker::new(base_url.clone(), credential)?,
+            secret: browser_secret.clone(),
             upstream: base_url,
             http: ureq::Agent::new_with_config(
                 ureq::Agent::config_builder()
@@ -108,6 +121,7 @@ impl RemoteServer {
             stop: Arc::new(AtomicBool::new(false)),
             threads: Vec::with_capacity(listeners.len()),
             browser_url,
+            browser_secret,
         };
         let active = Arc::new(AtomicUsize::new(0));
         for listener in listeners {
@@ -279,8 +293,9 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
                 .write(stream, request.method == "HEAD")
                 .map_err(Into::into);
         }
-        let credentialed = may_present_credential(&request, peer.ip(), local_address);
-        return upgrade(stream, backend, &request, credentialed);
+        let (target, credentialed) =
+            broker_upgrade_target(&request, peer.ip(), local_address, &backend.secret);
+        return upgrade(stream, backend, &request, &target, credentialed);
     }
     let serving_url = Url::parse(&format!(
         "http://{}/",
@@ -329,6 +344,7 @@ fn upgrade(
     stream: &mut TcpStream,
     backend: &Backend,
     request: &Request,
+    target: &str,
     credentialed: bool,
 ) -> Result<()> {
     let mut handshake = http::Request::builder()
@@ -356,7 +372,7 @@ fn upgrade(
     backend.broker.attach(
         stream.try_clone()?,
         request.prefetched.clone(),
-        &request.target,
+        target,
         credentialed,
     )
 }
@@ -593,22 +609,36 @@ fn request_metadata_is_allowed(
     })
 }
 
-/// Whether a WebSocket upgrade may have vosu's broker token presented on its behalf: it comes
-/// from this machine, from a page served at this listener's own origin. Browsers always send
-/// `Origin` on WebSocket upgrades and pages cannot set it, so another site's page never
-/// qualifies, and LAN viewers never do. Everything served at this origin is vosulay's own page
-/// or content proxied from vosu, which vosu already trusts as its own origin (vosu ADR 0013).
-/// A local program can claim this `Origin`, but it could send the same header to vosu
-/// directly: vosu's provenance check is CSRF protection, not authentication of local programs.
-fn may_present_credential(request: &Request, peer: IpAddr, local_address: SocketAddr) -> bool {
+/// Query parameter in which in-game counter frames present the broker secret.
+const BROKER_SECRET_PARAMETER: &str = "__vosulay_broker";
+
+/// The upgrade target to forward, without any broker secret parameter, and whether vosu's broker
+/// token may be presented for it. That needs all of:
+/// - the per-run secret, which only the in-game browser receives (through CEF's renderer extra
+///   info, never over HTTP), so a program that merely reaches this port cannot supply it;
+/// - a loopback peer, so LAN viewers never qualify;
+/// - `Origin` exactly this listener's origin and `Sec-Fetch-Site` absent or `same-origin`.
+///   Browsers always send `Origin` on WebSocket upgrades and pages cannot set it, so another
+///   site's page holding a leaked secret still cannot use it.
+///
+/// Counter frames can read the secret from their own socket URLs. They are trusted code under
+/// vosu ADR 0013 and could already save through that socket, so it gives them nothing new.
+fn broker_upgrade_target(
+    request: &Request,
+    peer: IpAddr,
+    local_address: SocketAddr,
+    secret: &str,
+) -> (String, bool) {
+    let (target, presented) = take_broker_secret(&request.target, secret);
     let Some(authority) = request
         .host
         .as_deref()
         .and_then(|host| request_authority(host, local_address))
     else {
-        return false;
+        return (target, false);
     };
-    normalize_ip(peer).is_loopback()
+    let credentialed = presented
+        && normalize_ip(peer).is_loopback()
         && request
             .fetch_site
             .as_deref()
@@ -621,7 +651,43 @@ fn may_present_credential(request: &Request, peer: IpAddr, local_address: Socket
                 origin.scheme() == "http"
                     && origin.path() == "/"
                     && origin.origin() == authority.origin()
-            })
+            });
+    (target, credentialed)
+}
+
+/// Removes every broker secret parameter, keeping the rest of the query byte for byte: vosu
+/// routes settings by the raw `l` value. Valid only when exactly one matching secret was present.
+fn take_broker_secret(target: &str, secret: &str) -> (String, bool) {
+    let Some((path, query)) = target.split_once('?') else {
+        return (target.to_owned(), false);
+    };
+    let mut presented = 0;
+    let mut valid = false;
+    let kept: Vec<&str> = query
+        .split('&')
+        .filter(|pair| {
+            let Some(rest) = pair.strip_prefix(BROKER_SECRET_PARAMETER) else {
+                return true;
+            };
+            let Some(value) = rest.strip_prefix('=').or(rest.is_empty().then_some("")) else {
+                return true;
+            };
+            presented += 1;
+            valid = value.len() == secret.len()
+                && value
+                    .bytes()
+                    .zip(secret.bytes())
+                    .fold(0, |difference, (a, b)| difference | (a ^ b))
+                    == 0;
+            false
+        })
+        .collect();
+    let target = if kept.is_empty() {
+        path.to_owned()
+    } else {
+        format!("{path}?{}", kept.join("&"))
+    };
+    (target, presented == 1 && valid)
 }
 
 fn request_authority(host: &str, local_address: SocketAddr) -> Option<Url> {
@@ -1528,60 +1594,101 @@ mod tests {
     }
 
     #[test]
-    fn only_this_machines_same_origin_pages_may_use_the_broker_token() {
+    fn broker_token_needs_the_in_game_secret_this_machine_and_this_origin() {
         let listener: SocketAddr = "127.0.0.1:5050".parse().unwrap();
         let loopback: IpAddr = Ipv4Addr::LOCALHOST.into();
-        let request = |host: &str, origin: Option<&str>, site: Option<&str>| Request {
-            method: "GET".into(),
-            target: "/websocket/commands?l=counter".into(),
-            host: Some(host.into()),
-            origin: origin.map(Into::into),
-            fetch_site: site.map(Into::into),
-            version: http::Version::HTTP_11,
-            headers: Vec::new(),
-            body: Vec::new(),
-            prefetched: Vec::new(),
-        };
-        let own = request(
-            "127.0.0.1:5050",
-            Some("http://127.0.0.1:5050"),
-            Some("same-origin"),
-        );
-        assert!(may_present_credential(&own, loopback, listener));
-        assert!(may_present_credential(
-            &request("localhost:5050", Some("http://localhost:5050"), None),
-            loopback,
-            listener
-        ));
-        // A LAN viewer of the same page stays view-only.
-        assert!(!may_present_credential(
-            &own,
-            "192.168.1.20".parse().unwrap(),
-            listener
-        ));
-        for foreign in [
-            // No Origin: not a browser page.
-            request("127.0.0.1:5050", None, None),
-            // Another site, another port of this host (vosu itself), and sandboxed local files.
+        let secret = "5".repeat(64);
+        let with =
+            |query: &str| format!("/websocket/commands?l=%2F%40vosu-profile%2Fstream%2Fc{query}");
+        let request =
+            |target: String, host: &str, origin: Option<&str>, site: Option<&str>| Request {
+                method: "GET".into(),
+                target,
+                host: Some(host.into()),
+                origin: origin.map(Into::into),
+                fetch_site: site.map(Into::into),
+                version: http::Version::HTTP_11,
+                headers: Vec::new(),
+                body: Vec::new(),
+                prefetched: Vec::new(),
+            };
+        let presented = with(&format!("&__vosulay_broker={secret}"));
+        let own = |target: String| {
             request(
+                target,
+                "127.0.0.1:5050",
+                Some("http://127.0.0.1:5050"),
+                Some("same-origin"),
+            )
+        };
+        // The secret never reaches vosu, and the counter's own query stays byte for byte.
+        assert_eq!(
+            broker_upgrade_target(&own(presented.clone()), loopback, listener, &secret),
+            (with(""), true)
+        );
+        assert_eq!(
+            broker_upgrade_target(
+                &request(
+                    format!("/websocket/commands?__vosulay_broker={secret}"),
+                    "localhost:5050",
+                    Some("http://localhost:5050"),
+                    None
+                ),
+                loopback,
+                listener,
+                &secret
+            ),
+            ("/websocket/commands".to_owned(), true)
+        );
+        // A program that reaches the port and claims this listener's origin, without the secret.
+        for target in [
+            with(""),
+            with("&__vosulay_broker="),
+            with(&format!("&__vosulay_broker={}", "6".repeat(64))),
+            with(&format!(
+                "&__vosulay_broker={secret}&__vosulay_broker={secret}"
+            )),
+        ] {
+            let forged = request(
+                target,
+                "127.0.0.1:5050",
+                Some("http://127.0.0.1:5050"),
+                None,
+            );
+            let (forwarded, credentialed) =
+                broker_upgrade_target(&forged, loopback, listener, &secret);
+            assert!(!credentialed, "{}", forged.target);
+            assert!(!forwarded.contains("__vosulay_broker"), "{forwarded}");
+        }
+        // With the secret: a LAN viewer, and pages that are not this listener's.
+        assert!(
+            !broker_upgrade_target(
+                &own(presented.clone()),
+                "192.168.1.20".parse().unwrap(),
+                listener,
+                &secret
+            )
+            .1
+        );
+        for (host, origin, site) in [
+            ("127.0.0.1:5050", None, None),
+            (
                 "127.0.0.1:5050",
                 Some("http://evil.example"),
                 Some("cross-site"),
             ),
-            request(
+            (
                 "127.0.0.1:5050",
                 Some("http://127.0.0.1:24050"),
                 Some("same-site"),
             ),
-            request("127.0.0.1:5050", Some("null"), Some("cross-site")),
-            // A rebinding host name.
-            request("evil.example:5050", Some("http://evil.example:5050"), None),
+            ("127.0.0.1:5050", Some("null"), Some("cross-site")),
+            ("evil.example:5050", Some("http://evil.example:5050"), None),
         ] {
+            let foreign = request(presented.clone(), host, origin, site);
             assert!(
-                !may_present_credential(&foreign, loopback, listener),
-                "{:?} {:?}",
-                foreign.host,
-                foreign.origin
+                !broker_upgrade_target(&foreign, loopback, listener, &secret).1,
+                "{host} {origin:?}"
             );
         }
     }
@@ -1898,6 +2005,7 @@ mod tests {
             listeners,
             base(),
             Arc::new(|| Ok(AppConfig::default())),
+            None,
             None,
         )
         .expect("server");

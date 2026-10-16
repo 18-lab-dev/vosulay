@@ -238,6 +238,7 @@ mod tests {
                 Ok(config)
             }),
             Some(editor.clone()),
+            None,
         )
         .expect("server");
         let manage = format!("{HOST}:{}", address.port());
@@ -322,6 +323,7 @@ mod tests {
                 None,
             )
             .unwrap(),
+            secret: "0".repeat(64),
             http: ureq::Agent::new_with_defaults(),
             editor: Some(Arc::new(FakeEditor::default())),
         };

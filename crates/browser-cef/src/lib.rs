@@ -43,7 +43,9 @@ pub struct RuntimeOptions<'a> {
 pub struct BrowserOptions<'a> {
     pub url: &'a str,
     pub backend_url: &'a str,
-    pub broker_url: Option<&'a str>,
+    /// The loopback broker counters route through, and its session secret, which frames
+    /// at the broker's origin present on WebSocket upgrades (see `assets/backend.js`).
+    pub broker: Option<(&'a str, &'a str)>,
     pub width: u32,
     pub height: u32,
     pub scale: f32,
@@ -698,7 +700,7 @@ impl CefRuntime {
             // Let CEF's damage-driven OSR clock apply the configured frame rate.
             ..Default::default()
         };
-        let mut extra_info = bridge::renderer_extra_info(options.backend_url, options.broker_url)
+        let mut extra_info = bridge::renderer_extra_info(options.backend_url, options.broker)
             .context("invalid HTTP(S) backend or broker URL")?;
         let browser_settings = BrowserSettings {
             background_color: 0,

@@ -370,14 +370,14 @@ type Upgrades = Arc<parking_lot::Mutex<Vec<(String, Option<String>)>>>;
 
 /// A vosu stand-in that records each upgrade's target and `Authorization`, and answers 401 to a
 /// bearer token it does not currently accept, as vosu does for a stale broker token.
-struct TokenUpstream {
-    url: Url,
+pub(crate) struct TokenUpstream {
+    pub(crate) url: Url,
     upgrades: Upgrades,
     accepted: Arc<parking_lot::Mutex<Vec<String>>>,
 }
 
 impl TokenUpstream {
-    fn start() -> Self {
+    pub(crate) fn start() -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
         let upgrades = Upgrades::default();
@@ -424,12 +424,12 @@ impl TokenUpstream {
         }
     }
 
-    fn accept_only(&self, tokens: &[&str]) {
+    pub(crate) fn accept_only(&self, tokens: &[&str]) {
         *self.accepted.lock() = tokens.iter().map(|token| (*token).to_owned()).collect();
     }
 
     /// The `Authorization` of each upgrade to `target`, in order, once there are `count`.
-    fn upgrades_to(&self, target: &str, count: usize) -> Vec<Option<String>> {
+    pub(crate) fn upgrades_to(&self, target: &str, count: usize) -> Vec<Option<String>> {
         let until = Instant::now() + Duration::from_secs(3);
         loop {
             let seen: Vec<_> = self
@@ -448,10 +448,11 @@ impl TokenUpstream {
     }
 }
 
-const OLD_TOKEN: &str = "0000000000000000000000000000000000000000000000000000000000000001";
+pub(crate) const OLD_TOKEN: &str =
+    "0000000000000000000000000000000000000000000000000000000000000001";
 const NEW_TOKEN: &str = "0000000000000000000000000000000000000000000000000000000000000002";
 
-fn write_token(path: &std::path::Path, upstream: &Url, token: &str) {
+pub(crate) fn write_token(path: &std::path::Path, upstream: &Url, token: &str) {
     let origin = upstream.origin().ascii_serialization();
     std::fs::write(
         path,
@@ -460,7 +461,7 @@ fn write_token(path: &std::path::Path, upstream: &Url, token: &str) {
     .unwrap();
 }
 
-fn bearer(token: &str) -> Option<String> {
+pub(crate) fn bearer(token: &str) -> Option<String> {
     Some(format!("Bearer {token}"))
 }
 

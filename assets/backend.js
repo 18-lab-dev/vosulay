@@ -1,4 +1,4 @@
-function (configuredBackend, brokerBase, managerPage) {
+function (configuredBackend, brokerBase, managerPage, brokerSecret) {
   if (typeof window.__VOSULAY_BACKEND_URL__ === 'function') return;
   const backend = new URL(configuredBackend);
   const broker = brokerBase ? new URL(brokerBase) : null;
@@ -56,12 +56,25 @@ function (configuredBackend, brokerBase, managerPage) {
     XMLHttpRequest.prototype.open = function(method, url, ...args) {
       return Reflect.apply(nativeOpen, this, [method, route(url), ...args]);
     };
+    // Only the in-game browser passes the broker's per-run secret (out of band, never over
+    // HTTP). Counter frames present it on their sockets so the broker may use vosu's broker
+    // token for them, which lets a counter save its own settings.
+    const present = value => {
+      const routed = route(value);
+      if (typeof brokerSecret !== 'string' || !/^[0-9a-f]{64}$/.test(brokerSecret)) return routed;
+      try {
+        const url = new URL(routed, document.baseURI);
+        if ((url.protocol !== 'ws:' && url.protocol !== 'wss:') || url.host !== broker.host || url.hash) return routed;
+        const separator = url.search ? '&' : (url.href.endsWith('?') ? '' : '?');
+        return `${url.href}${separator}__vosulay_broker=${brokerSecret}`;
+      } catch (_) { return routed; }
+    };
     const NativeWebSocket = window.WebSocket;
     if (typeof NativeWebSocket === 'function') {
       window.WebSocket = new Proxy(NativeWebSocket, {
         construct(target, args, newTarget) {
           if (args.length === 0) return Reflect.construct(target, args, newTarget);
-          return Reflect.construct(target, [route(args[0]), ...args.slice(1)], newTarget);
+          return Reflect.construct(target, [present(args[0]), ...args.slice(1)], newTarget);
         }
       });
     }

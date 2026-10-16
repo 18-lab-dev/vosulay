@@ -283,15 +283,18 @@ trusted clients/networks. Sources: [`src/remote.rs`](../src/remote.rs),
 **vosu broker token.** When `vosu_url` is loopback, vosulay reads vosu's
 per-start `broker.json` token and presents it on upstream
 `/websocket/commands` upgrades, which gives those sockets vosu's same-origin
-write permission for counter settings. Only sockets opened from this machine
-by pages at the listener's own origin (the peer is loopback and the browser's
-`Origin` is exactly the listener's) get it; LAN viewers, other sites and local
-HTML files do not, and it is never sent with HTTP requests, to other routes, or
-to a non-loopback backend. A local program that claims the listener's origin
-can use it, but such a program can already claim vosu's origin to vosu
-directly. Details: [integrations](integrations.md#vosu-broker-token). Sources:
+write permission for counter settings. Only in-game counter sockets get it:
+they must present a per-run broker secret that vosulay hands only to its own
+CEF renderer (never over HTTP), come from a loopback peer, and carry exactly the
+listener's own `Origin`. A program that reaches the broker port and claims
+that origin, LAN viewers, other sites, local HTML files, and counters shown in
+OBS or a browser do not get it, and it is never sent with HTTP requests, to
+other routes, or to a non-loopback backend. Details:
+[integrations](integrations.md#vosu-broker-token). Sources:
 [`src/backend/credential.rs`](../src/backend/credential.rs),
-[`src/backend.rs`](../src/backend.rs), [`src/remote.rs`](../src/remote.rs).
+[`src/backend.rs`](../src/backend.rs), [`src/remote.rs`](../src/remote.rs),
+[`crates/browser-cef/src/bridge.rs`](../crates/browser-cef/src/bridge.rs),
+[`assets/backend.js`](../assets/backend.js).
 
 **Settings → Advanced → Allow editing on this computer** (off by default) serves
 the full editor to loopback clients, and only under the Host

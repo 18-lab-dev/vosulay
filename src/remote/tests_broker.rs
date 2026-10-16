@@ -341,3 +341,76 @@ fn local_resources_are_confined_and_escaped_paths_are_rejected_over_http() {
     drop(server);
     drop(upstream);
 }
+
+/// Opens a commands socket on the listener as a page or program would, with `origin`.
+fn commands_socket(
+    address: SocketAddr,
+    query: &str,
+    origin: Option<&str>,
+) -> tokio_tungstenite::tungstenite::WebSocket<TcpStream> {
+    use tokio_tungstenite::tungstenite::{client::IntoClientRequest, http::HeaderValue};
+    let mut request = format!("ws://{address}/websocket/commands?{query}")
+        .into_client_request()
+        .expect("request");
+    if let Some(origin) = origin {
+        request
+            .headers_mut()
+            .insert("Origin", HeaderValue::from_str(origin).expect("origin"));
+    }
+    let stream = TcpStream::connect(address).expect("connect");
+    tokio_tungstenite::tungstenite::client(request, stream)
+        .expect("upgrade")
+        .0
+}
+
+#[test]
+fn only_sockets_presenting_the_in_game_secret_reach_vosu_with_its_token() {
+    use crate::backend::tests::{OLD_TOKEN, TokenUpstream, bearer, write_token};
+    let upstream = TokenUpstream::start();
+    upstream.accept_only(&[OLD_TOKEN]);
+    let directory = tempfile::tempdir().expect("token directory");
+    let path = directory.path().join("broker.json");
+    write_token(&path, &upstream.url, OLD_TOKEN);
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind");
+    let address = listener.local_addr().expect("address");
+    let server = RemoteServer::start_with_listeners(
+        vec![listener],
+        upstream.url.clone(),
+        Arc::new(|| Ok(AppConfig::default())),
+        None,
+        crate::backend::BrokerCredential::at(path, &upstream.url),
+    )
+    .expect("server");
+    let own = format!("http://{address}");
+    let secret = server.browser_secret().to_owned();
+
+    // An in-game counter frame: the secret and this listener's origin.
+    let _counter = commands_socket(
+        address,
+        &format!("l=counter&__vosulay_broker={secret}"),
+        Some(&own),
+    );
+    // Another program on this machine that claims the same origin but lacks the secret.
+    let _forged = commands_socket(address, "l=forged", Some(&own));
+    let _guessed = commands_socket(
+        address,
+        &format!("l=guessed&__vosulay_broker={}", "f".repeat(64)),
+        Some(&own),
+    );
+    // A program with no Origin at all.
+    let _bare = commands_socket(address, "l=bare", None);
+
+    // vosu never sees the secret, and only the counter's socket carries the token.
+    assert_eq!(
+        upstream.upgrades_to("/websocket/commands?l=counter", 1),
+        [bearer(OLD_TOKEN)]
+    );
+    for target in ["l=forged", "l=guessed", "l=bare"] {
+        assert_eq!(
+            upstream.upgrades_to(&format!("/websocket/commands?{target}"), 1),
+            [None],
+            "{target}"
+        );
+    }
+    drop(server);
+}

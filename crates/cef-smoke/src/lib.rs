@@ -130,7 +130,7 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<()> {
         BrowserOptions {
             url: MANAGER_URL,
             backend_url: "http://127.0.0.1:24050/",
-            broker_url: None,
+            broker: None,
             width: 256,
             height: 128,
             scale: 1.0,

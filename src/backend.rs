@@ -624,4 +624,4 @@ fn project(bytes: &mut Vec<u8>, source: Property<'_>, filters: &[Filter]) -> Res
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
