@@ -85,7 +85,14 @@ XDG configuration conventions) or `%APPDATA%\vosulay\config.json` on Windows.
 `data/config.json` selects portable storage instead. Profiles, URLs, settings,
 and local-file capability roots are stored in that JSON. CEF's persistent browser
 cache and `cef.log` are in `cef-cache` **beside the selected configuration**, not
-necessarily in the OS cache directory. Sources: [`src/config.rs`](../src/config.rs),
+necessarily in the OS cache directory. On Linux, CEF runs with
+`--password-store=basic`: Chromium encrypts that cache's cookies with its fixed
+local key instead of a key from the desktop keyring, so they are protected only
+by the directory's permissions. vosulay keeps no passwords there, and its broker
+secret and vosu token never reach cookies or web storage. A locked or prompting
+keyring otherwise held every HTTP request, leaving all counters blank. Cookies
+that an earlier release encrypted with a keyring key may no longer be readable,
+so counters can lose them once. Sources: [`src/config.rs`](../src/config.rs),
 [`src/runtime.rs`](../src/runtime.rs),
 [`src/runtime/host.rs`](../src/runtime/host.rs),
 [`crates/browser-cef/src/lib.rs`](../crates/browser-cef/src/lib.rs).

@@ -158,7 +158,7 @@ For UI/input changes, check:
 
 - Ctrl+Shift+Space enters/exits edit mode; Escape releases editing and game input.
 - Add a counter; move it, resize/Ctrl-scale/Shift-crop it by its edges, wheel a properties field, save, and reopen it; verify expected placement.
-- Ctrl+I toggles counter interaction without leaking editor gestures into the game.
+- Ctrl+I toggles counter interaction without leaking editor gestures into the game; after clicking into a counter with interaction on, turning it off lets Escape exit editing again.
 - Lose/regain game focus; editing exits by default, and the configurable keep-editing setting behaves as documented.
 - Tray **Edit mode**, **Hide vosulay**, and **Exit vosulay** work and show the expected checked state.
 - Open `http://127.0.0.1:5050/overlay` and verify the active profile; do not widen listener access just for a local test.

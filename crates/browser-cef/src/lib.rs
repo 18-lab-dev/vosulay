@@ -247,6 +247,14 @@ wrap_app! {
                 // updates and similar) are off; vosulay updates the pinned
                 // runtime itself.
                 command_line.append_switch(Some(&"disable-background-networking".into()));
+                // Chromium encrypts its cookie store with a key it keeps in the desktop keyring
+                // (Secret Service/KWallet). Every HTTP request waits for that key, so a locked or
+                // prompting keyring left every counter blank. vosulay keeps nothing secret in
+                // CEF's stores: no passwords, and its broker secret and vosu token never reach
+                // cookies or storage. "basic" uses Chromium's fixed local key instead, so counters'
+                // cookies are protected only by the cache directory's permissions.
+                #[cfg(target_os = "linux")]
+                command_line.append_switch_with_value(Some(&"password-store".into()), Some(&"basic".into()));
                 command_line.append_switch(Some(&"disable-component-update".into()));
                 let disable_features: CefString = "disable-features".into();
                 let current = command_line.switch_value(Some(&disable_features));

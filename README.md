@@ -275,7 +275,9 @@ The compositor bind takes the chord from every application, and the in-game
 shortcut no longer sees it.
 
 While editing, Ctrl+I toggles counter interaction, Delete removes the selected
-counter, and Escape exits editing. Ctrl+Z / Ctrl+Shift+Z undo/redo edits;
+counter, and Escape exits editing. While interaction is on, a counter you click
+keeps the keyboard, including Escape; turning interaction off returns it to the
+editor. Ctrl+Z / Ctrl+Shift+Z undo/redo edits;
 Ctrl+R refreshes the selected counter and Ctrl+Shift+R refreshes the active
 profile's counters. Interaction, profile, copy/paste, undo/redo, and refresh
 shortcuts are configurable. Interaction also requires Ctrl, Alt, or Meta.

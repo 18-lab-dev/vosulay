@@ -1577,6 +1577,13 @@
       document.body.classList.toggle("editing", state.editing);
       document.body.classList.toggle("interacting", state.editing && state.interacting);
       editor.hidden = !state.editing;
+      // A counter clicked during interaction keeps keyboard focus, and its (cross-origin) frame
+      // then receives the editor's keys, Escape included. Take focus back once interaction ends.
+      const active = document.activeElement;
+      if (!(state.editing && state.interacting) && active instanceof HTMLIFrameElement && stage.contains(active)) {
+        active.blur();
+        window.focus();
+      }
     }
     if (regions.stageStructure || regions.stageGeometry) {
       renderStage(regions.stageStructure, regions.stageGeometry);
