@@ -16,7 +16,7 @@ A placement identifies an installed `counter_id` or custom `url`, with optional 
 | --- | --- | --- |
 | `always_keep_overlays_in_view` | `false` | Constrain the selected counter while editing. |
 | `exit_edit_mode_on_focus_loss` | `true` | Leave editing when the game loses focus. |
-| `fps_limit` | `0` | Follow display refresh; fixed caps range up to 1,000,000. |
+| `fps_limit` | `0` | Automatic: the display refresh divided by the smallest whole number that brings it to 120 fps or less (360 → 120, 144 → 72); fixed caps range up to 1,000,000. |
 | `allow_unrestricted_shared_array_buffer` | `false` | Trusted-overlay compatibility opt-in; restart required. |
 | `allowed_ips` | `127.0.0.1,localhost,absolute` | Remote client allowlist; loopback is always allowed. |
 | `allow_local_profile_editing` | `false` | Serves the full editor at `http://manage.localhost:<port>/overlay` to this computer (loopback) only; the plain address stays view-only. |

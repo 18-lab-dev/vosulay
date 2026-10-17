@@ -89,7 +89,7 @@ impl Options {
             match argument.as_str() {
                 "--help" | "-h" => {
                     println!(
-                        "vosulay {}\n\nUsage: vosulay [options]\n  --vosu-url, -t URL    vosu or tosu-compatible backend for this run (default: Settings → Advanced → vosu URL)\n  --server-only        Serve remote overlays and editing without game attachment, tray or CEF\n  --toggle-edit        Ask the running instance to toggle in-game editing\n  --quit               Ask the running instance to save and exit gracefully\n  --fps-limit, -f FPS   auto/0 or a positive cap (default display refresh)\n  --benchmark-uncapped  Disable Chromium pacing; use minimum positive OSR interval\n  --pid PID            Additional supported game process; repeatable\n  --process-name NAME  Additional supported game executable; repeatable\n  --config PATH        Configuration file (default user configuration directory)\n  --cef-dir PATH       Runtime package directory (default beside executable or build-time cache)\n  --version            Product version\n\n--toggle-edit and --quit are mutually exclusive and fail if vosulay is not running.\n--server-only rejects --pid, --process-name, --fps-limit and --benchmark-uncapped.\nToggle editing in game with Ctrl+Shift+Space by default; configure it in Settings → Shortcuts. Escape leaves edit mode.",
+                        "vosulay {}\n\nUsage: vosulay [options]\n  --vosu-url, -t URL    vosu or tosu-compatible backend for this run (default: Settings → Advanced → vosu URL)\n  --server-only        Serve remote overlays and editing without game attachment, tray or CEF\n  --toggle-edit        Ask the running instance to toggle in-game editing\n  --quit               Ask the running instance to save and exit gracefully\n  --fps-limit, -f FPS   auto/0 or a positive cap (default: display refresh divided down to 60-120)\n  --benchmark-uncapped  Disable Chromium pacing; use minimum positive OSR interval\n  --pid PID            Additional supported game process; repeatable\n  --process-name NAME  Additional supported game executable; repeatable\n  --config PATH        Configuration file (default user configuration directory)\n  --cef-dir PATH       Runtime package directory (default beside executable or build-time cache)\n  --version            Product version\n\n--toggle-edit and --quit are mutually exclusive and fail if vosulay is not running.\n--server-only rejects --pid, --process-name, --fps-limit and --benchmark-uncapped.\nToggle editing in game with Ctrl+Shift+Space by default; configure it in Settings → Shortcuts. Escape leaves edit mode.",
                         env!("CARGO_PKG_VERSION")
                     );
                     return Ok(None);
@@ -211,12 +211,22 @@ fn parse_fps_limit(value: &str) -> Result<u32> {
     Ok(fps)
 }
 
+/// Automatic mode renders at the display refresh divided by the smallest whole number that brings
+/// it to 120 fps or less (360 -> 120, 240 -> 120, 144 -> 72), so frames stay evenly spaced on the
+/// display. Rendering at a high refresh such as 360 Hz made CEF's render, readback and upload
+/// enough extra GPU load that, with OBS capturing the game, the game's own frame rate dropped
+/// (720 -> 400 fps on an RTX 5090); 60-180 cost nothing measurable.
+fn automatic_rate(refresh_hz: f64) -> f64 {
+    const MAX_AUTOMATIC_FPS: f64 = 120.0;
+    refresh_hz / (refresh_hz / MAX_AUTOMATIC_FPS).ceil().max(1.0)
+}
+
 fn frame_rate(cli: Option<u32>, configured: u32, refresh_hz: f64) -> f64 {
     let limit = cli.unwrap_or(configured);
     if limit != 0 {
         f64::from(limit.min(crate::config::MAX_FPS_LIMIT))
     } else if refresh_hz.is_finite() && refresh_hz > 0.0 {
-        refresh_hz.min(f64::from(crate::config::MAX_FPS_LIMIT))
+        automatic_rate(refresh_hz)
     } else {
         60.0
     }
@@ -290,10 +300,33 @@ mod fps_tests {
     fn explicit_auto_overrides_persisted_fixed_rate_and_tracks_monitor_changes() {
         assert_eq!(frame_rate(None, 144, 59.94), 144.0);
         assert_eq!(frame_rate(Some(0), 144, 59.94), 59.94);
-        assert_eq!(frame_rate(Some(0), 144, 240.0), 240.0);
+        assert_eq!(frame_rate(Some(0), 144, 240.0), 120.0);
         assert_eq!(frame_rate(Some(120), 144, 240.0), 120.0);
-        assert_eq!(frame_rate(None, 0, 240.0), 240.0);
+        assert_eq!(frame_rate(None, 0, 240.0), 120.0);
         assert_eq!(frame_rate(None, 0, f64::NAN), 60.0);
+        // An explicit cap is never divided, however high.
+        assert_eq!(frame_rate(Some(360), 0, 360.0), 360.0);
+    }
+
+    #[test]
+    fn automatic_rate_divides_the_refresh_into_60_to_120_fps() {
+        for (refresh, expected) in [
+            (360.0, 120.0),
+            (240.0, 120.0),
+            (180.0, 90.0),
+            (165.0, 82.5),
+            (144.0, 72.0),
+            (121.0, 60.5),
+            (120.0, 120.0),
+            (100.0, 100.0),
+            (75.0, 75.0),
+            (59.94, 59.94),
+            (30.0, 30.0),
+        ] {
+            assert_eq!(frame_rate(None, 0, refresh), expected, "{refresh} Hz");
+        }
+        // Fractional refresh rates divide by the same whole number as their rounded value.
+        assert!((frame_rate(None, 0, 359.97) - 119.99).abs() < 1e-9);
     }
 
     #[test]

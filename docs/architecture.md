@@ -35,7 +35,7 @@ On Linux, CEF's external message pump runs only Chromium's task queue, so [crate
 
 ## Frame ownership and scheduling
 
-Production uses CEF's internal damage-driven OSR clock. Automatic FPS follows the selected game display; a fixed setting or CLI override caps the browser, not game presents. A message-pump wake does not request a repaint. Unchanged pages need not publish continuous frames. Game presentation and browser scheduling are independent clocks; the consumer uses the newest complete frame rather than queueing every produced update.
+Production uses CEF's internal damage-driven OSR clock. Automatic FPS follows the selected game display's refresh, divided down to 60-120 fps; a fixed setting or CLI override caps the browser, not game presents. A message-pump wake does not request a repaint. Unchanged pages need not publish continuous frames. Game presentation and browser scheduling are independent clocks; the consumer uses the newest complete frame rather than queueing every produced update.
 
 ### Linux
 

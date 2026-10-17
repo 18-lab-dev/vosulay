@@ -425,17 +425,31 @@ default-deny policies, so allow editing on this computer first.
 
 ## Frame rate
 
-Both hosts default to the attached game window's display refresh rate.
-Automatic mode updates when the target moves between displays or its refresh
-rate changes. Both hosts use CEF's internal, damage-driven OSR frame scheduler.
+By default (Automatic), both hosts render at the attached game window's display
+refresh rate divided by the smallest whole number that brings it to 120 fps or
+less: 360 Hz → 120, 240 Hz → 120, 165 Hz → 82.5 (CEF rounds it to 83), 144 Hz →
+72, and 120 Hz or slower displays unchanged. Dividing keeps frames evenly spaced
+on the display only approximately, because CEF's off-screen clock is not locked
+to the display. Automatic mode updates when the target moves between displays or
+its refresh rate changes. Both hosts use CEF's internal, damage-driven OSR frame scheduler.
 Linux's injected compositor consumes the newest complete frame at game present;
 Windows publishes completed application-owned GPU textures to asdf-overlay.
 Automatic mode applies the display rate without an external begin-frame loop.
 
+For most setups, and especially when streaming or recording the game with OBS,
+keep the overlay at 60-120 fps (Automatic does). Every rendered overlay frame is
+drawn by CEF, copied to the CPU and uploaded into the game, so the cost grows
+with the frame rate and competes with the game and OBS for the GPU. Measured on
+an RTX 5090 at 2560×1440 and 360 Hz, with a profile repainting every frame: osu!
+held 720 fps at limits of 60, 120 and 180, but dropped to about 400 fps at 360
+while OBS captured it (game capture plus desktop capture). Without OBS, 360 cost
+nothing visible. Weaker GPUs may tip over at lower rates; lower the limit if the
+game or the capture stutters.
+
 Settings → General → **FPS limit** persists either **Automatic** (the default,
 stored as `settings.fps_limit: 0`) or a **Fixed** integer cap. Saving applies it
 to the active browser immediately; no restart is required. Fixed caps stay fixed
-when the target moves between displays; Automatic follows the target display.
+when the target moves between displays; Automatic follows the target display's refresh, divided as above.
 
 Use `--fps-limit auto` (or `--fps-limit 0`) to select automatic mode explicitly,
 or a positive integer to set a fixed cap:
