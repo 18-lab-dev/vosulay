@@ -252,6 +252,28 @@ On Linux they work through the in-game input path while the game is focused.
 Windows registers global hotkeys; edit toggle acts only while the game is focused.
 Clear hide/show with Backspace or Delete while recording the shortcut.
 
+On Linux, an input method gets keys before the game whenever text input is
+enabled. In osu! that is while a text box such as song select search is
+focused, and always while vosulay is editing. If the input method claims the
+chord, the game never receives it. Mozc's default keymap, for example, turns
+`Ctrl+Shift+Space` into a full-width space. Escape still exits editing. To
+toggle independently of input methods, bind `vosulay --toggle-edit` (see below)
+in your compositor, which handles keybinds before any input method. On Hyprland
+with Lua configuration (`hyprland.lua`):
+
+```lua
+hl.bind("CTRL + SHIFT + space", hl.dsp.exec_cmd("vosulay --toggle-edit"))
+```
+
+or with `hyprland.conf`:
+
+```ini
+bind = CTRL SHIFT, SPACE, exec, vosulay --toggle-edit
+```
+
+The compositor bind takes the chord from every application, and the in-game
+shortcut no longer sees it.
+
 While editing, Ctrl+I toggles counter interaction, Delete removes the selected
 counter, and Escape exits editing. Ctrl+Z / Ctrl+Shift+Z undo/redo edits;
 Ctrl+R refreshes the selected counter and Ctrl+Shift+R refreshes the active
