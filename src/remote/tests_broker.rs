@@ -62,7 +62,7 @@ impl Upstream {
                     // vosu moves its dashboard to a separate origin: another port of this host.
                     (
                         "302 Found",
-                        "Location: http://127.0.0.1:9/settings?overlay=x&embed=1\r\n",
+                        "Location: http://127.0.0.1:9/settings?overlay=x\r\n",
                         "dashboard",
                     )
                 } else if target.starts_with("GET /missing") {
@@ -200,11 +200,11 @@ fn proxy_injects_bootstrap_and_preserves_upstream_asset_and_redirect_semantics()
     assert!(redirect.starts_with("HTTP/1.1 302 Found\r\n"));
     assert_eq!(header(&redirect, "Location"), Some("../next/page"));
     // The broker never takes dashboard pages over: their redirect leaves it untouched.
-    let dashboard = request(address, "GET", "/settings?overlay=x&embed=1", "");
+    let dashboard = request(address, "GET", "/settings?overlay=x", "");
     assert!(dashboard.starts_with("HTTP/1.1 302 Found\r\n"));
     assert_eq!(
         header(&dashboard, "Location"),
-        Some("http://127.0.0.1:9/settings?overlay=x&embed=1")
+        Some("http://127.0.0.1:9/settings?overlay=x")
     );
     let missing = request(address, "GET", "/missing", "");
     assert!(missing.starts_with("HTTP/1.1 404 Not Found\r\n"));

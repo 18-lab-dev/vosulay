@@ -288,11 +288,19 @@ they must present a per-run broker secret that vosulay hands only to its own
 CEF renderer (never over HTTP), come from a loopback peer, and carry exactly the
 listener's own `Origin`. A program that reaches the broker port and claims
 that origin, LAN viewers, other sites, local HTML files, and counters shown in
-OBS or a browser do not get it, and it is never sent with HTTP requests, to
-other routes, or to a non-loopback backend. Details:
+OBS or a browser do not get it, and it is never sent on other routes or to a
+non-loopback backend. A file naming a wildcard listener (`0.0.0.0` or `[::]`, from
+a vosu bound to every interface) is accepted only for a loopback `vosu_url` on
+the same scheme and port; the token still goes only to that loopback address. The host also sends it itself on the editor's vosu
+overlay settings and profile writes (`POST /api/counters/settings/<overlay>`,
+`POST /api/counters/profiles`); the editor page names only the overlay,
+profile and values, never the URL, and never sees the token. Anyone who can
+use the in-game editor or the opt-in manage page can therefore change vosu
+overlay settings and profiles. Details:
 [integrations](integrations.md#vosu-broker-token). Sources:
 [`src/backend/credential.rs`](../src/backend/credential.rs),
 [`src/backend.rs`](../src/backend.rs), [`src/remote.rs`](../src/remote.rs),
+[`src/api/vosu.rs`](../src/api/vosu.rs),
 [`crates/browser-cef/src/bridge.rs`](../crates/browser-cef/src/bridge.rs),
 [`assets/backend.js`](../assets/backend.js).
 

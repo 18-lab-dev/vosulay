@@ -49,17 +49,25 @@
   const urlCancel = $("url-cancel");
   const overlaySettingsModal = $("overlay-settings-modal");
   const overlaySettingsProfiles = $("overlay-settings-profiles");
-  const overlaySettingsFrame = $("overlay-settings-frame");
   const overlaySettingsNote = $("overlay-settings-note");
   const nameField = $("field-name");
   const urlField = $("field-url");
   const urlFieldLabel = $("field-url-label");
+  const advancedModal = $("advanced-modal");
+  const advancedPin = $("advanced-pin");
+  const advancedPinMenu = $("advanced-pin-menu");
+  const advancedRemoveConfirm = $("advanced-remove-confirm");
+  let advancedOverlay = null;
   const fields = {
-    left: $("field-left"), top: $("field-top"), width: $("field-width"),
-    height: $("field-height"), scale: $("field-scale"), z_index: $("field-z"),
-    opacity: $("field-opacity"), rotation: $("field-rotation"),
-    crop_left: $("field-crop-left"), crop_right: $("field-crop-right"),
-    crop_top: $("field-crop-top"), crop_bottom: $("field-crop-bottom")
+    left: [$("field-left"), $("advanced-field-left")],
+    top: [$("field-top"), $("advanced-field-top")],
+    width: [$("field-width"), $("advanced-field-width")],
+    height: [$("field-height"), $("advanced-field-height")],
+    scale: [$("field-scale"), $("advanced-field-scale")],
+    z_index: [$("field-z"), $("advanced-field-z")],
+    opacity: [$("field-opacity")], rotation: [$("field-rotation")],
+    crop_left: [$("field-crop-left")], crop_right: [$("field-crop-right")],
+    crop_top: [$("field-crop-top")], crop_bottom: [$("field-crop-bottom")]
   };
   const enabledField = $("field-enabled");
   enabledField.addEventListener("change", () => {
@@ -91,7 +99,6 @@
   const settingsNav = $("settings-nav");
   const settingsContent = $("settings-content");
   const settingsNavButtons = [...settingsNav.querySelectorAll("button[data-section]")];
-  const interactionHint = $("interaction-hint");
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const selectionBox = $("selection-box");
   const HOTKEY_KEYS = [
@@ -510,7 +517,7 @@
   // in use; otherwise the user could be locked out of leaving the editor.
   function toolbarPinned() {
     return !profileMenu.hidden || !profileMoreMenu.hidden || !profileCreate.hidden || !profileDeleteConfirm.hidden
-      || !settingsModal.hidden || !urlModal.hidden || !overlaySettingsModal.hidden || toolbar.contains(document.activeElement);
+      || !settingsModal.hidden || !urlModal.hidden || !overlaySettingsModal.hidden || !advancedModal.hidden || toolbar.contains(document.activeElement);
   }
 
   function updateToolbarAvoidance() {
@@ -606,10 +613,10 @@
     if (!state.config?.settings.always_keep_overlays_in_view) {
       const centerX = overlay.scale * (width * cosine - height * sine) / 2;
       const centerY = overlay.scale * (width * sine + height * cosine) / 2;
-      if (document.activeElement !== fields.left) {
+      if (!fields.left.includes(document.activeElement)) {
         overlay.left = clamp(finite(overlay.left, 0), -centerX, window.innerWidth - centerX);
       }
-      if (document.activeElement !== fields.top) {
+      if (!fields.top.includes(document.activeElement)) {
         overlay.top = clamp(finite(overlay.top, 0), -centerY, window.innerHeight - centerY);
       }
       return;
@@ -623,10 +630,10 @@
     );
     if (overlay.scale > fittingScale) overlay.scale = Math.max(0.1, fittingScale);
     const range = overlayPositionRange(overlay);
-    if (document.activeElement !== fields.left) {
+    if (!fields.left.includes(document.activeElement)) {
       overlay.left = clamp(finite(overlay.left, 0), range.minLeft, range.maxLeft);
     }
-    if (document.activeElement !== fields.top) {
+    if (!fields.top.includes(document.activeElement)) {
       overlay.top = clamp(finite(overlay.top, 0), range.minTop, range.maxTop);
     }
   }
@@ -912,10 +919,10 @@
   }
 
   function parseVosuSettings(value) {
-    if (!value || typeof value !== "object" || typeof value.settings_url !== "string" || !Array.isArray(value.profiles)) return null;
+    if (!value || typeof value !== "object" || !Array.isArray(value.profiles)) return null;
     const profiles = value.profiles.filter((name) => typeof name === "string" && VOSU_PROFILE_NAME.test(name));
     if (!profiles.includes(value.active)) return null;
-    return { settings_url: value.settings_url, active: value.active, profiles };
+    return { writable: value.writable === true, reason: value.writable === true ? null : typeof value.reason === "string" && value.reason ? value.reason : "vosu settings are read-only because no usable broker token is available.", active: value.active, profiles };
   }
 
   // vosu serves a pinned instance's settings from that profile; tosu ignores the query.
@@ -1292,7 +1299,9 @@
   }
 
   function clearInspectorWarnings() {
-    for (const input of Object.values(fields)) clearFieldWarning(input);
+    for (const inputs of Object.values(fields)) {
+      for (const input of inputs) clearFieldWarning(input);
+    }
   }
 
   function inspectorFieldBounds(input) {
@@ -1334,10 +1343,10 @@
 
   function renderInspectorNumbers(overlay, names = Object.keys(fields)) {
     for (const name of names) {
-      const input = fields[name];
-      if (document.activeElement === input) continue;
       const value = inspectorFieldValue(name, overlay);
-      if (input.value !== value) input.value = value;
+      for (const input of fields[name]) {
+        if (document.activeElement !== input && input.value !== value) input.value = value;
+      }
     }
   }
 
@@ -1354,23 +1363,15 @@
       clearInspectorWarnings();
     }
     inspector.hidden = !state.editing || !overlay || !state.inspectorPopup;
-    if (inspector.hidden) return;
+    if (!advancedModal.hidden && (!state.editing || overlay !== advancedOverlay)) closeAdvancedModal(false);
+    if (!overlay || (inspector.hidden && advancedModal.hidden)) return;
     const counter = findCounter(overlay.counter_id);
     const details = overlayDetails(overlay);
     const custom = Boolean(overlay.url);
 
     $("selection-name").textContent = details.name;
-    if (custom) {
-      const source = customSource(overlay);
-      $("selection-meta").textContent = source
-        ? `${source.protocol === "vosulay-overlay:" ? "HTML file" : "URL"} · ${overlay.url}`
-        : `Unsupported source · ${overlay.url}`;
-    } else {
-      const pin = overlay.vosu_profile ? `vosu profile ${overlay.vosu_profile}` : "";
-      $("selection-meta").textContent = counter
-        ? [counter.author, counter.version, pin].filter(Boolean).join(" · ")
-        : ["Counter is not installed", pin].filter(Boolean).join(" · ");
-    }
+    $("selection-name").title = details.name;
+    $("advanced-overlay-name").textContent = details.name;
 
     renderInspectorText(nameField, details.name);
     urlFieldLabel.hidden = !custom;
@@ -1379,6 +1380,8 @@
     renderInspectorNumbers(overlay);
     $("settings").disabled = custom || !counter || !counter.has_settings;
     refreshOverlayButton.disabled = overlay.enabled === false || !details.available;
+    renderAdvancedPin(overlay, counter);
+    if (inspector.hidden) return;
     if (state.inspectorPoint) {
       // Opens beside the pointer instead of under it (flipping near viewport
       // edges) so it does not cover the counter that was right-clicked.
@@ -1399,6 +1402,151 @@
     }
   }
 
+  function closeAdvancedPin(restoreFocus = false) {
+    advancedPinMenu.hidden = true;
+    advancedPin.setAttribute("aria-expanded", "false");
+    if (restoreFocus) advancedPin.focus();
+  }
+
+  function renderAdvancedPin(overlay, counter) {
+    const visible = !overlay.url && Boolean(counter) && Boolean(state.vosu);
+    $("advanced-pin-row").hidden = !visible;
+    if (!visible) {
+      closeAdvancedPin();
+      return;
+    }
+    const pin = overlay.vosu_profile || "";
+    const { active, profiles } = state.vosu;
+    const profileLabel = (name) => name === active && name !== "default" ? `${name} (default)` : name;
+    advancedPin.textContent = pin
+      ? profiles.includes(pin) ? profileLabel(pin) : `${pin} (missing; using ${active})`
+      : `Default profile (${active})`;
+    const options = [["", `Default profile (${active})`], ...profiles.map((name) => [name, profileLabel(name)])];
+    if (pin && !profiles.includes(pin)) options.push([pin, `${pin} (missing)`]);
+    const key = JSON.stringify([options, pin]);
+    if (advancedPinMenu.dataset.options === key) return;
+    advancedPinMenu.dataset.options = key;
+    advancedPinMenu.replaceChildren();
+    for (const [value, label] of options) {
+      const button = makeElement("button", "", label);
+      button.type = "button";
+      button.dataset.value = value;
+      button.setAttribute("role", "option");
+      button.setAttribute("aria-selected", String(value === pin));
+      advancedPinMenu.append(button);
+    }
+  }
+
+  function closeAdvancedModal(restoreFocus = true) {
+    if (advancedModal.hidden) return;
+    if (advancedModal.contains(document.activeElement)) document.activeElement.blur();
+    advancedModal.hidden = true;
+    advancedOverlay = null;
+    advancedRemoveConfirm.hidden = true;
+    closeAdvancedPin();
+    flushPendingSave();
+    updateToolbarAvoidance();
+    if (restoreFocus && state.editing && selectedOverlay()) {
+      state.inspectorPopup = true;
+      requestRender("inspector");
+      renderInspector();
+      $("open-advanced").focus();
+    }
+  }
+
+  function openAdvancedModal() {
+    const overlay = selectedOverlay();
+    if (!overlay || !state.editing) return;
+    flushEditingChanges();
+    closeProfileMenu();
+    closeProfileMoreMenu();
+    closeProfileCreator();
+    closeProfileDeleteConfirm();
+    closeInspectorPopup();
+    advancedOverlay = overlay;
+    advancedRemoveConfirm.hidden = true;
+    advancedModal.hidden = false;
+    renderInspector();
+    nameField.focus();
+    updateToolbarAvoidance();
+  }
+
+  function openAdvancedPin() {
+    advancedPinMenu.hidden = false;
+    advancedPin.setAttribute("aria-expanded", "true");
+    advancedPinMenu.querySelector('[aria-selected="true"]')?.focus();
+  }
+
+  $("inspector-close").addEventListener("click", () => closeInspectorPopup());
+  $("open-advanced").addEventListener("click", openAdvancedModal);
+  $("advanced-done").addEventListener("click", () => closeAdvancedModal());
+  advancedModal.addEventListener("click", (event) => {
+    if (event.target === advancedModal) closeAdvancedModal();
+    else if (!event.target.closest(".advanced-picker")) closeAdvancedPin();
+  });
+  advancedPin.addEventListener("click", () => {
+    if (advancedPinMenu.hidden) openAdvancedPin();
+    else closeAdvancedPin();
+  });
+  advancedPin.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    openAdvancedPin();
+  });
+  advancedPinMenu.addEventListener("click", (event) => {
+    const option = event.target.closest("button[data-value]");
+    if (!option || selectedOverlay() !== advancedOverlay) return;
+    pinOverlay(advancedOverlay, option.dataset.value);
+    closeAdvancedPin(true);
+  });
+  advancedPinMenu.addEventListener("keydown", (event) => {
+    const options = [...advancedPinMenu.querySelectorAll("button")];
+    const index = options.indexOf(document.activeElement);
+    let next;
+    if (event.key === "ArrowDown") next = (index + 1) % options.length;
+    else if (event.key === "ArrowUp") next = (index - 1 + options.length) % options.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = options.length - 1;
+    else return;
+    event.preventDefault();
+    options[next]?.focus();
+  });
+  advancedModal.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.repeat) return;
+      if (!advancedPinMenu.hidden) closeAdvancedPin(true);
+      else if (!advancedRemoveConfirm.hidden) {
+        advancedRemoveConfirm.hidden = true;
+        $("remove").focus();
+      } else closeAdvancedModal();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    closeAdvancedPin();
+    const focusable = [...advancedModal.querySelectorAll("button, input")]
+      .filter((element) => !element.disabled && element.getClientRects().length);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !focusable.includes(document.activeElement))) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !focusable.includes(document.activeElement))) {
+      event.preventDefault();
+      first?.focus();
+    }
+  });
+  $("advanced-remove-cancel").addEventListener("click", () => {
+    advancedRemoveConfirm.hidden = true;
+    $("remove").focus();
+  });
+  $("advanced-remove-accept").addEventListener("click", () => {
+    if (selectedOverlay() !== advancedOverlay) return;
+    closeAdvancedModal(false);
+    removeSelected();
+  });
+
   function describeShortcut(button, label, shortcut) {
     const title = shortcut ? `${label} (${shortcut})` : label;
     if (button.title !== title) button.title = title;
@@ -1409,12 +1557,6 @@
     else button.removeAttribute("aria-keyshortcuts");
   }
 
-  function renderInteractionHint() {
-    const shortcut = state.config ? state.config.settings.hotkeys.toggle_interaction : DEFAULT_HOTKEYS.toggle_interaction;
-    const text = !shortcut ? ""
-      : state.interacting ? ` · ${shortcut} returns to editing` : ` · ${shortcut} interacts`;
-    if (interactionHint.textContent !== text) interactionHint.textContent = text;
-  }
 
   function renderToolbarActions() {
     const hotkeys = state.config ? state.config.settings.hotkeys : DEFAULT_HOTKEYS;
@@ -1435,7 +1577,6 @@
       document.body.classList.toggle("editing", state.editing);
       document.body.classList.toggle("interacting", state.editing && state.interacting);
       editor.hidden = !state.editing;
-      renderInteractionHint();
     }
     if (regions.stageStructure || regions.stageGeometry) {
       renderStage(regions.stageStructure, regions.stageGeometry);
@@ -1460,9 +1601,10 @@
     const profile = activeProfile();
     const next = new Set(profile ? [...overlays].filter((overlay) => profile.overlays.includes(overlay)) : []);
     const same = next.size === state.selected.size && [...next].every((overlay) => state.selected.has(overlay));
-    if (!same && state.selected.size === 1 && inspector.contains(document.activeElement)) {
+    if (!same && state.selected.size === 1 && (inspector.contains(document.activeElement) || advancedModal.contains(document.activeElement))) {
       document.activeElement.blur();
     }
+    if (!same) closeAdvancedModal(false);
     if (!keepPopup) {
       state.inspectorCycle = null;
       state.inspectorPopup = false;
@@ -1620,6 +1762,7 @@
   function applyVosuSettings(next) {
     const previous = state.vosu;
     state.vosu = next;
+    if (nativeSettings && next) updateNativeDirty();
     const profile = activeProfile();
     if (!previous || !next || !profile) return;
     const listed = (registry, name) => registry.profiles.includes(name);
@@ -1664,7 +1807,7 @@
   }
 
   function flushEditingChanges() {
-    if (inspector.contains(document.activeElement)) document.activeElement.blur();
+    if (inspector.contains(document.activeElement) || advancedModal.contains(document.activeElement)) document.activeElement.blur();
     finishPointerOperation();
     flushPendingSave();
   }
@@ -1689,6 +1832,7 @@
 
   function openUrlModal() {
     if (!state.config) return;
+    closeAdvancedModal(false);
     closeProfileMenu();
     closeProfileCreator();
     closeProfileDeleteConfirm();
@@ -1698,83 +1842,310 @@
     urlName.focus();
   }
 
+  let nativeSettings = null;
+  let nativeSequence = 0;
+  const nativeClone = (value) => value === undefined ? "" : JSON.parse(JSON.stringify(value));
+  const nativeEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  function nativeError(message = "") {
+    $("overlay-settings-error").textContent = message;
+    $("overlay-settings-error").hidden = !message;
+  }
+  function nativeButton(label, action, className = "menu-item") {
+    const button = makeElement("button", className || "quiet-button", label);
+    button.type = "button";
+    button.addEventListener("click", action);
+    return button;
+  }
+  function settingsTarget(type) {
+    const overlay = state.overlaySettings;
+    const message = { type, counter_id: overlay.counter_id };
+    if (overlay.vosu_profile && state.vosu.profiles.includes(overlay.vosu_profile)) message.profile = overlay.vosu_profile;
+    return message;
+  }
+  function updateNativeDirty() {
+    if (!nativeSettings) return;
+    nativeSettings.dirty = !nativeEqual(nativeSettings.values, nativeSettings.original);
+    if (nativeSettings.dirty) nativeSettings.saved = false;
+    const readOnly = !state.vosu.writable;
+    $("overlay-settings-readonly").hidden = !readOnly;
+    $("overlay-settings-readonly").textContent = readOnly ? `Read-only: ${state.vosu.reason}` : "";
+    $("overlay-settings-save").hidden = readOnly;
+    $("overlay-settings-retry").hidden = !readOnly;
+    $("overlay-settings-retry").disabled = nativeSettings.busy;
+    for (const control of $("overlay-settings-content").querySelectorAll("input, textarea, button")) control.disabled = readOnly && !control.hasAttribute("data-readonly-allowed");
+    for (const button of $("overlay-settings-menu").querySelectorAll("button[data-action]")) {
+      button.disabled = readOnly || button.dataset.protected === "true";
+      button.title = readOnly ? state.vosu.reason : "";
+    }
+    $("overlay-settings-save").disabled = nativeSettings.busy || !nativeSettings.dirty;
+    $("overlay-settings-profile").disabled = nativeSettings.busy;
+    $("overlay-settings-more").disabled = nativeSettings.busy;
+    $("overlay-settings-content").inert = nativeSettings.busy;
+    overlaySettingsNote.textContent = nativeSettings.busy ? "Please wait…" : nativeSettings.dirty ? "Unsaved changes" : nativeSettings.saved ? "Settings saved" : "";
+  }
+  function nativeRequest(type, extra = {}) {
+    if (type !== "vosu-settings-load" && !state.vosu.writable) return;
+    const request_id = `settings-${++nativeSequence}`;
+    nativeSettings.pending = { request_id, type, ...extra };
+    nativeSettings.busy = true;
+    nativeError();
+    updateNativeDirty();
+    ipc({ ...(type === "vosu-profile-action" ? { type } : settingsTarget(type)), ...extra, request_id });
+  }
   function closeOverlaySettings(restoreFocus = true) {
     if (overlaySettingsModal.hidden) return;
     overlaySettingsModal.hidden = true;
     state.overlaySettings = null;
-    // Unloads vosu's page, which holds its own connections while open.
-    overlaySettingsFrame.removeAttribute("src");
-    overlaySettingsProfiles.replaceChildren();
-    overlaySettingsProfiles._vosulaySignature = "";
-    // Profiles created, renamed or deleted in vosu's page become pin choices.
-    requestCatalogRefresh();
+    nativeSettings = null;
+    $("overlay-settings-content").replaceChildren();
     if (restoreFocus && !$("settings").disabled) $("settings").focus();
   }
-
+  function loadNativeSettings() {
+    nativeSettings.saved = false;
+    $("overlay-settings-content").textContent = "Loading settings…";
+    $("overlay-settings-nav").replaceChildren();
+    nativeRequest("vosu-settings-load");
+  }
   function openOverlaySettings(overlay) {
-    if (!state.vosu || !overlay || overlay.url) return;
-    closeProfileMenu();
-    closeProfileCreator();
-    closeProfileDeleteConfirm();
-    state.overlaySettings = overlay;
-    overlaySettingsModal.hidden = false;
-    renderOverlaySettings();
-    requestCatalogRefresh();
-    $("overlay-settings-close").focus();
-  }
-
-  function overlaySettingsSource(overlay, profiles) {
-    const url = new URL(state.vosu.settings_url);
-    url.searchParams.set("overlay", overlay.counter_id);
-    // vosu rejects an unknown explicit profile; without one its page shows the active profile,
-    // which is also what a placement pinned to a deleted profile loads.
-    if (overlay.vosu_profile && profiles.includes(overlay.vosu_profile)) url.searchParams.set("profile", overlay.vosu_profile);
-    // Only the editor, with in-page listboxes and colour fields: off-screen CEF
-    // shows no native popups, and site navigation would leave the dialog.
-    url.searchParams.set("embed", "1");
-    return url.href;
-  }
-
-  function renderOverlaySettings() {
-    if (overlaySettingsModal.hidden) return;
-    const overlay = state.overlaySettings;
-    const profile = activeProfile();
-    if (!state.editing || !state.vosu || !overlay || overlay.url || !profile || !profile.overlays.includes(overlay)) {
-      closeOverlaySettings(false);
+    if (!overlay || overlay.url) return;
+    if (!state.vosu) {
+      const message = { type: "open-settings", counter_id: overlay.counter_id };
+      ipc(message);
       return;
     }
-    const { active, profiles } = state.vosu;
-    const pin = overlay.vosu_profile || "";
+    closeAdvancedModal(false);
+    closeProfileMenu(); closeProfileCreator(); closeProfileDeleteConfirm();
+    state.overlaySettings = overlay;
+    nativeSettings = { schema: [], values: {}, original: {}, dirty: false, busy: false, pending: null };
+    overlaySettingsModal.hidden = false;
+    $("overlay-settings-search").value = "";
+    $("overlay-settings-inline").hidden = true;
+    $("overlay-settings-menu").hidden = true;
+    overlaySettingsProfiles.hidden = true;
+    delete overlaySettingsProfiles.dataset.signature;
+    renderOverlaySettings();
+    loadNativeSettings();
+    $("overlay-settings-profile").focus();
+  }
+  function nativeDiscard(action) {
+    if (!nativeSettings.dirty) { action(); return; }
+    const inline = $("overlay-settings-inline");
+    inline.hidden = false;
+    inline.replaceChildren(document.createTextNode("Discard unsaved changes? "),
+      nativeButton("Discard", () => { inline.hidden = true; action(); }, ""),
+      nativeButton("Keep editing", () => { inline.hidden = true; }, ""));
+  }
+  function renderOverlaySettings() {
+    if (overlaySettingsModal.hidden || !nativeSettings) return;
+    const overlay = state.overlaySettings;
+    const profile = activeProfile();
+    if (!state.editing || !state.vosu || !overlay || !profile || !profile.overlays.includes(overlay)) { closeOverlaySettings(false); return; }
     $("overlay-settings-title").textContent = `${overlayDetails(overlay).name} settings`;
-    $("overlay-settings-meta").textContent = `vosu overlay ${overlay.counter_id}`;
-    const options = [["", `Active profile (${active})`], ...profiles.map((name) => [name, name])];
-    if (pin && !profiles.includes(pin)) options.push([pin, `${pin} (missing)`]);
-    // Rebuilding on every render would drop keyboard focus from the choice in use.
+    const pin = overlay.vosu_profile || "";
+    const profileLabel = (name) => name === state.vosu.active && name !== "default" ? `${name} (default)` : name;
+    $("overlay-settings-profile").textContent = pin ? `${profileLabel(pin)}${state.vosu.profiles.includes(pin) ? "" : " (missing)"}` : `Default profile (${state.vosu.active})`;
+    const options = [["", `Default profile (${state.vosu.active})`], ...state.vosu.profiles.map((name) => [name, profileLabel(name)])];
+    if (pin && !state.vosu.profiles.includes(pin)) options.push([pin, `${pin} (missing)`]);
     const signature = JSON.stringify([options, pin]);
-    if (overlaySettingsProfiles._vosulaySignature !== signature) {
-      overlaySettingsProfiles._vosulaySignature = signature;
-      const focused = overlaySettingsProfiles.contains(document.activeElement) ? document.activeElement.dataset.profile : null;
-      overlaySettingsProfiles.replaceChildren(...options.map(([value, label]) => {
-        const button = makeElement("button", value && !profiles.includes(value) ? "missing" : "", label);
-        button.type = "button";
-        button.setAttribute("role", "radio");
-        button.setAttribute("aria-checked", String(value === pin));
-        button.title = value ? `Always use vosu profile ${value}` : "Follow the profile active in vosu";
-        button.dataset.profile = value;
+    if (overlaySettingsProfiles.dataset.signature !== signature) {
+      overlaySettingsProfiles.dataset.signature = signature;
+      overlaySettingsProfiles.replaceChildren(...options.map(([name, label]) => {
+        const button = nativeButton(label, () => {
+          overlaySettingsProfiles.hidden = true;
+          $("overlay-settings-profile").setAttribute("aria-expanded", "false");
+          nativeDiscard(() => { pinOverlay(overlay, name); loadNativeSettings(); });
+        });
+        button.setAttribute("role", "option");
+        button.setAttribute("aria-selected", String(name === pin));
         return button;
       }));
-      if (focused !== null) {
-        const restored = [...overlaySettingsProfiles.children].find((button) => button.dataset.profile === focused);
-        if (restored) restored.focus();
+    }
+    updateNativeDirty();
+  }
+  function nativeChoice(options, value, change) {
+    const wrapper = makeElement("div", "native-choice");
+    const menu = makeElement("div", "toolbar-menu");
+    menu.hidden = true; menu.setAttribute("role", "listbox");
+    const button = nativeButton(String(value), () => { menu.hidden = !menu.hidden; button.setAttribute("aria-expanded", String(!menu.hidden)); }, "");
+    button.setAttribute("aria-haspopup", "listbox"); button.setAttribute("aria-expanded", "false");
+    for (const option of options) {
+      const item = nativeButton(String(option), () => { button.textContent = String(option); menu.hidden = true; button.setAttribute("aria-expanded", "false"); change(option); });
+      item.setAttribute("role", "option"); menu.append(item);
+    }
+    wrapper.append(button, menu); return wrapper;
+  }
+  function nativeInput(type, value, change) {
+    const input = document.createElement(type === "textarea" ? "textarea" : "input");
+    if (type !== "textarea") input.type = type;
+    if (type === "checkbox") input.checked = Boolean(value); else input.value = value ?? "";
+    if (type === "number") input.step = "any";
+    input.addEventListener("input", () => change(type === "checkbox" ? input.checked : type === "number" ? (input.value === "" ? "" : Number(input.value)) : input.value));
+    return input;
+  }
+  function nativeCommandValues(setting, configured) {
+    const defaults = Array.isArray(setting.value) ? nativeClone(setting.value) : [];
+    const fieldDefaults = Object.fromEntries((setting.options || []).map((option) => [option.name, nativeClone(option.value ?? (option.type === "checkbox" ? false : option.type === "number" ? 0 : ""))]));
+    const complete = (rows) => rows.map((row) => ({ ...nativeClone(fieldDefaults), ...row }));
+    if (!Array.isArray(configured)) return complete(defaults);
+    if (!setting.uniqueCheck) return complete(nativeClone(configured));
+    const key = setting.uniqueCheck;
+    const merged = defaults.map((row) => ({ ...row, ...(configured.find((item) => item[key] === row[key]) || {}) }));
+    for (const row of configured) if (!merged.some((item) => item[key] === row[key])) merged.push(nativeClone(row));
+    return complete(merged);
+  }
+  function nativeControl(setting, value, change) {
+    const type = setting.type;
+    if (type === "options") return nativeChoice(setting.options || [], value, change);
+    if (type === "button") return nativeButton(setting.title || "Open link", () => ipc({ ...settingsTarget("vosu-settings-link"), unique_id: setting.uniqueID }), "");
+    if (type === "color") {
+      const group = makeElement("div", "native-colour"), swatch = makeElement("span", "colour-swatch"), sliders = [];
+      const sync = (next) => { swatch.style.backgroundColor = next; sliders.forEach((slider, index) => { slider.value = parseInt(next.slice(1 + index * 2, 3 + index * 2), 16); }); };
+      const hex = nativeInput("text", value, (next) => { change(next); if (/^#[0-9a-f]{6}$/i.test(next)) sync(next); });
+      hex.setAttribute("aria-label", `${setting.title || setting.uniqueID} hex`);
+      group.append(swatch, hex);
+      ["R", "G", "B"].forEach((name) => {
+        const label = makeElement("label", "", name);
+        const slider = nativeInput("range", 0, () => {
+          const next = "#" + sliders.map((item) => Number(item.value).toString(16).padStart(2, "0")).join("");
+          hex.value = next; swatch.style.backgroundColor = next; change(next);
+        });
+        slider.min = "0"; slider.max = "255"; slider.setAttribute("aria-label", `${setting.title || setting.uniqueID} ${name}`);
+        sliders.push(slider); label.append(slider); group.append(label);
+      });
+      sync(/^#[0-9a-f]{6}$/i.test(value) ? value : "#000000");
+      return group;
+    }
+    if (type === "commands") {
+      const group = makeElement("div", "native-commands"), list = makeElement("div"), rows = value;
+      function renderRows() {
+        list.replaceChildren();
+        rows.forEach((row, index) => {
+          const element = makeElement("div", "native-command");
+          for (const option of setting.options || []) {
+            const label = makeElement("label", "", option.title || option.name);
+            const control = nativeControl({ ...option, uniqueID: option.name, options: option.values }, row[option.name] ?? option.value, (next) => { row[option.name] = next; change(rows); });
+            const input = control.matches("input,textarea") ? control : control.querySelector("button");
+            if (input) input.setAttribute("aria-label", `${option.title || option.name} ${index + 1}`);
+            label.append(control); element.append(label);
+          }
+          element.append(nativeButton("Remove command", () => { rows.splice(index, 1); renderRows(); change(rows); }, "quiet-button")); list.append(element);
+        });
+      }
+      renderRows();
+      group.append(list, nativeButton("Add command", () => {
+        rows.push(Object.fromEntries((setting.options || []).map((option) => [option.name, nativeClone(option.value)])));
+        renderRows(); change(rows);
+      }, ""));
+      return group;
+    }
+    return nativeInput(["text", "number", "checkbox", "textarea", "password"].includes(type) ? type : "text", value, change);
+  }
+  function buildNativeSettings() {
+    const content = $("overlay-settings-content"), nav = $("overlay-settings-nav");
+    content.replaceChildren(); nav.replaceChildren();
+    let section = null, index = 0;
+    function addSection(title, header) {
+      section = makeElement("section", "settings-section");
+      section.id = `native-settings-section-${index++}`; section.dataset.search = title.toLowerCase(); section.tabIndex = -1;
+      if (title) section.append(makeElement("h3", "", title));
+      content.append(section);
+      if (header) {
+        const target = section;
+        const button = nativeButton(title, () => { content.scrollTo({ top: target.offsetTop - content.offsetTop, behavior: "smooth" }); target.focus({ preventScroll: true }); }, "");
+        button.dataset.section = section.id; nav.append(button);
       }
     }
-    overlaySettingsNote.textContent = !pin
-      ? `Follows the profile active in vosu (${active}).`
-      : profiles.includes(pin)
-        ? `Pinned to ${pin}; switching vosu's active profile does not change it.`
-        : `vosu has no profile ${pin}, so this placement uses the profile that was active in vosu when it loaded. Pin it again to choose one.`;
-    const source = overlaySettingsSource(overlay, profiles);
-    if (overlaySettingsFrame.getAttribute("src") !== source) overlaySettingsFrame.setAttribute("src", source);
+    for (const setting of nativeSettings.schema) {
+      if (setting.type === "header") { addSection(setting.title || setting.uniqueID, true); continue; }
+      if (!section) addSection("", false);
+      const field = makeElement("div", "native-setting"); field.dataset.settingId = setting.uniqueID;
+      field.dataset.search = `${setting.title || ""} ${setting.description || ""} ${setting.uniqueID}`.toLowerCase();
+      const label = makeElement("label", "", setting.title || setting.uniqueID); field.append(label);
+      if (setting.description) field.append(makeElement("small", "", setting.description));
+      const control = nativeControl(setting, nativeSettings.values[setting.uniqueID], (value) => { nativeSettings.values[setting.uniqueID] = value; updateNativeDirty(); });
+      const input = control.matches("input,textarea") ? control : control.querySelector("input,textarea,button");
+      if (input) { input.id = `native-setting-${setting.uniqueID}`; label.htmlFor = input.id; }
+      field.append(control); section.append(field);
+    }
+    if (!nativeSettings.schema.length) content.textContent = "This overlay has no settings.";
+    filterNativeSettings(); updateNativeDirty();
+    content.dispatchEvent(new Event("scroll"));
+  }
+  function filterNativeSettings() {
+    const query = $("overlay-settings-search").value.trim().toLowerCase();
+    for (const section of $("overlay-settings-content").querySelectorAll(".settings-section")) {
+      const sectionMatch = Boolean(query) && section.dataset.search.includes(query);
+      let visible = false;
+      for (const field of section.querySelectorAll(".native-setting")) { field.hidden = Boolean(query) && !sectionMatch && !field.dataset.search.includes(query); visible ||= !field.hidden; }
+      section.hidden = !visible;
+      const button = $("overlay-settings-nav").querySelector(`[data-section="${section.id}"]`);
+      if (button) button.hidden = section.hidden;
+    }
+    $("overlay-settings-nav").hidden = !$("overlay-settings-nav").querySelector("button:not([hidden])");
+  }
+  function nativeProfileAction(action) {
+    $("overlay-settings-menu").hidden = true; $("overlay-settings-more").setAttribute("aria-expanded", "false");
+    if (action === "dashboard") { ipc(settingsTarget("open-settings")); return; }
+    nativeDiscard(() => {
+      const current = state.overlaySettings.vosu_profile && state.vosu.profiles.includes(state.overlaySettings.vosu_profile) ? state.overlaySettings.vosu_profile : state.vosu.active;
+      const inline = $("overlay-settings-inline");
+      if (action === "activate") { nativeRequest("vosu-profile-action", { action, name: current }); return; }
+      inline.hidden = false;
+      const cancel = nativeButton("Cancel", () => { inline.hidden = true; }, "");
+      if (action === "delete") {
+        inline.replaceChildren(document.createTextNode(`Delete profile ${current}? `), nativeButton("Delete profile", () => { inline.hidden = true; nativeRequest("vosu-profile-action", { action, name: current }); }, "danger-button"), cancel);
+      } else {
+        const input = nativeInput("text", action === "rename" ? current : "", () => {}); input.setAttribute("aria-label", "Profile name"); input.maxLength = 48;
+        const submit = () => {
+          const name = input.value.trim();
+          if (!VOSU_PROFILE_NAME.test(name)) { nativeError("Use 1–48 letters, numbers, underscores or hyphens."); return; }
+          inline.hidden = true;
+          nativeRequest("vosu-profile-action", action === "rename" ? { action, name: current, target: name } : { action: "create", name, ...(action === "copy" ? { copy_from: current } : {}) });
+        };
+        input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); submit(); } });
+        inline.replaceChildren(document.createTextNode(action === "copy" ? `Copy ${current} as ` : `${action === "rename" ? "Rename profile" : "Create profile"} `), input, nativeButton(action === "copy" ? "Copy" : action === "rename" ? "Rename" : "Create", submit, ""), cancel); input.focus();
+      }
+    });
+  }
+  function receiveNativeSettings(envelope) {
+    if (!nativeSettings || !nativeSettings.pending || envelope.request_id !== nativeSettings.pending.request_id) return;
+    const pending = nativeSettings.pending; nativeSettings.pending = null; nativeSettings.busy = false;
+    if (envelope.type === "vosu-settings-error") {
+      if (typeof envelope.read_only === "string" && envelope.read_only) {
+        applyVosuSettings({ ...state.vosu, writable: false, reason: envelope.read_only });
+        $("overlay-settings-inline").hidden = true;
+        nativeError();
+        updateNativeDirty();
+        return;
+      }
+      nativeError(envelope.message || "Could not update vosu settings.");
+      if (pending.type === "vosu-settings-load") {
+        const retry = nativeButton("Retry loading settings", loadNativeSettings, "");
+        retry.dataset.readonlyAllowed = "";
+        $("overlay-settings-content").replaceChildren(retry);
+      }
+      updateNativeDirty(); return;
+    }
+    if (envelope.registry) {
+      const registry = parseVosuSettings({ ...envelope.registry, writable: state.vosu.writable, reason: state.vosu.reason });
+      if (registry) applyVosuSettings(registry);
+    }
+    if (envelope.type === "vosu-settings") {
+      nativeSettings.schema = Array.isArray(envelope.settings) ? envelope.settings : []; nativeSettings.values = {};
+      for (const setting of nativeSettings.schema) if (setting.type !== "header") {
+        const value = envelope.values && Object.hasOwn(envelope.values, setting.uniqueID) ? envelope.values[setting.uniqueID] : setting.value;
+        nativeSettings.values[setting.uniqueID] = setting.type === "commands" ? nativeCommandValues(setting, value) : nativeClone(value);
+      }
+      nativeSettings.original = nativeClone(nativeSettings.values); buildNativeSettings();
+    } else if (envelope.type === "vosu-settings-saved") {
+      nativeSettings.original = nativeClone(nativeSettings.values); nativeSettings.saved = true; updateNativeDirty();
+    } else if (envelope.type === "vosu-profiles") {
+      if (pending.action === "create") pinOverlay(state.overlaySettings, pending.name);
+      else if (pending.action === "rename") pinOverlay(state.overlaySettings, pending.target);
+      else if (pending.action === "delete") pinOverlay(state.overlaySettings, "");
+      loadNativeSettings();
+    }
+    renderOverlaySettings(); requestRender("inspector");
   }
 
   function pinOverlay(overlay, value) {
@@ -1889,6 +2260,7 @@
       state.interacting = false;
       closeUrlModal();
       closeSettingsModal(false);
+      closeAdvancedModal(false);
       closeProfileMenu();
       closeProfileMoreMenu();
       closeProfileCreator();
@@ -2591,7 +2963,11 @@
     }
   }
 
-  for (const [name, input] of Object.entries(fields)) {
+  for (const [name, inputs] of Object.entries(fields)) {
+    for (const input of inputs) bindInspectorNumber(name, input);
+  }
+
+  function bindInspectorNumber(name, input) {
     input.addEventListener("focus", () => {
       beginInspectorEdit();
       if (name !== "left" && name !== "top") return;
@@ -2612,6 +2988,7 @@
         const root = overlayRoots.get(overlay);
         if (root) applyOverlayStyle(root, overlay);
         commitInspectorEdit();
+        renderInspectorNumbers(overlay, [name]);
         updatePanelAvoidance();
         return;
       }
@@ -2643,7 +3020,7 @@
       // A field still being typed in would skip this step's re-render and later
       // reapply its stale value on blur, so it commits (as its own undo step) first.
       const active = document.activeElement;
-      if (active instanceof HTMLElement && inspector.contains(active)) active.blur();
+      if (active instanceof HTMLElement && (inspector.contains(active) || advancedModal.contains(active))) active.blur();
       // Unfocused, each notch commits; one field's notches fold into one undo step.
       const before = historySnapshot();
       step();
@@ -2773,6 +3150,7 @@
 
   function openSettingsModal() {
     if (!state.config) return;
+    closeAdvancedModal(false);
     closeUrlModal(false);
     closeProfileMenu();
     closeProfileCreator();
@@ -3070,7 +3448,10 @@
     }
   });
 
-  $("remove").addEventListener("click", removeSelected);
+  $("remove").addEventListener("click", () => {
+    advancedRemoveConfirm.hidden = false;
+    $("advanced-remove-cancel").focus();
+  });
   $("reset").addEventListener("click", () => {
     const overlay = selectedOverlay();
     if (!overlay) return;
@@ -3095,44 +3476,78 @@
   });
   addUrl.addEventListener("click", openUrlModal);
   urlCancel.addEventListener("click", () => closeUrlModal());
-  $("overlay-settings-close").addEventListener("click", () => closeOverlaySettings());
-  $("overlay-settings-done").addEventListener("click", () => closeOverlaySettings());
-  $("overlay-settings-reload").addEventListener("click", requestCatalogRefresh);
-  $("overlay-settings-browser").addEventListener("click", () => {
-    const overlay = state.overlaySettings;
-    if (!overlay || !state.vosu) return;
-    const message = { type: "open-settings", counter_id: overlay.counter_id };
-    if (overlay.vosu_profile && state.vosu.profiles.includes(overlay.vosu_profile)) message.profile = overlay.vosu_profile;
-    ipc(message);
+  $("overlay-settings-cancel").addEventListener("click", () => closeOverlaySettings());
+  $("overlay-settings-retry").addEventListener("click", requestCatalogRefresh);
+  $("overlay-settings-search").addEventListener("input", filterNativeSettings);
+  $("overlay-settings-profile").addEventListener("click", () => {
+    overlaySettingsProfiles.hidden = !overlaySettingsProfiles.hidden;
+    $("overlay-settings-profile").setAttribute("aria-expanded", String(!overlaySettingsProfiles.hidden));
+    $("overlay-settings-menu").hidden = true;
   });
-  overlaySettingsProfiles.addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-profile]");
-    if (button) pinOverlay(state.overlaySettings, button.dataset.profile);
+  $("overlay-settings-more").addEventListener("click", () => {
+    const menu = $("overlay-settings-menu");
+    menu.hidden = !menu.hidden;
+    $("overlay-settings-more").setAttribute("aria-expanded", String(!menu.hidden));
+    overlaySettingsProfiles.hidden = true;
+    const current = state.vosu.profiles.includes(state.overlaySettings.vosu_profile) ? state.overlaySettings.vosu_profile : state.vosu.active;
+    menu.replaceChildren(...[["create", "Create profile…"], ["copy", "Copy profile…"], ["rename", "Rename…"], ["delete", "Delete…"], ["activate", "Set as default"]].map(([action, label]) => {
+      const button = nativeButton(label, () => nativeProfileAction(action));
+      button.setAttribute("role", "menuitem");
+      button.dataset.action = action;
+      button.dataset.protected = String(current === "default" && (action === "rename" || action === "delete"));
+      button.disabled = !state.vosu.writable || button.dataset.protected === "true";
+      button.title = !state.vosu.writable ? state.vosu.reason : "";
+      return button;
+    }), Object.assign(makeElement("div", "menu-separator"), { role: "separator" }), nativeButton("Open in vosu dashboard", () => nativeProfileAction("dashboard")));
   });
-  // vosu's embedded page reports its registry after loading, each profile action
-  // and each save. Only that frame, from the settings page's origin (vosu's
-  // dashboard origin where vosu has one, never its overlay origin), may update it.
-  window.addEventListener("message", (event) => {
-    const data = event.data;
-    if (overlaySettingsModal.hidden || !state.vosu || event.source !== overlaySettingsFrame.contentWindow
-        || !data || typeof data !== "object" || data.type !== "vosu-profiles") return;
-    let origin;
+  $("overlay-settings-save").addEventListener("click", () => {
+    if (!nativeSettings || nativeSettings.busy || !state.vosu.writable) return;
     try {
-      origin = new URL(state.vosu.settings_url).origin;
-    } catch (_) {
-      return;
-    }
-    const registry = event.origin === origin
-      ? parseVosuSettings({ settings_url: state.vosu.settings_url, active: data.active, profiles: data.profiles })
-      : null;
-    if (!registry) return;
-    applyVosuSettings(registry);
-    requestRender("inspector");
+      for (const setting of nativeSettings.schema) {
+        const value = nativeSettings.values[setting.uniqueID];
+        if (setting.type === "color" && !/^#[0-9a-f]{6}$/i.test(value)) throw new Error(`${setting.title || setting.uniqueID} needs a colour in #rrggbb format.`);
+        if (setting.type === "commands") for (const row of value) {
+          for (const option of setting.options || []) if (option.type === "number" && (typeof row[option.name] !== "number" || !Number.isFinite(row[option.name]))) throw new Error(`${option.title || option.name} needs a number.`);
+        }
+        if (setting.type === "number" && (typeof value !== "number" || !Number.isFinite(value))) throw new Error(`${setting.title || setting.uniqueID} needs a number.`);
+        if (setting.type === "commands" && setting.uniqueCheck) {
+          const seen = new Set();
+          for (const row of value) {
+            const key = row[setting.uniqueCheck];
+            if (key === undefined || String(key).trim() === "") throw new Error(`Every ${setting.title || setting.uniqueID} command needs ${setting.uniqueCheck}.`);
+            if (seen.has(String(key))) throw new Error(`${setting.title || setting.uniqueID} contains a duplicate ${setting.uniqueCheck}.`);
+            seen.add(String(key));
+          }
+        }
+      }
+      const values = Object.entries(nativeSettings.values).filter(([id, value]) => !nativeEqual(value, nativeSettings.original[id])).map(([uniqueID, value]) => ({ uniqueID, value }));
+      if (values.length) nativeRequest("vosu-settings-save", { values });
+    } catch (error) { nativeError(error.message); }
   });
-  // Fallback for a page that sends no registry: focus returns from vosu's page
-  // when the user goes back to the editor's own controls.
-  window.addEventListener("focus", () => {
-    if (!overlaySettingsModal.hidden) requestCatalogRefresh();
+  $("overlay-settings-content").addEventListener("scroll", () => {
+    const content = $("overlay-settings-content");
+    const sections = [...content.querySelectorAll(".settings-section:not([hidden])")];
+    const current = sections.filter((section) => section.offsetTop - content.offsetTop <= content.scrollTop + 40).pop() || sections[0];
+    for (const button of $("overlay-settings-nav").children) button.setAttribute("aria-current", String(Boolean(current && button.dataset.section === current.id)));
+  });
+  overlaySettingsModal.addEventListener("pointerdown", (event) => {
+    if (!event.target.closest(".native-picker")) {
+      overlaySettingsProfiles.hidden = true; $("overlay-settings-menu").hidden = true;
+      $("overlay-settings-profile").setAttribute("aria-expanded", "false");
+      $("overlay-settings-more").setAttribute("aria-expanded", "false");
+    }
+  });
+  overlaySettingsModal.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      const menu = [...overlaySettingsModal.querySelectorAll(".toolbar-menu:not([hidden])")].pop();
+      if (menu) { event.preventDefault(); event.stopPropagation(); menu.hidden = true; return; }
+      if (!$("overlay-settings-inline").hidden) { event.preventDefault(); event.stopPropagation(); $("overlay-settings-inline").hidden = true; return; }
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...overlaySettingsModal.querySelectorAll("button,input,textarea")].filter((element) => !element.disabled && element.getClientRects().length);
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });
   urlForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -3250,9 +3665,9 @@
     }, true);
   }
 
-  function menuOrModalOpen() {
-    return !settingsModal.hidden || !urlModal.hidden || !overlaySettingsModal.hidden || !profileMenu.hidden || !profileMoreMenu.hidden
-      || !profileCreate.hidden || !profileDeleteConfirm.hidden || state.inspectorPopup;
+  function menuOrModalOpen(allowInspector = false) {
+    return !settingsModal.hidden || !urlModal.hidden || !overlaySettingsModal.hidden || !advancedModal.hidden || !profileMenu.hidden || !profileMoreMenu.hidden
+      || !profileCreate.hidden || !profileDeleteConfirm.hidden || (!allowInspector && state.inspectorPopup);
   }
 
   function runHotkeyAction(action) {
@@ -3318,7 +3733,7 @@
     }
 
     if (event.key === "Delete") {
-      if (event.repeat || menuOrModalOpen() || editable || !state.editing || !selectedOverlay()) return;
+      if (event.repeat || menuOrModalOpen(true) || editable || !state.editing || !selectedOverlay()) return;
       removeSelected();
       event.preventDefault();
       return;
@@ -3329,7 +3744,10 @@
       if (menuOrModalOpen() || state.editing) event.preventDefault();
       return;
     }
-    if (!settingsModal.hidden) {
+    if (!advancedModal.hidden) {
+      event.preventDefault();
+      closeAdvancedModal();
+    } else if (!settingsModal.hidden) {
       event.preventDefault();
       closeSettingsModal();
     } else if (!urlModal.hidden) {
@@ -3457,6 +3875,8 @@
         state.retryRequired = false;
         flushPendingSave();
         settleFlushRequests(null);
+      } else if (["vosu-settings", "vosu-settings-saved", "vosu-profiles", "vosu-settings-error"].includes(envelope.type)) {
+        receiveNativeSettings(envelope);
       } else if (envelope.type === "counters") {
         const value = envelope.counters !== undefined ? envelope.counters : envelope.payload;
         state.counters = Array.isArray(value) ? value.filter((counter) => counter && typeof counter.id === "string").map((counter) => ({

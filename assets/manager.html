@@ -98,36 +98,67 @@
     <div id="selection-box" hidden aria-hidden="true"></div>
 
     <aside id="inspector" class="inspector" aria-label="Counter properties" hidden>
-      <div class="panel-heading">
-        <div class="truncate"><strong id="selection-name">Counter</strong><small id="selection-meta"></small></div>
-        <button id="remove" class="icon-button danger" title="Remove counter" aria-label="Remove counter">×</button>
+      <div class="panel-heading inspector-heading">
+        <strong id="selection-name" class="truncate">Counter</strong>
+        <div class="inspector-icons">
+          <button id="refresh-overlay" class="icon-button" type="button" title="Refresh overlay" aria-label="Refresh overlay">↻</button>
+          <button id="inspector-close" class="icon-button" type="button" title="Close properties" aria-label="Close properties">×</button>
+        </div>
       </div>
-      <div class="source-fields">
-        <label>Title<input id="field-name" type="text" autocomplete="off"></label>
-        <label id="field-url-label">URL<input id="field-url" type="text" inputmode="url" autocomplete="url" spellcheck="false"></label>
-      </div>
-      <label class="enabled-control"><input id="field-enabled" type="checkbox"> Enabled</label>
-      <div class="field-grid">
+      <div class="field-grid inspector-basics">
         <label>X<input id="field-left" type="number" step="1" aria-describedby="field-left-warning"><small id="field-left-warning" class="field-warning" hidden></small></label>
         <label>Y<input id="field-top" type="number" step="1" aria-describedby="field-top-warning"><small id="field-top-warning" class="field-warning" hidden></small></label>
-        <label>Width<input id="field-width" type="number" min="10" step="1" aria-describedby="field-width-warning"><small id="field-width-warning" class="field-warning" hidden></small></label>
-        <label>Height<input id="field-height" type="number" min="10" step="1" aria-describedby="field-height-warning"><small id="field-height-warning" class="field-warning" hidden></small></label>
+        <label>W<input id="field-width" type="number" min="10" step="1" aria-label="Width" aria-describedby="field-width-warning"><small id="field-width-warning" class="field-warning" hidden></small></label>
+        <label>H<input id="field-height" type="number" min="10" step="1" aria-label="Height" aria-describedby="field-height-warning"><small id="field-height-warning" class="field-warning" hidden></small></label>
         <label>Scale<input id="field-scale" type="number" min="0.1" step="0.05" aria-describedby="field-scale-warning"><small id="field-scale-warning" class="field-warning" hidden></small></label>
         <label>Layer<input id="field-z" type="number" min="0" max="999" step="1" aria-describedby="field-z-warning"><small id="field-z-warning" class="field-warning" hidden></small></label>
-        <label>Opacity %<input id="field-opacity" type="number" min="0" max="100" step="1" aria-describedby="field-opacity-warning"><small id="field-opacity-warning" class="field-warning" hidden></small></label>
-        <label>Rotation<input id="field-rotation" type="number" min="-180" max="180" step="1" aria-describedby="field-rotation-warning"><small id="field-rotation-warning" class="field-warning" hidden></small></label>
-        <label>Crop left<input id="field-crop-left" type="number" min="0" step="1" aria-describedby="field-crop-left-warning"><small id="field-crop-left-warning" class="field-warning" hidden></small></label>
-        <label>Crop right<input id="field-crop-right" type="number" min="0" step="1" aria-describedby="field-crop-right-warning"><small id="field-crop-right-warning" class="field-warning" hidden></small></label>
-        <label>Crop top<input id="field-crop-top" type="number" min="0" step="1" aria-describedby="field-crop-top-warning"><small id="field-crop-top-warning" class="field-warning" hidden></small></label>
-        <label>Crop bottom<input id="field-crop-bottom" type="number" min="0" step="1" aria-describedby="field-crop-bottom-warning"><small id="field-crop-bottom-warning" class="field-warning" hidden></small></label>
+        <div class="inspector-divider" role="separator"></div>
+        <button id="settings" class="quiet-button" type="button">⚙ Settings</button>
+        <button id="open-advanced" class="quiet-button" type="button">Advanced</button>
       </div>
-      <div class="inspector-actions">
-        <button id="reset" class="quiet-button" title="Restore the counter's size, scale 1 and no crop">Reset size</button>
-        <button id="refresh-overlay" class="quiet-button" type="button">Refresh</button>
-        <button id="settings" class="quiet-button">Settings</button>
-      </div>
-      <small class="hint">Drag moves · drag an edge or handle to resize, Ctrl+drag to scale, Shift+drag to crop · wheel over a field changes it · right-click overlap cycles settings<span id="interaction-hint"> · Ctrl+I interacts</span></small>
     </aside>
+
+    <div id="advanced-modal" class="modal-backdrop" hidden>
+      <section class="settings-dialog advanced-dialog" role="dialog" aria-modal="true" aria-labelledby="advanced-title">
+        <div class="settings-dialog-header"><strong id="advanced-title">Advanced placement</strong><small id="advanced-overlay-name" class="truncate"></small></div>
+        <div class="settings-dialog-content">
+          <div class="source-fields">
+            <label>Title<input id="field-name" type="text" autocomplete="off"></label>
+            <label id="field-url-label">URL<input id="field-url" type="text" inputmode="url" autocomplete="url" spellcheck="false" aria-describedby="field-url-warning"><small id="field-url-warning" class="field-warning" hidden></small></label>
+          </div>
+          <label class="advanced-enabled"><input id="field-enabled" type="checkbox">Enabled</label>
+          <div class="field-grid">
+            <label>X<input id="advanced-field-left" type="number" step="1" aria-describedby="advanced-field-left-warning"><small id="advanced-field-left-warning" class="field-warning" hidden></small></label>
+            <label>Y<input id="advanced-field-top" type="number" step="1" aria-describedby="advanced-field-top-warning"><small id="advanced-field-top-warning" class="field-warning" hidden></small></label>
+            <label>W<input id="advanced-field-width" type="number" min="10" step="1" aria-label="Width" aria-describedby="advanced-field-width-warning"><small id="advanced-field-width-warning" class="field-warning" hidden></small></label>
+            <label>H<input id="advanced-field-height" type="number" min="10" step="1" aria-label="Height" aria-describedby="advanced-field-height-warning"><small id="advanced-field-height-warning" class="field-warning" hidden></small></label>
+            <label>Scale<input id="advanced-field-scale" type="number" min="0.1" step="0.05" aria-describedby="advanced-field-scale-warning"><small id="advanced-field-scale-warning" class="field-warning" hidden></small></label>
+            <label>Layer<input id="advanced-field-z" type="number" min="0" max="999" step="1" aria-describedby="advanced-field-z-warning"><small id="advanced-field-z-warning" class="field-warning" hidden></small></label>
+            <label>Opacity %<input id="field-opacity" type="number" min="0" max="100" step="1" aria-describedby="field-opacity-warning"><small id="field-opacity-warning" class="field-warning" hidden></small></label>
+            <label>Rotation<input id="field-rotation" type="number" min="-180" max="180" step="1" aria-describedby="field-rotation-warning"><small id="field-rotation-warning" class="field-warning" hidden></small></label>
+          </div>
+          <fieldset class="advanced-crops"><legend>Crop</legend><div class="field-grid">
+            <label>Left<input id="field-crop-left" type="number" min="0" step="1" aria-describedby="field-crop-left-warning"><small id="field-crop-left-warning" class="field-warning" hidden></small></label>
+            <label>Right<input id="field-crop-right" type="number" min="0" step="1" aria-describedby="field-crop-right-warning"><small id="field-crop-right-warning" class="field-warning" hidden></small></label>
+            <label>Top<input id="field-crop-top" type="number" min="0" step="1" aria-describedby="field-crop-top-warning"><small id="field-crop-top-warning" class="field-warning" hidden></small></label>
+            <label>Bottom<input id="field-crop-bottom" type="number" min="0" step="1" aria-describedby="field-crop-bottom-warning"><small id="field-crop-bottom-warning" class="field-warning" hidden></small></label>
+          </div></fieldset>
+          <div id="advanced-pin-row" class="advanced-pin-row" hidden>
+            <span>vosu profile</span>
+            <div class="advanced-picker">
+              <button id="advanced-pin" type="button" aria-haspopup="listbox" aria-expanded="false"></button>
+              <div id="advanced-pin-menu" class="toolbar-menu" role="listbox" aria-label="Placement vosu profile" hidden></div>
+            </div>
+          </div>
+          <div class="advanced-actions"><button id="reset" class="quiet-button" type="button" title="Restore the counter's size, scale 1 and no crop">Reset size</button><button id="remove" class="quiet-button danger" type="button">Remove overlay</button></div>
+          <div id="advanced-remove-confirm" class="advanced-remove-confirm" role="group" aria-label="Confirm overlay removal" hidden>
+            <span>Remove this overlay from the profile?</span>
+            <button id="advanced-remove-cancel" type="button">Cancel</button><button id="advanced-remove-accept" class="danger-button" type="button">Remove overlay</button>
+          </div>
+        </div>
+        <div class="settings-dialog-footer"><div class="settings-dialog-actions"><small>Changes save automatically.</small><span class="settings-actions-spacer"></span><button id="advanced-done" class="primary-button" type="button">Done</button></div></div>
+      </section>
+    </div>
     <div id="url-modal" class="modal-backdrop" hidden>
       <form id="url-form" class="url-dialog" role="dialog" aria-modal="true" aria-labelledby="url-dialog-title" novalidate>
         <strong id="url-dialog-title">Add overlay URL</strong>
@@ -143,21 +174,32 @@
     </div>
 
     <div id="overlay-settings-modal" class="modal-backdrop" hidden>
-      <section class="overlay-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="overlay-settings-title">
-        <div class="overlay-settings-header">
-          <div class="truncate"><strong id="overlay-settings-title">Overlay settings</strong><small id="overlay-settings-meta"></small></div>
-          <button id="overlay-settings-close" class="icon-button" type="button" title="Close" aria-label="Close overlay settings">×</button>
-        </div>
+      <section class="settings-dialog native-overlay-dialog" role="dialog" aria-modal="true" aria-labelledby="overlay-settings-title">
+        <div class="settings-dialog-header"><strong id="overlay-settings-title">Overlay settings</strong></div>
         <div class="overlay-settings-pin">
-          <span id="overlay-settings-pin-label">This placement uses</span>
-          <div id="overlay-settings-profiles" class="overlay-settings-profiles" role="radiogroup" aria-labelledby="overlay-settings-pin-label"></div>
-          <button id="overlay-settings-reload" class="icon-button" type="button" title="Reload vosu profiles" aria-label="Reload vosu profiles">↻</button>
+          <span>This placement uses</span>
+          <div class="native-picker">
+            <button id="overlay-settings-profile" type="button" aria-haspopup="listbox" aria-expanded="false"></button>
+            <div id="overlay-settings-profiles" class="toolbar-menu" role="listbox" aria-label="vosu profile" hidden></div>
+          </div>
+          <div class="native-picker">
+            <button id="overlay-settings-more" class="icon-button" type="button" aria-label="Profile actions" aria-haspopup="menu" aria-expanded="false">☰</button>
+            <div id="overlay-settings-menu" class="toolbar-menu" role="menu" hidden></div>
+          </div>
         </div>
-        <iframe id="overlay-settings-frame" class="overlay-settings-frame" title="vosu overlay settings"></iframe>
-        <div class="overlay-settings-footer">
-          <small id="overlay-settings-note"></small>
-          <button id="overlay-settings-browser" class="quiet-button" type="button">Open in browser</button>
-          <button id="overlay-settings-done" class="primary-button" type="button">Done</button>
+        <div id="overlay-settings-inline" class="native-inline" hidden></div>
+        <div class="native-search"><input id="overlay-settings-search" type="search" placeholder="Search settings" aria-label="Search overlay settings"></div>
+        <div id="overlay-settings-error" class="native-error" role="alert" hidden></div>
+        <div id="overlay-settings-readonly" class="native-readonly" role="status" hidden></div>
+        <div class="settings-dialog-body">
+          <nav id="overlay-settings-nav" class="settings-nav" aria-label="Overlay settings sections"></nav>
+          <div id="overlay-settings-content" class="settings-dialog-content"></div>
+        </div>
+        <div class="settings-dialog-footer">
+          <span id="overlay-settings-note" role="status"></span>
+          <button id="overlay-settings-cancel" type="button">Cancel</button>
+          <button id="overlay-settings-save" class="primary-button" type="button" disabled>Save</button>
+          <button id="overlay-settings-retry" class="primary-button" type="button" hidden>Retry</button>
         </div>
       </section>
     </div>

@@ -259,18 +259,43 @@ profile's counters. Interaction, profile, copy/paste, undo/redo, and refresh
 shortcuts are configurable. Interaction also requires Ctrl, Alt, or Meta.
 Text fields keep native undo/redo; normal mode leaves game input alone.
 
-With vosu's overlay settings profiles available, the inspector's **Settings**
-button opens the overlay settings dialog. It embeds vosu's settings editor for
-the counter, where values are edited and profiles created, copied, renamed,
-deleted or activated; changes to vosu's profiles show up in the dialog right
-away. **This placement uses** pins the selected placement to one vosu profile,
-or lets it follow whichever profile is active in vosu; pinned placements show
-the profile after their name. **Open in browser** opens vosu's full settings
-page. With tosu, or a vosu without settings profiles, **Settings** opens the
-counter's settings page in the browser as before. If you rename or delete a
-profile that placements are pinned to, the editor marks those pins as missing
-and reloads the counters, which then use vosu's active profile; refresh
-view-only pages in OBS or a browser yourself.
+The compact inspector has refresh and close controls in its header, position
+and size fields in two columns, then a **Scale / Layer** row and a
+**Settings / Advanced** row. Hover or focus an icon for its label.
+**Advanced** opens the full placement editor: enabled state, title, position,
+size, scale, layer, opacity, rotation, crop, reset size, custom-overlay URL and
+vosu profile pin, plus removal with an inline confirmation. The Delete key also
+removes the selected placement; undo restores it.
+
+When vosu exposes overlay settings profiles, the inspector's **Settings**
+button opens a native editor in vosulay's Settings modal, not an embedded
+dashboard page. Search settings or jump between their sections, edit values,
+and save them to vosu. The **This placement uses** dropdown chooses the settings
+profile and pins the selected placement to it, so its settings remain the same
+when vosu's default profile changes. Choose **Default profile** to follow vosu's
+current default instead. Selecting a named profile does not change that default.
+The menu creates an empty profile, copies, renames, deletes or uses **Set as
+default** to change vosu's default profile; default markers identify that profile
+in the picker and menu. Pins are placement properties and participate in
+vosulay's normal save and undo history. Pinned placements show the profile after
+their name.
+
+Native settings remain available when vosu reports read-only access, including
+when no local write token is available. Values load with disabled inputs; the
+reported reason and **Retry** replace **Save**. Creating, copying, renaming,
+deleting and setting the default profile are disabled, but choosing a settings
+profile for this placement remains available. **Retry** refreshes backend
+capabilities so editing can resume once write access is restored; read-only
+access never silently redirects to a browser.
+
+The menu's explicit **Open in vosu dashboard** action remains available to open
+the dashboard in a browser. With tosu, an older vosu, or any backend that does
+not expose the native settings-profile catalog, the **Settings** action opens
+the counter's settings page in the browser instead. Creating or renaming a
+profile from this menu pins the placement you are editing to it, and deleting
+its profile unpins it. Any other placement pinned to a profile that was renamed
+or deleted, here or elsewhere, is marked missing and reloads with vosu's default
+profile; refresh view-only pages in OBS or a browser yourself.
 
 Copy (`Ctrl+C`) keeps the selected overlays across profile switches; paste
 (`Ctrl+V`) adds them to the active profile at the same position.

@@ -27,9 +27,11 @@ const DISABLED: &str =
 pub trait ManageEditor: Send + Sync {
     /// `{"config": <AppConfig>, "revision": n}`.
     fn state(&self) -> Result<Value>;
-    /// Handles one manager message (saves, native file dialogs, counter settings)
+    /// Handles one manager message (saves, native file dialogs, vosu overlay settings)
     /// and returns the manager envelopes it produced.
     fn message(&self, message: Value) -> Result<Value>;
+    /// The catalog envelope (`counters`, or `error`).
+    fn counters(&self) -> Value;
 }
 
 /// Whether `host` (a request's Host header) names the manage page.
@@ -139,7 +141,7 @@ fn api(
         |error: anyhow::Error| HttpError::new(500, "Internal Server Error", format!("{error:#}\n"));
     let value = match (action, post) {
         ("state", false) => editor.state().map_err(failed)?,
-        ("counters", false) => crate::api::counters_envelope(&backend.upstream),
+        ("counters", false) => editor.counters(),
         ("message", true) => {
             let message: Value = serde_json::from_slice(&request.body)
                 .map_err(|_| HttpError::new(400, "Bad Request", "Request body is not JSON\n"))?;
@@ -205,6 +207,9 @@ mod tests {
         fn message(&self, message: Value) -> Result<Value> {
             self.messages.lock().push(message);
             Ok(json!([{"type": "saved", "revision": 8}]))
+        }
+        fn counters(&self) -> Value {
+            json!({"type": "counters", "counters": [], "vosu": null})
         }
     }
 

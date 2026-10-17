@@ -8,11 +8,16 @@ use url::Url;
 
 use crate::config::valid_vosu_profile;
 
+mod vosu;
+
+pub(crate) use vosu::VosuClient;
+
 const MAX_COUNTER_PAGE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_PROFILES_BYTES: usize = 64 * 1024;
 const MAX_DASHBOARD_BYTES: usize = 4096;
 const MAX_VOSU_PROFILES: usize = 32;
-const FETCH_DEADLINE: Duration = Duration::from_secs(10);
+/// The bound for catalog refreshes that no shutdown drain waits on (the manage page).
+pub(crate) const FETCH_DEADLINE: Duration = Duration::from_secs(10);
 const DEFAULT_WIDTH: f64 = 500.0;
 const DEFAULT_HEIGHT: f64 = 300.0;
 
@@ -30,22 +35,20 @@ pub struct InstalledCounter {
 
 /// vosu's overlay settings profiles. tosu and earlier vosu releases have none.
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct VosuSettings {
-    /// vosu's inline settings editor, which also manages the profiles. It is on vosu's dashboard
-    /// origin when vosu reports one (`/api/dashboard`), otherwise on the backend origin.
-    pub settings_url: Url,
+pub struct VosuRegistry {
     pub active: String,
     pub profiles: Vec<String>,
 }
 
-/// The manager's catalog envelope: the installed counters and, when the backend
-/// offers them, vosu's overlay settings profiles (`vosu`, otherwise `null`).
-pub fn counters_envelope(base_url: &Url) -> Value {
-    counters_envelope_with_timeout(base_url, FETCH_DEADLINE)
-}
-
-/// Both requests share `timeout`, so callers keep one bound per refresh.
-pub(crate) fn counters_envelope_with_timeout(base_url: &Url, timeout: Duration) -> Value {
+/// The manager's catalog envelope: the installed counters and, when the backend offers them,
+/// vosu's overlay settings profiles plus whether vosulay may write vosu's overlay settings or
+/// why not (`vosu`, otherwise `null`). Both requests share `timeout`, so callers keep one bound
+/// per refresh.
+pub(crate) fn counters_envelope(
+    base_url: &Url,
+    timeout: Duration,
+    access: Result<(), String>,
+) -> Value {
     let deadline = Instant::now() + timeout;
     match fetch_installed_counters_with_timeout(base_url, timeout) {
         Ok(counters) => {
@@ -53,30 +56,29 @@ pub(crate) fn counters_envelope_with_timeout(base_url: &Url, timeout: Duration) 
             // A backend without profiles is tosu or an older vosu, not a catalog
             // failure: the editor then keeps its profile-less behaviour.
             let vosu = (!remaining.is_zero())
-                .then(|| fetch_vosu_settings(base_url, remaining).ok())
-                .flatten();
+                .then(|| fetch_vosu_registry(base_url, remaining).ok())
+                .flatten()
+                .map(|registry| {
+                    json!({
+                        "active": registry.active,
+                        "profiles": registry.profiles,
+                        "writable": access.is_ok(),
+                        "reason": access.err(),
+                    })
+                });
             json!({"type": "counters", "counters": counters, "vosu": vosu})
         }
         Err(error) => json!({"type": "error", "message": format!("{error:#}")}),
     }
 }
 
-fn fetch_vosu_settings(base_url: &Url, timeout: Duration) -> Result<VosuSettings> {
-    let deadline = Instant::now() + timeout;
-    let registry = get_json(
+pub(crate) fn fetch_vosu_registry(base_url: &Url, timeout: Duration) -> Result<VosuRegistry> {
+    let body = get_json(
         &base_url.join("/api/counters/profiles")?,
         timeout,
         MAX_PROFILES_BYTES,
     )?;
-    let mut settings = parse_vosu_settings(base_url, &registry)?;
-    let remaining = deadline.saturating_duration_since(Instant::now());
-    if let Some(dashboard) = (!remaining.is_zero())
-        .then(|| dashboard_origin(base_url, remaining))
-        .flatten()
-    {
-        settings.settings_url = dashboard.join("/settings")?;
-    }
-    Ok(settings)
+    parse_vosu_registry(&body)
 }
 
 /// vosu's settings page for the browser: on its dashboard origin when it reports one, otherwise
@@ -117,7 +119,7 @@ fn parse_dashboard_origin(origin: &str) -> Option<Url> {
 }
 
 /// A bounded JSON GET that, like the catalog fetch, never follows redirects.
-fn get_json(endpoint: &Url, timeout: Duration, limit: usize) -> Result<Vec<u8>> {
+pub(crate) fn get_json(endpoint: &Url, timeout: Duration, limit: usize) -> Result<Vec<u8>> {
     let mut response = ureq::get(endpoint.as_str())
         .config()
         .http_status_as_error(false)
@@ -145,7 +147,7 @@ fn get_json(endpoint: &Url, timeout: Duration, limit: usize) -> Result<Vec<u8>> 
     Ok(bytes)
 }
 
-fn parse_vosu_settings(base_url: &Url, body: &[u8]) -> Result<VosuSettings> {
+pub(crate) fn parse_vosu_registry(body: &[u8]) -> Result<VosuRegistry> {
     #[derive(Deserialize)]
     struct Registry {
         active: String,
@@ -161,11 +163,7 @@ fn parse_vosu_settings(base_url: &Url, body: &[u8]) -> Result<VosuSettings> {
             && profiles.contains(&active),
         "invalid vosu profile registry"
     );
-    Ok(VosuSettings {
-        settings_url: base_url.join("/settings")?,
-        active,
-        profiles,
-    })
+    Ok(VosuRegistry { active, profiles })
 }
 
 fn fetch_installed_counters_with_timeout(
@@ -755,37 +753,32 @@ mod tests {
     }
 
     #[test]
-    fn envelope_carries_vosu_profiles_and_their_settings_page() {
-        // vosu before the dashboard split: the settings page is on the backend origin.
+    fn envelope_carries_vosu_profiles_and_write_access() {
         let base = backend_fixture(
             include_str!("../tests/fixtures/backend/vosu-counter-search.html"),
             Some(r#"{"active":"stream","profiles":["default","stream"]}"#),
             None,
         );
-        let envelope = counters_envelope_with_timeout(&base, Duration::from_secs(2));
+        let envelope = counters_envelope(&base, Duration::from_secs(2), Ok(()));
         assert_eq!(envelope["type"], "counters");
         assert_eq!(envelope["counters"].as_array().map(Vec::len), Some(1));
         assert_eq!(
             envelope["vosu"],
-            json!({
-                "settings_url": base.join("/settings").unwrap().as_str(),
-                "active": "stream",
-                "profiles": ["default", "stream"],
-            })
+            json!({"active": "stream", "profiles": ["default", "stream"], "writable": true, "reason": null})
+        );
+        let read_only = counters_envelope(&base, Duration::from_secs(2), Err("why".to_owned()));
+        assert_eq!(
+            read_only["vosu"],
+            json!({"active": "stream", "profiles": ["default", "stream"], "writable": false, "reason": "why"})
         );
     }
 
     #[test]
-    fn settings_page_moves_to_the_dashboard_origin_vosu_reports() {
+    fn browser_settings_page_moves_to_the_dashboard_origin_vosu_reports() {
         let base = backend_fixture(
             include_str!("../tests/fixtures/backend/vosu-counter-search.html"),
             Some(r#"{"active":"default","profiles":["default"]}"#),
             Some(r#"{"origin":"http://127.0.0.1:24152"}"#),
-        );
-        let envelope = counters_envelope_with_timeout(&base, Duration::from_secs(2));
-        assert_eq!(
-            envelope["vosu"]["settings_url"],
-            "http://127.0.0.1:24152/settings"
         );
         assert_eq!(
             settings_page(&base, Duration::from_secs(2))
@@ -822,7 +815,7 @@ mod tests {
             None,
             None,
         );
-        let envelope = counters_envelope_with_timeout(&base, Duration::from_secs(2));
+        let envelope = counters_envelope(&base, Duration::from_secs(2), Ok(()));
         assert_eq!(envelope["type"], "counters");
         assert!(
             envelope["counters"]
@@ -834,7 +827,6 @@ mod tests {
 
     #[test]
     fn profile_registry_must_be_consistent() {
-        let base = Url::parse("http://127.0.0.1:24050/").unwrap();
         for body in [
             r#"{"error":"Unknown route"}"#,
             "<html>not found</html>",
@@ -842,10 +834,7 @@ mod tests {
             r#"{"active":"live","profiles":["live"]}"#,
             r#"{"active":"default","profiles":["default","bad name"]}"#,
         ] {
-            assert!(
-                parse_vosu_settings(&base, body.as_bytes()).is_err(),
-                "{body}"
-            );
+            assert!(parse_vosu_registry(body.as_bytes()).is_err(), "{body}");
         }
     }
 }

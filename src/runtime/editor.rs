@@ -1,13 +1,14 @@
 use super::resources::{ProductResources, read_bounded};
 use crate::{
-    api::counters_envelope_with_timeout,
+    api::VosuClient,
     config::{AppConfig, Profile, save_to_path},
     shell_policy::{overlay_url, profile_filename},
 };
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
+    collections::VecDeque,
     fmt::Write as _,
     io::Write,
     path::{Path, PathBuf},
@@ -54,6 +55,11 @@ pub(super) struct EditorWorker {
     counters: Arc<CounterQueue>,
     counter_tx: Option<CounterSender>,
     counter_thread: Option<JoinHandle<()>>,
+    vosu: Arc<VosuClient>,
+    vosu_tx: Option<SyncSender<Work>>,
+    vosu_thread: Option<JoinHandle<()>>,
+    /// Errors for vosu requests that found the worker's queue full.
+    vosu_busy: RefCell<VecDeque<Reply>>,
     pending: Cell<usize>,
 }
 
@@ -73,6 +79,15 @@ const PAGE_MESSAGES: &[&str] = &[
     "open-settings",
 ];
 
+/// The manager's vosu overlay settings requests. They wait on vosu's HTTP API, so they run beside
+/// the task thread instead of holding up saves.
+const VOSU_MESSAGES: &[&str] = &[
+    "vosu-settings-load",
+    "vosu-settings-save",
+    "vosu-profile-action",
+    "vosu-settings-link",
+];
+
 fn opens_dialog(kind: &str) -> bool {
     matches!(
         kind,
@@ -80,7 +95,20 @@ fn opens_dialog(kind: &str) -> bool {
     )
 }
 
-struct RemoteEditor(TaskSender);
+/// The envelope answering one vosu settings request; a `button` link only answers on failure.
+fn vosu_reply(client: &VosuClient, message: &Value) -> Option<Value> {
+    if message.get("type").and_then(Value::as_str) != Some("vosu-settings-link") {
+        return Some(client.handle(message));
+    }
+    let opened = client
+        .button_link(message)
+        .and_then(|url| open::that_detached(url.as_str()).map_err(Into::into));
+    opened.err().map(
+        |error| json!({"type": "error", "message": format!("Could not open the link: {error:#}")}),
+    )
+}
+
+struct RemoteEditor(TaskSender, Arc<VosuClient>);
 
 impl RemoteEditor {
     fn call(&self, call: RemoteCall, timeout: Option<Duration>) -> Result<Value> {
@@ -107,14 +135,24 @@ impl crate::remote::ManageEditor for RemoteEditor {
     }
     fn message(&self, message: Value) -> Result<Value> {
         let kind = message.get("type").and_then(Value::as_str).unwrap_or("");
+        if VOSU_MESSAGES.contains(&kind) {
+            // Answered on the page's own request thread, so vosu's latency never holds the worker.
+            return Ok(Value::Array(
+                vosu_reply(&self.1, &message).into_iter().collect(),
+            ));
+        }
         let timeout = (!opens_dialog(kind)).then_some(REMOTE_TIMEOUT);
         self.call(RemoteCall::Message(message), timeout)
+    }
+    fn counters(&self) -> Value {
+        self.1.counters_envelope(crate::api::FETCH_DEADLINE)
     }
 }
 
 // At shutdown there can be one active fetch and one coalesced fetch to drain.
 // Two two-second global HTTP deadlines leave headroom in the host's five-second
-// drain; the catalog and vosu profile requests share each deadline.
+// drain; the catalog and vosu profile requests share each deadline. vosu settings
+// requests use the same bound per request.
 const COUNTER_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Default)]
@@ -141,7 +179,7 @@ impl Drop for CounterSender {
     }
 }
 
-fn counter_worker(queue: Arc<CounterQueue>, backend: Url) {
+fn counter_worker(queue: Arc<CounterQueue>, client: Arc<VosuClient>) {
     loop {
         let (generation, document) = {
             let mut state = queue.state.lock().expect("counter queue poisoned");
@@ -155,7 +193,7 @@ fn counter_worker(queue: Arc<CounterQueue>, backend: Url) {
                 state = queue.ready.wait(state).expect("counter queue poisoned");
             }
         };
-        let envelope = counters_envelope_with_timeout(&backend, COUNTER_TIMEOUT);
+        let envelope = client.counters_envelope(COUNTER_TIMEOUT);
         let mut state = queue.state.lock().expect("counter queue poisoned");
         if generation == state.generation {
             state.reply = Some((
@@ -190,11 +228,42 @@ impl EditorWorker {
         });
         let counter_tx = CounterSender(counters.clone());
         let counter_queue = counters.clone();
-        let counter_backend = backend.clone();
+        let vosu = Arc::new(VosuClient::new(backend.clone(), COUNTER_TIMEOUT));
+        let counter_client = vosu.clone();
         let counter_thread = thread::Builder::new()
             .name("vosulay-manager-counters".into())
-            .spawn(move || counter_worker(counter_queue, counter_backend))
+            .spawn(move || counter_worker(counter_queue, counter_client))
             .context("could not start counter worker")?;
+        let (vosu_tx, vosu_requests) = mpsc::sync_channel::<Work>(16);
+        let (vosu_client, vosu_replies, vosu_host) = (vosu.clone(), replies.clone(), host.clone());
+        let vosu_thread = thread::Builder::new()
+            .name("vosulay-manager-vosu".into())
+            .spawn(move || {
+                while let Ok(work) = vosu_requests.recv() {
+                    let Some(envelope) = vosu_reply(&vosu_client, &work.message) else {
+                        continue;
+                    };
+                    let reply = Reply {
+                        document: work.document,
+                        envelope,
+                        dialog_closed: false,
+                        broadcast: false,
+                        task_finished: false,
+                    };
+                    if vosu_replies.send(reply).is_err() {
+                        return;
+                    }
+                    vosu_host.unpark();
+                }
+            });
+        let vosu_thread = match vosu_thread {
+            Ok(thread) => thread,
+            Err(error) => {
+                drop(counter_tx);
+                let _ = counter_thread.join();
+                return Err(error).context("could not start vosu settings worker");
+            }
+        };
         let thread = thread::Builder::new().name("vosulay-manager-tasks".into()).spawn(move || {
             let mut state = State {
                 config,
@@ -247,8 +316,10 @@ impl EditorWorker {
             Ok(thread) => thread,
             Err(error) => {
                 drop(counter_tx);
-                // No requests have been exposed yet, so this worker exits without fetching.
+                drop(vosu_tx);
+                // No requests have been exposed yet, so these workers exit without fetching.
                 let _ = counter_thread.join();
+                let _ = vosu_thread.join();
                 return Err(error).context("could not start manager task worker");
             }
         };
@@ -259,6 +330,10 @@ impl EditorWorker {
             counters,
             counter_tx: Some(counter_tx),
             counter_thread: Some(counter_thread),
+            vosu,
+            vosu_tx: Some(vosu_tx),
+            vosu_thread: Some(vosu_thread),
+            vosu_busy: RefCell::default(),
             pending: Cell::new(0),
         })
     }
@@ -274,6 +349,34 @@ impl EditorWorker {
             .get("type")
             .and_then(Value::as_str)
             .unwrap_or("");
+        if VOSU_MESSAGES.contains(&kind) {
+            let sender = self
+                .vosu_tx
+                .as_ref()
+                .context("vosu settings worker is stopping")?;
+            return match sender.try_send(work) {
+                Ok(()) => Ok(()),
+                // A page flooding vosu requests gets an answer, not a failed host loop.
+                Err(mpsc::TrySendError::Full(work)) => {
+                    let mut busy = self.vosu_busy.borrow_mut();
+                    if busy.len() < 16 {
+                        busy.push_back(Reply {
+                            envelope: json!({
+                                "type": "vosu-settings-error",
+                                "request_id": work.message.get("request_id"),
+                                "message": "vosulay is still busy with earlier vosu requests; try again",
+                            }),
+                            document: work.document,
+                            dialog_closed: false,
+                            broadcast: false,
+                            task_finished: false,
+                        });
+                    }
+                    Ok(())
+                }
+                Err(mpsc::TrySendError::Disconnected(_)) => bail!("vosu settings worker stopped"),
+            };
+        }
         if kind == "refresh-counters" {
             let sender = self
                 .counter_tx
@@ -306,6 +409,9 @@ impl EditorWorker {
         self.pending.get() != 0
     }
     pub fn next_reply(&self) -> Option<Reply> {
+        if let Some(reply) = self.vosu_busy.borrow_mut().pop_front() {
+            return Some(reply);
+        }
         if let Ok(reply) = self.rx.try_recv() {
             if reply.task_finished {
                 self.pending.set(self.pending.get() - 1);
@@ -324,10 +430,11 @@ impl EditorWorker {
             tx.take();
         }
         self.counter_tx.take();
+        self.vosu_tx.take();
     }
     /// The manage page's route into this worker (see `crate::remote::ManageEditor`).
     pub fn manage_editor(&self) -> Arc<dyn crate::remote::ManageEditor> {
-        Arc::new(RemoteEditor(self.tx.clone()))
+        Arc::new(RemoteEditor(self.tx.clone(), self.vosu.clone()))
     }
     pub fn finished(&self) -> bool {
         self.thread.as_ref().is_none_or(JoinHandle::is_finished)
@@ -335,16 +442,24 @@ impl EditorWorker {
                 .counter_thread
                 .as_ref()
                 .is_none_or(JoinHandle::is_finished)
+            && self
+                .vosu_thread
+                .as_ref()
+                .is_none_or(JoinHandle::is_finished)
     }
     pub fn join(&mut self) -> Result<()> {
-        // Join both even if either panics; neither owned thread may be left behind.
+        // Join all even if one panics; no owned thread may be left behind.
         let manager = self.thread.take().map(JoinHandle::join);
         let counters = self.counter_thread.take().map(JoinHandle::join);
+        let vosu = self.vosu_thread.take().map(JoinHandle::join);
         if manager.is_some_and(|result| result.is_err()) {
             bail!("manager task worker panicked");
         }
         if counters.is_some_and(|result| result.is_err()) {
             bail!("counter worker panicked");
+        }
+        if vosu.is_some_and(|result| result.is_err()) {
+            bail!("vosu settings worker panicked");
         }
         Ok(())
     }

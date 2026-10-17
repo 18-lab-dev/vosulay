@@ -101,6 +101,7 @@ function (viewOrigin) {
   const FORWARDED = new Set([
     'save-config', 'choose-overlay-file', 'import-profile', 'export-profile',
     'import-tosu-layout', 'authorize-profile-import', 'open-settings',
+    'vosu-settings-load', 'vosu-settings-save', 'vosu-profile-action', 'vosu-settings-link',
   ]);
   window.__VOSULAY_POST_MESSAGE__ = (payload) => {
     const message = typeof payload === 'string' ? JSON.parse(payload) : payload;
