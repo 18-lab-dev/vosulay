@@ -51,6 +51,8 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         return Ok(0);
     };
     #[cfg(target_os = "linux")]
+    super::signals::install(&thread::current()).context("could not handle exit signals")?;
+    #[cfg(target_os = "linux")]
     let control = Some(super::control::Server::start()?);
     #[cfg(windows)]
     let control = match super::control::Server::start() {
@@ -93,6 +95,9 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         );
         loop {
             while worker.next_reply().is_some() {}
+            if exit_signalled() {
+                break;
+            }
             if let Some(request) = control
                 .as_ref()
                 .and_then(super::control::Server::next_request)
@@ -212,6 +217,18 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
     result.map(|()| 0)
 }
 
+/// Whether Ctrl+C, SIGTERM or SIGHUP asked vosulay to exit since the last call.
+#[cfg(target_os = "linux")]
+fn exit_signalled() -> bool {
+    super::signals::take_exit_request()
+}
+
+// Windows delivers console Ctrl+C through its own control handler, which this does not cover.
+#[cfg(windows)]
+fn exit_signalled() -> bool {
+    false
+}
+
 #[derive(Clone, Copy)]
 enum Closing {
     Exit,
@@ -281,6 +298,12 @@ impl Host<'_> {
                     resources: self.resources.clone(),
                 })
             }?);
+            // CEF replaced the exit signal handlers with Chromium's, which vosulay never hears.
+            // `CefSettings::disable_signal_handlers` does not prevent that in CEF 152: Chromium's
+            // shutdown detector still installs them, and the setting only stops Chromium from
+            // resetting the crash-signal handlers.
+            #[cfg(target_os = "linux")]
+            super::signals::install(&thread::current()).context("could not handle exit signals")?;
         }
         let browser = self.runtime.as_ref().unwrap().open(
             BrowserOptions {
@@ -441,6 +464,8 @@ impl Host<'_> {
                     };
                     request.answer(Ok(()));
                     Some(event)
+                } else if exit_signalled() {
+                    Some(PlatformEvent::Exit)
                 } else {
                     self.platform.poll()
                 }

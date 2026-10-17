@@ -377,7 +377,9 @@ repeatable `--pid` and `--process-name`, `--config`, `--cef-dir`, and
 `--server-only`. Run `vosulay --help` (Windows: `vosulay.exe --help`) for details.
 
 Use `vosulay --toggle-edit` from a compositor keybind to toggle editing in the
-running instance, or `vosulay --quit` to save and exit gracefully. These two
+running instance, or `vosulay --quit` to save and exit gracefully. On Linux,
+Ctrl+C in the terminal that started vosulay, `kill`, or closing that terminal
+exits the same graceful way; a second Ctrl+C exits at once. These two
 commands are mutually exclusive, communicate only through a per-user local
 control channel, and exit with status 1 if no instance is running or the command
 is rejected. A plain second launch still exits successfully without starting

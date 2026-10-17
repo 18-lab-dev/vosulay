@@ -17,6 +17,8 @@ host and unparks its event loop. Normal-mode requests reuse the tray's edit
 arming and graceful-exit/flush paths. No running instance means a failed command,
 not an implicit launch.
 
+On Linux, [src/runtime/signals.rs](../src/runtime/signals.rs) turns SIGINT, SIGTERM and SIGHUP into the same graceful exit: the handler only records the request and writes to a pipe, and a watcher thread unparks the host; a second signal restores the default action and re-raises it. CEF installs Chromium's own handlers for these signals during initialization, and their quit request never reaches vosulay's externally pumped loop (Ctrl+C once did nothing until a second one killed the process), so the host installs its handlers again right after `CefRuntime::initialize`.
+
 `--server-only` branches after the shared worker/server startup and before Linux
 launcher refresh, platform discovery/attachment, tray startup or lazy CEF
 initialization. Its loop discards manager replies, rejects in-game edit toggles,

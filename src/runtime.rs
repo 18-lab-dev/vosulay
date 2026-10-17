@@ -8,6 +8,8 @@ mod instance;
 #[cfg(target_os = "linux")]
 mod launchers;
 mod resources;
+#[cfg(target_os = "linux")]
+mod signals;
 mod tosu;
 
 pub use host::run;
