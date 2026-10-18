@@ -12,7 +12,9 @@ counter changes), corners (two counters in opposite corners change), full
 (every pixel changes). Rates are overlay updates per second.
 
 Output: a Markdown table of medians across repetitions, and with --json the
-raw per-run records.
+raw per-run records. `--profile` builds the compositor with its `profile`
+feature, so each record also carries the per-call CPU and GPU breakdown of
+the upload and composite; a second table summarizes it.
 """
 import argparse
 import hashlib
@@ -29,12 +31,13 @@ ROOT = Path(__file__).resolve().parent.parent
 NVIDIA_EGL = Path("/usr/share/glvnd/egl_vendor.d/10_nvidia.json")
 
 
-def build(target: Path) -> Path:
+def build(target: Path, profile: bool) -> Path:
     environment = dict(os.environ, CARGO_TARGET_DIR=str(target))
+    features = ["--features", "vosulay-overlay/profile"] if profile else []
     # --lib and --example are separate invocations: building only the example
     # does not rebuild the cdylib that gets preloaded.
     for arguments in (
-        ["-p", "vosulay-overlay", "-p", "vosulay-lookup", "--lib"],
+        ["-p", "vosulay-overlay", "-p", "vosulay-lookup", "--lib", *features],
         ["-p", "vosulay-overlay", "--example", "upload_bench"],
     ):
         subprocess.run(
@@ -110,6 +113,38 @@ def table(records: list) -> str:
     return "\n".join(lines)
 
 
+PROFILE_STAGES = (
+    "cpu_capture", "cpu_orphan", "cpu_map", "cpu_copy", "cpu_unmap",
+    "cpu_tex_sub_image", "cpu_draw", "cpu_restore", "cpu_compose", "gpu_upload", "gpu_composite",
+)
+
+
+def profile_table(records: list) -> str:
+    """Per-update stages (median across repetitions of each run's p50/p99, µs)."""
+    groups = {}
+    for record in records:
+        if record.get("profile") and record["scenario"] != "none":
+            key = (record["draws"], record["scenario"], record["rate"])
+            groups.setdefault(key, []).append(record["profile"])
+    order = {"static": 1, "small": 2, "corners": 3, "full": 4}
+    header = " | ".join(stage.replace("cpu_", "").replace("gpu_", "GPU ") for stage in PROFILE_STAGES)
+    lines = [f"| game draws | scenario | updates/s | MB/update | {header} |", "|---" * (4 + len(PROFILE_STAGES)) + "|"]
+    for key in sorted(groups, key=lambda k: (k[0], order[k[1]], k[2])):
+        runs = groups[key]
+        cells = []
+        for stage in PROFILE_STAGES:
+            if not any(run[stage]["count"] for run in runs):
+                cells.append("-")
+                continue
+            p50 = statistics.median(run[stage]["p50"] for run in runs)
+            p99 = statistics.median(run[stage]["p99"] for run in runs)
+            cells.append(f"{p50:.0f}/{p99:.0f}")
+        uploads = sum(run["uploads"] for run in runs)
+        megabytes = sum(run["upload_bytes"] for run in runs) / max(uploads, 1) / 1e6
+        lines.append(f"| {key[0]} | {key[1]} | {key[2] or '-'} | {megabytes:.2f} | " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--scenarios", default="none,static,small,corners,full")
@@ -123,11 +158,12 @@ def main() -> None:
         default=str(NVIDIA_EGL) if NVIDIA_EGL.exists() else "",
         help="glvnd EGL vendor JSON (default: NVIDIA when installed, so Mesa's software renderer is never measured)",
     )
+    parser.add_argument("--profile", action="store_true", help="build the compositor's profile feature")
     parser.add_argument("--target-dir", type=Path, default=ROOT / "target" / "overlay-upload-bench")
     parser.add_argument("--json", type=Path, help="write raw records here")
     args = parser.parse_args()
 
-    release = build(args.target_dir)
+    release = build(args.target_dir / ("profile" if args.profile else "plain"), args.profile)
     for name in ("libvosulay_overlay.so", "libvosulay_lookup.so"):
         print(f"{name} sha256 {digest(release / name)}", file=sys.stderr)
 
@@ -149,6 +185,9 @@ def main() -> None:
     renderers = {record["renderer"] for record in records}
     print(f"renderer: {', '.join(sorted(renderers))}")
     print(table(records))
+    if args.profile:
+        print()
+        print(profile_table(records))
     if args.json:
         args.json.write_text("\n".join(json.dumps(record) for record in records) + "\n")
 

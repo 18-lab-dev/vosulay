@@ -56,7 +56,9 @@ Use a fresh output directory. The wrapper isolates PID/IPC/network namespaces an
 - Repetitions (`--reps`) are interleaved, so drift from other GPU work spreads over every scenario. The table reports medians: fps, frame time, CPU time of the hooked swap and GPU time of everything the hook submitted (timestamp queries, read without waiting).
 - Each run reads back a counter pixel after the last swap and fails unless the overlay was composited (or, for `none`, was not).
 - The EGL vendor defaults to NVIDIA when its glvnd file is installed, so Mesa's software renderer is never measured by accident; `--egl-vendor` overrides it. `--api es` uses an ES 3 context instead of desktop GL 3.3 core.
+- `--profile` builds the compositor with its `profile` feature (benchmark builds only) and adds a second table: CPU time of each GL call on the update path (state capture, buffer orphan, map, row copy, unmap, `glTexSubImage2D`, draw, restore) and GPU time of the upload and of the composite from timestamp queries that are read without waiting.
 - `--json FILE` keeps the raw per-run records.
+- GPU upload time is bounded by the GPU's PCIe link: check `/sys/bus/pci/devices/<gpu>/current_link_speed` and `current_link_width` before comparing machines. A Gen4 x4 link (a GPU behind the chipset) moves roughly 7 GB/s, so a full 2560x1440 update costs about 2 ms of GPU time there.
 
 It isolates the game-side cost. Chromium's own rendering and readback, and real swapchain presentation, are outside it.
 

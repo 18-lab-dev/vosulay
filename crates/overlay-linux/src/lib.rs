@@ -11,6 +11,8 @@ mod hooks;
 mod late;
 #[cfg(all(target_arch = "x86_64", target_env = "gnu"))]
 mod lookup;
+#[cfg(feature = "profile")]
+mod profile;
 mod sdl;
 mod sdl3;
 mod vulkan;

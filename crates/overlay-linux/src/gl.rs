@@ -7,6 +7,20 @@ use std::mem;
 use std::ptr;
 use vosulay_frame::DamageRect;
 
+/// Times `$body` under a profile stage in `profile` builds; plain otherwise.
+macro_rules! timed {
+    ($stage:ident, $body:expr) => {{
+        #[cfg(feature = "profile")]
+        {
+            crate::profile::time(crate::profile::Stage::$stage, || $body)
+        }
+        #[cfg(not(feature = "profile"))]
+        {
+            $body
+        }
+    }};
+}
+
 const GL_TEXTURE_2D: c_uint = 0x0de1;
 const GL_RGBA: c_uint = 0x1908;
 const GL_RGBA8: c_int = 0x8058;
@@ -299,6 +313,8 @@ pub(crate) struct Renderer {
     sequence: u64,
     is_es: bool,
     max_texture_size: u32,
+    #[cfg(feature = "profile")]
+    timer: Option<crate::profile::GpuTimer>,
 }
 
 impl Renderer {
@@ -306,10 +322,10 @@ impl Renderer {
         context: usize,
         width: u32,
         height: u32,
-        load: impl FnMut(&[u8]) -> *const c_void,
+        mut load: impl FnMut(&[u8]) -> *const c_void,
     ) -> Option<Self> {
         // SAFETY: caller guarantees a current GL3/ES3 context for this loader.
-        let mut gl = unsafe { Gl::load(load) }?;
+        let mut gl = unsafe { Gl::load(&mut load) }?;
         // SAFETY: current context owns the returned static version string.
         let version = unsafe { (gl.get_string)(GL_VERSION) };
         if version.is_null() {
@@ -428,6 +444,9 @@ impl Renderer {
             sequence: 0,
             is_es,
             max_texture_size: maximum as u32,
+            // SAFETY: the loader's context is current.
+            #[cfg(feature = "profile")]
+            timer: unsafe { crate::profile::GpuTimer::new(&mut load) },
         })
     }
 
@@ -455,17 +474,7 @@ impl Renderer {
             (self.gl.active_texture)(GL_TEXTURE0);
             (self.gl.bind_texture)(GL_TEXTURE_2D, self.texture);
             set_unpack_defaults(&self.gl);
-            (self.gl.tex_image)(
-                GL_TEXTURE_2D,
-                0,
-                GL_RGBA8,
-                width as c_int,
-                height as c_int,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                ptr::null(),
-            );
+            allocate_texture(&self.gl, width, height);
             state.restore(&self.gl, self.is_es);
         }
         self.width = width;
@@ -493,7 +502,7 @@ impl Renderer {
         width: u32,
         height: u32,
     ) -> Option<bool> {
-        unsafe { self.compose(frame, width, height) }
+        timed!(Compose, unsafe { self.compose(frame, width, height) })
     }
 
     unsafe fn compose(
@@ -524,7 +533,12 @@ impl Renderer {
         if active != 0 && paused == 0 {
             return None;
         }
-        let mut state = GlState::capture(gl, self.is_es, frame.is_some());
+        let mut state = timed!(Capture, GlState::capture(gl, self.is_es, frame.is_some()));
+        #[cfg(feature = "profile")]
+        if let Some(timer) = self.timer.as_mut() {
+            // SAFETY: the renderer's context is current.
+            unsafe { timer.begin() };
+        }
         // SAFETY: renderer context is current and the texture belongs to it.
         unsafe {
             (gl.active_texture)(GL_TEXTURE0);
@@ -554,17 +568,28 @@ impl Renderer {
                     (gl.pixel_store)(GL_UNPACK_SKIP_PIXELS, region.x as c_int);
                     (gl.pixel_store)(GL_UNPACK_SKIP_ROWS, region.y as c_int);
                 }
-                (gl.tex_sub_image)(
-                    GL_TEXTURE_2D,
-                    0,
-                    region.x as c_int,
-                    region.y as c_int,
-                    region.width as c_int,
-                    region.height as c_int,
-                    GL_RGBA,
-                    GL_UNSIGNED_BYTE,
-                    source.unwrap_or(bytes.as_ptr().cast()),
+                timed!(
+                    TexSubImage,
+                    (gl.tex_sub_image)(
+                        GL_TEXTURE_2D,
+                        0,
+                        region.x as c_int,
+                        region.y as c_int,
+                        region.width as c_int,
+                        region.height as c_int,
+                        GL_RGBA,
+                        GL_UNSIGNED_BYTE,
+                        source.unwrap_or(bytes.as_ptr().cast()),
+                    )
                 );
+            }
+            #[cfg(feature = "profile")]
+            {
+                crate::profile::upload(region.width as usize * region.height as usize * 4);
+                if let Some(timer) = self.timer.as_mut() {
+                    // SAFETY: the renderer's context is current.
+                    unsafe { timer.uploaded() };
+                }
             }
             self.has_frame = true;
             self.sequence = frame.sequence();
@@ -623,12 +648,17 @@ impl Renderer {
                 gl.mask(1, 1, 1, 1);
                 (gl.use_program)(self.program);
                 (gl.bind_vertex_array)(self.vao);
-                (gl.draw_arrays)(GL_TRIANGLES, 0, 3);
+                timed!(Draw, (gl.draw_arrays)(GL_TRIANGLES, 0, 3));
             }
+        }
+        #[cfg(feature = "profile")]
+        if let Some(timer) = self.timer.as_mut() {
+            // SAFETY: the renderer's context is current.
+            unsafe { timer.end() };
         }
         // SAFETY: same current context as capture.
         unsafe {
-            state.restore(gl, self.is_es);
+            timed!(Restore, state.restore(gl, self.is_es));
         }
         Some(consumed)
     }
@@ -973,11 +1003,38 @@ unsafe fn create_resources(
         }
         (gl.active_texture)(GL_TEXTURE0);
         (gl.bind_texture)(GL_TEXTURE_2D, texture);
+        set_texture_parameters(gl);
+        set_unpack_defaults(gl);
+        allocate_texture(gl, width, height);
+        (gl.use_program)(program);
+        let location = (gl.uniform_location)(program, c"overlay_texture".as_ptr());
+        if location >= 0 {
+            (gl.uniform_1i)(location, 0);
+        }
+    }
+    Some((texture, program, vao))
+}
+
+/// # Safety
+/// A context is current with the target texture bound to GL_TEXTURE_2D.
+unsafe fn set_texture_parameters(gl: &Gl) {
+    unsafe {
         (gl.tex_parameter)(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         (gl.tex_parameter)(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         (gl.tex_parameter)(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         (gl.tex_parameter)(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        set_unpack_defaults(gl);
+    }
+}
+
+/// Mutable RGBA8 storage for the bound texture. On the RTX 5090 neither a
+/// BGRA + UNSIGNED_INT_8_8_8_8_REV upload nor immutable storage changed upload
+/// time (`docs/testing.md`, overlay upload cost); the copy is link-bound.
+///
+/// # Safety
+/// A context is current with the target texture bound to GL_TEXTURE_2D and
+/// no unpack buffer bound.
+unsafe fn allocate_texture(gl: &Gl, width: u32, height: u32) {
+    unsafe {
         (gl.tex_image)(
             GL_TEXTURE_2D,
             0,
@@ -989,13 +1046,7 @@ unsafe fn create_resources(
             GL_UNSIGNED_BYTE,
             ptr::null(),
         );
-        (gl.use_program)(program);
-        let location = (gl.uniform_location)(program, c"overlay_texture".as_ptr());
-        if location >= 0 {
-            (gl.uniform_1i)(location, 0);
-        }
     }
-    Some((texture, program, vao))
 }
 
 unsafe fn compile_shader(gl: &Gl, kind: c_uint, source: &[u8]) -> Option<c_uint> {
@@ -1048,32 +1099,40 @@ unsafe fn stage_rows(
     unsafe {
         (gl.bind_buffer)(GL_PIXEL_UNPACK_BUFFER, staging);
         // Fresh storage, so an upload still reading the previous rows is never waited on.
-        (gl.buffer_data)(
-            GL_PIXEL_UNPACK_BUFFER,
-            size as isize,
-            ptr::null(),
-            GL_STREAM_DRAW,
+        timed!(
+            Orphan,
+            (gl.buffer_data)(
+                GL_PIXEL_UNPACK_BUFFER,
+                size as isize,
+                ptr::null(),
+                GL_STREAM_DRAW,
+            )
         );
-        let mapped = (gl.map_buffer_range)(
-            GL_PIXEL_UNPACK_BUFFER,
-            0,
-            size as isize,
-            GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT,
+        let mapped = timed!(
+            Map,
+            (gl.map_buffer_range)(
+                GL_PIXEL_UNPACK_BUFFER,
+                0,
+                size as isize,
+                GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT,
+            )
         );
         if mapped.is_null() {
             (gl.bind_buffer)(GL_PIXEL_UNPACK_BUFFER, 0);
             return None;
         }
-        for row in 0..region.height as usize {
-            let offset = (region.y as usize + row) * stride + region.x as usize * 4;
-            ptr::copy_nonoverlapping(
-                bytes.as_ptr().add(offset),
-                mapped.cast::<u8>().add(row * length),
-                length,
-            );
-        }
+        timed!(Copy, {
+            for row in 0..region.height as usize {
+                let offset = (region.y as usize + row) * stride + region.x as usize * 4;
+                ptr::copy_nonoverlapping(
+                    bytes.as_ptr().add(offset),
+                    mapped.cast::<u8>().add(row * length),
+                    length,
+                );
+            }
+        });
         // A lost mapping (rare) leaves undefined contents; upload directly instead.
-        if (gl.unmap_buffer)(GL_PIXEL_UNPACK_BUFFER) == 0 {
+        if timed!(Unmap, (gl.unmap_buffer)(GL_PIXEL_UNPACK_BUFFER)) == 0 {
             (gl.bind_buffer)(GL_PIXEL_UNPACK_BUFFER, 0);
             return None;
         }

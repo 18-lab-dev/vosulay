@@ -9,6 +9,10 @@ license = "MIT"
 name = "vosulay_overlay"
 crate-type = ["cdylib", "rlib"]
 
+[features]
+# Benchmark-only timing of the GL upload and composite; see src/profile.rs.
+profile = []
+
 [target.'cfg(target_os = "linux")'.dependencies]
 ash = "0.38"
 libc = "0.2"

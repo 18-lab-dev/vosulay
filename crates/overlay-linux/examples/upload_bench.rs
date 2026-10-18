@@ -338,6 +338,20 @@ mod bench {
         String::from_utf8(buffer).ok()
     }
 
+    /// Drops the compositor profile's warm-up samples, when it has one.
+    fn reset_compositor_profile() {
+        let symbol = unsafe {
+            dlsym(
+                std::ptr::null_mut(),
+                c"vosulay_overlay_profile_reset".as_ptr(),
+            )
+        };
+        if !symbol.is_null() {
+            let reset: unsafe extern "C" fn() = unsafe { std::mem::transmute(symbol) };
+            unsafe { reset() };
+        }
+    }
+
     pub fn main() {
         let options = options();
         let warmup = Duration::from_secs(1);
@@ -490,6 +504,7 @@ mod bench {
             while Instant::now() < warm {
                 frame(&mut swap_us, false);
             }
+            reset_compositor_profile();
             let start = Instant::now();
             let end = start + Duration::from_secs_f64(options.seconds);
             let mut frames = 0u64;
