@@ -277,3 +277,263 @@ fn dll_version_resource_is_a_res_file_with_signing_metadata() {
     }
     assert_eq!(version.info.file_type, 2, "VFT_DLL");
 }
+
+/// How the local server answers one request for the asset.
+#[derive(Clone, Copy)]
+enum Reply {
+    /// 200 for the whole asset, closing after `cut` body bytes.
+    Full { cut: usize },
+    /// Honors `Range` with a 206, closing after `cut` body bytes.
+    Ranged { cut: usize },
+    /// A 206 claiming the range starts at `start`, whatever was asked.
+    WrongRange { start: usize },
+}
+
+/// Serves `replies` in order, one per connection, and returns the `Range`
+/// header of each request.
+fn cut_off_server(
+    asset: Vec<u8>,
+    replies: Vec<Reply>,
+) -> (String, std::thread::JoinHandle<Vec<Option<String>>>) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/asset", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        let mut ranges = Vec::new();
+        for reply in replies {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut byte = [0_u8];
+            while !request.ends_with(b"\r\n\r\n") {
+                stream.read_exact(&mut byte).unwrap();
+                request.push(byte[0]);
+            }
+            let request = String::from_utf8(request).unwrap();
+            let range = request
+                .lines()
+                .find_map(|line| {
+                    line.strip_prefix("range: ")
+                        .or_else(|| line.strip_prefix("Range: "))
+                })
+                .map(str::to_owned);
+            let requested = range
+                .as_deref()
+                .and_then(|range| range.strip_prefix("bytes="))
+                .and_then(|range| range.strip_suffix('-'))
+                .map(|start| start.parse::<usize>().unwrap());
+            let (status, start, cut) = match (reply, requested) {
+                (Reply::Full { cut }, _) => ("200 OK", 0, cut),
+                (Reply::Ranged { cut }, Some(start)) => ("206 Partial Content", start, cut),
+                (Reply::Ranged { cut }, None) => ("200 OK", 0, cut),
+                (Reply::WrongRange { start }, _) => ("206 Partial Content", start, usize::MAX),
+            };
+            let body = &asset[start..];
+            let mut head = format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n",
+                body.len()
+            );
+            if status.starts_with("206") {
+                head += &format!(
+                    "Content-Range: bytes {start}-{}/{}\r\n",
+                    asset.len() - 1,
+                    asset.len()
+                );
+            }
+            head += "\r\n";
+            let _ = stream.write_all(head.as_bytes());
+            let _ = stream.write_all(&body[..cut.min(body.len())]);
+            ranges.push(range);
+        }
+        ranges
+    });
+    (url, server)
+}
+
+fn asset_fixture() -> (Vec<u8>, String, String) {
+    let asset: Vec<u8> = (0..300_000_u32)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 24) as u8)
+        .collect();
+    let sha1 = format!("{:x}", Sha1::digest(&asset));
+    let sha256 = format!("{:x}", Sha256::digest(&asset));
+    (asset, sha1, sha256)
+}
+
+const RETRIES: Retries = Retries {
+    attempts: 3,
+    stalls: 2,
+    delay: Duration::ZERO,
+};
+
+fn leftover_downloads(directory: &Path) -> usize {
+    fs::read_dir(directory)
+        .unwrap()
+        .filter(|entry| {
+            entry
+                .as_ref()
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".asset-download-")
+        })
+        .count()
+}
+
+#[test]
+fn interrupted_download_resumes_from_where_it_was_cut() {
+    let (asset, sha1, sha256) = asset_fixture();
+    let (url, server) = cut_off_server(
+        asset.clone(),
+        vec![
+            Reply::Full { cut: 100_000 },
+            Reply::Ranged { cut: 120_000 },
+            Reply::Ranged { cut: usize::MAX },
+        ],
+    );
+    let directory = tempfile::tempdir().unwrap();
+    let destination = directory.path().join("asset.tar.bz2");
+    download_verified(
+        &destination,
+        &url,
+        asset.len() as u64,
+        Some(&sha1),
+        &sha256,
+        RETRIES,
+    )
+    .unwrap();
+    assert_eq!(fs::read(&destination).unwrap(), asset);
+    assert_eq!(
+        server.join().unwrap(),
+        [
+            None,
+            Some("bytes=100000-".into()),
+            Some("bytes=220000-".into())
+        ]
+    );
+    assert_eq!(leftover_downloads(directory.path()), 0);
+}
+
+#[test]
+fn server_ignoring_the_range_restarts_the_download() {
+    let (asset, sha1, sha256) = asset_fixture();
+    let (url, server) = cut_off_server(
+        asset.clone(),
+        vec![
+            Reply::Full { cut: 100_000 },
+            Reply::Full { cut: usize::MAX },
+        ],
+    );
+    let directory = tempfile::tempdir().unwrap();
+    let destination = directory.path().join("asset.tar.bz2");
+    download_verified(
+        &destination,
+        &url,
+        asset.len() as u64,
+        Some(&sha1),
+        &sha256,
+        RETRIES,
+    )
+    .unwrap();
+    // The 200 body replaced the partial data rather than being appended to it.
+    assert_eq!(fs::read(&destination).unwrap(), asset);
+    assert_eq!(server.join().unwrap(), [None, Some("bytes=100000-".into())]);
+}
+
+#[test]
+fn a_range_that_does_not_continue_the_file_is_discarded() {
+    let (asset, sha1, sha256) = asset_fixture();
+    let (url, server) = cut_off_server(
+        asset.clone(),
+        vec![
+            Reply::Full { cut: 100_000 },
+            Reply::WrongRange { start: 50_000 },
+            Reply::Full { cut: usize::MAX },
+        ],
+    );
+    let directory = tempfile::tempdir().unwrap();
+    let destination = directory.path().join("asset.tar.bz2");
+    download_verified(
+        &destination,
+        &url,
+        asset.len() as u64,
+        Some(&sha1),
+        &sha256,
+        RETRIES,
+    )
+    .unwrap();
+    assert_eq!(fs::read(&destination).unwrap(), asset);
+    // After the mismatched 206 the download starts over without a range.
+    assert_eq!(
+        server.join().unwrap(),
+        [None, Some("bytes=100000-".into()), None]
+    );
+}
+
+#[test]
+fn a_download_cut_on_every_attempt_fails_at_the_cap_without_publishing() {
+    let (asset, sha1, sha256) = asset_fixture();
+    let (url, server) = cut_off_server(
+        asset.clone(),
+        vec![
+            Reply::Full { cut: 10_000 },
+            Reply::Ranged { cut: 10_000 },
+            Reply::Ranged { cut: 10_000 },
+        ],
+    );
+    let directory = tempfile::tempdir().unwrap();
+    let destination = directory.path().join("asset.tar.bz2");
+    let error = download_verified(
+        &destination,
+        &url,
+        asset.len() as u64,
+        Some(&sha1),
+        &sha256,
+        RETRIES,
+    )
+    .unwrap_err();
+    assert!(
+        format!("{error:#}").contains(
+            "after 30000 of 300000 bytes; gave up after 2 attempts without progress or 3 in all"
+        ),
+        "{error:#}"
+    );
+    assert_eq!(server.join().unwrap().len(), 3);
+    assert!(!destination.exists());
+    assert_eq!(leftover_downloads(directory.path()), 0);
+}
+
+#[test]
+fn a_download_that_stops_progressing_gives_up_before_the_attempt_cap() {
+    let (asset, sha1, sha256) = asset_fixture();
+    // Progress, then two resumes that deliver nothing.
+    let (url, server) = cut_off_server(
+        asset.clone(),
+        vec![
+            Reply::Full { cut: 10_000 },
+            Reply::Ranged { cut: 0 },
+            Reply::Ranged { cut: 0 },
+        ],
+    );
+    let directory = tempfile::tempdir().unwrap();
+    let destination = directory.path().join("asset.tar.bz2");
+    let retries = Retries {
+        attempts: 10,
+        stalls: 2,
+        delay: Duration::ZERO,
+    };
+    let error = download_verified(
+        &destination,
+        &url,
+        asset.len() as u64,
+        Some(&sha1),
+        &sha256,
+        retries,
+    )
+    .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("after 10000 of 300000 bytes"),
+        "{error:#}"
+    );
+    // Three requests, not ten: the stall limit ended it.
+    assert_eq!(server.join().unwrap().len(), 3);
+    assert!(!destination.exists());
+    assert_eq!(leftover_downloads(directory.path()), 0);
+}

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use bzip2::read::BzDecoder;
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
@@ -7,8 +7,9 @@ use std::{
     collections::BTreeMap,
     env,
     fs::{self, File, OpenOptions},
-    io::{self, BufReader, Read, Write},
+    io::{self, BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
+    thread,
     time::Duration,
 };
 
@@ -22,6 +23,23 @@ pub const PINS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tools/ce
 const RECEIPT: &str = ".vosulay-cef-verified.json";
 const MAX_MEMBERS: usize = 20_000;
 const MAX_UNPACKED: u64 = 3_000_000_000;
+/// Retry limits for one pinned download. The CEF CDN has been seen resetting
+/// HTTP/1.1 transfers every ~6 s (about 25 MB here), so a resume that makes
+/// progress is free; only consecutive attempts that add no bytes count toward
+/// `stalls`, with a growing pause. `attempts` bounds the whole download.
+#[derive(Clone, Copy)]
+struct Retries {
+    attempts: u32,
+    stalls: u32,
+    delay: Duration,
+}
+const DOWNLOAD_RETRIES: Retries = Retries {
+    attempts: 64,
+    stalls: 4,
+    delay: Duration::from_secs(1),
+};
+/// Per request, so a resumed download gets a fresh budget.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(90);
 
 #[derive(Deserialize)]
 pub struct Pins {
@@ -409,39 +427,144 @@ fn acquire_file(
             })
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            eprintln!("Downloading pinned runtime asset: {url}");
-            let mut temporary = tempfile::Builder::new()
-                .prefix(".asset-download-")
-                .tempfile_in(destination.parent().context("asset path has no parent")?)?;
-            let mut response = ureq::get(url)
-                .config()
-                .timeout_global(Some(Duration::from_secs(90)))
-                .build()
-                .call()
-                .with_context(|| format!("cannot download pinned runtime asset: {url}"))?;
-            let mut reader = response.body_mut().as_reader();
-            loop {
-                let count = reader.read(&mut buffer).with_context(|| {
-                    format!(
-                        "reading pinned asset {url} after {} of {size} bytes",
-                        hashes.size
-                    )
-                })?;
-                if count == 0 {
-                    break;
-                }
-                hashes.update(&buffer[..count], size, sha1.is_some())?;
-                temporary.write_all(&buffer[..count])?;
-            }
-            hashes.verify(size, sha1, sha256)?;
-            temporary.flush()?;
-            temporary.persist_noclobber(destination).with_context(|| {
-                format!("cannot publish verified asset: {}", destination.display())
-            })?;
-            Ok(())
+            download_verified(destination, url, size, sha1, sha256, DOWNLOAD_RETRIES)
         }
         Err(error) => Err(error.into()),
     }
+}
+
+/// Downloads into a temporary file beside `destination` and publishes it only
+/// after size and digests match, so an interrupted or wrong download never
+/// appears at `destination`.
+fn download_verified(
+    destination: &Path,
+    url: &str,
+    size: u64,
+    sha1: Option<&str>,
+    sha256: &str,
+    retries: Retries,
+) -> Result<()> {
+    eprintln!("Downloading pinned runtime asset: {url}");
+    let mut temporary = tempfile::Builder::new()
+        .prefix(".asset-download-")
+        .tempfile_in(destination.parent().context("asset path has no parent")?)?;
+    let mut hashes = Hashes::new();
+    download(
+        url,
+        size,
+        sha1.is_some(),
+        temporary.as_file_mut(),
+        &mut hashes,
+        retries,
+    )?;
+    hashes.verify(size, sha1, sha256)?;
+    temporary.flush()?;
+    temporary
+        .persist_noclobber(destination)
+        .with_context(|| format!("cannot publish verified asset: {}", destination.display()))?;
+    Ok(())
+}
+
+/// Streams `url` into `file`. After a dropped connection or a short body it
+/// asks for the rest with `Range`; only a 206 whose `Content-Range` continues
+/// exactly where `file` ends is appended. A 200, or a 206 for any other range,
+/// starts over from byte zero, so `file` and `hashes` always hold one
+/// contiguous prefix of the asset.
+fn download(
+    url: &str,
+    size: u64,
+    use_sha1: bool,
+    file: &mut File,
+    hashes: &mut Hashes,
+    retries: Retries,
+) -> Result<()> {
+    let mut buffer = [0_u8; 65_536];
+    let mut failure = anyhow!("no download attempt was made");
+    let mut stalls = 0;
+    let mut previous = None;
+    for attempt in 1..=retries.attempts {
+        if let Some(previous) = previous {
+            if hashes.size > previous {
+                stalls = 0;
+            } else {
+                stalls += 1;
+                if stalls == retries.stalls {
+                    break;
+                }
+                thread::sleep(retries.delay * stalls);
+            }
+            eprintln!(
+                "Download of {url} interrupted after {} of {size} bytes ({failure:#}); attempt {attempt}/{}",
+                hashes.size, retries.attempts
+            );
+        }
+        let offset = hashes.size;
+        previous = Some(offset);
+        let mut request = ureq::get(url)
+            .config()
+            .timeout_global(Some(DOWNLOAD_TIMEOUT))
+            .build();
+        if offset > 0 {
+            request = request.header("Range", format!("bytes={offset}-"));
+        }
+        let mut response = match request.call() {
+            Ok(response) => response,
+            // A missing or forbidden asset does not appear by retrying.
+            Err(ureq::Error::StatusCode(code))
+                if (400..500).contains(&code) && code != 408 && code != 429 =>
+            {
+                bail!("cannot download pinned runtime asset {url}: HTTP {code}");
+            }
+            Err(error) => {
+                failure =
+                    anyhow!(error).context(format!("cannot download pinned runtime asset: {url}"));
+                continue;
+            }
+        };
+        let status = response.status().as_u16();
+        let expected_range = format!("bytes {offset}-{}/{size}", size.saturating_sub(1));
+        let resumed = offset > 0
+            && status == 206
+            && response
+                .headers()
+                .get("content-range")
+                .and_then(|value| value.to_str().ok())
+                == Some(expected_range.as_str());
+        if !resumed {
+            // Whatever the reason, the data so far cannot be continued.
+            *hashes = Hashes::new();
+            file.set_len(0)?;
+            file.seek(SeekFrom::Start(0))?;
+            if status != 200 {
+                failure = anyhow!("server answered HTTP {status} without the requested range");
+                continue;
+            }
+        }
+        let mut reader = response.body_mut().as_reader();
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) => {
+                    failure = anyhow!("body ended early");
+                    break;
+                }
+                Ok(count) => {
+                    hashes.update(&buffer[..count], size, use_sha1)?;
+                    file.write_all(&buffer[..count])?;
+                }
+                Err(error) => {
+                    failure = anyhow!(error);
+                    break;
+                }
+            }
+        }
+        if hashes.size == size {
+            return Ok(());
+        }
+    }
+    Err(failure.context(format!(
+        "reading pinned asset {url} after {} of {size} bytes; gave up after {} attempts without progress or {} in all",
+        hashes.size, retries.stalls, retries.attempts
+    )))
 }
 
 fn safe_archive_path(name: &str, root_name: &str) -> Result<PathBuf> {
