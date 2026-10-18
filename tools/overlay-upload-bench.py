@@ -82,6 +82,9 @@ def run(release: Path, args, scenario: str, rate: float, draws: int) -> dict:
     record["composited"] = record["pixel"][0] == 128 and record["pixel"][3] >= 200
     if (scenario == "none") == record["composited"]:
         raise SystemExit(f"composition proof failed for {scenario}: {record['pixel']}")
+    # After updates stop, both counters must show the last published frame.
+    if not record["content_ok"]:
+        raise SystemExit(f"stale overlay content for {scenario}: {record['pixel']} {record['corner']}")
     return record
 
 

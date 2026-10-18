@@ -7,6 +7,8 @@ use std::mem;
 use std::ptr;
 use vosulay_frame::DamageRect;
 
+mod upload;
+
 /// Times `$body` under a profile stage in `profile` builds; plain otherwise.
 macro_rules! timed {
     ($stage:ident, $body:expr) => {{
@@ -135,6 +137,27 @@ type PolygonMode = unsafe extern "C" fn(c_uint, c_uint);
 type GetStringi = unsafe extern "C" fn(c_uint, c_uint) -> *const u8;
 type Enablei = unsafe extern "C" fn(c_uint, c_uint);
 type ColorMaski = unsafe extern "C" fn(c_uint, u8, u8, u8, u8);
+type FenceSync = unsafe extern "C" fn(c_uint, c_uint) -> *mut c_void;
+type ClientWaitSync = unsafe extern "C" fn(*mut c_void, c_uint, u64) -> c_uint;
+type DeleteSync = unsafe extern "C" fn(*mut c_void);
+type Flush = unsafe extern "C" fn();
+type CopyImageSubData = unsafe extern "C" fn(
+    c_uint,
+    c_uint,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_uint,
+    c_uint,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+);
 type BlendFuncSeparatei = unsafe extern "C" fn(c_uint, c_uint, c_uint, c_uint, c_uint);
 type BlendEquationSeparatei = unsafe extern "C" fn(c_uint, c_uint, c_uint);
 
@@ -197,6 +220,12 @@ struct Gl {
     blend_equation_separate: BlendEquationSeparate,
     color_mask: ColorMask,
     draw_arrays: DrawArrays,
+    fence_sync: FenceSync,
+    client_wait_sync: ClientWaitSync,
+    delete_sync: DeleteSync,
+    flush: Flush,
+    finish: Flush,
+    copy_image: Option<CopyImageSubData>,
 }
 
 impl Gl {
@@ -287,6 +316,12 @@ impl Gl {
             blend_equation_separate: symbol!("glBlendEquationSeparate", BlendEquationSeparate),
             color_mask: symbol!("glColorMask", ColorMask),
             draw_arrays: symbol!("glDrawArrays", DrawArrays),
+            fence_sync: symbol!("glFenceSync", FenceSync),
+            client_wait_sync: symbol!("glClientWaitSync", ClientWaitSync),
+            delete_sync: symbol!("glDeleteSync", DeleteSync),
+            flush: symbol!("glFlush", Flush),
+            finish: symbol!("glFinish", Flush),
+            copy_image: optional!("glCopyImageSubData", CopyImageSubData),
             polygon_mode: {
                 let p = load(b"glPolygonMode\0");
                 if p.is_null() {
@@ -313,6 +348,11 @@ pub(crate) struct Renderer {
     sequence: u64,
     is_es: bool,
     max_texture_size: u32,
+    version: (u8, u8),
+    /// Off-stream uploads for EGL games; None uploads in the game's stream.
+    uploader: Option<upload::Uploader>,
+    /// Whether starting `uploader` was attempted for the current size.
+    uploader_tried: bool,
     #[cfg(feature = "profile")]
     timer: Option<crate::profile::GpuTimer>,
 }
@@ -444,6 +484,9 @@ impl Renderer {
             sequence: 0,
             is_es,
             max_texture_size: maximum as u32,
+            version: (major, minor),
+            uploader: None,
+            uploader_tried: false,
             // SAFETY: the loader's context is current.
             #[cfg(feature = "profile")]
             timer: unsafe { crate::profile::GpuTimer::new(&mut load) },
@@ -455,6 +498,15 @@ impl Renderer {
     }
     pub(crate) fn has_frame(&self) -> bool {
         self.has_frame
+    }
+    /// Whether only newer frames are needed: the texture holds one, or the
+    /// uploader already has a complete one on its way.
+    pub(crate) fn has_or_awaits_frame(&self) -> bool {
+        self.has_frame
+            || self
+                .uploader
+                .as_ref()
+                .is_some_and(upload::Uploader::full_pending)
     }
     pub(crate) fn sequence(&self) -> u64 {
         self.sequence
@@ -468,6 +520,9 @@ impl Renderer {
         if self.width == width && self.height == height {
             return;
         }
+        // Staging textures have the old size; start over at the new one.
+        self.uploader = None;
+        self.uploader_tried = false;
         let mut state = GlState::capture(&self.gl, self.is_es, true);
         // SAFETY: renderer context is current and the texture is owned by it.
         unsafe {
@@ -511,7 +566,7 @@ impl Renderer {
         width: u32,
         height: u32,
     ) -> Option<bool> {
-        if frame.is_none() && !self.has_frame {
+        if frame.is_none() && !self.has_frame && self.uploader.is_none() {
             return Some(false);
         }
         let expected = self.width as usize * self.height as usize * 4;
@@ -548,6 +603,34 @@ impl Renderer {
                 bind_sampler(0, 0);
             }
             (gl.bind_texture)(GL_TEXTURE_2D, self.texture);
+        }
+        if frame.is_some() && !self.uploader_tried {
+            self.uploader_tried = true;
+            // SAFETY: the game's context is current with no unpack buffer
+            // bound (`GlState::capture` restores what this binds).
+            self.uploader = unsafe {
+                set_unpack_defaults(gl);
+                let uploader =
+                    upload::Uploader::start(gl, self.is_es, self.version, self.width, self.height);
+                (gl.bind_texture)(GL_TEXTURE_2D, self.texture);
+                uploader
+            };
+        }
+        let mut frame = frame;
+        if let Some(uploader) = self.uploader.as_ref() {
+            // SAFETY: the game's context is current; `texture` is displayed.
+            if let Some(applied) = unsafe { uploader.apply(gl, self.texture) } {
+                self.has_frame |= applied.full;
+                self.sequence = applied.sequence;
+                #[cfg(feature = "profile")]
+                if let Some(timer) = self.timer.as_mut() {
+                    // SAFETY: the renderer's context is current.
+                    unsafe { timer.uploaded() };
+                }
+            }
+            if let Some(newest) = frame.take() {
+                uploader.offer(newest, !self.has_frame);
+            }
         }
         let consumed = if let Some(frame) = frame.as_ref() {
             let bytes = frame.pixels();
@@ -667,6 +750,8 @@ impl Renderer {
         if self.context != context {
             return;
         }
+        // Stops the thread and its shared context before the textures go.
+        self.uploader = None;
         // SAFETY: the matching owning context is current.
         unsafe {
             (self.gl.delete_textures)(1, &self.texture);

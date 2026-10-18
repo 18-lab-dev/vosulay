@@ -282,7 +282,7 @@ fn draw(surface: &Surface, context: usize, w: u32, h: u32, focused: bool) {
         .renderers
         .iter()
         .position(|renderer| renderer.matches(context));
-    let frame = if existing.is_some_and(|index| rendering.renderers[index].has_frame()) {
+    let frame = if existing.is_some_and(|index| rendering.renderers[index].has_or_awaits_frame()) {
         client.latest()
     } else {
         client.replay_latest()

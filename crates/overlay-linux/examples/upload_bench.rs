@@ -15,6 +15,10 @@ mod bench {
     use std::{
         collections::VecDeque,
         ffi::{CStr, c_char, c_void},
+        sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicU32, Ordering},
+        },
         time::{Duration, Instant},
     };
     use vosulay_frame::DamageRect;
@@ -158,7 +162,15 @@ mod bench {
 
     /// The host side of one attachment: Hello, Visible and the Ring, pings
     /// every 100 ms like the real host, and publications at `rate`.
-    fn host(scenario: Scenario, rate: f64, stop: Instant) -> u64 {
+    /// Lets the game stop updates before checking content: once `quiet` is
+    /// set the host publishes no new changes, finishes publishing the last
+    /// one, and stores its counter value (+1) in `settled`.
+    struct Settle {
+        quiet: AtomicBool,
+        settled: AtomicU32,
+    }
+
+    fn host(scenario: Scenario, rate: f64, stop: Instant, settle: Arc<Settle>) -> u64 {
         let endpoint = std::env::var("VOSULAY_ENDPOINT").expect("VOSULAY_ENDPOINT is required");
         let listener = Listener::bind(&endpoint).expect("bind the private endpoint");
         let mut producer = Producer::new(WIDTH, HEIGHT).expect("create the frame ring");
@@ -208,6 +220,7 @@ mod bench {
         let mut next_ping = Instant::now();
         let mut value = 0u8;
         let mut published = 0;
+        let mut last_damage = None;
         while Instant::now() < stop {
             while let Ok(Some(_)) = connection.recv() {}
             let now = Instant::now();
@@ -215,7 +228,22 @@ mod bench {
                 let _ = connection.send(&session(Packet::new(Kind::Ping)), &[]);
                 next_ping = now + Duration::from_millis(100);
             }
-            if scenario != Scenario::Static && now >= next_frame {
+            if settle.quiet.load(Ordering::Acquire) {
+                if settle.settled.load(Ordering::Acquire) == 0 {
+                    // A publication dropped because every slot was leased is
+                    // retried with its damage; unchanged pixels return false.
+                    for _ in 0..50 {
+                        if producer.publish(&pixels, last_damage).expect("publish") {
+                            published += 1;
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                    settle
+                        .settled
+                        .store(u32::from(value) + 1, Ordering::Release);
+                }
+            } else if scenario != Scenario::Static && now >= next_frame {
                 value = value.wrapping_add(1);
                 let damage = match scenario {
                     Scenario::Full => {
@@ -236,6 +264,7 @@ mod bench {
                         Some(TOP_LEFT.union(BOTTOM_RIGHT))
                     }
                 };
+                last_damage = damage;
                 if producer.publish(&pixels, damage).expect("publish") {
                     published += 1;
                 }
@@ -254,7 +283,8 @@ mod bench {
         available: unsafe extern "C" fn(u32, u32, *mut i32),
         result: unsafe extern "C" fn(u32, u32, *mut u64),
         free: Vec<[u32; 3]>,
-        pending: VecDeque<[u32; 3]>,
+        /// Query sets in flight, and whether their frame is measured.
+        pending: VecDeque<([u32; 3], bool)>,
         game_ns: Vec<f64>,
         hook_ns: Vec<f64>,
     }
@@ -278,10 +308,10 @@ mod bench {
                 hook_ns: Vec::new(),
             }
         }
-        /// Collects finished frames without waiting; drops a frame's timing
+        /// Collects finished frames without waiting; a frame goes untimed
         /// when every query set is still in flight.
-        fn poll(&mut self, record: bool) {
-            while let Some(set) = self.pending.front().copied() {
+        fn poll(&mut self) {
+            while let Some((set, record)) = self.pending.front().copied() {
                 let mut ready = 0;
                 unsafe { (self.available)(set[2], GL_QUERY_RESULT_AVAILABLE, &mut ready) };
                 if ready == 0 {
@@ -359,9 +389,13 @@ mod bench {
             + warmup
             + Duration::from_secs_f64(options.seconds)
             + Duration::from_secs(1);
+        let settle = Arc::new(Settle {
+            quiet: AtomicBool::new(false),
+            settled: AtomicU32::new(0),
+        });
         let host = (options.scenario != Scenario::None).then(|| {
-            let (scenario, rate) = (options.scenario, options.rate);
-            std::thread::spawn(move || host(scenario, rate, stop))
+            let (scenario, rate, settle) = (options.scenario, options.rate, Arc::clone(&settle));
+            std::thread::spawn(move || host(scenario, rate, stop, settle))
         });
         // SAFETY: EGL and GL calls below follow their C contracts on one thread
         // with the created context current.
@@ -462,7 +496,7 @@ mod bench {
             let mut swap_us = Vec::new();
             let mut frame = |swap_us: &mut Vec<f64>, record: bool| {
                 let set = timestamps.as_mut().and_then(|t| {
-                    t.poll(record);
+                    t.poll();
                     t.free.pop()
                 });
                 let counter = timestamps.as_ref().map(|t| t.query_counter);
@@ -490,7 +524,11 @@ mod bench {
                 // a pbuffer swap presents nothing itself.
                 if let (Some(set), Some(counter)) = (set, counter) {
                     counter(set[2], GL_TIMESTAMP);
-                    timestamps.as_mut().unwrap().pending.push_back(set);
+                    timestamps
+                        .as_mut()
+                        .unwrap()
+                        .pending
+                        .push_back((set, record));
                 }
                 // Two frames in flight, like a swapchain.
                 fences.push_back(fence(0x9117, 0));
@@ -514,20 +552,51 @@ mod bench {
             }
             finish();
             let elapsed = start.elapsed().as_secs_f64();
-            if let Some(t) = timestamps.as_mut() {
-                t.poll(true);
+            // Settle: stop updates, keep presenting until the last one has
+            // had time to reach the screen, then check both counters.
+            settle.quiet.store(true, Ordering::Release);
+            let settle_end = Instant::now() + Duration::from_millis(300);
+            while Instant::now() < settle_end
+                || (host.is_some() && settle.settled.load(Ordering::Acquire) == 0)
+            {
+                frame(&mut swap_us, false);
+                assert!(
+                    Instant::now() < stop + Duration::from_secs(5),
+                    "the host never settled"
+                );
             }
-            // Proof of composition: the top-left counter after the last swap.
-            let mut pixel = [0u8; 4];
-            read(
-                (TOP_LEFT.x + 300) as i32,
-                (HEIGHT - TOP_LEFT.y - 100) as i32,
-                1,
-                1,
-                0x1908,
-                0x1401,
-                pixel.as_mut_ptr().cast(),
-            );
+            finish();
+            if let Some(t) = timestamps.as_mut() {
+                t.poll();
+            }
+            let value = settle.settled.load(Ordering::Acquire).saturating_sub(1) as u8;
+            let read_counter = |rect: DamageRect| {
+                let mut pixel = [0u8; 4];
+                read(
+                    (rect.x + rect.width / 2) as i32,
+                    (HEIGHT - rect.y - rect.height / 2) as i32,
+                    1,
+                    1,
+                    0x1908,
+                    0x1401,
+                    pixel.as_mut_ptr().cast(),
+                );
+                pixel
+            };
+            let pixel = read_counter(TOP_LEFT);
+            let corner = read_counter(BOTTOM_RIGHT);
+            // Expected RGBA of each counter after the last update (BGRA bytes
+            // are swizzled): full changes only blue; painted counters change
+            // green and blue; the bottom-right one is painted by corners only.
+            let painted = [128, 255 - value, value, 255];
+            let expected = match options.scenario {
+                Scenario::None => None,
+                Scenario::Static => Some(([128, 255, 0, 255], [128, 255, 0, 255])),
+                Scenario::Small => Some((painted, [128, 255, 0, 255])),
+                Scenario::Corners => Some((painted, painted)),
+                Scenario::Full => Some(([128, 255, value, 255], [128, 255, value, 255])),
+            };
+            let content_ok = expected.is_none_or(|(top, bottom)| pixel == top && corner == bottom);
             let published = host.map(|thread| thread.join().expect("host thread"));
             let gpu = timestamps.map_or_else(
                 || "null".to_owned(),
@@ -540,7 +609,7 @@ mod bench {
                 },
             );
             println!(
-                "{{\"scenario\":\"{}\",\"rate\":{},\"draws\":{},\"api\":\"{}\",\"renderer\":\"{}\",\"fps\":{:.1},\"frame_ms\":{:.4},\"swap_cpu_us\":{},\"gpu\":{},\"published\":{},\"pixel\":[{},{},{},{}],\"profile\":{}}}",
+                "{{\"scenario\":\"{}\",\"rate\":{},\"draws\":{},\"api\":\"{}\",\"renderer\":\"{}\",\"fps\":{:.1},\"frame_ms\":{:.4},\"swap_cpu_us\":{},\"gpu\":{},\"published\":{},\"pixel\":[{},{},{},{}],\"corner\":[{},{},{},{}],\"content_ok\":{},\"profile\":{}}}",
                 options.scenario.name(),
                 options.rate,
                 options.draws,
@@ -555,6 +624,11 @@ mod bench {
                 pixel[1],
                 pixel[2],
                 pixel[3],
+                corner[0],
+                corner[1],
+                corner[2],
+                corner[3],
+                content_ok,
                 compositor_profile().unwrap_or_else(|| "null".to_owned()),
             );
         }

@@ -58,6 +58,8 @@ Use a fresh output directory. The wrapper isolates PID/IPC/network namespaces an
 - The EGL vendor defaults to NVIDIA when its glvnd file is installed, so Mesa's software renderer is never measured by accident; `--egl-vendor` overrides it. `--api es` uses an ES 3 context instead of desktop GL 3.3 core.
 - `--profile` builds the compositor with its `profile` feature (benchmark builds only) and adds a second table: CPU time of each GL call on the update path (state capture, buffer orphan, map, row copy, unmap, `glTexSubImage2D`, draw, restore) and GPU time of the upload and of the composite from timestamp queries that are read without waiting.
 - `--json FILE` keeps the raw per-run records.
+- After the timed part, updates stop and both counters are read back; the run fails unless they show the last published frame, which catches lost or misplaced damage.
+- The environment passes through, so `VOSULAY_OVERLAY_ASYNC_UPLOAD=0` measures the in-stream upload instead of the off-stream one.
 - GPU upload time is bounded by the GPU's PCIe link: check `/sys/bus/pci/devices/<gpu>/current_link_speed` and `current_link_width` before comparing machines. A Gen4 x4 link (a GPU behind the chipset) moves roughly 7 GB/s, so a full 2560x1440 update costs about 2 ms of GPU time there.
 
 It isolates the game-side cost. Chromium's own rendering and readback, and real swapchain presentation, are outside it.
