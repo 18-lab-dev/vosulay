@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""Headless benchmark of the in-game cost of overlay updates (Linux).
+
+Builds the compositor library, the lookup helper and the `upload_bench`
+example explicitly, then runs a matrix of overlay scenarios against a
+synthetic surfaceless-EGL game with the library preloaded. Repetitions are
+interleaved so drift (other work on a shared GPU) spreads over every scenario.
+No window, display connection or input is involved.
+
+Scenarios: none (no compositor), static (composite only), small (one 600x200
+counter changes), corners (two counters in opposite corners change), full
+(every pixel changes). Rates are overlay updates per second.
+
+Output: a Markdown table of medians across repetitions, and with --json the
+raw per-run records.
+"""
+import argparse
+import hashlib
+import itertools
+import json
+import os
+import statistics
+import subprocess
+import sys
+import uuid
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+NVIDIA_EGL = Path("/usr/share/glvnd/egl_vendor.d/10_nvidia.json")
+
+
+def build(target: Path) -> Path:
+    environment = dict(os.environ, CARGO_TARGET_DIR=str(target))
+    # --lib and --example are separate invocations: building only the example
+    # does not rebuild the cdylib that gets preloaded.
+    for arguments in (
+        ["-p", "vosulay-overlay", "-p", "vosulay-lookup", "--lib"],
+        ["-p", "vosulay-overlay", "--example", "upload_bench"],
+    ):
+        subprocess.run(
+            ["cargo", "build", "--release", "--locked", *arguments],
+            cwd=ROOT,
+            env=environment,
+            check=True,
+        )
+    return target / "release"
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+
+
+def run(release: Path, args, scenario: str, rate: float, draws: int) -> dict:
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in ("DISPLAY", "WAYLAND_DISPLAY", "LD_PRELOAD", "VOSULAY_ENDPOINT")
+    }
+    if args.egl_vendor:
+        environment["__EGL_VENDOR_LIBRARY_FILENAMES"] = args.egl_vendor
+    if scenario != "none":
+        environment["LD_PRELOAD"] = ":".join(
+            str(release / name) for name in ("libvosulay_lookup.so", "libvosulay_overlay.so")
+        )
+        environment["VOSULAY_ENDPOINT"] = f"@vosulay-upload-bench-{uuid.uuid4().hex[:12]}"
+    command = [
+        str(release / "examples" / "upload_bench"),
+        "--scenario", scenario,
+        "--rate", str(rate),
+        "--seconds", str(args.seconds),
+        "--draws", str(draws),
+        "--api", args.api,
+    ]
+    result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=120)
+    if result.returncode != 0:
+        raise SystemExit(f"{' '.join(command)} failed:\n{result.stderr}")
+    record = json.loads(result.stdout.strip().splitlines()[-1])
+    # The top-left counter reads back as red 128 when the overlay was drawn.
+    record["composited"] = record["pixel"][0] == 128 and record["pixel"][3] >= 200
+    if (scenario == "none") == record["composited"]:
+        raise SystemExit(f"composition proof failed for {scenario}: {record['pixel']}")
+    return record
+
+
+def table(records: list) -> str:
+    groups = {}
+    for record in records:
+        key = (record["draws"], record["scenario"], record["rate"] if record["scenario"] not in ("none", "static") else 0)
+        groups.setdefault(key, []).append(record)
+    order = {"none": 0, "static": 1, "small": 2, "corners": 3, "full": 4}
+    lines = [
+        "| game draws | scenario | updates/s | fps | frame ms | hooked swap CPU µs p50 / p99 | hook GPU µs p50 / p99 | runs |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for key in sorted(groups, key=lambda k: (k[0], order[k[1]], k[2])):
+        runs = groups[key]
+        median = lambda f: statistics.median(f(r) for r in runs)  # noqa: E731
+        gpu = runs[0]["gpu"]
+        hook = (
+            f"{median(lambda r: r['gpu']['hook_us']['p50']):.0f} / {median(lambda r: r['gpu']['hook_us']['p99']):.0f}"
+            if gpu
+            else "n/a"
+        )
+        lines.append(
+            f"| {key[0]} | {key[1]} | {key[2] or '-'} | {median(lambda r: r['fps']):.0f} | "
+            f"{median(lambda r: r['frame_ms']):.3f} | "
+            f"{median(lambda r: r['swap_cpu_us']['p50']):.0f} / {median(lambda r: r['swap_cpu_us']['p99']):.0f} | "
+            f"{hook} | {len(runs)} |"
+        )
+    return "\n".join(lines)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--scenarios", default="none,static,small,corners,full")
+    parser.add_argument("--rates", default="60,120,360", help="overlay updates per second")
+    parser.add_argument("--draws", default="4,100", help="game load: blended fullscreen layers per frame")
+    parser.add_argument("--reps", type=int, default=2)
+    parser.add_argument("--seconds", type=float, default=2.0)
+    parser.add_argument("--api", choices=("gl", "es"), default="gl")
+    parser.add_argument(
+        "--egl-vendor",
+        default=str(NVIDIA_EGL) if NVIDIA_EGL.exists() else "",
+        help="glvnd EGL vendor JSON (default: NVIDIA when installed, so Mesa's software renderer is never measured)",
+    )
+    parser.add_argument("--target-dir", type=Path, default=ROOT / "target" / "overlay-upload-bench")
+    parser.add_argument("--json", type=Path, help="write raw records here")
+    args = parser.parse_args()
+
+    release = build(args.target_dir)
+    for name in ("libvosulay_overlay.so", "libvosulay_lookup.so"):
+        print(f"{name} sha256 {digest(release / name)}", file=sys.stderr)
+
+    configurations = []
+    for draws in (int(value) for value in args.draws.split(",")):
+        for scenario in args.scenarios.split(","):
+            rates = [0.0] if scenario in ("none", "static") else [float(v) for v in args.rates.split(",")]
+            configurations += [(scenario, rate, draws) for rate in rates]
+    records = []
+    for repetition, configuration in itertools.product(range(args.reps), configurations):
+        record = run(release, args, *configuration)
+        record["repetition"] = repetition
+        records.append(record)
+        print(
+            f"rep {repetition} {configuration[0]:>7} {configuration[1]:>5.0f}/s draws {configuration[2]:>3}: "
+            f"{record['fps']:.0f} fps",
+            file=sys.stderr,
+        )
+    renderers = {record["renderer"] for record in records}
+    print(f"renderer: {', '.join(sorted(renderers))}")
+    print(table(records))
+    if args.json:
+        args.json.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+
+
+if __name__ == "__main__":
+    main()

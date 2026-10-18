@@ -47,6 +47,19 @@ python3 tools/cef/private-smoke.py \
 
 Use a fresh output directory. The wrapper isolates PID/IPC/network namespaces and temporary directories, creates its own X display, strips interactive desktop variables, and bounds process lifetime. Never substitute a smoke window on the user's working desktop. Smoke checks OSR transparency, JavaScript/secure scheme, manager bridge, iframe pixels, WebGL, resize, and shutdown; WebGPU compute depends on adapter availability. A software smoke does not prove hardware/game composition or input behavior.
 
+### Overlay upload cost (Linux GL, headless)
+
+`python3 tools/overlay-upload-bench.py` measures what overlay updates cost a GL game, on any Linux machine with a GPU and its EGL driver. It builds the compositor library and lookup helper with `--lib` (building only the example does not refresh the preloaded `.so`) and the [`upload_bench`](../crates/overlay-linux/examples/upload_bench.rs) example into `target/overlay-upload-bench/`, prints the libraries' hashes, then runs a synthetic surfaceless-EGL game: a 2560x1440 pbuffer drawn uncapped with two frames in flight, with the compositor preloaded. A fake host in the same process attaches over the real control protocol and publishes into a real frame ring. No window, display connection or input is involved, but the GPU is shared, so keep runs short on a machine someone is using.
+
+- Scenarios: `none` (no compositor), `static` (composite only), `small` (one 600x200 counter changes), `corners` (two counters in opposite corners change), `full` (every pixel changes), at `--rates` overlay updates per second (default 60,120,360).
+- `--draws` sets the game load in blended fullscreen layers per frame; the defaults `4,100` are a light game and roughly 1 ms per frame on an RTX 5090.
+- Repetitions (`--reps`) are interleaved, so drift from other GPU work spreads over every scenario. The table reports medians: fps, frame time, CPU time of the hooked swap and GPU time of everything the hook submitted (timestamp queries, read without waiting).
+- Each run reads back a counter pixel after the last swap and fails unless the overlay was composited (or, for `none`, was not).
+- The EGL vendor defaults to NVIDIA when its glvnd file is installed, so Mesa's software renderer is never measured by accident; `--egl-vendor` overrides it. `--api es` uses an ES 3 context instead of desktop GL 3.3 core.
+- `--json FILE` keeps the raw per-run records.
+
+It isolates the game-side cost. Chromium's own rendering and readback, and real swapchain presentation, are outside it.
+
 ## Coverage and manual boundaries
 
 - `src/config.rs`, `tests/tosu_migration.rs`: defaults, normalization (including `vosu_profile` pins), persistence, safe/idempotent imports.
