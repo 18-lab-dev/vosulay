@@ -147,28 +147,28 @@
       "url": "https://github.com/frida/capstone/blob/d536b1577fd033a31d75f48fd183aa425256cc18/suite/regress/LICENSE"
     }
   ],
-  "cef-dll-sys@152.4.0+152.0.8": [
+  "cef-dll-sys@154.5.0+154.0.34": [
     {
-      "file": "licenses/cef-dll-sys-152.4.0+152.0.8/LICENSE-MIT",
+      "file": "licenses/cef-dll-sys-154.5.0+154.0.34/LICENSE-MIT",
       "sha256": "968a067d2458015543add393bbde51ef3f330ea122cf7b3380ea62e5a8945aee",
-      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-MIT"
+      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/2861f6991fae3ee31f877891382adcbc9b9f0953/LICENSE-MIT"
     },
     {
-      "file": "licenses/cef-dll-sys-152.4.0+152.0.8/LICENSE-APACHE",
+      "file": "licenses/cef-dll-sys-154.5.0+154.0.34/LICENSE-APACHE",
       "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-APACHE"
+      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/2861f6991fae3ee31f877891382adcbc9b9f0953/LICENSE-APACHE"
     }
   ],
-  "cef@152.4.0+152.0.8": [
+  "cef@154.5.0+154.0.34": [
     {
-      "file": "licenses/cef-152.4.0+152.0.8/LICENSE-MIT",
+      "file": "licenses/cef-154.5.0+154.0.34/LICENSE-MIT",
       "sha256": "968a067d2458015543add393bbde51ef3f330ea122cf7b3380ea62e5a8945aee",
-      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-MIT"
+      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/2861f6991fae3ee31f877891382adcbc9b9f0953/LICENSE-MIT"
     },
     {
-      "file": "licenses/cef-152.4.0+152.0.8/LICENSE-APACHE",
+      "file": "licenses/cef-154.5.0+154.0.34/LICENSE-APACHE",
       "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-APACHE"
+      "url": "https://raw.githubusercontent.com/tauri-apps/cef-rs/2861f6991fae3ee31f877891382adcbc9b9f0953/LICENSE-APACHE"
     }
   ],
   "codespan-reporting@0.11.1": [

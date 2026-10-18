@@ -6,7 +6,7 @@ Covers the union of the locked Linux host/compositor/lookup and Windows host/cli
 
 ## CEF and Chromium
 
-Pinned CEF: `152.0.8+g1ce985c+chromium-152.0.7977.134`. The accompanying `LICENSE.txt` and `CREDITS.html` carry CEF and Chromium component terms, including the runtime libraries, resources, locales, and Windows bootstrap. Keep those files with the runtime.
+Pinned CEF: `154.0.34+g14c5a08+chromium-154.0.8037.98`. The accompanying `LICENSE.txt` and `CREDITS.html` carry CEF and Chromium component terms, including the runtime libraries, resources, locales, and Windows bootstrap. Keep those files with the runtime.
 
 ## asdf-overlay 2.1.0
 
@@ -766,37 +766,37 @@ Repository: https://github.com/rust-lang/cc-rs
 
 License/notice texts: [Text 72](#license-text-72), [Text 181](#license-text-181)
 
-### cef 152.4.0+152.0.8
+### cef 154.5.0+154.0.34
 
 Declared license: `Apache-2.0 OR MIT`
 
 Source: `registry+https://github.com/rust-lang/crates.io-index`
 
-Unmodified crate source: https://crates.io/api/v1/crates/cef/152.4.0+152.0.8/download
+Unmodified crate source: https://crates.io/api/v1/crates/cef/154.5.0+154.0.34/download
 
 Repository: https://github.com/tauri-apps/cef-rs
 
 License/notice texts: [Text 169](#license-text-169), [Text 181](#license-text-181)
 
-License text provenance: https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-MIT
+License text provenance: https://raw.githubusercontent.com/tauri-apps/cef-rs/2861f6991fae3ee31f877891382adcbc9b9f0953/LICENSE-MIT
 
-License text provenance: https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-APACHE
+License text provenance: https://raw.githubusercontent.com/tauri-apps/cef-rs/2861f6991fae3ee31f877891382adcbc9b9f0953/LICENSE-APACHE
 
-### cef-dll-sys 152.4.0+152.0.8
+### cef-dll-sys 154.5.0+154.0.34
 
 Declared license: `Apache-2.0 OR MIT`
 
 Source: `registry+https://github.com/rust-lang/crates.io-index`
 
-Unmodified crate source: https://crates.io/api/v1/crates/cef-dll-sys/152.4.0+152.0.8/download
+Unmodified crate source: https://crates.io/api/v1/crates/cef-dll-sys/154.5.0+154.0.34/download
 
 Repository: https://github.com/tauri-apps/cef-rs
 
 License/notice texts: [Text 169](#license-text-169), [Text 181](#license-text-181)
 
-License text provenance: https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-MIT
+License text provenance: https://raw.githubusercontent.com/tauri-apps/cef-rs/2861f6991fae3ee31f877891382adcbc9b9f0953/LICENSE-MIT
 
-License text provenance: https://raw.githubusercontent.com/tauri-apps/cef-rs/b8efa38d60d84668cae538da2dc5a4e8a81dbf6a/LICENSE-APACHE
+License text provenance: https://raw.githubusercontent.com/tauri-apps/cef-rs/2861f6991fae3ee31f877891382adcbc9b9f0953/LICENSE-APACHE
 
 ### cexpr 0.6.0
 
@@ -17527,8 +17527,8 @@ Normalized SHA-256: `968a067d2458015543add393bbde51ef3f330ea122cf7b3380ea62e5a89
 
 Used by:
 
-- **cef 152.4.0+152.0.8** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/cef/152.4.0+152.0.8/download); repository: https://github.com/tauri-apps/cef-rs; files: `licenses/cef-152.4.0+152.0.8/LICENSE-MIT`
-- **cef-dll-sys 152.4.0+152.0.8** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/cef-dll-sys/152.4.0+152.0.8/download); repository: https://github.com/tauri-apps/cef-rs; files: `licenses/cef-dll-sys-152.4.0+152.0.8/LICENSE-MIT`
+- **cef 154.5.0+154.0.34** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/cef/154.5.0+154.0.34/download); repository: https://github.com/tauri-apps/cef-rs; files: `licenses/cef-154.5.0+154.0.34/LICENSE-MIT`
+- **cef-dll-sys 154.5.0+154.0.34** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/cef-dll-sys/154.5.0+154.0.34/download); repository: https://github.com/tauri-apps/cef-rs; files: `licenses/cef-dll-sys-154.5.0+154.0.34/LICENSE-MIT`
 - **download-cef 3.0.0** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/download-cef/3.0.0/download); repository: https://github.com/tauri-apps/cef-rs; files: `licenses/download-cef-3.0.0/LICENSE-MIT`
 
 ````text
@@ -18002,8 +18002,8 @@ Used by:
 - **bzip2 0.6.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/bzip2/0.6.1/download); repository: https://github.com/trifectatechfoundation/bzip2-rs; files: `LICENSE-APACHE`
 - **cc 1.4.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cc/1.4.4/download); repository: https://github.com/rust-lang/cc-rs; files: `LICENSE-APACHE`
 - **cc 1.5.1** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cc/1.5.1/download); repository: https://github.com/rust-lang/cc-rs; files: `LICENSE-APACHE`
-- **cef 152.4.0+152.0.8** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/cef/152.4.0+152.0.8/download); repository: https://github.com/tauri-apps/cef-rs; files: `licenses/cef-152.4.0+152.0.8/LICENSE-APACHE`
-- **cef-dll-sys 152.4.0+152.0.8** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/cef-dll-sys/152.4.0+152.0.8/download); repository: https://github.com/tauri-apps/cef-rs; files: `licenses/cef-dll-sys-152.4.0+152.0.8/LICENSE-APACHE`
+- **cef 154.5.0+154.0.34** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/cef/154.5.0+154.0.34/download); repository: https://github.com/tauri-apps/cef-rs; files: `licenses/cef-154.5.0+154.0.34/LICENSE-APACHE`
+- **cef-dll-sys 154.5.0+154.0.34** — `Apache-2.0 OR MIT`; [source](https://crates.io/api/v1/crates/cef-dll-sys/154.5.0+154.0.34/download); repository: https://github.com/tauri-apps/cef-rs; files: `licenses/cef-dll-sys-154.5.0+154.0.34/LICENSE-APACHE`
 - **cexpr 0.6.0** — `Apache-2.0/MIT`; [source](https://crates.io/api/v1/crates/cexpr/0.6.0/download); repository: https://github.com/jethrogb/rust-cexpr; files: `LICENSE-APACHE`
 - **cfg-if 1.0.4** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cfg-if/1.0.4/download); repository: https://github.com/rust-lang/cfg-if; files: `LICENSE-APACHE`
 - **cfg-if 1.0.5** — `MIT OR Apache-2.0`; [source](https://crates.io/api/v1/crates/cfg-if/1.0.5/download); repository: https://github.com/rust-lang/cfg-if; files: `LICENSE-APACHE`

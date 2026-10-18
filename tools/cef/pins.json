@@ -1,29 +1,29 @@
 {
-  "cef_version": "152.0.8+g1ce985c+chromium-152.0.7977.134",
+  "cef_version": "154.0.34+g14c5a08+chromium-154.0.8037.98",
   "catalog": "https://cef-builds.spotifycdn.com/index.json",
-  "catalog_observed": "2026-10-04",
+  "catalog_observed": "2026-10-18",
   "sha256_provenance": "Computed from downloaded official archive bytes after matching catalog SHA1 and size.",
   "platforms": {
     "linux-x86_64": {
-      "archive": "cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_linux64_minimal.tar.bz2",
-      "url": "https://cef-builds.spotifycdn.com/cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_linux64_minimal.tar.bz2",
-      "size": 321520830,
-      "sha1": "25798f5f87b9cc699311c9abae73f4ef0f56ea76",
-      "sha256": "7f47eeb1c297099ffb9e12d0dea6a0d4eabd255135d114ff0ace8780bdb3feeb",
-      "cef_path_subdir": "cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_linux64_minimal",
-      "required_files": ["Release/chrome-sandbox", "Release/libcef.so", "Release/libEGL.so", "Release/libGLESv2.so", "Release/libvk_swiftshader.so", "Release/libvulkan.so.1", "Release/v8_context_snapshot.bin", "Release/vk_swiftshader_icd.json", "Resources/chrome_100_percent.pak", "Resources/chrome_200_percent.pak", "Resources/icudtl.dat", "Resources/resources.pak", "Resources/locales/en-US.pak", "include/cef_version.h", "LICENSE.txt", "CREDITS.html"],
-      "package_release_files": ["chrome-sandbox", "libcef.so", "libEGL.so", "libGLESv2.so", "libvk_swiftshader.so", "libvulkan.so.1", "v8_context_snapshot.bin", "vk_swiftshader_icd.json"],
+      "archive": "cef_binary_154.0.34+g14c5a08+chromium-154.0.8037.98_linux64_minimal.tar.bz2",
+      "url": "https://cef-builds.spotifycdn.com/cef_binary_154.0.34+g14c5a08+chromium-154.0.8037.98_linux64_minimal.tar.bz2",
+      "size": 326489962,
+      "sha1": "15c91ad767097217b2e82ba8b933fe30b134be69",
+      "sha256": "e87e2c76304372dd28b899ceb6efa4b353f52700594ddc358a8237ec07ec6492",
+      "cef_path_subdir": "cef_binary_154.0.34+g14c5a08+chromium-154.0.8037.98_linux64_minimal",
+      "required_files": ["Release/chrome-sandbox", "Release/libcef.so", "Release/libvk_swiftshader.so", "Release/libvulkan.so.1", "Release/v8_context_snapshot.bin", "Release/vk_swiftshader_icd.json", "Resources/chrome_100_percent.pak", "Resources/chrome_200_percent.pak", "Resources/icudtl.dat", "Resources/resources.pak", "Resources/locales/en-US.pak", "include/cef_version.h", "LICENSE.txt", "CREDITS.html"],
+      "package_release_files": ["chrome-sandbox", "libcef.so", "libvk_swiftshader.so", "libvulkan.so.1", "v8_context_snapshot.bin", "vk_swiftshader_icd.json"],
       "package_resources": ["chrome_100_percent.pak", "chrome_200_percent.pak", "icudtl.dat", "resources.pak", "locales"]
     },
     "windows-x86_64": {
-      "archive": "cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_windows64_minimal.tar.bz2",
-      "url": "https://cef-builds.spotifycdn.com/cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_windows64_minimal.tar.bz2",
-      "size": 171635737,
-      "sha1": "74289811aa46b242cfbdba7e89f389e70df818b9",
-      "sha256": "c78fd85d4c604007e199d1abf749bf2ca6d10c1e81d32d22ea0c8f9dfcf7ea92",
-      "cef_path_subdir": "cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_windows64_minimal",
-      "required_files": ["Release/bootstrap.exe", "Release/bootstrapc.exe", "Release/libcef.dll", "Release/libcef.lib", "Release/chrome_elf.dll", "Release/d3dcompiler_47.dll", "Release/dxcompiler.dll", "Release/dxil.dll", "Release/libEGL.dll", "Release/libGLESv2.dll", "Release/v8_context_snapshot.bin", "Release/vk_swiftshader.dll", "Release/vk_swiftshader_icd.json", "Release/vulkan-1.dll", "Resources/chrome_100_percent.pak", "Resources/chrome_200_percent.pak", "Resources/icudtl.dat", "Resources/resources.pak", "Resources/locales/en-US.pak", "include/cef_version.h", "LICENSE.txt", "CREDITS.html"],
-      "package_release_files": ["chrome_elf.dll", "d3dcompiler_47.dll", "dxcompiler.dll", "dxil.dll", "libEGL.dll", "libGLESv2.dll", "libcef.dll", "v8_context_snapshot.bin", "vk_swiftshader.dll", "vk_swiftshader_icd.json", "vulkan-1.dll"],
+      "archive": "cef_binary_154.0.34+g14c5a08+chromium-154.0.8037.98_windows64_minimal.tar.bz2",
+      "url": "https://cef-builds.spotifycdn.com/cef_binary_154.0.34+g14c5a08+chromium-154.0.8037.98_windows64_minimal.tar.bz2",
+      "size": 172752666,
+      "sha1": "be54bbaf3222191dec59ffd9c9ec7e8a7f44a26d",
+      "sha256": "c81c34d048d87276f4a18f0b000206710a1709bb67dd658948b87100e1a538da",
+      "cef_path_subdir": "cef_binary_154.0.34+g14c5a08+chromium-154.0.8037.98_windows64_minimal",
+      "required_files": ["Release/bootstrap.exe", "Release/bootstrapc.exe", "Release/libcef.dll", "Release/libcef.lib", "Release/chrome_elf.dll", "Release/d3dcompiler_47.dll", "Release/dxcompiler.dll", "Release/dxil.dll", "Release/v8_context_snapshot.bin", "Release/vk_swiftshader.dll", "Release/vk_swiftshader_icd.json", "Release/vulkan-1.dll", "Resources/chrome_100_percent.pak", "Resources/chrome_200_percent.pak", "Resources/icudtl.dat", "Resources/resources.pak", "Resources/locales/en-US.pak", "include/cef_version.h", "LICENSE.txt", "CREDITS.html"],
+      "package_release_files": ["chrome_elf.dll", "d3dcompiler_47.dll", "dxcompiler.dll", "dxil.dll", "libcef.dll", "v8_context_snapshot.bin", "vk_swiftshader.dll", "vk_swiftshader_icd.json", "vulkan-1.dll"],
       "package_resources": ["chrome_100_percent.pak", "chrome_200_percent.pak", "icudtl.dat", "resources.pak", "locales"]
     }
   },
@@ -52,8 +52,14 @@
       }
     ],
     "dlls": [
-      { "name": "asdf_overlay-x64.dll", "target": "x86_64-pc-windows-msvc" },
-      { "name": "asdf_overlay-x86.dll", "target": "i686-pc-windows-msvc" }
+      {
+        "name": "asdf_overlay-x64.dll",
+        "target": "x86_64-pc-windows-msvc"
+      },
+      {
+        "name": "asdf_overlay-x86.dll",
+        "target": "i686-pc-windows-msvc"
+      }
     ]
   }
 }

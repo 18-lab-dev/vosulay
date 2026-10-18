@@ -299,9 +299,9 @@ impl Host<'_> {
                 })
             }?);
             // CEF replaced the exit signal handlers with Chromium's, which vosulay never hears.
-            // `CefSettings::disable_signal_handlers` does not prevent that in CEF 152: Chromium's
-            // shutdown detector still installs them, and the setting only stops Chromium from
-            // resetting the crash-signal handlers.
+            // `CefSettings::disable_signal_handlers` does not prevent that (rechecked on CEF 154):
+            // Chromium's shutdown detector still installs them, and the setting only stops Chromium
+            // from resetting the crash-signal handlers.
             #[cfg(target_os = "linux")]
             super::signals::install(&thread::current()).context("could not handle exit signals")?;
         }

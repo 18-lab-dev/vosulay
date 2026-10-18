@@ -13,8 +13,8 @@ The exact CEF file lists, versions, sizes and digests are in [tools/cef/pins.jso
 | Linux `libvosulay_overlay.so`, `libvosulay_lookup.so` | `crates/overlay-linux` and `crates/overlay-lookup`, built from this checkout | MIT plus Rust dependency notices | vosulay source-built injected libraries |
 | `VkLayer_vosulay_overlay.json` | Repository layer manifest, copied unchanged | MIT | Data, not a binary |
 | Windows `vosulay.exe` | Official pinned CEF `Release/bootstrap.exe`, renamed to the client basename; icon/version resources edited, CEF copyright retained | CEF BSD-style terms in `LICENSE.txt`; Chromium terms in `CREDITS.html` | **Upstream prebuilt, not vosulay code; ships unsigned** |
-| Linux CEF `chrome-sandbox`, `libcef.so`, `libEGL.so`, `libGLESv2.so`, `libvk_swiftshader.so`, `libvulkan.so.1` | Official minimal CEF archive; Linux packager strips ELF debug/unneeded symbols | CEF `LICENSE.txt` and Chromium component `CREDITS.html` | Third-party prebuilt; not an own-binary signing target |
-| Windows CEF `libcef.dll`, `chrome_elf.dll`, `d3dcompiler_47.dll`, `dxcompiler.dll`, `dxil.dll`, `libEGL.dll`, `libGLESv2.dll`, `vk_swiftshader.dll`, `vulkan-1.dll` | Official minimal CEF archive | `LICENSE.txt` and `CREDITS.html` (not all component code is CEF's BSD license) | Upstream DLLs ship unsigned by vosulay; preserve upstream signatures if any |
+| Linux CEF `chrome-sandbox`, `libcef.so`, `libvk_swiftshader.so`, `libvulkan.so.1` | Official minimal CEF archive; Linux packager strips ELF debug/unneeded symbols | CEF `LICENSE.txt` and Chromium component `CREDITS.html` | Third-party prebuilt; not an own-binary signing target |
+| Windows CEF `libcef.dll`, `chrome_elf.dll`, `d3dcompiler_47.dll`, `dxcompiler.dll`, `dxil.dll`, `vk_swiftshader.dll`, `vulkan-1.dll` | Official minimal CEF archive | `LICENSE.txt` and `CREDITS.html` (not all component code is CEF's BSD license) | Upstream DLLs ship unsigned by vosulay; preserve upstream signatures if any |
 | CEF `v8_context_snapshot.bin`, `vk_swiftshader_icd.json`, `chrome_100_percent.pak`, `chrome_200_percent.pak`, `icudtl.dat`, `resources.pak`, entire `locales/` tree | Copied from pinned archive | `LICENSE.txt` and `CREDITS.html` | Third-party runtime data |
 | Windows `asdf_overlay-x64.dll`, `asdf_overlay-x86.dll` | Built by vosulay's Packages workflow (`vosulay-cef build-asdf`) from asdf-overlay source `c925244c8d14ca36d82585834cdfebf13d6ce86b`, linking Frida's stock Gum 17.17.0 devkits; source archive and devkits pinned by SHA-256 | Upstream `MIT OR Apache-2.0`; dependency notices enumerated from the pinned lockfile (205 crates per x64/x86 graph) plus pinned native Frida Gum 17.17.0 SDK component sources; GLib LGPL static-link route described below | Third-party code ships unsigned by vosulay |
 | Embedded `assets/manager.html`, `.css`, `.js`, `assets/backend.js` | Repository frontend/broker source compiled into host | Repository MIT, retaining original copyright (see history below) | Part of source-built host |
@@ -29,12 +29,12 @@ There is no separate vendored production-source tree in this checkout. Registry 
 
 ## Pins and integrity
 
-CEF is pinned to `152.0.8+g1ce985c+chromium-152.0.7977.134`. Official [Spotify-hosted CEF catalog](https://cef-builds.spotifycdn.com/index.json) size and SHA-1 were matched before calculating archive SHA-256:
+CEF is pinned to `154.0.34+g14c5a08+chromium-154.0.8037.98`. Official [Spotify-hosted CEF catalog](https://cef-builds.spotifycdn.com/index.json) size and SHA-1 were matched before calculating archive SHA-256. Since CEF 154 the minimal archives no longer ship ANGLE's separate `libEGL`/`libGLESv2` libraries on either platform:
 
 | Download | Pinned SHA-256 |
 | --- | --- |
-| Linux minimal CEF archive | `7f47eeb1c297099ffb9e12d0dea6a0d4eabd255135d114ff0ace8780bdb3feeb` |
-| Windows minimal CEF archive | `c78fd85d4c604007e199d1abf749bf2ca6d10c1e81d32d22ea0c8f9dfcf7ea92` |
+| Linux minimal CEF archive | `e87e2c76304372dd28b899ceb6efa4b353f52700594ddc358a8237ec07ec6492` |
+| Windows minimal CEF archive | `c81c34d048d87276f4a18f0b000206710a1709bb67dd658948b87100e1a538da` |
 | asdf-overlay `c925244` source archive (codeload) | `ae413f0ed484f268a9237573a7eb1bafdde4e1d5a6cabd600ebd986818c6573b` |
 | Frida Gum devkit 17.17.0 windows-x86_64 | `7c0166afe681395acb523fc3044a8b9434c9166997f6fdba43fd3631abaa6ca0` |
 | Frida Gum devkit 17.17.0 windows-x86 | `ee208077ac38d28cd8f262374fc4ff11ebfce138c4b0d782d9f767b9ff49711e` |

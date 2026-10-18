@@ -30,7 +30,7 @@ fi
 # snapshot's inputs as newer than its previous dep-info, even on a revisit.
 find "$source_dir" -type f -exec touch -- {} +
 cd "$source_dir"
-export CEF_PATH="$cache/cef/cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_linux64_minimal"
+export CEF_PATH="$cache/cef/cef_binary_154.0.34+g14c5a08+chromium-154.0.8037.98_linux64_minimal"
 export CARGO_HOME="$cache/cargo" CARGO_NET_OFFLINE=true
 export CARGO_TARGET_DIR="$root/target"
 export PYTHONPATH="$cache/pillow"

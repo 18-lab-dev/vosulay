@@ -14,7 +14,7 @@ from offline import locked_registry, stable_member
 
 ROOT = Path(__file__).resolve().parents[2]
 ALIAS = "vosu@127.0.0.1"
-SDK_NAME = "cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_linux64_minimal"
+SDK_NAME = "cef_binary_154.0.34+g14c5a08+chromium-154.0.8037.98_linux64_minimal"
 SSH = ["ssh", "-p", "2222", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=10", ALIAS]
 SFTP = ["sftp", "-P", "2222", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=10"]
 

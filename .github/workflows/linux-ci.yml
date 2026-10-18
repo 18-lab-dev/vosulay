@@ -100,7 +100,7 @@ jobs:
           # runtime; browser-cef and cef-smoke targets get only $ORIGIN, and
           # Cargo drops link-search paths outside target/ from LD_LIBRARY_PATH.
           # Expose libcef.so alone: the whole Release/ directory would also
-          # shadow system libEGL, libGLESv2, and libvulkan for the C fixtures.
+          # shadow the system libvulkan for the C fixtures.
           lib="$RUNNER_TEMP/cef-lib"
           mkdir -p "$lib"
           ln -sf "$cef/Release/libcef.so" "$lib/libcef.so"

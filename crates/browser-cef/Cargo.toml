@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = "1.0"
-cef = { version = "=152.4.0", default-features = false, features = ["dox"] }
+cef = { version = "=154.5.0", default-features = false, features = ["dox"] }
 serde_json = "1.0"
 url = "2.5"
 vosulay-frame = { path = "../frame" }
