@@ -5,7 +5,7 @@ use libc::{c_char, c_int, c_uint, c_void};
 use std::ffi::CStr;
 use std::mem;
 use std::ptr;
-use vosulay_frame::DamageRect;
+use vosulay_frame::{DamageRect, DamageRects};
 
 mod upload;
 
@@ -633,42 +633,28 @@ impl Renderer {
             }
         }
         let consumed = if let Some(frame) = frame.as_ref() {
-            let bytes = frame.pixels();
-            let region = self
+            let rects = self
                 .has_frame
                 .then(|| frame.damage_since(self.sequence))
                 .flatten()
-                .unwrap_or_else(|| DamageRect::full(self.width, self.height));
+                .unwrap_or_else(|| DamageRects::full(self.width, self.height));
             // Input is tightly-packed BGRA. Uploading as RGBA is portable to
             // ES3; the fragment shader performs the B/R swizzle. Only the
-            // region changed since this texture's frame is copied: a full
+            // regions changed since this texture's frame are copied: a full
             // frame per present costs milliseconds at 1440p.
             unsafe {
                 set_unpack_defaults(gl);
-                let source = stage_rows(gl, self.staging, bytes, self.width, region);
-                if source.is_none() {
-                    (gl.pixel_store)(GL_UNPACK_ROW_LENGTH, self.width as c_int);
-                    (gl.pixel_store)(GL_UNPACK_SKIP_PIXELS, region.x as c_int);
-                    (gl.pixel_store)(GL_UNPACK_SKIP_ROWS, region.y as c_int);
-                }
-                timed!(
-                    TexSubImage,
-                    (gl.tex_sub_image)(
-                        GL_TEXTURE_2D,
-                        0,
-                        region.x as c_int,
-                        region.y as c_int,
-                        region.width as c_int,
-                        region.height as c_int,
-                        GL_RGBA,
-                        GL_UNSIGNED_BYTE,
-                        source.unwrap_or(bytes.as_ptr().cast()),
-                    )
+                upload_rects(
+                    gl,
+                    self.staging,
+                    frame.pixels(),
+                    self.width,
+                    rects.as_slice(),
                 );
             }
             #[cfg(feature = "profile")]
             {
-                crate::profile::upload(region.width as usize * region.height as usize * 4);
+                crate::profile::upload(rects.pixels() as usize * 4);
                 if let Some(timer) = self.timer.as_mut() {
                     // SAFETY: the renderer's context is current.
                     unsafe { timer.uploaded() };
@@ -1159,27 +1145,71 @@ unsafe fn compile_shader(gl: &Gl, kind: c_uint, source: &[u8]) -> Option<c_uint>
     }
 }
 
-/// Copies `region` of a tightly packed frame into `staging` and leaves it
-/// bound as the unpack buffer, returning the upload source (offset 0).
+/// Uploads `rects` of a tightly packed `width`-wide frame into the texture
+/// bound to GL_TEXTURE_2D, one `glTexSubImage2D` per rectangle, staged
+/// through `staging` when it maps.
+///
+/// # Safety
+/// The context is current with unpack defaults set, `staging` is zero or its
+/// buffer, `bytes` holds `width`-wide rows and every rectangle lies within
+/// them and the texture.
+unsafe fn upload_rects(gl: &Gl, staging: c_uint, bytes: &[u8], width: u32, rects: &[DamageRect]) {
+    let staged = unsafe { stage_rows(gl, staging, bytes, width, rects) };
+    let mut offset = 0;
+    for &rect in rects {
+        let source = if staged {
+            offset as *const c_void
+        } else {
+            unsafe {
+                (gl.pixel_store)(GL_UNPACK_ROW_LENGTH, width as c_int);
+                (gl.pixel_store)(GL_UNPACK_SKIP_PIXELS, rect.x as c_int);
+                (gl.pixel_store)(GL_UNPACK_SKIP_ROWS, rect.y as c_int);
+            }
+            bytes.as_ptr().cast()
+        };
+        unsafe {
+            timed!(
+                TexSubImage,
+                (gl.tex_sub_image)(
+                    GL_TEXTURE_2D,
+                    0,
+                    rect.x as c_int,
+                    rect.y as c_int,
+                    rect.width as c_int,
+                    rect.height as c_int,
+                    GL_RGBA,
+                    GL_UNSIGNED_BYTE,
+                    source,
+                )
+            );
+        }
+        offset += rect.width as usize * rect.height as usize * 4;
+    }
+}
+
+/// Copies `rects` of a tightly packed frame, one after another, into
+/// `staging` and leaves it bound as the unpack buffer; false leaves no buffer
+/// bound, for direct uploads from `bytes`.
 /// Uploading from process memory made NVIDIA serialize each large copy into
 /// the game's frame; a GL-owned buffer lets the GPU fetch the rows itself.
-/// None leaves no buffer bound, for a direct upload from `bytes`.
 ///
 /// # Safety
 /// The renderer's context is current, `staging` is zero or its buffer,
-/// `bytes` holds `width`-wide rows, and `region` lies within them.
+/// `bytes` holds `width`-wide rows, and every rectangle lies within them.
 unsafe fn stage_rows(
     gl: &Gl,
     staging: c_uint,
     bytes: &[u8],
     width: u32,
-    region: DamageRect,
-) -> Option<*const c_void> {
+    rects: &[DamageRect],
+) -> bool {
     if staging == 0 {
-        return None;
+        return false;
     }
-    let length = region.width as usize * 4;
-    let size = length * region.height as usize;
+    let size: usize = rects
+        .iter()
+        .map(|rect| rect.width as usize * rect.height as usize * 4)
+        .sum();
     let stride = width as usize * 4;
     unsafe {
         (gl.bind_buffer)(GL_PIXEL_UNPACK_BUFFER, staging);
@@ -1204,25 +1234,26 @@ unsafe fn stage_rows(
         );
         if mapped.is_null() {
             (gl.bind_buffer)(GL_PIXEL_UNPACK_BUFFER, 0);
-            return None;
+            return false;
         }
         timed!(Copy, {
-            for row in 0..region.height as usize {
-                let offset = (region.y as usize + row) * stride + region.x as usize * 4;
-                ptr::copy_nonoverlapping(
-                    bytes.as_ptr().add(offset),
-                    mapped.cast::<u8>().add(row * length),
-                    length,
-                );
+            let mut target = mapped.cast::<u8>();
+            for rect in rects {
+                let length = rect.width as usize * 4;
+                for row in 0..rect.height as usize {
+                    let offset = (rect.y as usize + row) * stride + rect.x as usize * 4;
+                    ptr::copy_nonoverlapping(bytes.as_ptr().add(offset), target, length);
+                    target = target.add(length);
+                }
             }
         });
         // A lost mapping (rare) leaves undefined contents; upload directly instead.
         if timed!(Unmap, (gl.unmap_buffer)(GL_PIXEL_UNPACK_BUFFER)) == 0 {
             (gl.bind_buffer)(GL_PIXEL_UNPACK_BUFFER, 0);
-            return None;
+            return false;
         }
     }
-    Some(ptr::null())
+    true
 }
 
 unsafe fn set_unpack_defaults(gl: &Gl) {

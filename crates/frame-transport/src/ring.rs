@@ -20,11 +20,18 @@ use std::{
         atomic::{AtomicU32, AtomicU64, Ordering, fence},
     },
 };
-use vosulay_frame::DamageRect;
+use vosulay_frame::{DamageRect, DamageRects};
 
 const SLOTS: usize = 3;
-/// Publications whose damage a consumer can still combine. A consumer further
-/// behind than this uploads the whole frame.
+/// Damage rectangles a consumer can still combine. A consumer further behind
+/// than this uploads the whole frame.
+///
+/// A publication with several separate rectangles takes one sequence number,
+/// and one history entry, per rectangle, and its slot carries the last of
+/// them. Older consumers union every entry between two slot sequences, which
+/// yields the publication's bounding box, so the layout (and `MAGIC`) stays
+/// the same in both directions: a mismatched host and compositor upload a
+/// bounding box instead of separate rectangles, never stale pixels.
 const HISTORY: usize = 64;
 // Native-endian load of these bytes; the shared memory holds them verbatim.
 const MAGIC: u64 = u64::from_ne_bytes(*b"VLAYRNG2");
@@ -312,9 +319,9 @@ pub struct Producer {
     handle: RingHandle,
     sequence: u64,
     last_published_slot: Option<usize>,
-    damage: [Option<DamageRect>; SLOTS],
+    damage: [Option<DamageRects>; SLOTS],
     /// Change since the last successful publication, for the shared history.
-    unpublished: Option<DamageRect>,
+    unpublished: Option<DamageRects>,
 }
 impl Producer {
     pub fn new(width: u32, height: u32) -> io::Result<Self> {
@@ -324,8 +331,8 @@ impl Producer {
             },
             sequence: 0,
             last_published_slot: None,
-            damage: [Some(DamageRect::full(width, height)); SLOTS],
-            unpublished: Some(DamageRect::full(width, height)),
+            damage: [Some(DamageRects::full(width, height)); SLOTS],
+            unpublished: Some(DamageRects::full(width, height)),
         })
     }
     pub fn handle(&self) -> RingHandle {
@@ -336,7 +343,7 @@ impl Producer {
     /// frames. None requires a full copy. Returns false for unchanged pixels or
     /// when all slots are leased; every readable slot remains a complete image.
     /// Fails with `InvalidData` if the peer has altered the shared header.
-    pub fn publish(&mut self, pixels: &[u8], damage: Option<DamageRect>) -> io::Result<bool> {
+    pub fn publish(&mut self, pixels: &[u8], damage: Option<DamageRects>) -> io::Result<bool> {
         let mapping = &self.handle.mapping;
         let header = mapping.header();
         let Geometry {
@@ -352,17 +359,15 @@ impl Producer {
             ));
         }
         let damage = damage
-            .and_then(|rect| rect.clipped(width, height))
-            .unwrap_or_else(|| DamageRect::full(width, height));
+            .and_then(|rects| rects.clipped(width, height))
+            .unwrap_or_else(|| DamageRects::full(width, height));
         // Each slot has its own older snapshot. Accumulate even if this call
         // is dropped, and clear only the slot actually brought up to date.
-        for pending in &mut self.damage {
-            *pending = Some(pending.map_or(damage, |previous| previous.union(damage)));
+        for pending in self.damage.iter_mut().chain([&mut self.unpublished]) {
+            let mut accumulated = pending.unwrap_or_default();
+            accumulated.extend(&damage);
+            *pending = Some(accumulated);
         }
-        self.unpublished = Some(
-            self.unpublished
-                .map_or(damage, |previous| previous.union(damage)),
-        );
         if let Some(index) = self.last_published_slot {
             let control = header.slots[index].control.load(Ordering::Acquire);
             if control >> 2 == self.sequence && control & STATE_MASK != WRITING {
@@ -372,8 +377,11 @@ impl Producer {
                 // after the comparison below finishes.
                 let previous =
                     unsafe { std::slice::from_raw_parts(mapping.payload(index), pixels.len()) };
-                if self.damage[index].is_none_or(|rect| {
-                    damage_rows(rect, width).all(|range| previous[range.clone()] == pixels[range])
+                if self.damage[index].is_none_or(|rects| {
+                    rects.as_slice().iter().all(|&rect| {
+                        damage_rows(rect, width)
+                            .all(|range| previous[range.clone()] == pixels[range])
+                    })
                 }) {
                     // These pixels equal the last publication exactly.
                     self.unpublished = None;
@@ -381,9 +389,12 @@ impl Producer {
                 }
             }
         }
+        let changed = self.unpublished.expect("publication damage accumulated");
+        // One sequence (and history entry) per rectangle; the slot carries
+        // the last. See `HISTORY`.
         let Some(sequence) = self
             .sequence
-            .checked_add(1)
+            .checked_add(changed.as_slice().len() as u64)
             .filter(|sequence| *sequence <= u64::MAX >> 2)
         else {
             return Err(invalid("frame sequence exhausted"));
@@ -416,22 +427,23 @@ impl Producer {
                 // was last written and is clipped to local geometry, so each
                 // range lies within both `pixels` and this slot.
                 let damage = self.damage[index].expect("current damage accumulated");
-                for range in damage_rows(damage, width) {
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(
-                            pixels.as_ptr().add(range.start),
-                            mapping.payload(index).add(range.start),
-                            range.len(),
-                        );
+                for &rect in damage.as_slice() {
+                    for range in damage_rows(rect, width) {
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(
+                                pixels.as_ptr().add(range.start),
+                                mapping.payload(index).add(range.start),
+                                range.len(),
+                            );
+                        }
                     }
                 }
                 self.damage[index] = None;
-                mapping.record_damage(
-                    sequence,
-                    self.unpublished
-                        .take()
-                        .expect("publication damage accumulated"),
-                );
+                let first = sequence + 1 - changed.as_slice().len() as u64;
+                for (offset, &rect) in changed.as_slice().iter().enumerate() {
+                    mapping.record_damage(first + offset as u64, rect);
+                }
+                self.unpublished = None;
                 header.slots[index]
                     .control
                     .store(sequence << 2 | READY, Ordering::Release);
@@ -533,20 +545,19 @@ impl ReadFrame {
     pub fn sequence(&self) -> u64 {
         self.sequence
     }
-    /// Region that changed between publication `uploaded` of this ring and
+    /// Regions that changed between publication `uploaded` of this ring and
     /// this frame. None means copy the whole frame: `uploaded` is not an
     /// earlier publication, or its history has been overwritten.
-    pub fn damage_since(&self, uploaded: u64) -> Option<DamageRect> {
+    pub fn damage_since(&self, uploaded: u64) -> Option<DamageRects> {
         if uploaded == 0 || uploaded >= self.sequence || self.sequence - uploaded > HISTORY as u64 {
             return None;
         }
         let Geometry { width, height, .. } = self.mapping.geometry;
-        let mut region: Option<DamageRect> = None;
+        let mut regions = DamageRects::default();
         for sequence in uploaded + 1..=self.sequence {
-            let rect = self.mapping.damage(sequence)?.clipped(width, height)?;
-            region = Some(region.map_or(rect, |region| region.union(rect)));
+            regions.push(self.mapping.damage(sequence)?.clipped(width, height)?);
         }
-        region
+        Some(regions)
     }
     pub fn pixels(&self) -> &[u8] {
         // SAFETY: READING lease protects initialized bytes until this guard
@@ -715,15 +726,15 @@ mod tests {
             height: 1,
         };
         // A newly allocated slot still needs the complete initial snapshot.
-        assert!(producer.publish(&pixels, Some(rect(0))).unwrap());
+        assert!(producer.publish(&pixels, Some(rect(0).into())).unwrap());
         let retained = retained_reader.latest().unwrap();
         for (step, pixel) in [0, 7, 2, 5, 1, 6, 3, 4].into_iter().enumerate() {
             pixels[pixel as usize * 4..pixel as usize * 4 + 4].fill(step as u8 + 20);
-            assert!(producer.publish(&pixels, Some(rect(pixel))).unwrap());
+            assert!(producer.publish(&pixels, Some(rect(pixel).into())).unwrap());
             assert_eq!(retained.pixels(), &[9; 32]);
         }
         assert_eq!(latest_reader.latest().unwrap().pixels(), &pixels);
-        assert!(!producer.publish(&pixels, Some(rect(4))).unwrap());
+        assert!(!producer.publish(&pixels, Some(rect(4).into())).unwrap());
         assert!(latest_reader.latest().is_none());
     }
 
@@ -743,19 +754,19 @@ mod tests {
         assert!(producer.publish(&pixels, None).unwrap());
         let a = first.latest().unwrap();
         pixels[20..24].fill(2);
-        assert!(producer.publish(&pixels, Some(rect(5))).unwrap());
+        assert!(producer.publish(&pixels, Some(rect(5).into())).unwrap());
         let b = second.latest().unwrap();
         pixels[8..12].fill(3);
-        assert!(producer.publish(&pixels, Some(rect(2))).unwrap());
+        assert!(producer.publish(&pixels, Some(rect(2).into())).unwrap());
         let c = third.latest().unwrap();
         let leased_c = pixels;
         pixels[28..32].fill(4);
-        assert!(!producer.publish(&pixels, Some(rect(7))).unwrap());
+        assert!(!producer.publish(&pixels, Some(rect(7).into())).unwrap());
         pixels[4..8].fill(5);
-        assert!(!producer.publish(&pixels, Some(rect(1))).unwrap());
+        assert!(!producer.publish(&pixels, Some(rect(1).into())).unwrap());
         drop(b);
         pixels[16..20].fill(6);
-        assert!(producer.publish(&pixels, Some(rect(4))).unwrap());
+        assert!(producer.publish(&pixels, Some(rect(4).into())).unwrap());
         assert_eq!(second.latest().unwrap().pixels(), &pixels);
         assert_eq!(a.pixels(), &[1; 32]);
         assert_eq!(c.pixels(), &leased_c);
@@ -776,7 +787,7 @@ mod tests {
         let mut pixels = [1; 128];
         let change = |pixels: &mut [u8; 128], pixel: usize, value: u8| {
             pixels[pixel * 4..pixel * 4 + 4].fill(value);
-            Some(rect(pixel))
+            Some(rect(pixel).into())
         };
         assert!(producer.publish(&pixels, None).unwrap());
         let uploaded = game.latest().unwrap();
@@ -786,6 +797,7 @@ mod tests {
         let damage = change(&mut pixels, 10, 3);
         assert!(producer.publish(&pixels, damage).unwrap());
         let b = second.latest().unwrap();
+        let after_b = b.sequence();
         // All three slots are leased: this change is dropped, so its damage
         // must travel with the next successful publication.
         let damage = change(&mut pixels, 11, 4);
@@ -804,10 +816,54 @@ mod tests {
             width,
             height: 1,
         };
-        assert_eq!(frame.damage_since(base), Some(row(1, 4)));
-        assert_eq!(frame.damage_since(frame.sequence() - 1), Some(row(3, 2)));
+        // Each changed pixel stays its own rectangle; together they span
+        // what a single bounding box would.
+        let since_base = frame.damage_since(base).unwrap();
+        assert_eq!(since_base.as_slice(), &[1, 2, 3, 4].map(|x| row(x, 1)));
+        assert_eq!(since_base.bounds(), Some(row(1, 4)));
+        let since_b = frame.damage_since(after_b).unwrap();
+        assert_eq!(since_b.as_slice(), &[row(3, 1), row(4, 1)]);
         assert_eq!(frame.damage_since(frame.sequence()), None);
         assert_eq!(frame.damage_since(0), None);
+    }
+
+    #[test]
+    fn separate_rectangles_reach_new_consumers_and_union_for_older_ones() {
+        let mut producer = Producer::new(8, 4).unwrap();
+        let mut game = consumer(&producer);
+        let mut pixels = [0; 128];
+        assert!(producer.publish(&pixels, None).unwrap());
+        let base = game.latest().unwrap().sequence();
+        let top_left = DamageRect {
+            x: 0,
+            y: 0,
+            width: 2,
+            height: 1,
+        };
+        let bottom_right = DamageRect {
+            x: 6,
+            y: 3,
+            width: 2,
+            height: 1,
+        };
+        pixels[..8].fill(1);
+        pixels[120..].fill(1);
+        let mut damage = DamageRects::from(top_left);
+        damage.push(bottom_right);
+        assert!(producer.publish(&pixels, Some(damage)).unwrap());
+        let frame = game.latest().unwrap();
+        assert_eq!(frame.pixels(), &pixels);
+        assert_eq!(
+            frame.damage_since(base).unwrap().as_slice(),
+            &[top_left, bottom_right]
+        );
+        // A compositor from before separate rectangles unions every history
+        // entry between the two slot sequences: the bounding box, so it
+        // still uploads every changed pixel.
+        let older = (base + 1..=frame.sequence())
+            .map(|sequence| frame.mapping.damage(sequence).unwrap())
+            .reduce(DamageRect::union);
+        assert_eq!(older, Some(DamageRect::full(8, 4)));
     }
 
     #[test]
@@ -825,17 +881,20 @@ mod tests {
         };
         for step in 1..=HISTORY as u8 {
             pixels[28..32].fill(step);
-            assert!(producer.publish(&pixels, Some(single)).unwrap());
+            assert!(producer.publish(&pixels, Some(single.into())).unwrap());
         }
         let frame = game.latest().unwrap();
         assert_eq!(frame.sequence() - base, HISTORY as u64);
-        assert_eq!(frame.damage_since(base), Some(single));
+        assert_eq!(frame.damage_since(base), Some(single.into()));
         pixels[28..32].fill(0xff);
         drop(frame);
-        assert!(producer.publish(&pixels, Some(single)).unwrap());
+        assert!(producer.publish(&pixels, Some(single.into())).unwrap());
         let frame = game.latest().unwrap();
         assert_eq!(frame.damage_since(base), None);
-        assert_eq!(frame.damage_since(frame.sequence() - 1), Some(single));
+        assert_eq!(
+            frame.damage_since(frame.sequence() - 1),
+            Some(single.into())
+        );
     }
 
     #[test]
@@ -911,7 +970,7 @@ mod tests {
             // Changed pixels force a copy attempt rather than a no-op compare.
             let next = pixels[0] + 1;
             pixels.fill(next);
-            for damage in [None, Some(everything)] {
+            for damage in [None, Some(everything.into())] {
                 let error = producer.publish(&pixels, damage).unwrap_err();
                 assert_eq!(error.kind(), io::ErrorKind::InvalidData);
             }
@@ -926,7 +985,7 @@ mod tests {
         shared.frame_bytes.store(32, Ordering::Relaxed);
         drop(leased);
         pixels[4..8].fill(99);
-        assert!(producer.publish(&pixels, Some(everything)).unwrap());
+        assert!(producer.publish(&pixels, Some(everything.into())).unwrap());
         let frame = consumer.latest().unwrap();
         assert_eq!(frame.sequence(), 2);
         assert_eq!((frame.width(), frame.height()), (4, 2));

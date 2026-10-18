@@ -14,7 +14,7 @@
 //! `XInitThreads`. Everything else, and any failure here, keeps the in-stream
 //! upload in `Renderer::compose`.
 use super::{
-    GL_RGBA, GL_RGBA8, GL_TEXTURE_2D, GL_UNSIGNED_BYTE, Gl, set_unpack_defaults, stage_rows,
+    GL_RGBA, GL_RGBA8, GL_TEXTURE_2D, GL_UNSIGNED_BYTE, Gl, set_unpack_defaults, upload_rects,
 };
 use libc::{c_int, c_uint, c_void};
 use parking_lot::{Condvar, Mutex};
@@ -27,7 +27,7 @@ use std::{
     thread::JoinHandle,
     time::Duration,
 };
-use vosulay_frame::DamageRect;
+use vosulay_frame::DamageRects;
 use vosulay_transport::ReadFrame;
 
 type Sync = *mut c_void;
@@ -124,7 +124,7 @@ unsafe impl Send for ShareTarget {}
 struct Done {
     staging: usize,
     ready: usize,
-    rect: DamageRect,
+    rects: DamageRects,
     sequence: u64,
     full: bool,
 }
@@ -282,28 +282,29 @@ impl Uploader {
                 break;
             }
             let done = state.done.pop_front().expect("front exists");
-            let rect = done.rect;
             // SAFETY: both textures are RGBA8 of the frame's size and the
-            // rectangle lies within them.
+            // rectangles lie within them.
             unsafe {
                 (gl.delete_sync)(done.ready as Sync);
-                copy(
-                    done.staging as c_uint,
-                    GL_TEXTURE_2D,
-                    0,
-                    rect.x as c_int,
-                    rect.y as c_int,
-                    0,
-                    texture,
-                    GL_TEXTURE_2D,
-                    0,
-                    rect.x as c_int,
-                    rect.y as c_int,
-                    0,
-                    rect.width as c_int,
-                    rect.height as c_int,
-                    1,
-                );
+                for rect in done.rects.as_slice() {
+                    copy(
+                        done.staging as c_uint,
+                        GL_TEXTURE_2D,
+                        0,
+                        rect.x as c_int,
+                        rect.y as c_int,
+                        0,
+                        texture,
+                        GL_TEXTURE_2D,
+                        0,
+                        rect.x as c_int,
+                        rect.y as c_int,
+                        0,
+                        rect.width as c_int,
+                        rect.height as c_int,
+                        1,
+                    );
+                }
                 let copied = (gl.fence_sync)(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
                 (gl.flush)();
                 state.free.push((done.staging, copied as usize));
@@ -496,33 +497,16 @@ fn run(
             }
             let frame = offer.frame;
             let full = offer.full || uploaded == 0;
-            let rect = (!full)
+            let rects = (!full)
                 .then(|| frame.damage_since(uploaded))
                 .flatten()
-                .unwrap_or_else(|| DamageRect::full(frame.width(), frame.height()));
-            let bytes = frame.pixels();
+                .unwrap_or_else(|| DamageRects::full(frame.width(), frame.height()));
             (gl.bind_texture)(GL_TEXTURE_2D, texture as c_uint);
             set_unpack_defaults(&gl);
-            let source = stage_rows(&gl, buffer, bytes, width, rect);
-            if source.is_none() {
-                (gl.pixel_store)(super::GL_UNPACK_ROW_LENGTH, width as c_int);
-                (gl.pixel_store)(super::GL_UNPACK_SKIP_PIXELS, rect.x as c_int);
-                (gl.pixel_store)(super::GL_UNPACK_SKIP_ROWS, rect.y as c_int);
-            }
-            (gl.tex_sub_image)(
-                GL_TEXTURE_2D,
-                0,
-                rect.x as c_int,
-                rect.y as c_int,
-                rect.width as c_int,
-                rect.height as c_int,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                source.unwrap_or(bytes.as_ptr().cast()),
-            );
+            upload_rects(&gl, buffer, frame.pixels(), width, rects.as_slice());
             set_unpack_defaults(&gl);
             #[cfg(feature = "profile")]
-            crate::profile::upload(rect.width as usize * rect.height as usize * 4);
+            crate::profile::upload(rects.pixels() as usize * 4);
             let sequence = frame.sequence();
             // The rows are in GL's hands; release the ring slot.
             drop(frame);
@@ -538,7 +522,7 @@ fn run(
             shared.state.lock().done.push_back(Done {
                 staging: texture,
                 ready: ready as usize,
-                rect,
+                rects,
                 sequence,
                 full,
             });

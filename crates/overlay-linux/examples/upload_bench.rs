@@ -21,7 +21,7 @@ mod bench {
         },
         time::{Duration, Instant},
     };
-    use vosulay_frame::DamageRect;
+    use vosulay_frame::{DamageRect, DamageRects};
     use vosulay_transport::{
         Listener, Producer,
         protocol::{FORMAT_BGRA, Kind, Packet},
@@ -256,12 +256,15 @@ mod bench {
                     }
                     Scenario::Small => {
                         paint(&mut pixels, TOP_LEFT, value);
-                        Some(TOP_LEFT)
+                        Some(TOP_LEFT.into())
                     }
                     _ => {
+                        // Two separate rectangles, as CEF reports them.
                         paint(&mut pixels, TOP_LEFT, value);
                         paint(&mut pixels, BOTTOM_RIGHT, value);
-                        Some(TOP_LEFT.union(BOTTOM_RIGHT))
+                        let mut rects = DamageRects::from(TOP_LEFT);
+                        rects.push(BOTTOM_RIGHT);
+                        Some(rects)
                     }
                 };
                 last_damage = damage;

@@ -18,8 +18,8 @@ use std::{
     time::{Duration, Instant},
 };
 use vosulay_frame::{
-    BrowserFrame, BrowserFrameBackend, BrowserInput, DamageRect, InputModifiers, KeyKind,
-    MouseButton,
+    BrowserFrame, BrowserFrameBackend, BrowserInput, DamageRect, DamageRects, InputModifiers,
+    KeyKind, MouseButton,
 };
 
 fn configure_api() {
@@ -286,8 +286,10 @@ wrap_app! {
     }
 }
 
-fn paint_damage(rects: Option<&[Rect]>, width: u32, height: u32) -> Option<DamageRect> {
-    let mut damage: Option<DamageRect> = None;
+/// CEF's dirty rectangles, kept separate (up to `MAX_DAMAGE_RECTS`) so
+/// counters far apart upload only what changed, not their bounding box.
+fn paint_damage(rects: Option<&[Rect]>, width: u32, height: u32) -> Option<DamageRects> {
+    let mut damage = DamageRects::default();
     for rect in rects? {
         let left = i64::from(rect.x).max(0);
         let top = i64::from(rect.y).max(0);
@@ -303,9 +305,9 @@ fn paint_damage(rects: Option<&[Rect]>, width: u32, height: u32) -> Option<Damag
             width: (right - left) as u32,
             height: (bottom - top) as u32,
         };
-        damage = Some(damage.map_or(rect, |previous| previous.union(rect)));
+        damage.push(rect);
     }
-    damage
+    (!damage.is_empty()).then_some(damage)
 }
 
 wrap_render_handler! {
@@ -1051,5 +1053,56 @@ mod console_tests {
             Some("data:")
         );
         assert_eq!(console_origin("", 3), None);
+    }
+}
+
+#[cfg(test)]
+mod paint_damage_tests {
+    use super::*;
+
+    fn cef_rect(x: i32, y: i32, width: i32, height: i32) -> Rect {
+        Rect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    #[test]
+    fn counters_far_apart_stay_separate_rectangles_clipped_to_the_view() {
+        let damage = paint_damage(
+            Some(&[cef_rect(-10, 0, 110, 20), cef_rect(1800, 1000, 200, 100)]),
+            1920,
+            1080,
+        )
+        .unwrap();
+        assert_eq!(
+            damage.as_slice(),
+            &[
+                DamageRect {
+                    x: 0,
+                    y: 0,
+                    width: 100,
+                    height: 20
+                },
+                DamageRect {
+                    x: 1800,
+                    y: 1000,
+                    width: 120,
+                    height: 80
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn missing_or_empty_damage_requires_the_whole_frame() {
+        assert_eq!(paint_damage(None, 1920, 1080), None);
+        assert_eq!(paint_damage(Some(&[]), 1920, 1080), None);
+        assert_eq!(
+            paint_damage(Some(&[cef_rect(0, 0, 10, 0)]), 1920, 1080),
+            None
+        );
     }
 }
