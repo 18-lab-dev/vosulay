@@ -116,6 +116,8 @@ mod bench {
         seconds: f64,
         draws: u32,
         es: bool,
+        /// Minimum game frame time in ms (0 = uncapped), like a game's frame limiter.
+        cap_ms: f64,
     }
     fn options() -> Options {
         let mut options = Options {
@@ -124,6 +126,7 @@ mod bench {
             seconds: 2.0,
             draws: 4,
             es: false,
+            cap_ms: 0.0,
         };
         let mut arguments = std::env::args().skip(1);
         while let Some(argument) = arguments.next() {
@@ -136,6 +139,7 @@ mod bench {
                 "--seconds" => options.seconds = value().parse().unwrap_or_else(|_| usage()),
                 "--draws" => options.draws = value().parse().unwrap_or_else(|_| usage()),
                 "--api" => options.es = value() == "es",
+                "--cap-ms" => options.cap_ms = value().parse().unwrap_or_else(|_| usage()),
                 _ => usage(),
             }
         }
@@ -144,7 +148,7 @@ mod bench {
     fn usage() -> ! {
         eprintln!(
             "usage: upload_bench [--scenario none|static|small|corners|full] [--rate UPDATES_PER_SECOND] \
-             [--seconds S] [--draws GAME_LAYERS] [--api gl|es]\n\
+             [--seconds S] [--draws GAME_LAYERS] [--api gl|es] [--cap-ms MIN_FRAME_MS]\n\
              Preload libvosulay_lookup.so and libvosulay_overlay.so and set VOSULAY_ENDPOINT, \
              except for --scenario none."
         );
@@ -351,6 +355,38 @@ mod bench {
         )
     }
 
+    /// Frame pacing: the distribution of intervals between successive frame
+    /// starts, which is what a player feels, unlike the average rate.
+    fn pacing(mut intervals: Vec<f64>) -> String {
+        intervals.sort_by(f64::total_cmp);
+        let median = percentile(&intervals, 0.5);
+        let over = |limit: f64| intervals.iter().filter(|&&value| value > limit).count();
+        format!(
+            "{{\"frames\":{},\"p50\":{:.3},\"p99\":{:.3},\"p999\":{:.3},\"max\":{:.3},\"over_2x_median\":{},\"over_4x_median\":{},\"over_8_3ms\":{},\"over_16_7ms\":{}}}",
+            intervals.len(),
+            median,
+            percentile(&intervals, 0.99),
+            percentile(&intervals, 0.999),
+            intervals.last().copied().unwrap_or(f64::NAN),
+            over(2.0 * median),
+            over(4.0 * median),
+            over(8.33),
+            over(16.67),
+        )
+    }
+
+    /// Sleeps until shortly before `deadline`, then spins, so the cap holds to
+    /// a few microseconds like a game's frame limiter.
+    fn pace_until(deadline: Instant) {
+        let now = Instant::now();
+        if deadline > now + Duration::from_micros(300) {
+            std::thread::sleep(deadline - now - Duration::from_micros(300));
+        }
+        while Instant::now() < deadline {
+            std::hint::spin_loop();
+        }
+    }
+
     /// The compositor's optional profile (built with its `profile` feature),
     /// found in the preloaded library without linking to it.
     fn compositor_profile() -> Option<String> {
@@ -546,12 +582,21 @@ mod bench {
                 frame(&mut swap_us, false);
             }
             reset_compositor_profile();
+            let cap = Duration::from_secs_f64(options.cap_ms / 1e3);
             let start = Instant::now();
             let end = start + Duration::from_secs_f64(options.seconds);
             let mut frames = 0u64;
-            while Instant::now() < end {
+            let mut intervals = Vec::new();
+            let mut frame_start = start;
+            while frame_start < end {
                 frame(&mut swap_us, true);
                 frames += 1;
+                if !cap.is_zero() {
+                    pace_until(frame_start + cap);
+                }
+                let next = Instant::now();
+                intervals.push((next - frame_start).as_secs_f64() * 1e3);
+                frame_start = next;
             }
             finish();
             let elapsed = start.elapsed().as_secs_f64();
@@ -612,10 +657,12 @@ mod bench {
                 },
             );
             println!(
-                "{{\"scenario\":\"{}\",\"rate\":{},\"draws\":{},\"api\":\"{}\",\"renderer\":\"{}\",\"fps\":{:.1},\"frame_ms\":{:.4},\"swap_cpu_us\":{},\"gpu\":{},\"published\":{},\"pixel\":[{},{},{},{}],\"corner\":[{},{},{},{}],\"content_ok\":{},\"profile\":{}}}",
+                "{{\"scenario\":\"{}\",\"rate\":{},\"draws\":{},\"cap_ms\":{},\"pacing_ms\":{},\"api\":\"{}\",\"renderer\":\"{}\",\"fps\":{:.1},\"frame_ms\":{:.4},\"swap_cpu_us\":{},\"gpu\":{},\"published\":{},\"pixel\":[{},{},{},{}],\"corner\":[{},{},{},{}],\"content_ok\":{},\"profile\":{}}}",
                 options.scenario.name(),
                 options.rate,
                 options.draws,
+                options.cap_ms,
+                pacing(intervals),
                 if options.es { "es" } else { "gl" },
                 renderer.replace('"', "'"),
                 frames as f64 / elapsed,
