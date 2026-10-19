@@ -52,6 +52,9 @@ impl Publisher {
                     }
                     Err(error) => panic!("upstream accept: {error}"),
                 };
+                // Winsock inherits the listener's nonblocking mode; Unix does not. A
+                // nonblocking handshake read can miss the request and drop the connection.
+                stream.set_nonblocking(false).unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(3)))
                     .unwrap();

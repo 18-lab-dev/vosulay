@@ -30,6 +30,10 @@ impl Upstream {
                     }
                     Err(_) => break,
                 };
+                // Winsock inherits the listener's nonblocking mode; Unix does not.
+                stream
+                    .set_nonblocking(false)
+                    .expect("fixture stream blocking");
                 stream
                     .set_read_timeout(Some(TIMEOUT))
                     .expect("fixture read timeout");
