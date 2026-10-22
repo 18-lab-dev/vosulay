@@ -91,6 +91,8 @@ pub struct Profile {
     pub id: String,
     pub name: String,
     pub overlays: Vec<Placement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ruleset: Option<crate::ruleset::Ruleset>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -190,6 +192,7 @@ impl Default for Profile {
             id: "default".to_owned(),
             name: "Default".to_owned(),
             overlays: Vec::new(),
+            ruleset: None,
         }
     }
 }
@@ -552,6 +555,7 @@ mod tests {
             profiles: vec![Profile {
                 id: String::new(),
                 name: String::new(),
+                ruleset: None,
                 overlays: vec![Placement {
                     counter_id: "counter".to_owned(),
                     url: None,
@@ -587,6 +591,7 @@ mod tests {
                 profiles: vec![Profile {
                     id: "profile-1".to_owned(),
                     name: "Profile 1".to_owned(),
+                    ruleset: None,
                     overlays: vec![Placement {
                         counter_id: "counter".to_owned(),
                         url: None,
@@ -636,6 +641,7 @@ mod tests {
                 Profile {
                     id: "other".to_owned(),
                     name: "Other".to_owned(),
+                    ruleset: None,
                     overlays: vec![first],
                 },
             ],
@@ -673,6 +679,7 @@ mod tests {
             profiles: vec![Profile {
                 id: String::new(),
                 name: "  ".to_owned(),
+                ruleset: None,
                 overlays: vec![Placement {
                     counter_id: "escaped/&counter".to_owned(),
                     url: Some(

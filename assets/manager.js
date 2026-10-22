@@ -25,6 +25,31 @@
   const profileRenameName = $("profile-rename-name");
   const profilePosition = $("profile-position");
   const profilePositionTotal = $("profile-position-total");
+  const profileRulesets = $("profile-rulesets");
+  const RULESETS = ["osu", "taiko", "fruits", "mania"];
+  let backendRuleset = null;
+  const initialScheme = window.__VOSULAY_COLOR_SCHEME__;
+  delete window.__VOSULAY_COLOR_SCHEME__;
+  const colorPreference = matchMedia("(prefers-color-scheme: light)");
+  const applyTheme = () => {
+    document.documentElement.dataset.theme = initialScheme === "light" || initialScheme === "dark"
+      ? initialScheme : colorPreference.matches ? "light" : "dark";
+  };
+  applyTheme();
+  colorPreference.addEventListener("change", applyTheme);
+  profileRulesets.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-ruleset]");
+    const profile = activeProfile();
+    if (!button || !profile || backendRuleset === null) return;
+    const ruleset = button.dataset.ruleset || null;
+    flushEditingChanges();
+    for (const other of state.config.profiles) {
+      if (ruleset && other.ruleset === ruleset) other.ruleset = null;
+    }
+    profile.ruleset = ruleset;
+    scheduleSave(true);
+    renderProfiles();
+  });
   const profileImport = $("profile-import");
   const profileExport = $("profile-export");
   const profileDeleteConfirm = $("profile-delete-confirm");
@@ -385,9 +410,10 @@
     let profiles = Array.isArray(source.profiles) ? source.profiles.map((profile, index) => ({
       id: safeId(profile && profile.id, `profile-${index + 1}`),
       name: safeId(profile && profile.name, `Profile ${index + 1}`),
+      ruleset: RULESETS.includes(profile && profile.ruleset) ? profile.ruleset : null,
       overlays: Array.isArray(profile && profile.overlays) ? profile.overlays.map(normalizeOverlay) : []
     })) : [];
-    if (!profiles.length) profiles = [{ id: "default", name: "Default", overlays: [] }];
+    if (!profiles.length) profiles = [{ id: "default", name: "Default", overlays: [], ruleset: null }];
     const ids = new Set();
     profiles.forEach((profile, index) => {
       let id = profile.id;
@@ -797,6 +823,7 @@
       if (!current) return next;
       const pool = current.overlays.slice();
       current.name = next.name;
+      current.ruleset = next.ruleset;
       current.overlays = next.overlays.map((overlay) => {
         const index = pool.findIndex((candidate) => candidate
           && candidate.counter_id === overlay.counter_id && candidate.url === overlay.url);
@@ -1090,7 +1117,7 @@
   }
 
   function profileMoreItems() {
-    return [...profileMoreMenu.querySelectorAll("input, button")].filter((item) => !item.disabled && !item.hidden);
+    return [...profileMoreMenu.querySelectorAll("input, button")].filter((item) => !item.disabled && !item.closest("[hidden]"));
   }
 
   function closeProfileMoreMenu(refocus = false) {
@@ -1176,6 +1203,10 @@
       return;
     }
     const current = activeProfile();
+    profileRulesets.hidden = backendRuleset === null;
+    for (const button of profileRulesets.querySelectorAll("button[data-ruleset]")) {
+      button.setAttribute("aria-checked", String((button.dataset.ruleset || null) === (current?.ruleset || null)));
+    }
     const count = state.config.profiles.length;
     profileSelectLabel.textContent = current ? current.name : "";
     state.config.profiles.forEach((profile, index) => {
@@ -2229,7 +2260,7 @@
     profiles.splice(index, 1);
     // A configuration always needs one profile; the sole profile is replaced
     // by an empty one rather than refusing the deletion.
-    if (!profiles.length) profiles.push({ id: uniqueProfileId(), name: "Default", overlays: [] });
+    if (!profiles.length) profiles.push({ id: uniqueProfileId(), name: "Default", overlays: [], ruleset: null });
     if (wasActive || !profiles.some((item) => item.id === state.config.active_profile)) {
       state.config.active_profile = profiles[Math.min(index, profiles.length - 1)].id;
     }
@@ -2813,7 +2844,7 @@
     }
     flushEditingChanges();
     const before = historySnapshot();
-    const profile = { id: uniqueProfileId(), name, overlays: [] };
+    const profile = { id: uniqueProfileId(), name, overlays: [], ruleset: null };
     replaceSelection([]);
     state.config.profiles.push(profile);
     state.config.active_profile = profile.id;
@@ -3889,6 +3920,12 @@
         settleFlushRequests(null);
       } else if (["vosu-settings", "vosu-settings-saved", "vosu-profiles", "vosu-settings-error"].includes(envelope.type)) {
         receiveNativeSettings(envelope);
+      } else if (envelope.type === "ruleset") {
+        const next = RULESETS.includes(envelope.ruleset) ? envelope.ruleset : null;
+        const availabilityChanged = (backendRuleset === null) !== (next === null);
+        backendRuleset = next;
+        profileRulesets.hidden = next === null;
+        if (state.config && availabilityChanged) renderProfiles();
       } else if (envelope.type === "counters") {
         const value = envelope.counters !== undefined ? envelope.counters : envelope.payload;
         state.counters = Array.isArray(value) ? value.filter((counter) => counter && typeof counter.id === "string").map((counter) => ({

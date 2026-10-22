@@ -4,6 +4,22 @@
 
 [src/api.rs](../src/api.rs) fetches `/api/counters/search/` with a 10-second deadline and 2 MiB body limit. It recognizes vosu, tosu 4.26, legacy, and empty-state markup rather than trusting a product name; missing/invalid resolutions fall back to 500×300. [Fixtures](../tests/fixtures/backend/) protect this contract. The backend defaults to `http://127.0.0.1:24050/`; `--vosu-url` accepts HTTP(S) without credentials, query, or fragment.
 
+### Ruleset selection
+
+`src/runtime/editor/rulesets.rs` owns one bounded
+`/websocket/v2/subscribe` connection selecting only `["/settings/mode"]`.
+It decodes v2 initial/update/removal frames, reconnects without credentials, and
+passes availability/changes through the editor worker's queue. No browser
+editor needs to be open. An unavailable field disables binding controls (tosu's
+other APIs and existing manual profiles continue working). See
+[configuration](configuration.md) for manual-override and duplicate-binding rules.
+
+Unpinned view pages poll a read-only active-profile ID once per second and reload
+only after it changes: `/__vosulay/view-state` standalone, or
+`/tools/vosulay/api/v1/view/state` through vosu. Explicit `?profile=N` pages install
+no follower. The state route exposes no manager revision, bridge or write authority.
+
+
 ### vosu overlay settings profiles
 
 After a successful catalog fetch, [src/api.rs](../src/api.rs) reads vosu's `GET /api/counters/profiles` within the same deadline (64 KiB limit, no redirects) and adds `vosu: {active, profiles, writable, reason}` to the manager's `counters` envelope, both in game and on the manage page. `writable` says whether vosulay holds a broker token (below) that vosu has not refused; otherwise `reason` says why in plain words (vosu on another computer, no token file, a file for another listener, an invalid file, or a token vosu refused even after a reread). Any failure, or a registry that is not self-consistent (invalid names, no `default`, active profile not listed), yields `vosu: null`: tosu and older vosu keep the profile-less editor and the browser settings page.

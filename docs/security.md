@@ -276,6 +276,13 @@ not a vosulay analytics upload. Sources: [`src/config.rs`](../src/config.rs),
 [`src/api.rs`](../src/api.rs), [`src/backend.rs`](../src/backend.rs),
 [`src/remote.rs`](../src/remote.rs).
 
+Profile following adds one unauthenticated selected-field v2 socket to the
+configured backend, reading only `/settings/mode`; it carries no broker/service
+token. Automatic changes affect vosulay's own configuration, never osu!'s data.
+The view-only active-profile-ID route cannot mutate state. Unpinned viewers
+poll that ID; explicitly URL-selected profiles remain fixed. Editor fonts are
+bundled and embedded, with no external font requests.
+
 **Network access is not restricted to the configured backend.** Custom HTTP(S)
 overlays and their scripts/resources can load unrelated origins directly; the
 routing bootstrap only intercepts matching backend requests. Vosulay's own

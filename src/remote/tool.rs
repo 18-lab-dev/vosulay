@@ -116,6 +116,9 @@ fn respond(
     if read && path == "/v1/manage/document" {
         return manage::page(view, upstream).map_err(|error| anyhow::anyhow!("{}", error.message));
     }
+    if read && path == "/v1/view/state" {
+        return Ok(view_state(&crate::config::load_from_path(config)?));
+    }
     if read && path == "/v1/view" {
         return overlay_response(
             view,

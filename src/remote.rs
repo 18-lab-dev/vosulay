@@ -311,6 +311,7 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
     ))?;
     let result = match route {
         "overlay" => overlay_response(&serving_url, &backend.upstream, &config, &request.target),
+        "__vosulay/view-state" => Ok(view_state(&config)),
         route if route.starts_with("local/") => local_response(&config, route),
         "__vosulay/backend.js" => {
             let mut response = Response::bytes(
@@ -961,21 +962,49 @@ fn overlay_response(
     config: &AppConfig,
     target: &str,
 ) -> std::result::Result<Response, HttpError> {
-    let profile = select_profile(config, parse_profile(target)?)?;
-    let mut response = Response::bytes(
-        200,
-        "OK",
-        "text/html; charset=utf-8",
-        render_profile(profile, base_url, upstream)?.into_bytes(),
-    );
+    let selected = parse_profile(target)?;
+    let profile = select_profile(config, selected)?;
+    let mut html = render_profile(profile, base_url, upstream)?;
+    if selected.is_none() {
+        let state_url = if target.starts_with("/v1/view") {
+            "/tools/vosulay/api/v1/view/state"
+        } else {
+            "/__vosulay/view-state"
+        };
+        html.truncate(html.len() - "</body></html>".len());
+        use std::fmt::Write as _;
+        write!(
+            html,
+            "<script>({})(...{});</script></body></html>",
+            include_str!("../assets/view-follow.js"),
+            crate::ui::script_json(&serde_json::json!([profile.id, state_url]))
+        )
+        .map_err(|_| HttpError::new(500, "Internal Server Error", "Could not render follower\n"))?;
+    }
+    let mut response = Response::bytes(200, "OK", "text/html; charset=utf-8", html.into_bytes());
     response.headers.extend([
         ("Cache-Control".into(), "no-store".to_owned()),
         ("Referrer-Policy".into(), "no-referrer".to_owned()),
         ("X-Content-Type-Options".into(), "nosniff".to_owned()),
         ("Cross-Origin-Resource-Policy".into(), "same-origin".to_owned()),
-        ("Content-Security-Policy".into(), "default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; style-src 'unsafe-inline'; frame-src 'self' http: https:; frame-ancestors *".to_owned()),
+        ("Content-Security-Policy".into(), "default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; frame-src 'self' http: https:; frame-ancestors *".to_owned()),
     ]);
     Ok(response)
+}
+
+fn view_state(config: &AppConfig) -> Response {
+    let mut response = Response::bytes(
+        200,
+        "OK",
+        "application/json",
+        serde_json::json!({"active_profile":config.active_profile})
+            .to_string()
+            .into_bytes(),
+    );
+    response
+        .headers
+        .push(("Cache-Control".into(), "no-store".into()));
+    response
 }
 
 fn parse_profile(target: &str) -> std::result::Result<Option<usize>, HttpError> {
@@ -1750,6 +1779,7 @@ mod tests {
             id: "two".to_owned(),
             name: "Two".to_owned(),
             overlays: Vec::new(),
+            ruleset: None,
         });
         config.active_profile = "two".to_owned();
         assert_eq!(
@@ -1796,6 +1826,7 @@ mod tests {
                 z_index: 7,
                 ..Placement::default()
             }],
+            ruleset: None,
         };
         let html = render_profile(&profile, &base(), &base()).expect("render");
         assert!(html.contains("http://127.0.0.1:24050/a%2Fb/"));
@@ -1824,6 +1855,7 @@ mod tests {
                 },
                 placement,
             ],
+            ruleset: None,
         };
         let html = render_profile(&profile, &base(), &base()).expect("render");
         assert!(html.contains("src=\"http://127.0.0.1:24050/a%2Fb/?vosuProfile=stream\""));
@@ -1840,6 +1872,7 @@ mod tests {
                 enabled: false,
                 ..Placement::default()
             }],
+            ruleset: None,
         };
         let html = render_profile(&profile, &base(), &base()).expect("render");
         assert!(!html.contains("secret-counter"));
@@ -1868,6 +1901,7 @@ mod tests {
                     ..Placement::default()
                 },
             ],
+            ruleset: None,
         };
 
         let html = render_profile(&profile, &base(), &base()).expect("render");
@@ -2061,3 +2095,41 @@ mod tests {
 
 #[cfg(test)]
 mod tests_broker;
+
+#[cfg(test)]
+mod profile_follow_tests {
+    use super::*;
+    #[test]
+    fn explicit_url_profiles_never_follow_the_active_profile() {
+        let mut config = AppConfig::default();
+        config.profiles.push(Profile {
+            id: "mania".into(),
+            name: "Mania".into(),
+            overlays: vec![],
+            ruleset: Some(crate::ruleset::Ruleset::Mania),
+        });
+        config.active_profile = "mania".into();
+        let base = Url::parse("http://127.0.0.1:5050/").unwrap();
+        for (target, follows) in [
+            ("/overlay", true),
+            ("/overlay?profile=1", false),
+            ("/v1/view", true),
+            ("/v1/view?profile=1", false),
+        ] {
+            let response = overlay_response(&base, &base, &config, target).unwrap();
+            let Body::Bytes(bytes) = response.body else {
+                panic!("HTML response");
+            };
+            let html = String::from_utf8(bytes).unwrap();
+            assert_eq!(html.contains("setInterval"), follows, "{target}");
+            assert!(html.contains(if follows {
+                "<title>Mania</title>"
+            } else {
+                "<title>Default</title>"
+            }));
+            if target == "/v1/view" {
+                assert!(html.contains("/tools/vosulay/api/v1/view/state"));
+            }
+        }
+    }
+}

@@ -49,6 +49,15 @@
                 <input id="profile-position" type="number" min="1" step="1" inputmode="numeric" aria-label="Profile position" aria-describedby="profile-position-total">
                 <span id="profile-position-total"></span>
               </label>
+              <div id="profile-rulesets" role="group" aria-label="Ruleset binding" hidden>
+                <div class="menu-separator" role="separator"></div>
+                <div class="menu-section-label">02 / Ruleset binding</div>
+                <button class="menu-item" type="button" role="menuitemradio" data-ruleset="" aria-checked="true">Unbound</button>
+                <button class="menu-item" type="button" role="menuitemradio" data-ruleset="osu" aria-checked="false">osu!</button>
+                <button class="menu-item" type="button" role="menuitemradio" data-ruleset="taiko" aria-checked="false">osu!taiko</button>
+                <button class="menu-item" type="button" role="menuitemradio" data-ruleset="fruits" aria-checked="false">osu!catch</button>
+                <button class="menu-item" type="button" role="menuitemradio" data-ruleset="mania" aria-checked="false">osu!mania</button>
+              </div>
               <div class="menu-separator" role="separator"></div>
               <button id="profile-import" class="menu-item" type="button" role="menuitem" title="Import profile from JSON" disabled>Import…</button>
               <button id="profile-export" class="menu-item" type="button" role="menuitem" title="Export active profile to JSON" disabled>Export…</button>
@@ -85,6 +94,7 @@
     </header>
 
     <aside class="sidebar" aria-label="Installed counters">
+      <div class="panel-heading sheet-label">01 / Counter library</div>
       <div class="source-actions" aria-label="Add custom overlay">
         <button id="add-url" class="quiet-button" type="button">Add URL</button>
         <button id="add-html-file" class="quiet-button" type="button">HTML file</button>
@@ -98,6 +108,7 @@
     <div id="selection-box" hidden aria-hidden="true"></div>
 
     <aside id="inspector" class="inspector" aria-label="Counter properties" hidden>
+      <div class="sheet-label inspector-sheet-label">03 / Placement</div>
       <div class="panel-heading inspector-heading">
         <strong id="selection-name" class="truncate">Counter</strong>
         <div class="inspector-icons">

@@ -201,6 +201,7 @@ fn manual_import_repairs_collisions_without_replacing_existing_profile() {
             profiles: vec![Profile {
                 id: "default".into(),
                 name: "Imported".into(),
+                ruleset: None,
                 overlays: vec![Placement {
                     counter_id: "x".into(),
                     ..Placement::default()

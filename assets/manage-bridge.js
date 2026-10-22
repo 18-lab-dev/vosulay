@@ -71,6 +71,7 @@ function (viewOrigin) {
   async function loadState(force) {
     const epoch = saveEpoch;
     const state = await request('state');
+    deliver({ type: 'ruleset', ruleset: state.ruleset ?? null });
     if (saving || epoch !== saveEpoch) return;
     if (!force && state.revision === revision) return;
     revision = state.revision;

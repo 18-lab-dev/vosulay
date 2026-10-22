@@ -18,6 +18,7 @@ Need help? See [SUPPORT.md](SUPPORT.md) for where to ask questions and report bu
 - Position, resize, scale, rotate, reorder, and adjust the opacity of overlays.
 - Disable individual overlays without removing their placement; re-enable them in the inspector.
 - Maintain multiple overlay profiles; rename the active one from the profile menu (☰ → Rename).
+- Bind overlay profiles to osu!, taiko, catch or mania and follow vosu's ruleset changes automatically, without overriding URL-selected profiles.
 - Discover installed counters from a local Vosu or Tosu instance, and search them by name, author or folder.
 - Edit a counter's vosu settings and settings profiles from the editor, and pin a placement to one vosu profile so it keeps its settings when vosu's active profile changes (vosu with settings profiles only).
 - Copy one or more selected overlays and paste them into another profile; the copies keep every property, including their vosu profile pin.
@@ -304,6 +305,31 @@ Ctrl+R refreshes the selected counter and Ctrl+Shift+R refreshes the active
 profile's counters. Interaction, profile, copy/paste, undo/redo, and refresh
 shortcuts are configurable. Interaction also requires Ctrl, Alt, or Meta.
 Text fields keep native undo/redo; normal mode leaves game input alone.
+
+### Ruleset-bound profiles
+
+In the active profile's **☰** menu, choose **Ruleset binding** → osu!, osu!taiko,
+osu!catch or osu!mania. **Unbound** removes the association. This section appears
+only while the backend supplies a valid selected ruleset; tosu backends without
+that field keep the existing manual profile controls.
+
+The first available ruleset on startup, and each subsequent change to a different
+ruleset, select the matching profile. A manual profile switch wins until the
+next different ruleset; reconnecting or receiving the same ruleset never cancels
+it. An unbound ruleset leaves the current profile alone. Binding a ruleset moves
+it from any previously bound profile; hand-edited duplicate bindings use the
+first matching profile in profile order. Bindings are saved with profiles.
+
+View-only pages without `?profile=` follow the host's active profile. An explicit
+`?profile=N` stays pinned and never follows automatic or manual host switches.
+This works both standalone with vosu and as a supervised vosu tool.
+
+The editor now uses 18-LAB's graphite/amber **WORKSTATION** and paper/blueprint
+**DRAFTING** themes with bundled fonts. Standalone follows the operating-system
+colour preference; a tool opened from vosu starts in its supplied colour scheme.
+The game canvas remains transparent outside editing.
+
+### Counter properties
 
 The compact inspector has refresh and close controls in its header, position
 and size fields in two columns, then a **Scale / Layer** row and a

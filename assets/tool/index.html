@@ -4,10 +4,11 @@ import { vosu } from '/tools/_host/v1/bridge.js';
 try {
   await vosu.ready;
   if (window.top !== window.self || window.opener) throw new Error('Open vosulay in a separate tab without an opener');
-  const response = await vosu.fetch(vosu.canWrite ? 'v1/manage/document' : 'v1/view');
+  const response = await vosu.fetch(vosu.canWrite ? 'v1/manage/document' : `v1/view${location.search}`);
   if (!response.ok) throw new Error(`vosulay returned ${response.status}`);
   const html = await response.text();
   if (vosu.canWrite) window.__VOSULAY_TOOL_FETCH__ = (path, init) => vosu.fetch(path, init);
+  window.__VOSULAY_COLOR_SCHEME__ = vosu.colorScheme;
   document.open();
   document.write(html);
   document.close();

@@ -6,6 +6,7 @@ that logs outbound messages and acknowledges saves (simulated; nothing is
 persisted). No CEF, game, or running vosulay is needed.
 """
 import argparse
+import base64
 import functools
 import http.server
 import json
@@ -88,7 +89,11 @@ def build(config: dict, counters: list, vosu_demo: bool = False) -> str:
     html = (ASSETS / "manager.html").read_text(encoding="utf-8")
     if html.count(MARKER) != 1:
         raise SystemExit(f"assets/manager.html must contain exactly one {MARKER}")
-    css = javascript_string((ASSETS / "manager.css").read_text(encoding="utf-8"))
+    styles = (ASSETS / "manager.css").read_text(encoding="utf-8")
+    for font in (ASSETS / "fonts").glob("*.woff2"):
+        styles = styles.replace("vosulay-font:" + font.name,
+                                "data:font/woff2;base64," + base64.b64encode(font.read_bytes()).decode("ascii"))
+    css = javascript_string(styles)
     javascript = javascript_string((ASSETS / "manager.js").read_text(encoding="utf-8"))
     vosu = {"active": "default", "profiles": ["default", "stream"], "writable": True, "reason": None} if vosu_demo else None
     host = """

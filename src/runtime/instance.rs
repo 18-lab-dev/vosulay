@@ -43,6 +43,19 @@ impl InstanceGuard {
     }
 }
 
+#[cfg(target_os = "linux")]
+impl Drop for InstanceGuard {
+    fn drop(&mut self) {
+        use std::os::fd::AsRawFd;
+        // A concurrently forked subprocess can briefly retain the open file
+        // description until exec. Ownership ends with this guard, not that
+        // inherited descriptor's eventual close.
+        unsafe {
+            libc::flock(self._file.as_raw_fd(), libc::LOCK_UN);
+        }
+    }
+}
+
 #[cfg(windows)]
 pub struct InstanceGuard {
     handle: windows::Win32::Foundation::HANDLE,
@@ -99,5 +112,40 @@ mod tests {
         assert!(InstanceGuard::acquire_at(&path).unwrap().is_none());
         drop(first);
         assert!(InstanceGuard::acquire_at(&path).unwrap().is_some());
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod fork_tests {
+    use super::InstanceGuard;
+    #[test]
+    fn inherited_descriptor_does_not_extend_instance_ownership() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("instance.lock");
+        let guard = InstanceGuard::acquire_at(&path).unwrap().unwrap();
+        let mut pipe = [0; 2];
+        assert_eq!(unsafe { libc::pipe(pipe.as_mut_ptr()) }, 0);
+        let child = unsafe { libc::fork() };
+        assert!(child >= 0);
+        if child == 0 {
+            // Only async-signal-safe operations after fork in the multithreaded test runner.
+            unsafe {
+                libc::close(pipe[1]);
+                let mut byte = 0_u8;
+                libc::read(pipe[0], (&mut byte as *mut u8).cast(), 1);
+                libc::_exit(0);
+            }
+        }
+        unsafe {
+            libc::close(pipe[0]);
+        }
+        drop(guard);
+        let reacquired = InstanceGuard::acquire_at(&path).unwrap().is_some();
+        unsafe {
+            libc::write(pipe[1], b"x".as_ptr().cast(), 1);
+            libc::close(pipe[1]);
+            libc::waitpid(child, std::ptr::null_mut(), 0);
+        }
+        assert!(reacquired);
     }
 }

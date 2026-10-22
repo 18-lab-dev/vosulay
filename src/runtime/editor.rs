@@ -20,6 +20,7 @@ use std::{
     time::Duration,
 };
 use url::Url;
+mod rulesets;
 
 pub(super) struct Work {
     pub document: String,
@@ -38,6 +39,7 @@ pub(super) struct Reply {
 enum Task {
     Manager(Work),
     Remote(RemoteCall, SyncSender<Result<Value>>),
+    Ruleset(Option<crate::ruleset::Ruleset>),
 }
 
 enum RemoteCall {
@@ -61,6 +63,7 @@ pub(super) struct EditorWorker {
     /// Errors for vosu requests that found the worker's queue full.
     vosu_busy: RefCell<VecDeque<Reply>>,
     pending: Cell<usize>,
+    rulesets: Option<rulesets::Watcher>,
 }
 
 // The manage page waits at most this long for the worker (a save waits behind queued
@@ -218,6 +221,7 @@ impl EditorWorker {
         backend: Url,
         resources: Arc<ProductResources>,
     ) -> Result<Self> {
+        let watched_backend = backend.clone();
         let (tx, requests) = mpsc::sync_channel::<Task>(64);
         let (replies, rx) = mpsc::sync_channel(64);
         let host = thread::current();
@@ -271,12 +275,25 @@ impl EditorWorker {
                 backend,
                 resources,
                 revision: 0,
+                ruleset: crate::ruleset::Selection::default(),
                 granted: Default::default(),
                 #[cfg(target_os = "linux")]
                 clipboard: super::clipboard::Clipboard::connect(),
             };
             while let Ok(task) = requests.recv() {
                 let work = match task {
+                    Task::Ruleset(ruleset) => {
+                        let envelopes = match state.ruleset(ruleset) {
+                            Ok(envelopes) => envelopes,
+                            Err(error) => vec![json!({"type":"error","message":format!("Could not switch ruleset profile: {error:#}")})],
+                        };
+                        if envelopes.is_empty() { continue; }
+                        for envelope in envelopes {
+                            if replies.send(Reply { document: String::new(), envelope, dialog_closed: false, broadcast: true, task_finished: false }).is_err() { return; }
+                        }
+                        host.unpark();
+                        continue;
+                    }
                     Task::Manager(work) => work,
                     Task::Remote(call, reply) => {
                         let (result, changed) = state.remote(call);
@@ -323,7 +340,7 @@ impl EditorWorker {
                 return Err(error).context("could not start manager task worker");
             }
         };
-        Ok(Self {
+        let mut worker = Self {
             tx: Arc::new(Mutex::new(Some(tx))),
             rx,
             thread: Some(thread),
@@ -335,7 +352,17 @@ impl EditorWorker {
             vosu_thread: Some(vosu_thread),
             vosu_busy: RefCell::default(),
             pending: Cell::new(0),
-        })
+            rulesets: None,
+        };
+        match rulesets::Watcher::start(watched_backend, worker.tx.clone()) {
+            Ok(watcher) => worker.rulesets = Some(watcher),
+            Err(error) => {
+                worker.stop();
+                worker.join()?;
+                return Err(error);
+            }
+        }
+        Ok(worker)
     }
 
     pub fn submit(&self, work: Work) -> Result<()> {
@@ -425,6 +452,9 @@ impl EditorWorker {
             .and_then(|(generation, reply)| (generation == state.generation).then_some(reply))
     }
     pub fn stop(&mut self) {
+        if let Some(watcher) = &mut self.rulesets {
+            watcher.stop();
+        }
         // Also disconnects the manage page, so the task thread can finish.
         if let Ok(mut tx) = self.tx.lock() {
             tx.take();
@@ -439,6 +469,10 @@ impl EditorWorker {
     pub fn finished(&self) -> bool {
         self.thread.as_ref().is_none_or(JoinHandle::is_finished)
             && self
+                .rulesets
+                .as_ref()
+                .is_none_or(rulesets::Watcher::finished)
+            && self
                 .counter_thread
                 .as_ref()
                 .is_none_or(JoinHandle::is_finished)
@@ -452,6 +486,9 @@ impl EditorWorker {
         let manager = self.thread.take().map(JoinHandle::join);
         let counters = self.counter_thread.take().map(JoinHandle::join);
         let vosu = self.vosu_thread.take().map(JoinHandle::join);
+        if let Some(watcher) = &mut self.rulesets {
+            watcher.join()?;
+        }
         if manager.is_some_and(|result| result.is_err()) {
             bail!("manager task worker panicked");
         }
@@ -471,6 +508,7 @@ struct State {
     backend: Url,
     resources: Arc<ProductResources>,
     revision: u64,
+    ruleset: crate::ruleset::Selection,
     /// `vosulay-overlay:` URLs from native file choices (picker, profile import) this run.
     granted: std::collections::HashSet<String>,
     #[cfg(target_os = "linux")]
@@ -478,6 +516,30 @@ struct State {
 }
 
 impl State {
+    fn ruleset(&mut self, ruleset: Option<crate::ruleset::Ruleset>) -> Result<Vec<Value>> {
+        let availability_changed = self.ruleset.current != ruleset;
+        let changed = self.ruleset.update(ruleset);
+        if !changed && !availability_changed {
+            return Ok(Vec::new());
+        }
+        let mut envelopes = vec![json!({"type":"ruleset","ruleset":ruleset})];
+        if changed
+            && let Some(profile) = self
+                .config
+                .profiles
+                .iter()
+                .find(|profile| profile.ruleset == ruleset)
+            && profile.id != self.config.active_profile
+        {
+            let mut config = self.config.clone();
+            config.active_profile.clone_from(&profile.id);
+            save_to_path(&config, &self.path)?;
+            self.config = config;
+            self.revision += 1;
+            envelopes.push(json!({"type":"config","config":self.config,"revision":self.revision}));
+        }
+        Ok(envelopes)
+    }
     /// Whether vosulay serves the page's clipboard instead of Chromium.
     fn host_clipboard(&self) -> bool {
         #[cfg(target_os = "linux")]
@@ -491,7 +553,9 @@ impl State {
     fn remote(&mut self, call: RemoteCall) -> (Result<Value>, Option<Value>) {
         match call {
             RemoteCall::State => (
-                Ok(json!({"config": self.config, "revision": self.revision})),
+                Ok(
+                    json!({"config": self.config, "revision": self.revision, "ruleset": self.ruleset.current}),
+                ),
                 None,
             ),
             RemoteCall::Message(message) => {
@@ -569,6 +633,7 @@ impl State {
         match kind {
             "ready" => Ok(vec![
                 json!({"type": "config", "config": self.config, "revision": self.revision}),
+                json!({"type":"ruleset","ruleset":self.ruleset.current}),
                 // Elsewhere Chromium's own clipboard works for the page.
                 json!({"type": "clipboard-support", "available": self.host_clipboard()}),
             ]),
@@ -896,6 +961,7 @@ mod tests {
             id: "other".into(),
             name: "Other".into(),
             overlays: vec![placement.clone()],
+            ruleset: None,
         });
         config.normalize();
         let resources = Arc::new(ProductResources::new(&config).unwrap());
@@ -978,27 +1044,28 @@ mod tests {
         let expected_url = backend.join("nested%2Ffolder/").unwrap();
         let server = thread::spawn(move || {
             let deadline = Instant::now() + Duration::from_secs(3);
-            let mut stream = loop {
-                match listener.accept() {
-                    Ok((stream, _)) => break stream,
+            loop {
+                let mut stream = match listener.accept() {
+                    Ok((stream, _)) => stream,
                     Err(error)
                         if error.kind() == std::io::ErrorKind::WouldBlock
                             && Instant::now() < deadline =>
                     {
                         thread::sleep(Duration::from_millis(1));
+                        continue;
                     }
                     Err(_) => return,
-                }
-            };
-            // Winsock inherits the listener's nonblocking mode; Unix does not.
-            stream.set_nonblocking(false).unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(3)))
-                .unwrap();
-            {
-                // Consume headers before closing, avoiding a reset with unread
-                // request bytes still pending in the socket receive buffer.
+                };
+                // The ruleset watcher may connect before the catalog request.
+                // Exercise both consumers instead of assuming the first socket
+                // is necessarily the counter worker.
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
                 let mut reader = std::io::BufReader::new(&mut stream);
+                let mut first = String::new();
+                reader.read_line(&mut first).unwrap();
                 let mut line = String::new();
                 loop {
                     line.clear();
@@ -1007,9 +1074,19 @@ mod tests {
                         break;
                     }
                 }
+                drop(reader);
+                if first.starts_with("GET /api/counters/search/") {
+                    let body =
+                        include_str!("../../tests/fixtures/backend/vosu-counter-search.html");
+                    write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                    return;
+                }
+                write!(
+                    stream,
+                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                )
+                .unwrap();
             }
-            let body = include_str!("../../tests/fixtures/backend/vosu-counter-search.html");
-            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
         });
         let directory = tempfile::tempdir().unwrap();
         let config = AppConfig::default();

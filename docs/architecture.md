@@ -6,6 +6,18 @@ One Rust host uses the pinned precompiled CEF runtime on Linux and Windows. CEF 
 
 [src/runtime/host.rs](../src/runtime/host.rs) owns attachment, browser lifetime, input capture, browser heartbeats, visibility, and frame-rate policy. [src/runtime/editor.rs](../src/runtime/editor.rs) moves blocking catalog fetches, revision-checked configuration saves, file dialogs, and imports off the event loop. CEF initializes lazily when a game is selected. Detachment flushes edits and closes the view; the initialized runtime remains until exit because CEF cannot safely be reinitialized in one process.
 
+The editor worker also serializes ruleset-bound profile selection. A cancellable
+selected-field v2 watcher sends only ruleset changes/availability; the worker
+uses its existing atomic saves and revision/broadcast path. The watcher closes
+with the worker on stdin EOF or native exit, so it cannot outlive the host.
+The last valid ruleset survives backend reconnects to preserve manual selections.
+
+Both CEF and browser managers embed the same WORKSTATION/DRAFTING CSS and
+base64-embedded OFL font subsets, retaining the vosulay logo and transparent game
+canvas. No font request goes to vosu or a CDN. Native managers follow the OS;
+the tool bootstrap passes vosu's initial `colorScheme` into the manager.
+
+
 Linux's [entrypoint](../src/main.rs) re-executes Cargo-built binaries beside the retained CEF assets. Windows enters through the pinned CEF sandbox bootstrap and loads the application client DLL.
 
 After claiming per-user instance ownership, startup binds

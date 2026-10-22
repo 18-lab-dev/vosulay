@@ -6,6 +6,21 @@
 
 `AppConfig` has schema version `1`, an active profile ID, a non-empty profile list, settings, and a tosu migration-completed marker. The default profile is `default` / `Default`, with no placements. Profiles have an ID, name, and ordered placements. Repeated placements of one counter are valid and must not be deduplicated.
 
+Each profile may also have `ruleset: "osu" | "taiko" | "fruits" | "mania"`;
+omitting it (or `null`) leaves the profile unbound. The editor exposes bindings
+only when the backend supplies `/settings/mode` through the selected-field v2
+subscription. Choosing a binding clears that ruleset on other profiles.
+For manually edited/imported duplicates, the first matching profile wins.
+
+Automatic selection occurs on the first valid sample and on a change to a
+different valid ruleset. Manual profile changes persist until the next different
+ruleset. Missing values, reconnects and repeated samples do not count as changes;
+an unbound ruleset keeps the current profile. The selected profile is atomically
+saved by the existing editor worker and broadcast with a new revision. Binding
+edits alone do not trigger automatic selection. Explicit URL `?profile=N`
+selection remains local to that viewer and never follows the host's active ID.
+
+
 A placement identifies an installed `counter_id` or custom `url`, with optional name, geometry, scale, opacity, rotation, crop, enabled state, and z-order. Disabling keeps placement data. Supported custom schemes are `http`, `https`, and `vosulay-overlay`.
 
 `width`/`height` size the counter's frame. `crop_top`, `crop_right`, `crop_bottom` and `crop_left` (default `0`) hide that many unscaled counter pixels from each side; `left`/`top` place the top-left corner of the remaining region, which is what scale and rotation apply to. Renderers ([assets/manager.js](../assets/manager.js), the static page in [src/remote.rs](../src/remote.rs)) clip a full-size frame offset by the left/top crop.

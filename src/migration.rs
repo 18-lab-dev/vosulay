@@ -121,7 +121,12 @@ fn parse_profile(v: &Value, index: usize) -> Result<Profile> {
         .enumerate()
         .map(|(i, v)| parse_placement(v, index, i))
         .collect::<Result<Vec<_>>>()?;
-    Ok(Profile { id, name, overlays })
+    Ok(Profile {
+        id,
+        name,
+        overlays,
+        ruleset: None,
+    })
 }
 fn parse_placement(v: &Value, profile: usize, index: usize) -> Result<Placement> {
     let m = object(v, "overlay")?;
