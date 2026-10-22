@@ -40,6 +40,10 @@ function (configuredBackend, brokerBase, managerPage, brokerSecret) {
     } catch (_) {}
   }
   Object.defineProperty(window, '__VOSULAY_BACKEND_URL__', { value: route, configurable: true });
+  // The tool manager shares vosu's origin. Its authenticated host fetches must
+  // stay on vosu, never be rewritten to the counter broker. Counter frames get
+  // their own bootstrap and still route all backend traffic normally.
+  if (manager && typeof window.__VOSULAY_TOOL_FETCH__ === 'function') return;
   if (broker) {
     const nativeFetch = window.fetch;
     if (typeof nativeFetch === 'function') window.fetch = function(input, init) {

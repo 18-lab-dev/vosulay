@@ -17,6 +17,8 @@ use crate::{
 };
 
 mod manage;
+mod tool;
+pub use tool::ToolServer;
 
 pub use manage::ManageEditor;
 
@@ -40,6 +42,7 @@ struct Backend {
     secret: String,
     http: ureq::Agent,
     editor: Option<Arc<dyn ManageEditor>>,
+    tool_mode: bool,
 }
 
 impl RemoteServer {
@@ -60,9 +63,13 @@ impl RemoteServer {
             .context("failed to bind local backend broker")?;
         let address = listen_address(&config.settings);
         let mut listeners = vec![local];
-        match TcpListener::bind(address) {
-            Ok(listener) => listeners.push(listener),
-            Err(error) => eprintln!("Remote overlay hosting at {address} is unavailable: {error}"),
+        if crate::tool::Environment::from_env()?.is_none() {
+            match TcpListener::bind(address) {
+                Ok(listener) => listeners.push(listener),
+                Err(error) => {
+                    eprintln!("Remote overlay hosting at {address} is unavailable: {error}")
+                }
+            }
         }
         let credential = crate::backend::BrokerCredential::for_backend(&base_url);
         Self::start_with_listeners(
@@ -116,6 +123,7 @@ impl RemoteServer {
                     .build(),
             ),
             editor,
+            tool_mode: crate::tool::Environment::from_env()?.is_some(),
         });
         let mut server = Self {
             stop: Arc::new(AtomicBool::new(false)),

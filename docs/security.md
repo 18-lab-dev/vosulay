@@ -105,6 +105,29 @@ falling back to the user's cache directory. Sources:
 [`crates/cef-tools/src/lib.rs`](../crates/cef-tools/src/lib.rs),
 [`src/runtime/instance.rs`](../src/runtime/instance.rs).
 
+### vosu-managed installation
+
+Tool mode is explicitly selected by `VOSU_TOOL_PROTOCOL=1`. vosu supervises the
+process with the user's OS rights; catalog trust is not an OS sandbox. The
+backend is forced to `VOSU_URL`, persistent state stays in `VOSU_TOOL_DATA_DIR`
+and browser cache/logs in `VOSU_TOOL_CACHE_DIR`. Initial import copies (never
+moves or rewrites) the standalone config only when tool data is empty.
+Tool startup suppresses launcher registration and Linux game-shortcut rewriting;
+it does not remove existing standalone registrations.
+
+The protocol HTTP listener binds 127.0.0.1 on an assigned port and requires the
+exact per-start `X-Vosu-Tool-Token` on every request, including health checks.
+The separate counter broker is still loopback, with its existing authority
+checks; no configured standalone remote/LAN listener is started in tool mode.
+The standalone manage origin is disabled. Dashboard UI sessions authorize the
+write-only `/v1/manage` proxy; view-only `/v1/view` needs no UI session.
+Sessions remain only in the page's fetch closure and never enter storage,
+cookies, counter frames or logs. Tool-manager frames use an opaque-origin
+sandbox, so even counters on vosu's shared origin cannot reach the bridge.
+The editor worker retains its message/capability checks. Existing native game
+attachment, input and CEF sandbox disclosures still apply to this separate tool.
+
+
 ### How to remove vosulay completely
 
 1. Choose **tray → Exit vosulay** (Hide is not Exit), and close games that loaded

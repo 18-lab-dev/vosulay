@@ -25,6 +25,23 @@ initialization. Its loop discards manager replies, rejects in-game edit toggles,
 and drains/stops/joins the worker on `--quit`. Backend and configuration overrides
 still apply. Game-selection and frame-pacing CLI options are rejected.
 
+### Supervised tool mode
+
+`VOSU_TOOL_PROTOCOL=1` opts into vosu protocol v1; otherwise startup is unchanged.
+`src/tool.rs` reads vosu's backend and data/cache paths, imports a standalone
+config only into an empty data directory, and watches stdin. EOF feeds the same
+graceful exit/flush path as tray Exit. An occupied per-user instance lock exits
+with status 1 in tool mode (standalone retains its existing status 0).
+Launcher registration and Linux shortcut refresh are suppressed, never removed.
+The tray and native game rendering remain owned by vosulay, not vosu.
+
+`src/remote/tool.rs` binds a separate loopback port 0, authenticates every route
+with the launch token and prints the flushed readiness line. It adapts the same
+`ManageEditor` authority used by the standalone manager, not a second config
+writer. The normal broker remains private loopback; tool mode does not bind the
+configured standalone remote listener or enable its manage origin.
+
+
 On Linux, CEF's external message pump runs only Chromium's task queue, so [crates/browser-cef](../crates/browser-cef/src/glib.rs) also dispatches the default GLib main context, where Chromium watches its display connection; a waker thread unparks the host when those descriptors become ready. GLib's "work due now" timeout is trusted only when a source is actually ready: Chromium's GLib work source reports it permanently under CEF's external pump, which otherwise kept the host loop and waker spinning at full CPU and delivered paints in bursts. Windowless Chromium never holds keyboard focus, and Wayland compositors only share the clipboard with a focused client, so the page's text fields use the host's clipboard: [src/runtime/clipboard.rs](../src/runtime/clipboard.rs) reads and owns the selection through wlr data-control (wlroots compositors, Hyprland, KWin), or else as an X11 `CLIPBOARD` client ([x11.rs](../src/runtime/clipboard/x11.rs)). GNOME's Xwayland bridge mirrors the clipboard without focus checks, so the X11 path covers GNOME and plain X11 sessions; Hyprland's bridge does check focus, which is why data-control comes first. The page inserts pasted text with `insertText`, and a cut deletes its selection only after the host confirms the write. INCR transfers are not implemented; text beyond one X request fails rather than truncating. CEF keeps Chromium's own Wayland/X11 choice; forcing X11 lost the WebGPU adapter on NVIDIA. Windows, or Linux without data-control or an X display, uses Chromium's own clipboard.
 
 ## Browser trust boundary

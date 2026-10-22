@@ -33,6 +33,11 @@ fn launch_cached_runtime() -> anyhow::Result<()> {
         env, fs, io::ErrorKind, os::unix::process::CommandExt, path::Path, process::Command,
     };
     use vosulay_cef_tools::sha256;
+    if std::env::var("VOSU_TOOL_PROTOCOL").as_deref() == Ok("1")
+        && std::env::args().any(|argument| argument == "--server-only")
+    {
+        return Ok(());
+    }
 
     let executable = env::current_exe()?;
     let directory = executable

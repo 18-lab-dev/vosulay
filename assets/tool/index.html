@@ -1,0 +1,17 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>vosulay</title><meta name="referrer" content="no-referrer"></head><body><p id="status">Connecting to vosulay…</p><script type="module">
+import { vosu } from '/tools/_host/v1/bridge.js';
+try {
+  await vosu.ready;
+  if (window.top !== window.self || window.opener) throw new Error('Open vosulay in a separate tab without an opener');
+  const response = await vosu.fetch(vosu.canWrite ? 'v1/manage/document' : 'v1/view');
+  if (!response.ok) throw new Error(`vosulay returned ${response.status}`);
+  const html = await response.text();
+  if (vosu.canWrite) window.__VOSULAY_TOOL_FETCH__ = (path, init) => vosu.fetch(path, init);
+  document.open();
+  document.write(html);
+  document.close();
+} catch (error) {
+  document.getElementById('status').textContent = `Cannot open vosulay: ${error.message}. Open from the vosu dashboard for editing.`;
+}
+</script></body></html>

@@ -43,6 +43,7 @@ pub(super) fn is_manage_host(host: Option<&str>, local_address: SocketAddr) -> b
 /// Editing is offered only when enabled, available, and the client is this machine.
 pub(super) fn enabled(config: &AppConfig, backend: &Backend, peer: SocketAddr) -> bool {
     config.settings.allow_local_profile_editing
+        && !backend.tool_mode
         && backend.editor.is_some()
         && normalize_ip(peer.ip()).is_loopback()
 }
@@ -87,7 +88,7 @@ fn view_url(local_address: SocketAddr) -> std::result::Result<Url, HttpError> {
         .map_err(|_| HttpError::new(500, "Internal Server Error", "Invalid listener address\n"))
 }
 
-fn page(view: &Url, upstream: &Url) -> std::result::Result<Response, HttpError> {
+pub(super) fn page(view: &Url, upstream: &Url) -> std::result::Result<Response, HttpError> {
     let routing = json!([upstream.as_str(), view.as_str(), true]);
     let prelude = format!(
         "({})(...{});({})({});",
@@ -321,7 +322,7 @@ mod tests {
     fn editing_is_offered_only_to_this_machine() {
         let mut config = AppConfig::default();
         config.settings.allow_local_profile_editing = true;
-        let backend = Backend {
+        let mut backend = Backend {
             upstream: Url::parse("http://127.0.0.1:24050/").unwrap(),
             broker: crate::backend::Broker::new(
                 Url::parse("http://127.0.0.1:24050/").unwrap(),
@@ -331,6 +332,7 @@ mod tests {
             secret: "0".repeat(64),
             http: ureq::Agent::new_with_defaults(),
             editor: Some(Arc::new(FakeEditor::default())),
+            tool_mode: false,
         };
         assert!(enabled(
             &config,
@@ -346,6 +348,12 @@ mod tests {
             &config,
             &backend,
             "192.168.1.20:40000".parse().unwrap()
+        ));
+        backend.tool_mode = true;
+        assert!(!enabled(
+            &config,
+            &backend,
+            "127.0.0.1:40000".parse().unwrap()
         ));
         config.settings.allow_local_profile_editing = false;
         assert!(!enabled(

@@ -1,0 +1,18 @@
+manifest_version = 1
+id = "vosulay"
+name = "vosulay"
+version = "1.4.0"
+description = "In-game overlay host and profile editor for vosu"
+author = "18-LAB"
+homepage = "https://github.com/shiruviaa/vosulay"
+
+[ui]
+root = "assets/tool"
+
+[service]
+command = ["bin/vosulay"]
+startup = "always"
+
+[api]
+read = ["/v1/view"]
+write = ["/v1/manage"]

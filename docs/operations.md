@@ -19,6 +19,39 @@ For a source installation, run `cargo install --path . --locked` (`--force` to
 reinstall). Cargo-installed Linux binaries depend on the retained caches above,
 not a redistributable executable alone.
 
+### vosu tool packages
+
+The release workflow additionally wraps each verified portable runtime with
+`tools/release/tool-package.py package --runtime <staging-directory> --output dist
+--target <triple>`. Supported triples are `x86_64-unknown-linux-gnu` and
+`x86_64-pc-windows-msvc`. Each ZIP has `tool.toml`, `assets/tool`, `bin` (the
+complete executable-adjacent runtime) and `licenses`; symlinks are dereferenced.
+`tool.toml` must match the workspace version. The release job generates
+`catalog.json` with both ZIPs' SHA-256 and sizes before the existing asset-set,
+checksum, draft-release and detached-signature flow. Windows wraps the already
+verified runtime after client signing; it never rebuilds/replaces signed files.
+CEF acquisition remains build-time and pinned/verified; startup downloads nothing.
+The existing third-party notices and corresponding-source release asset apply
+to the tool package too.
+Linux tool ZIP extraction does not install the setuid sandbox helper; it uses
+Chromium's unprivileged-user-namespace sandbox where permitted, like the
+standalone tarball. On systems restricting user namespaces, follow the tarball
+sandbox setup instead of disabling Chromium's sandbox.
+
+vosu supplies `VOSU_URL`, `VOSU_TOOL_TOKEN`, `VOSU_TOOL_DATA_DIR` and
+`VOSU_TOOL_CACHE_DIR` with `VOSU_TOOL_PROTOCOL=1`. Data is `config.json` under
+the supplied data directory and CEF storage/logs are `cef-cache` under cache.
+Only a completely empty data directory imports the previous standalone JSON;
+subsequent starts never overwrite tool edits or modify standalone files.
+`--server-only` remains available for isolated protocol verification.
+
+Windows still requires the packaged CEF sandbox bootstrap and matched client/
+injection DLLs. Cross-checking source does not establish that Chromium sandbox
+children operate correctly inside vosu's supervised Windows job object; a native
+authorized CEF/game run is required. On both platforms restart games before
+upgrading the host/injected libraries: never mix tool and standalone versions.
+
+
 ### Linux release packages
 
 [`packaging/linux/build.sh`](../packaging/linux/build.sh) builds the tarball and
@@ -136,8 +169,8 @@ trigger SmartScreen.
    Windows job produces the ZIP and installer. Every run uploads
    `vosulay-linux-x86_64` and `vosulay-windows-x86_64` artifacts.
 6. Publication verifies the tag matches `Cargo.toml`, then creates a **draft**
-   GitHub release with all six packages, `vosulay-<v>-third-party-sources.tar`
-   and `SHA256SUMS`. The source archive is the corresponding source for the LGPL
+   GitHub release with the six standalone packages, both tool ZIPs, `catalog.json`,
+   `vosulay-<v>-third-party-sources.tar` and `SHA256SUMS`. The source archive is the corresponding source for the LGPL
    components inside the asdf-overlay DLLs
    ([provenance](provenance.md)); it is assembled from pinned, hash-checked
    upstream archives, and a changed upstream archive fails publication. A

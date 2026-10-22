@@ -6,7 +6,7 @@ set -eu
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
-    build-essential pkg-config ca-certificates curl git \
+    build-essential pkg-config ca-certificates curl git python3 python3-tomli \
     libwayland-dev
 if ! command -v rustup >/dev/null 2>&1; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |

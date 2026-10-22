@@ -46,9 +46,16 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
     let Some(options) = Options::parse()? else {
         return Ok(0);
     };
+    let tool = crate::tool::Environment::from_env()?;
+    let mut options = options;
+    if let Some(tool) = &tool {
+        options.config = tool.prepare(&options.config)?;
+        options.vosu_url = Some(tool.backend.clone());
+        crate::tool::watch_stdin()?;
+    }
     let Some(_instance) = super::instance::InstanceGuard::acquire()? else {
         eprintln!("Vosulay is already running; exiting this second instance.");
-        return Ok(0);
+        return Ok(if tool.is_some() { 1 } else { 0 });
     };
     #[cfg(target_os = "linux")]
     super::signals::install(&thread::current()).context("could not handle exit signals")?;
@@ -62,7 +69,9 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
             None
         }
     };
-    super::desktop_entry::register();
+    if tool.is_none() {
+        super::desktop_entry::register();
+    }
     let mut config = crate::config::load_from_path(&options.config)?;
     super::tosu::migrate(&mut config, &options.config);
     let resources = Arc::new(ProductResources::new(&config)?);
@@ -84,15 +93,30 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         Some(worker.manage_editor()),
     )
     .context("could not start overlay backend broker")?;
+    let _tool_server = tool
+        .as_ref()
+        .map(|env| {
+            crate::remote::ToolServer::start(
+                env,
+                remote.browser_url(),
+                options.config.clone(),
+                worker.manage_editor(),
+            )
+        })
+        .transpose()?;
     if options.server_only {
-        let address = std::net::SocketAddr::new(
-            config.settings.remote_listen_host.parse()?,
-            config.settings.remote_listen_port,
-        );
-        eprintln!(
-            "vosulay server-only: http://{address}/overlay (local editor: http://manage.localhost:{}/overlay)",
-            config.settings.remote_listen_port
-        );
+        if tool.is_some() {
+            eprintln!("vosulay server-only: supervised by vosu; open its dashboard tool editor");
+        } else {
+            let address = std::net::SocketAddr::new(
+                config.settings.remote_listen_host.parse()?,
+                config.settings.remote_listen_port,
+            );
+            eprintln!(
+                "vosulay server-only: http://{address}/overlay (local editor: http://manage.localhost:{}/overlay)",
+                config.settings.remote_listen_port
+            );
+        }
         loop {
             while worker.next_reply().is_some() {}
             if exit_signalled() {
@@ -129,7 +153,9 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         return Ok(0);
     }
     #[cfg(target_os = "linux")]
-    super::launchers::refresh(&options.overlay, &options.lookup);
+    if tool.is_none() {
+        super::launchers::refresh(&options.overlay, &options.lookup);
+    }
     #[cfg(windows)]
     let mut platform = PlatformController::start(
         WindowsOptions {
@@ -220,13 +246,13 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
 /// Whether Ctrl+C, SIGTERM or SIGHUP asked vosulay to exit since the last call.
 #[cfg(target_os = "linux")]
 fn exit_signalled() -> bool {
-    super::signals::take_exit_request()
+    crate::tool::exit_requested() || super::signals::take_exit_request()
 }
 
 // Windows delivers console Ctrl+C through its own control handler, which this does not cover.
 #[cfg(windows)]
 fn exit_signalled() -> bool {
-    false
+    crate::tool::exit_requested()
 }
 
 #[derive(Clone, Copy)]
@@ -294,7 +320,9 @@ impl Host<'_> {
                 CefRuntime::initialize(RuntimeOptions {
                     runtime: &self.options.runtime,
                     sandbox_info: self.sandbox_info,
-                    cache: &parent.join("cef-cache"),
+                    cache: &crate::tool::Environment::from_env()?
+                        .map(|env| env.cache.join("cef-cache"))
+                        .unwrap_or_else(|| parent.join("cef-cache")),
                     resources: self.resources.clone(),
                 })
             }?);

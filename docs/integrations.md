@@ -55,6 +55,27 @@ With `allow_local_profile_editing` on (default off), loopback peers that name th
 
 External renderers (idk-overlay, tosu-overlay-qt style windows) use the manage page as their frontend: they load it top-level, sized to the game; outside edit mode it renders only counters on a transparent background. They toggle edit mode with tosu's in-game convention: the bridge maps `window.postMessage('editingStarted' | 'editingEnded')` to the manager's `editing` envelope and posts the same strings when the manager reports `set-editing` (shortcut, Escape, **Done**), which hosts use to capture input or restore click-through. It accepts only messages whose `source` is the page's own window, so counter frames cannot switch the editor. The page cannot be framed (`frame-ancestors 'none'`, `X-Frame-Options: DENY`, and a 403 for `/overlay` with a non-`document` `Sec-Fetch-Dest`), because a framing counter or website could otherwise trick clicks into same-origin edits.
 
+### vosu dashboard tool sessions
+
+The optional `tool.toml` UI loads vosu's browser bridge. Dashboard Open exchanges
+its one-use launch code for an in-memory session; the service token never enters
+the browser. `/v1/manage` is write-only in the manifest, including document,
+state and catalog GETs. The session therefore replaces standalone
+`manage.localhost` plus the local-editing opt-in as the authorization gate.
+The same editor worker still checks message allowlists, revisions, local-file
+capabilities and native-dialog selections. Tool mode disables the standalone
+manage origin even if an imported config enabled it.
+
+The HTTP bridge captures the session-aware fetch closure and removes its global.
+Tool-manager counter frames are sandboxed with scripts but without same-origin
+authority, including custom URLs; they cannot reach the manager or session.
+Counter data comes from the independent loopback broker. This opaque-origin
+sandbox can limit counters requiring browser storage or privileged browser APIs.
+Standalone browser/CEF frames retain their existing behavior.
+The UI refuses framed/opener-bearing launches. Direct/reloaded tool pages fetch
+only `/v1/view`, an open read route rendering the active or selected profile.
+
+
 ## OBS capture boundary
 
 Linux launch order is **lookup helper → foreign preloads → compositor**, and OBS's Vulkan layer stays ahead of vosulay's. When OBS's GL capture library is loaded, vosulay's GLX/EGL swap hooks call OBS's swap wrapper first, so OBS captures the clean frame and chains back for composition regardless of preload order; this covers games such as Wine that resolve swaps through `dlsym`. Display Capture still includes the overlay. Vosulay does not modify OBS scenes, capture sources, or export flags.

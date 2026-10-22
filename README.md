@@ -29,6 +29,28 @@ Need help? See [SUPPORT.md](SUPPORT.md) for where to ask questions and report bu
 
 ## Install
 
+### Install from the vosu dashboard
+
+With vosu 1.2.0 or newer, open **Tools → Available**, install **vosulay** from
+the official `shiruviaa/vosulay` catalog source, then choose **Open** for the
+full profile editor. vosu starts and stops the host; the vosulay tray remains
+available. **Exit vosulay** stops it until you start it again in vosu. Opening
+the tool URL directly (or reloading) shows a view-only profile, without editing
+authority; open again from the dashboard to edit.
+
+The tool uses vosu's backend and separate tool data/cache directories. On its
+first start into an empty data directory it copies an existing standalone
+configuration, including profiles, without changing the original. Stop a
+standalone vosulay before enabling the tool: only one host may own your user.
+Tool mode does not register launchers or rewrite game shortcuts. Linux game
+launch integration must use the matching packaged compositor/lookup libraries
+as described [below](#linux); restart the game after changing versions.
+
+### Standalone installation
+
+Standalone packages remain available for vosu or tosu, with their existing
+configuration, launcher registration and lifecycle:
+
 Download an x86_64 package from [GitHub Releases](https://github.com/shiruviaa/vosulay/releases).
 Replace `<v>` below with the release version. Published releases include
 `SHA256SUMS` for checking the downloads. Releases after v1.2.0 also carry a

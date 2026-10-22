@@ -2,6 +2,9 @@ function (viewOrigin) {
   // Host bridge for the manage page (manage.localhost). The manager script runs
   // after this and talks to vosulay over HTTP instead of the in-game native bridge.
   document.documentElement.dataset.vosulayHost = 'page';
+  const toolFetch = window.__VOSULAY_TOOL_FETCH__;
+  delete window.__VOSULAY_TOOL_FETCH__;
+  if (toolFetch) document.documentElement.dataset.vosulayTool = '1';
   const routeBackend = window.__VOSULAY_BACKEND_URL__;
   const view = new URL(viewOrigin);
   // Local HTML overlays load from the listener's own /local/ route, like on the
@@ -36,7 +39,9 @@ function (viewOrigin) {
       init.headers = { 'Content-Type': 'application/json' };
       init.body = JSON.stringify(body);
     }
-    const response = await fetch(`/__vosulay/manage/${action}`, init);
+    const response = toolFetch
+      ? await toolFetch(`v1/manage/${action}`, init)
+      : await fetch(`/__vosulay/manage/${action}`, init);
     const text = await response.text();
     if (!response.ok) throw new Error(text.trim() || `vosulay returned ${response.status}`);
     return text ? JSON.parse(text) : null;
@@ -111,6 +116,7 @@ function (viewOrigin) {
       deliver({ type: 'clipboard-support', available: false });
       loadState(true).catch(fail);
       request('counters').then(deliver, fail);
+      if (toolFetch) deliver({ type: 'editing', editing: true });
     } else if (type === 'refresh-counters') {
       request('counters').then(deliver, fail);
     } else if (type === 'set-editing') {

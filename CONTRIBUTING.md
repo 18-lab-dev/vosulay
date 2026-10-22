@@ -77,6 +77,13 @@ python3 tools/notices/generate.py --check
 
 Use `--workspace`; Cargo's root-only default misses browser, transport, compositor, and tooling tests. Clippy, tests and the notices check are exactly the commands in Linux CI. After changing dependencies, regenerate the shipped `THIRD_PARTY_NOTICES.md` with `python3 tools/notices/generate.py`. Formatting is a recommended local check, not currently a workflow step. On Windows these commands check native Windows code; on Linux they check native Linux code and shared platform-independent tests.
 
+For the supervised dashboard manager, also run its dependency-free routing
+regression tests with Node.js 22 or newer:
+
+```sh
+node --test tests/tool_frontend.mjs
+```
+
 ### Tier 2 — another platform without another machine
 
 Linux contributors can optionally check Windows source using [cargo-xwin](https://github.com/rust-cross/cargo-xwin). Install Clang and LLVM first (a full LLVM installation is recommended by cargo-xwin; on Ubuntu the packages are `clang`, `llvm`, and `lld`). Read cargo-xwin's notice about the Microsoft SDK/CRT license before installing/using it:

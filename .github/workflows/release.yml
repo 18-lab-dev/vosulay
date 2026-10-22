@@ -54,6 +54,11 @@ jobs:
       - name: Build Linux packages
         run: packaging/linux/build.sh dist
 
+      - name: Build Linux tool package
+        run: |
+          version="$(cargo pkgid --locked -p vosulay | sed 's/.*[#@]//')"
+          python3 tools/release/tool-package.py package --runtime "dist/vosulay-$version-linux-x86_64" --output dist --target x86_64-unknown-linux-gnu
+
       - name: Upload Linux packages
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -63,6 +68,7 @@ jobs:
             dist/*.deb
             dist/*.rpm
             dist/*.pkg.tar.zst
+            dist/vosu-tool-*.zip
           if-no-files-found: error
 
   windows:
@@ -182,6 +188,9 @@ jobs:
           Copy-Item $installer.FullName dist/
           ./packaging/windows/verify-release.ps1 -Package dist/package -Installer $installer.FullName -RequireSignature:$signed
 
+      - name: Build Windows tool package from verified runtime
+        run: python tools/release/tool-package.py package --runtime dist/package --output dist --target x86_64-pc-windows-msvc
+
       - name: Upload Windows packages
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -189,6 +198,7 @@ jobs:
           path: |
             dist/vosulay-*-windows-x86_64.zip
             dist/vosulay-*-windows-x86_64-setup.exe
+            dist/vosu-tool-*.zip
           if-no-files-found: error
 
   release:
@@ -223,7 +233,11 @@ jobs:
           # Corresponding source for the LGPL components statically linked into
           # the shipped asdf-overlay DLLs; see docs/provenance.md.
           python3 tools/notices/source_bundle.py "dist/vosulay-$version-third-party-sources.tar"
+          python3 tools/release/tool-package.py catalog --directory dist --repository "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME"
           expected="$(printf '%s\n' \
+            "catalog.json" \
+            "vosu-tool-vosulay-$version-x86_64-unknown-linux-gnu.zip" \
+            "vosu-tool-vosulay-$version-x86_64-pc-windows-msvc.zip" \
             "vosulay-$version-1-x86_64.pkg.tar.zst" \
             "vosulay-$version-1.x86_64.rpm" \
             "vosulay-$version-linux-x86_64.tar.gz" \
