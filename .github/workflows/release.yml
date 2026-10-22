@@ -54,6 +54,9 @@ jobs:
       - name: Build Linux packages
         run: packaging/linux/build.sh dist
 
+      - name: Test tool packaging and artwork
+        run: python3 -m unittest discover -s tools/release -p 'test*.py'
+
       - name: Build Linux tool package
         run: |
           version="$(cargo pkgid --locked -p vosulay | sed 's/.*[#@]//')"
@@ -236,6 +239,8 @@ jobs:
           python3 tools/release/tool-package.py catalog --directory dist --repository "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME"
           expected="$(printf '%s\n' \
             "catalog.json" \
+            "vosu-tool-vosulay-icon.svg" \
+            "vosu-tool-vosulay-banner.svg" \
             "vosu-tool-vosulay-$version-x86_64-unknown-linux-gnu.zip" \
             "vosu-tool-vosulay-$version-x86_64-pc-windows-msvc.zip" \
             "vosulay-$version-1-x86_64.pkg.tar.zst" \

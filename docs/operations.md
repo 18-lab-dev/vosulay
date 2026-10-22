@@ -38,6 +38,17 @@ Chromium's unprivileged-user-namespace sandbox where permitted, like the
 standalone tarball. On systems restricting user namespaces, follow the tarball
 sandbox setup instead of disabling Chromium's sandbox.
 
+Tool packages also include the manifest's `icon` and `banner` files under
+`assets/branding`. The icon is the existing 1024×1024 app icon; the 1200×400
+banner centers the existing dark-surface logo artwork in a 3:1 viewport
+on the app icon's dark background, preserving the brand's shapes and palette.
+Packaging validates confined regular-file paths, image
+types, the 1 MiB limit, square icons (at least 256×256) and 3:1 banners (±2%).
+Catalog generation publishes `vosu-tool-vosulay-icon.svg` and
+`vosu-tool-vosulay-banner.svg` alongside the ZIPs, and sets HTTPS `icon_url`
+and `banner_url` fields. Run the packaging regression suite with
+`python3 -m unittest discover -s tools/release -p 'test*.py'`.
+
 vosu supplies `VOSU_URL`, `VOSU_TOOL_TOKEN`, `VOSU_TOOL_DATA_DIR` and
 `VOSU_TOOL_CACHE_DIR` with `VOSU_TOOL_PROTOCOL=1`. Data is `config.json` under
 the supplied data directory and CEF storage/logs are `cef-cache` under cache.
@@ -169,7 +180,7 @@ trigger SmartScreen.
    Windows job produces the ZIP and installer. Every run uploads
    `vosulay-linux-x86_64` and `vosulay-windows-x86_64` artifacts.
 6. Publication verifies the tag matches `Cargo.toml`, then creates a **draft**
-   GitHub release with the six standalone packages, both tool ZIPs, `catalog.json`,
+   GitHub release with the six standalone packages, both tool ZIPs, both tool artwork SVGs, `catalog.json`,
    `vosulay-<v>-third-party-sources.tar` and `SHA256SUMS`. The source archive is the corresponding source for the LGPL
    components inside the asdf-overlay DLLs
    ([provenance](provenance.md)); it is assembled from pinned, hash-checked

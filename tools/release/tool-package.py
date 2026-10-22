@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import zipfile
+from package_art import artwork, art_urls, publish_art
 try:
     import tomllib
 except ModuleNotFoundError:  # Ubuntu 22.04's Python 3.10
@@ -21,6 +22,8 @@ def package(runtime, output, target):
     if manifest['version'] != version:
         raise ValueError('tool.toml version must match Cargo.toml')
     files = [(ROOT / 'tool.toml', 'tool.toml')]
+    art = artwork(ROOT, manifest, required=True)
+    files += [(ROOT / path, path) for path, _ in art.values()]
     files += [(p, 'assets/tool/' + p.relative_to(ROOT / 'assets/tool').as_posix()) for p in (ROOT / 'assets/tool').rglob('*') if p.is_file()]
     files += [(p, 'bin/' + p.relative_to(runtime).as_posix()) for p in runtime.rglob('*') if p.is_file()]
     files += [(ROOT / name, 'licenses/' + name) for name in ('LICENSE', 'THIRD_PARTY_NOTICES.md')]
@@ -43,9 +46,16 @@ def catalog(directory, repository, tag):
     packages = {}
     for target in TARGETS:
         path = directory / f'vosu-tool-vosulay-{manifest["version"]}-{target}.zip'
-        packages[target] = {'url': f'https://github.com/{repository}/releases/download/{tag}/{path.name}', 'sha256': hashlib.file_digest(path.open('rb'), 'sha256').hexdigest(), 'size': path.stat().st_size}
+        digest = hashlib.sha256()
+        with path.open('rb') as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(chunk)
+        packages[target] = {'url': f'https://github.com/{repository}/releases/download/{tag}/{path.name}', 'sha256': digest.hexdigest(), 'size': path.stat().st_size}
     entry = {key: manifest[key] for key in ('id', 'name', 'version', 'description', 'author', 'homepage')}
     entry.update(protocol=1, interfaces=['ui', 'service'], requires=[], packages=packages)
+    art = artwork(ROOT, manifest, required=True)
+    publish_art(art, manifest['id'], 'tool', directory)
+    entry.update(art_urls(art, manifest['id'], 'tool', f'https://github.com/{repository}/releases/download/{tag}'))
     (directory / 'catalog.json').write_text(json.dumps({'catalog_version': 1, 'name': 'vosulay', 'published': datetime.now(timezone.utc).isoformat(), 'tools': [entry]}, indent=2) + '\n')
 
 
