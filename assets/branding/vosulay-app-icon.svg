@@ -1,20 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc" shape-rendering="geometricPrecision">
-  <title id="title">Vosulay app icon</title>
-  <desc id="desc">The violet Vosulay overlay frame and telemetry V with rose and cyan signal nodes on a rounded dark tile.</desc>
-
-  <rect width="1024" height="1024" rx="144" fill="#100E18"/>
-
-  <g transform="translate(160.6 157.8) scale(5.6)">
-    <rect x="14" y="6" width="108" height="104" rx="3" fill="none" stroke="#8B7CFF" stroke-width="2.5" opacity="0.34"/>
-    <rect x="8" y="12" width="108" height="104" rx="3" fill="none" stroke="#8B7CFF" stroke-width="2.75" opacity="0.78"/>
-
-    <path d="M18 36 H32 L64 94 L96 36 H110" fill="none" stroke="#8B7CFF" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="64" cy="94" r="8" fill="#F45CAD"/>
-    <circle cx="64" cy="94" r="3.2" fill="#7AE1F8"/>
-
-    <rect x="3.5" y="7.5" width="9" height="9" rx="1.5" fill="#8B7CFF" stroke="#F9F7FF" stroke-width="1.25"/>
-    <rect x="111.5" y="7.5" width="9" height="9" rx="1.5" fill="#8B7CFF" stroke="#F9F7FF" stroke-width="1.25"/>
-    <rect x="3.5" y="111.5" width="9" height="9" rx="1.5" fill="#8B7CFF" stroke="#F9F7FF" stroke-width="1.25"/>
-    <rect x="111.5" y="111.5" width="9" height="9" rx="1.5" fill="#8B7CFF" stroke="#F9F7FF" stroke-width="1.25"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 120 120" role="img" aria-labelledby="vosulay-icon-title vosulay-icon-desc">
+<title id="vosulay-icon-title">vosulay app icon</title>
+<desc id="vosulay-icon-desc">The osu! hit circle with an accent overlay panel in front of it, on a graphite tile.</desc>
+<!-- 18-LAB product icon, master. Mark on the 120-unit grid, scaled 0.8 on the tile. -->
+<rect width="120" height="120" rx="14.4" fill="#111214"/>
+<g transform="translate(60 60) scale(0.8) translate(-60 -60)"><mask id="vosulay-gap"><rect x="-1" y="-1" width="200" height="200" fill="#fff"/><path d="M68 10H94A16 16 0 0 1 110 26V46A16 16 0 0 1 94 62H68A16 16 0 0 1 52 46V26A16 16 0 0 1 68 10Z" fill="#000"/></mask><circle cx="50" cy="70" r="28" fill="none" stroke="#ebe8e1" stroke-width="12" mask="url(#vosulay-gap)"/><path fill-rule="evenodd" fill="#ff963f" d="M68 16H94A10 10 0 0 1 104 26V46A10 10 0 0 1 94 56H68A10 10 0 0 1 58 46V26A10 10 0 0 1 68 16ZM70 28H92V44H70ZM74 33H88V39H74Z"/></g>
 </svg>

@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/branding/vosulay-logo-on-dark.svg">
-  <img src="assets/branding/vosulay-logo.svg" alt="vosulay" width="720">
+  <source media="(prefers-color-scheme: light)" srcset="assets/branding/vosulay-banner-light.svg">
+  <img src="assets/branding/vosulay-banner.svg" alt="vosulay by 18-LAB — in-game overlay manager for vosu and tosu-compatible counters." width="100%">
 </picture>
 
 **Cross-platform in-game overlay manager for a vosu or tosu-compatible backend — native Rust with one CEF browser runtime.**
@@ -695,7 +695,8 @@ conversion, malformed/unsafe input, persistence, idempotence, and no-overwrite.
 
 ## License
 
-[MIT](LICENSE) for the source code. The vosulay logo and icons are © 2026
-sxlvia under [CC BY 4.0](assets/branding/LICENSE.md); showing them while using
-or talking about vosulay (streams, videos, screenshots) needs no credit.
+[MIT](LICENSE) for the source code. vosulay is an 18-LAB product. The vosulay
+logo and icons are © 2026 sxlvia under [CC BY 4.0](assets/branding/LICENSE.md),
+with usage rules in [branding](docs/branding.md); showing them while using or
+talking about vosulay (streams, videos, screenshots) needs no credit.
 Third-party terms and artifact origins: [notices](THIRD_PARTY_NOTICES.md) and [provenance](docs/provenance.md).

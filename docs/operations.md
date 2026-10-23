@@ -42,7 +42,8 @@ Tool packages also include the manifest's `icon` and `banner` files under
 `assets/branding`: `vosu-tool-icon.svg` and `vosu-tool-banner.svg` are drawn
 in the family of the first-party vosu tools (vosu-tools `docs/art.md`), so the
 dashboard's Tools page reads as one set; they follow the dashboard's light and
-dark modes. The app icon and logo are unchanged.
+dark modes. The app icon, logo and their rasters are described in
+[branding](branding.md).
 Packaging validates confined regular-file paths, image
 types, the 1 MiB limit, square icons (at least 256×256) and 3:1 banners (±2%).
 Catalog generation publishes `vosu-tool-vosulay-icon.svg` and

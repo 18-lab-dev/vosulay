@@ -13,7 +13,7 @@
 [Setup]
 AppId={{D1A97E8C-F65B-44D8-8E1B-25BC7A83E294}
 AppName=Vosulay
-AppPublisher=sxlvia
+AppPublisher=18-LAB
 AppVersion={#AppVersion}
 ; Code signing requires the product name and version on every signed file,
 ; matching vosulay.exe and vosulay.dll.
@@ -21,7 +21,7 @@ VersionInfoVersion={#AppVersion}
 VersionInfoProductName=Vosulay
 VersionInfoProductVersion={#AppVersion}
 VersionInfoProductTextVersion={#AppVersion}
-VersionInfoCompany=sxlvia
+VersionInfoCompany=18-LAB
 VersionInfoDescription=Vosulay Setup
 DefaultDirName={localappdata}\Programs\Vosulay
 PrivilegesRequired=lowest
@@ -29,6 +29,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 LicenseFile=..\..\LICENSE
+SetupIconFile=..\..\assets\branding\vosulay.ico
 OutputDir={#OutputDir}
 OutputBaseFilename=vosulay-{#AppVersion}-windows-x86_64-setup
 Compression=lzma2

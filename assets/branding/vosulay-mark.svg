@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 120 120" role="img" aria-labelledby="vosulay-mark-title vosulay-mark-desc">
+<title id="vosulay-mark-title">vosulay mark</title>
+<desc id="vosulay-mark-desc">The osu! hit circle with an accent overlay panel in front of it. Follows the light or dark colour scheme.</desc>
+<style>@media (prefers-color-scheme:dark){.i{stroke:#ebe8e1}.a{fill:#ff963f}}</style>
+<mask id="vosulay-gap"><rect x="-1" y="-1" width="200" height="200" fill="#fff"/><path d="M68 10H94A16 16 0 0 1 110 26V46A16 16 0 0 1 94 62H68A16 16 0 0 1 52 46V26A16 16 0 0 1 68 10Z" fill="#000"/></mask><circle cx="50" cy="70" r="28" fill="none" class="i" stroke="#132030" stroke-width="12" mask="url(#vosulay-gap)"/><path fill-rule="evenodd" class="a" fill="#175fad" d="M68 16H94A10 10 0 0 1 104 26V46A10 10 0 0 1 94 56H68A10 10 0 0 1 58 46V26A10 10 0 0 1 68 16ZM70 28H92V44H70ZM74 33H88V39H74Z"/>
+</svg>

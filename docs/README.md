@@ -10,5 +10,6 @@ These pages are hand-maintained. Update them with code changes; the code is the 
 - [Security and installation disclosure](security.md): system changes, privileges, injection, input/clipboard access, network exposure, and vulnerability reporting.
 - [Code signing policy](code-signing.md): what is signed, team roles, privacy policy, and enabling SignPath signing.
 - [Provenance](provenance.md): distributed artifact origins, licensing, and third-party notices.
+- [Branding](branding.md): the vosulay mark, 18-LAB lockup, files, and how the icons are rendered.
 - [Testing](testing.md): contributor checks, private smoke, coverage boundaries, and optional maintainer guest/benchmark evidence.
 - [Source map](source-map.md): change-oriented navigation.

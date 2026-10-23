@@ -73,7 +73,7 @@ fn apply_version_metadata(version: &mut editpe::VersionInfo, file_name: &str) ->
     version.info.product_version = numbers;
     for table in &mut version.strings {
         for (key, value) in [
-            ("CompanyName", "sxlvia"),
+            ("CompanyName", "18-LAB"),
             ("FileDescription", "Vosulay"),
             ("ProductName", "Vosulay"),
             ("InternalName", "vosulay"),

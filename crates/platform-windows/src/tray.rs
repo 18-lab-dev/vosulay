@@ -594,10 +594,30 @@ unsafe extern "system" fn window_proc(
     }
 }
 
+/// Pre-rendered small-icon sizes (tools/branding/render.py) for 100-300 % scaling; 16 and
+/// 24 px are pixel-fitted. The shell would otherwise shrink one large bitmap itself.
+const TRAY_SIZES: [i32; 6] = [16, 20, 24, 32, 40, 48];
+const TRAY_ICONS: [&[u8]; 6] = [
+    include_bytes!("../../../assets/branding/icons/vosulay-16.png"),
+    include_bytes!("../../../assets/branding/icons/vosulay-20.png"),
+    include_bytes!("../../../assets/branding/icons/vosulay-24.png"),
+    include_bytes!("../../../assets/branding/icons/vosulay-32.png"),
+    include_bytes!("../../../assets/branding/icons/vosulay-40.png"),
+    include_bytes!("../../../assets/branding/icons/vosulay-48.png"),
+];
+
+/// The smallest rendered icon at least `wanted` pixels wide, else the largest.
+fn tray_icon_png(wanted: i32) -> &'static [u8] {
+    let index = TRAY_SIZES
+        .iter()
+        .position(|size| *size >= wanted)
+        .unwrap_or(TRAY_SIZES.len() - 1);
+    TRAY_ICONS[index]
+}
+
 fn branding_icon() -> Result<OwnedIcon> {
-    let mut decoder = png::Decoder::new(Cursor::new(include_bytes!(
-        "../../../assets/branding/vosulay-app-icon.png"
-    )));
+    let wanted = unsafe { GetSystemMetrics(SM_CXSMICON) };
+    let mut decoder = png::Decoder::new(Cursor::new(tray_icon_png(wanted)));
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder
         .read_info()
@@ -671,5 +691,24 @@ fn branding_icon() -> Result<OwnedIcon> {
         let _ = DeleteObject(mask.into());
         let _ = DeleteObject(color.into());
         Ok(OwnedIcon(icon?))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tray_icon_matches_the_small_icon_size() {
+        let width = |png: &[u8]| {
+            png::Decoder::new(Cursor::new(png))
+                .read_info()
+                .unwrap()
+                .info()
+                .width
+        };
+        for (wanted, expected) in [(16, 16), (20, 20), (24, 24), (28, 32), (48, 48), (64, 48)] {
+            assert_eq!(width(tray_icon_png(wanted)), expected);
+        }
     }
 }

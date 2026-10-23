@@ -1,9 +1,14 @@
 # vosulay branding license
 
 The vosulay logo, wordmark and app icons are © 2026 sxlvia. This covers the
-files in this folder (`assets/branding/`), the brand mark drawn in the editor
-toolbar (`assets/manager.html`), and the copies built into vosulay's programs,
-installer, packages and desktop entries.
+files in this folder (`assets/branding/`: marks, logos, banners, social preview,
+rendered icons and catalog art), the brand mark drawn in the editor toolbar
+(`assets/manager.html`), and the copies built into vosulay's programs,
+installer, packages and desktop entries. The wordmarks are outlines of Barlow
+Condensed (© 2017 The Barlow Project Authors), which keeps its own SIL Open
+Font License 1.1. The 18-LAB name and mark in this artwork identify vosulay's
+organisation; as CC BY 4.0 section 2(b)(2) states, the license grants no
+trademark rights.
 
 They are licensed under the
 [Creative Commons Attribution 4.0 International License (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).

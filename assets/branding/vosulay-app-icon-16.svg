@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" role="img" aria-labelledby="vosulay-icon-title vosulay-icon-desc">
+<title id="vosulay-icon-title">vosulay app icon</title>
+<desc id="vosulay-icon-desc">The osu! hit circle with an accent overlay panel in front of it, on a graphite tile.</desc>
+<!-- Pixel-fitted 16 px master: strokes and ring edges on whole pixels. -->
+<rect width="16" height="16" rx="2" fill="#111214"/>
+<mask id="vosulay-gap"><rect x="-1" y="-1" width="200" height="200" fill="#fff"/><path d="M8 1H13A2 2 0 0 1 15 3V7A2 2 0 0 1 13 9H8A2 2 0 0 1 6 7V3A2 2 0 0 1 8 1Z" fill="#000"/></mask><circle cx="6.5" cy="9.5" r="3.5" fill="none" stroke="#ebe8e1" stroke-width="2" mask="url(#vosulay-gap)"/><path fill-rule="evenodd" fill="#ff963f" d="M8 2H13A1 1 0 0 1 14 3V7A1 1 0 0 1 13 8H8A1 1 0 0 1 7 7V3A1 1 0 0 1 8 2ZM9 4H12V6H9Z"/>
+</svg>
