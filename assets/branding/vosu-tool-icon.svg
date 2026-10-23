@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 24 24">
+<style>@media (prefers-color-scheme:dark){.i{stroke:#b8b5ad}.a{stroke:#ff963f}}</style>
+<mask id="m"><rect width="24" height="24" fill="#fff"/><rect x="10" y="2.5" width="12" height="10.5" rx="2"/></mask>
+<g class="i" fill="none" stroke="#3b4858" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="14" r="6" mask="url(#m)"/></g>
+<g class="a" fill="none" stroke="#175fad" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="11.5" y="4" width="9" height="7.5" rx="1"/><path d="M14 7.75h4"/></g>
+</svg>

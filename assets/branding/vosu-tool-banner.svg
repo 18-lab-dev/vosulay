@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400">
+<style>@media (prefers-color-scheme:dark){.bg{fill:#0b0c0d}.g{stroke:#ebe8e1;stroke-opacity:.06}.r{stroke:#3b3f45}.m{stroke:#7e8288}.a{stroke:#ff963f}}</style>
+<defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path class="g" d="M40 .5H.5V40" fill="none" stroke="#175fad" stroke-opacity=".08"/></pattern><mask id="cut"><rect width="1200" height="400" fill="#fff"/><rect x="894" y="106" width="252" height="188" rx="16"/></mask></defs>
+<rect class="bg" width="1200" height="400" fill="#e7e6df"/>
+<rect width="1200" height="400" fill="url(#grid)"/>
+<g class="r" fill="none" stroke="#a7b2bd" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><rect x="360" y="40" width="800" height="320" rx="10"/><circle cx="620" cy="244" r="44"/><circle cx="760" cy="172" r="44"/><circle cx="900" cy="246" r="44" mask="url(#cut)"/><path d="M674 214l8-4M712 194l8-4M808 196l8 4M846 216l8 4"/></g>
+<g class="m" fill="none" stroke="#5b6775" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><rect x="400" y="148" width="152" height="48" rx="6"/><path d="M428 172h64"/></g>
+<g class="a" fill="none" stroke="#175fad" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><rect x="912" y="124" width="216" height="152" rx="8"/><path d="M944 240c34 0 46-70 84-70s46 38 72 38M944 156h60"/></g>
+</svg>

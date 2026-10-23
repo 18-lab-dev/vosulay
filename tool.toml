@@ -5,8 +5,8 @@ version = "1.4.0"
 description = "In-game overlay host and profile editor for vosu"
 author = "18-LAB"
 homepage = "https://github.com/shiruviaa/vosulay"
-icon = "assets/branding/vosulay-app-icon.svg"
-banner = "assets/branding/vosulay-banner.svg"
+icon = "assets/branding/vosu-tool-icon.svg"
+banner = "assets/branding/vosu-tool-banner.svg"
 
 [ui]
 root = "assets/tool"
