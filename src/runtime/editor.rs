@@ -40,6 +40,7 @@ enum Task {
     Manager(Work),
     Remote(RemoteCall, SyncSender<Result<Value>>),
     Ruleset(Option<crate::ruleset::Ruleset>),
+    OpenDashboard,
 }
 
 enum RemoteCall {
@@ -282,6 +283,10 @@ impl EditorWorker {
             };
             while let Ok(task) = requests.recv() {
                 let work = match task {
+                    Task::OpenDashboard => {
+                        super::lifecycle::open_dashboard();
+                        continue;
+                    }
                     Task::Ruleset(ruleset) => {
                         let envelopes = match state.ruleset(ruleset) {
                             Ok(envelopes) => envelopes,
@@ -465,6 +470,16 @@ impl EditorWorker {
     /// The manage page's route into this worker (see `crate::remote::ManageEditor`).
     pub fn manage_editor(&self) -> Arc<dyn crate::remote::ManageEditor> {
         Arc::new(RemoteEditor(self.tx.clone(), self.vosu.clone()))
+    }
+    pub(super) fn open_dashboard(&self) -> Result<()> {
+        self.tx
+            .lock()
+            .map_err(|_| anyhow::anyhow!("manager worker poisoned"))?
+            .as_ref()
+            .context("vosulay is shutting down")?
+            .try_send(Task::OpenDashboard)
+            .map_err(|_| anyhow::anyhow!("vosulay is busy; try again"))?;
+        Ok(())
     }
     pub fn finished(&self) -> bool {
         self.thread.as_ref().is_none_or(JoinHandle::is_finished)

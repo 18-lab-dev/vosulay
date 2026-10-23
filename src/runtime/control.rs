@@ -17,18 +17,21 @@ const MAX_LINE: usize = 512;
 pub enum Command {
     ToggleEdit,
     Quit,
+    YieldToVosu,
 }
 impl Command {
     fn line(self) -> &'static str {
         match self {
             Self::ToggleEdit => "toggle-edit\n",
             Self::Quit => "quit\n",
+            Self::YieldToVosu => "yield-to-vosu\n",
         }
     }
     fn parse(line: &str) -> Result<Self> {
         match line {
             "toggle-edit" => Ok(Self::ToggleEdit),
             "quit" => Ok(Self::Quit),
+            "yield-to-vosu" => Ok(Self::YieldToVosu),
             _ => bail!("unknown control command"),
         }
     }
@@ -369,6 +372,11 @@ mod tests {
             Command::ToggleEdit
         );
         assert_eq!(Command::parse("quit").unwrap(), Command::Quit);
+        assert_eq!(
+            Command::parse("yield-to-vosu").unwrap(),
+            Command::YieldToVosu
+        );
+        assert_eq!(Command::YieldToVosu.line(), "yield-to-vosu\n");
         assert!(Command::parse("exit").is_err());
         assert!(read_line(&mut &b"quit"[..]).is_err());
         assert!(read_line(&mut vec![b'x'; MAX_LINE + 1].as_slice()).is_err());
@@ -427,7 +435,7 @@ mod tests {
                 Some(request) => {
                     seen.push(request.command);
                     let answer = match request.command {
-                        Command::Quit => Ok(()),
+                        Command::Quit | Command::YieldToVosu => Ok(()),
                         Command::ToggleEdit => Err("not now".to_owned()),
                     };
                     request.answer(answer);

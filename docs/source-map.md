@@ -21,6 +21,7 @@ together.
 | Local overlay authorization | [`src/shell_policy.rs`](../src/shell_policy.rs), [`src/runtime/resources.rs`](../src/runtime/resources.rs) | Capability-scoped local HTML resolution, traversal/symlink confinement, MIME types. |
 | Linux game launchers | [`src/runtime/launchers.rs`](../src/runtime/launchers.rs) | Rewrite osu desktop shortcuts with preload order and Vulkan layer settings. |
 | App launchers and single instance | [`src/runtime/desktop_entry.rs`](../src/runtime/desktop_entry.rs), [`src/runtime/instance.rs`](../src/runtime/instance.rs) | XDG desktop/icon and Windows Start Menu registration; per-user instance ownership. |
+| vosu lifecycle ownership | [`src/runtime/lifecycle.rs`](../src/runtime/lifecycle.rs), [`tools/test-lifecycle.py`](../tools/test-lifecycle.py) | Bounded native-broker hand-off, standalone-only control-channel yield, dashboard discovery, and real-host verification in a private network namespace. |
 | Native hotkeys | [`crates/frame/src/hotkey.rs`](../crates/frame/src/hotkey.rs) | Shared parser and matching used by the host and platform input paths. |
 | CEF wrapper | [`crates/browser-cef`](../crates/browser-cef) (`src/lib.rs`, `bridge.rs`, `scheme.rs`, `glib.rs`) | OSR browser, native manager bridge, `vosulay://` scheme, permission policy, Linux GLib dispatch beside the external pump; build script links the pinned CEF. |
 | CEF smoke | [`crates/cef-smoke`](../crates/cef-smoke), [`tools/cef/private-smoke.py`](../tools/cef/private-smoke.py) | Standalone OSR/WebGL/bridge smoke binary and its private-Xvfb runner. |

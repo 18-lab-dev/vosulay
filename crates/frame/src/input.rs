@@ -82,6 +82,7 @@ pub enum PlatformEvent {
     CaptureEnded,
     ToggleVisibility,
     Exit,
+    OpenDashboard,
     Warning(String),
     Fatal(String),
 }

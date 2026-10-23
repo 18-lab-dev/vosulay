@@ -34,10 +34,17 @@ Need help? See [SUPPORT.md](SUPPORT.md) for where to ask questions and report bu
 
 With vosu 1.2.0 or newer, open **Tools → Available**, install **vosulay** from
 the official `shiruviaa/vosulay` catalog source, then choose **Open** for the
-full profile editor. vosu starts and stops the host; the vosulay tray remains
-available. **Exit vosulay** stops it until you start it again in vosu. Opening
-the tool URL directly (or reloading) shows a view-only profile, without editing
-authority; open again from the dashboard to edit.
+full profile editor. vosu owns the host's lifetime: use its dashboard
+**Start / Stop / Restart** controls; exiting vosu stops vosulay too. The tray
+keeps editing/visibility controls and **Open in vosu dashboard**, without an
+Exit item. Opening the tool URL directly (or reloading) shows a view-only
+profile; open again from the dashboard to edit.
+
+Launching the standalone app, a saved autostart entry, or the CLI while a running
+vosu has this tool enabled hands off to vosu instead of creating a second host.
+If vosu is absent or the tool is disabled, standalone operation is unchanged.
+Starting the tool asks an existing compatible standalone host to flush and
+release ownership first; it never force-kills a process.
 
 The tool uses vosu's backend and separate tool data/cache directories. On its
 first start into an empty data directory it copies an existing standalone
@@ -132,8 +139,9 @@ Alternatively, unpack `vosulay-<v>-windows-x86_64.zip` and run `vosulay.exe`.
 Keep `vosulay.dll`, CEF runtime files/locales and both injection DLLs beside it.
 The ZIP uses the same user configuration as the installer, not portable config.
 
-Before upgrading or uninstalling, choose **tray → Exit vosulay** when prompted;
-hiding the app is not quitting it. To upgrade, run the newer release's installer
+Before upgrading or uninstalling, stop the managed tool in vosu's dashboard,
+or choose **tray → Exit vosulay** for standalone use; hiding is not quitting.
+To upgrade, run the newer release's installer
 over the existing installation, or replace the unpacked ZIP directory.
 Uninstall from Windows **Apps & features**.
 Uninstall keeps `%APPDATA%\vosulay\config.json`.
@@ -372,19 +380,21 @@ profile; refresh view-only pages in OBS or a browser yourself.
 Copy (`Ctrl+C`) keeps the selected overlays across profile switches; paste
 (`Ctrl+V`) adds them to the active profile at the same position.
 
-Both platforms provide **Edit mode**, **Hide vosulay**, and **Exit vosulay**
-in the tray; the first two are checkable. Linux requires StatusNotifierItem
-tray support. Use **Exit vosulay** to quit; hiding does not exit the app.
+Both platforms provide checkable **Edit mode** and **Hide vosulay** tray items.
+Standalone also provides **Exit vosulay**; the vosu-managed tool instead provides
+**Open in vosu dashboard**. Stop managed instances in vosu, not the tray.
+Linux requires StatusNotifierItem tray support. Hiding never exits the app.
 Editing only captures input while the game is focused, so choosing **Edit mode**
 from the tray starts editing as soon as the game is focused again; it stays
 checked until then, and choosing it again cancels.
 
-On startup, vosulay registers an app-launcher entry. Linux installs
+On standalone startup, vosulay registers an app-launcher entry. Linux installs
 `~/.local/share/applications/com.vosu.vosulay.desktop` with an absolute Exec
 and `~/.local/share/icons/hicolor/scalable/apps/com.vosu.vosulay.svg`
 (respecting `XDG_DATA_HOME`), unless a system-wide entry exists. Windows
 creates `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Vosulay.lnk`.
-A second launch while vosulay is running prints a message and exits immediately.
+A second standalone launch prints a message and exits, except that an enabled
+tool in a running vosu receives the launch through vosu's authenticated broker.
 
 By default, editing ends when the game loses focus. Turn off **Settings →
 General → Leave edit mode when the game loses focus** to keep the editor on
@@ -449,7 +459,8 @@ repeatable `--pid` and `--process-name`, `--config`, `--cef-dir`, and
 `--server-only`. Run `vosulay --help` (Windows: `vosulay.exe --help`) for details.
 
 Use `vosulay --toggle-edit` from a compositor keybind to toggle editing in the
-running instance, or `vosulay --quit` to save and exit gracefully. On Linux,
+running instance. Standalone `vosulay --quit` saves and exits gracefully;
+managed instances reject this command: stop them in vosu's dashboard. On Linux,
 Ctrl+C in the terminal that started vosulay, `kill`, or closing that terminal
 exits the same graceful way; a second Ctrl+C exits at once. These two
 commands are mutually exclusive, communicate only through a per-user local

@@ -48,15 +48,26 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
     };
     let tool = crate::tool::Environment::from_env()?;
     let mut options = options;
+    if tool.is_none() && super::lifecycle::handoff(!options.server_only) {
+        return Ok(0);
+    }
+    let _instance = match super::lifecycle::acquire(tool.is_some()) {
+        Ok(Some(instance)) => instance,
+        Ok(None) => {
+            eprintln!("Vosulay is already running; exiting this second instance.");
+            return Ok(0);
+        }
+        Err(error) if tool.is_some() => {
+            eprintln!("Vosulay: ownership takeover refused: {error:#}");
+            return Ok(0);
+        }
+        Err(error) => return Err(error),
+    };
     if let Some(tool) = &tool {
         options.config = tool.prepare(&options.config)?;
         options.vosu_url = Some(tool.backend.clone());
         crate::tool::watch_stdin()?;
     }
-    let Some(_instance) = super::instance::InstanceGuard::acquire()? else {
-        eprintln!("Vosulay is already running; exiting this second instance.");
-        return Ok(if tool.is_some() { 1 } else { 0 });
-    };
     #[cfg(target_os = "linux")]
     super::signals::install(&thread::current()).context("could not handle exit signals")?;
     #[cfg(target_os = "linux")]
@@ -127,9 +138,12 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
                 .and_then(super::control::Server::next_request)
             {
                 match request.command {
-                    super::control::Command::Quit => {
+                    super::control::Command::Quit | super::control::Command::YieldToVosu if tool.is_none() => {
                         request.answer(Ok(()));
                         break;
+                    }
+                    super::control::Command::Quit | super::control::Command::YieldToVosu => {
+                        request.answer(Err("vosu owns this instance; use its dashboard Start/Stop/Restart".into()));
                     }
                     super::control::Command::ToggleEdit => request.answer(Err(format!(
                         "there is no in-game overlay in server-only mode; edit on http://manage.localhost:{}/overlay",
@@ -178,6 +192,7 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
     )?;
     let initial_fps = super::frame_rate(options.fps_limit, config.settings.fps_limit, 60.0);
     let mut host = Host {
+        tool_mode: tool.is_some(),
         browser: None,
         runtime: None,
         sandbox_info,
@@ -262,6 +277,7 @@ enum Closing {
     Detach,
 }
 struct Host<'a> {
+    tool_mode: bool,
     browser: Option<OsrBrowser>,
     runtime: Option<CefRuntime>,
     sandbox_info: *mut u8,
@@ -486,12 +502,25 @@ impl Host<'_> {
             }
             while let Some(event) = {
                 if let Some(request) = self.control.and_then(super::control::Server::next_request) {
-                    let event = match request.command {
-                        super::control::Command::ToggleEdit => PlatformEvent::ToggleEdit,
-                        super::control::Command::Quit => PlatformEvent::Exit,
-                    };
-                    request.answer(Ok(()));
-                    Some(event)
+                    if self.tool_mode
+                        && matches!(
+                            request.command,
+                            super::control::Command::Quit | super::control::Command::YieldToVosu
+                        )
+                    {
+                        request.answer(Err(
+                            "vosu owns this instance; use its dashboard Start/Stop/Restart".into(),
+                        ));
+                        None
+                    } else {
+                        let event = match request.command {
+                            super::control::Command::ToggleEdit => PlatformEvent::ToggleEdit,
+                            super::control::Command::Quit
+                            | super::control::Command::YieldToVosu => PlatformEvent::Exit,
+                        };
+                        request.answer(Ok(()));
+                        Some(event)
+                    }
                 } else if exit_signalled() {
                     Some(PlatformEvent::Exit)
                 } else {
@@ -576,6 +605,11 @@ impl Host<'_> {
                             browser.set_visible(self.visible && self.attached)?;
                         }
                         self.platform.set_tray_state(self.editing, self.visible);
+                    }
+                    PlatformEvent::OpenDashboard => {
+                        if let Err(error) = self.worker.open_dashboard() {
+                            eprintln!("Vosulay: could not queue dashboard launch: {error:#}");
+                        }
                     }
                     PlatformEvent::Exit => {
                         if self.flush(Closing::Exit)? {

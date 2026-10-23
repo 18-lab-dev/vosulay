@@ -94,6 +94,39 @@ fn token_path() -> Option<PathBuf> {
     Some(directory.join("vosu").join("broker.json"))
 }
 
+/// Native CLI discovery shares the broker-file validation used for commands.
+#[cfg(feature = "cef-host")]
+pub(crate) fn local_host() -> Option<(Url, String)> {
+    let mut bytes = Vec::new();
+    std::fs::File::open(token_path()?)
+        .ok()?
+        .take(MAX_FILE + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    if bytes.len() as u64 > MAX_FILE {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let origin = Url::parse(value["origin"].as_str()?).ok()?;
+    if origin.scheme() != "http"
+        || !origin
+            .host_str()?
+            .trim_matches(['[', ']'])
+            .parse::<std::net::IpAddr>()
+            .ok()?
+            .is_loopback()
+        || origin.path() != "/"
+        || origin.query().is_some()
+        || origin.fragment().is_some()
+        || !origin.username().is_empty()
+        || origin.password().is_some()
+    {
+        return None;
+    }
+    let token = parse(&bytes, &origin).ok()?;
+    Some((origin, token))
+}
+
 fn parse(bytes: &[u8], backend: &Url) -> Result<String, String> {
     #[derive(Deserialize)]
     struct File {

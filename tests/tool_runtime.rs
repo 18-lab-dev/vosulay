@@ -90,8 +90,9 @@ fn readiness_token_eof_exit_conflict_and_launcher_suppression() {
     assert!(request(port, "/v1/manage/state", None).starts_with("HTTP/1.1 401"));
     assert!(request(port, "/v1/manage/state", Some(&"a".repeat(64))).contains("\"config\""));
     let duplicate = command(root.path()).arg("--server-only").output().unwrap();
-    assert_eq!(duplicate.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&duplicate.stderr).contains("already running"));
+    assert_eq!(duplicate.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&duplicate.stderr).contains("vosu owns this instance"));
+    assert!(child.try_wait().unwrap().is_none());
     assert!(
         !root
             .path()
@@ -100,7 +101,7 @@ fn readiness_token_eof_exit_conflict_and_launcher_suppression() {
     );
     drop(child.stdin.take());
     assert_eq!(wait(&mut child).code(), Some(0));
-    // A user-requested quit takes the same graceful host exit path as tray Exit.
+    // Legacy local Quit cannot bypass vosu's lifecycle ownership.
     let mut child = command(root.path())
         .arg("--server-only")
         .stdin(Stdio::piped())
@@ -112,6 +113,9 @@ fn readiness_token_eof_exit_conflict_and_launcher_suppression() {
         .read_line(&mut line)
         .unwrap();
     let quit = command(root.path()).arg("--quit").output().unwrap();
-    assert!(quit.status.success());
+    assert!(!quit.status.success());
+    assert!(String::from_utf8_lossy(&quit.stderr).contains("vosu owns this instance"));
+    assert!(child.try_wait().unwrap().is_none());
+    drop(child.stdin.take());
     assert_eq!(wait(&mut child).code(), Some(0));
 }

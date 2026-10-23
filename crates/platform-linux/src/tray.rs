@@ -15,6 +15,7 @@ pub(super) struct LinuxTray {
     pub editing: bool,
     pub visible: bool,
     warned: AtomicBool,
+    tool_mode: bool,
 }
 
 impl LinuxTray {
@@ -24,6 +25,7 @@ impl LinuxTray {
             editing: false,
             visible: true,
             warned: AtomicBool::new(false),
+            tool_mode: std::env::var("VOSU_TOOL_PROTOCOL").as_deref() == Ok("1"),
         };
         match tray.assume_sni_available(true).spawn() {
             Ok(handle) => Some(handle),
@@ -80,8 +82,19 @@ impl Tray for LinuxTray {
             .into(),
             MenuItem::Separator,
             StandardItem {
-                label: "Exit vosulay".into(),
-                activate: Box::new(|tray: &mut Self| tray.shared.event(PlatformEvent::Exit)),
+                label: if self.tool_mode {
+                    "Open in vosu dashboard"
+                } else {
+                    "Exit vosulay"
+                }
+                .into(),
+                activate: Box::new(|tray: &mut Self| {
+                    tray.shared.event(if tray.tool_mode {
+                        PlatformEvent::OpenDashboard
+                    } else {
+                        PlatformEvent::Exit
+                    })
+                }),
                 ..Default::default()
             }
             .into(),

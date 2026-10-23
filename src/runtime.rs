@@ -7,6 +7,7 @@ mod host;
 mod instance;
 #[cfg(target_os = "linux")]
 mod launchers;
+mod lifecycle;
 mod resources;
 #[cfg(target_os = "linux")]
 mod signals;

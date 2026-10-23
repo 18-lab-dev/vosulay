@@ -114,6 +114,12 @@ and browser cache/logs in `VOSU_TOOL_CACHE_DIR`. Initial import copies (never
 moves or rewrites) the standalone config only when tool data is empty.
 Tool startup suppresses launcher registration and Linux game-shortcut rewriting;
 it does not remove existing standalone registrations.
+Standalone launches discover enabled-tool ownership only through vosu's validated
+local broker file and authenticated native CLI API, with bounded HTTP requests.
+The credential and one-use editor launch code are never logged. Managed startup
+may ask a same-user standalone host to flush and yield over the existing local
+control channel; supervised peers refuse. It never force-kills a peer. There is
+no managed tray Quit action: vosu closes stdin to stop the tool.
 
 The protocol HTTP listener binds 127.0.0.1 on an assigned port and requires the
 exact per-start `X-Vosu-Tool-Token` on every request, including health checks.
@@ -130,8 +136,9 @@ attachment, input and CEF sandbox disclosures still apply to this separate tool.
 
 ### How to remove vosulay completely
 
-1. Choose **tray → Exit vosulay** (Hide is not Exit), and close games that loaded
-   the overlay before replacing/removing libraries. Exit stops the host and its
+1. Stop the managed tool in **vosu → Tools**, or choose standalone
+   **tray → Exit vosulay** (Hide is not Exit), and close games that loaded
+   the overlay before replacing/removing libraries. Stopping closes the host and its
    listeners; restarting the game without vosulay integration is the way to
    ensure no previously injected code remains loaded.
 2. **Windows installer:** use **Settings → Apps → Installed apps / Apps & features

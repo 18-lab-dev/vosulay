@@ -92,7 +92,7 @@ pub(crate) fn settings_page(base_url: &Url, timeout: Duration) -> Result<Url> {
 
 /// vosu serves its dashboard, settings page included, on a separate origin and reports it at
 /// `GET /api/dashboard` on the overlay origin.
-fn dashboard_origin(base_url: &Url, timeout: Duration) -> Option<Url> {
+pub(crate) fn dashboard_origin(base_url: &Url, timeout: Duration) -> Option<Url> {
     #[derive(Deserialize)]
     struct Dashboard {
         origin: String,

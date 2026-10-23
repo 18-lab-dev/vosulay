@@ -34,18 +34,23 @@ On Linux, [src/runtime/signals.rs](../src/runtime/signals.rs) turns SIGINT, SIGT
 `--server-only` branches after the shared worker/server startup and before Linux
 launcher refresh, platform discovery/attachment, tray startup or lazy CEF
 initialization. Its loop discards manager replies, rejects in-game edit toggles,
-and drains/stops/joins the worker on `--quit`. Backend and configuration overrides
+and drains/stops/joins the worker on standalone `--quit` or managed stdin EOF. Backend and configuration overrides
 still apply. Game-selection and frame-pacing CLI options are rejected.
 
 ### Supervised tool mode
 
-`VOSU_TOOL_PROTOCOL=1` opts into vosu protocol v1; otherwise startup is unchanged.
-`src/tool.rs` reads vosu's backend and data/cache paths, imports a standalone
-config only into an empty data directory, and watches stdin. EOF feeds the same
-graceful exit/flush path as tray Exit. An occupied per-user instance lock exits
-with status 1 in tool mode (standalone retains its existing status 0).
+`VOSU_TOOL_PROTOCOL=1` opts into vosu protocol v1. Before standalone ownership,
+`src/runtime/lifecycle.rs` checks vosu's native broker for an enabled vosulay
+tool and reuses the `vosux --open` flow instead of starting another host.
+Absent/unreachable vosu or a disabled tool retains standalone startup.
+Tool startup asks an occupied standalone host to yield via its same-user control
+channel, waits boundedly for the lock, then imports its flushed configuration
+only into an empty tool data directory. Supervised peers refuse takeover.
+Refusal/timeout exits 0 with a diagnostic: vosu reports stopped/exited without
+crash backoff. `src/tool.rs` watches stdin; EOF closes views and flushes state.
 Launcher registration and Linux shortcut refresh are suppressed, never removed.
-The tray and native game rendering remain owned by vosulay, not vosu.
+The tool tray retains editing controls but replaces Exit with dashboard access;
+vosu alone owns Start/Stop/Restart. Native game rendering stays in vosulay.
 
 `src/remote/tool.rs` binds a separate loopback port 0, authenticates every route
 with the launch token and prints the flushed readiness line. It adapts the same

@@ -47,6 +47,7 @@ const EDIT: u8 = 1;
 const HIDE: u8 = 2;
 const EXIT: u8 = 8;
 const SHORTCUT_EDIT: u8 = 16;
+const DASHBOARD: u8 = 32;
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 static NEXT_CLASS: AtomicUsize = AtomicUsize::new(1);
 
@@ -58,6 +59,7 @@ struct Shared {
     overflow: AtomicU8,
     host: thread::Thread,
     hotkeys: Mutex<(NativeHotkey, Option<NativeHotkey>)>,
+    tool_mode: bool,
 }
 
 pub(crate) struct Tray {
@@ -79,6 +81,7 @@ impl Tray {
             overflow: AtomicU8::new(0),
             host: thread::current(),
             hotkeys: Mutex::new((toggle_edit, toggle_visibility)),
+            tool_mode: std::env::var("VOSU_TOOL_PROTOCOL").as_deref() == Ok("1"),
         });
         let (tx, events) = mpsc::sync_channel(16);
         let (ready_tx, ready) = mpsc::sync_channel(1);
@@ -125,7 +128,7 @@ impl Tray {
             return Some(event);
         }
         // Preserve Exit and net toggle parity without blocking the tray thread.
-        for bit in [EDIT, SHORTCUT_EDIT, HIDE, EXIT] {
+        for bit in [EDIT, SHORTCUT_EDIT, HIDE, EXIT, DASHBOARD] {
             if self.shared.overflow.fetch_and(!bit, Ordering::AcqRel) & bit != 0 {
                 return Some(event_for(bit));
             }
@@ -200,6 +203,7 @@ fn event_for(bit: u8) -> PlatformEvent {
         EDIT => PlatformEvent::ToggleEdit,
         SHORTCUT_EDIT => PlatformEvent::ShortcutToggleEdit,
         HIDE => PlatformEvent::ToggleVisibility,
+        DASHBOARD => PlatformEvent::OpenDashboard,
         _ => PlatformEvent::Exit,
     }
 }
@@ -358,7 +362,16 @@ impl WindowState {
                 w!("Hide vosulay"),
             )?;
             AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null())?;
-            AppendMenuW(menu, MF_STRING, EXIT as usize, w!("Exit vosulay"))?;
+            if self.shared.tool_mode {
+                AppendMenuW(
+                    menu,
+                    MF_STRING,
+                    DASHBOARD as usize,
+                    w!("Open in vosu dashboard"),
+                )?;
+            } else {
+                AppendMenuW(menu, MF_STRING, EXIT as usize, w!("Exit vosulay"))?;
+            }
             if point.x == -1 && point.y == -1 {
                 GetCursorPos(&mut point)?;
             }
@@ -377,7 +390,9 @@ impl WindowState {
             .0 as u8;
             let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
             if !self.shared.stopping.load(Ordering::Acquire) {
-                if matches!(command, EDIT | HIDE | EXIT) {
+                if matches!(command, EDIT | HIDE | DASHBOARD)
+                    || (command == EXIT && !self.shared.tool_mode)
+                {
                     self.emit(command);
                 }
                 let _ = Shell_NotifyIconW(NIM_SETFOCUS, &self.notify_data(hwnd));

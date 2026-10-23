@@ -120,6 +120,16 @@ mod fork_tests {
     use super::InstanceGuard;
     #[test]
     fn inherited_descriptor_does_not_extend_instance_ownership() {
+        // Forking the parallel runner would temporarily retain other tests'
+        // listeners, making their close/rebind assertions race this child.
+        const CHILD: &str = "VOSULAY_TEST_INSTANCE_FORK_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            assert!(std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "runtime::instance::fork_tests::inherited_descriptor_does_not_extend_instance_ownership", "--test-threads=1"])
+                .env(CHILD, "1")
+                .status().unwrap().success());
+            return;
+        }
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("instance.lock");
         let guard = InstanceGuard::acquire_at(&path).unwrap().unwrap();

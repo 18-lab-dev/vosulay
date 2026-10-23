@@ -91,6 +91,30 @@ Standalone browser/CEF frames retain their existing behavior.
 The UI refuses framed/opener-bearing launches. Direct/reloaded tool pages fetch
 only `/v1/view`, an open read route rendering the active or selected profile.
 
+### Native lifecycle hand-off
+
+Standalone startup reads the existing bounded `broker.json` credential, accepts
+only its validated literal-loopback HTTP origin, and sends authenticated
+`GET /tools/_host/v1/cli`. An enabled `vosulay` UI delegates through
+`POST /tools/_host/v1/cli/vosulay/open`, exactly the `vosux --open` path.
+Discovery has a 750 ms deadline; launch has a three-second deadline, no proxy,
+and no redirects. No broker, stale authorization, unreachable vosu, or a disabled
+tool leaves standalone behavior unchanged. Once an enabled tool is confirmed,
+launch failure is reported rather than starting a competing host. Launch-code
+fragments are never printed. `--server-only` delegates without opening a browser.
+The tool tray resolves vosu's actual dashboard via existing `GET /api/dashboard`
+and opens its Tools page; it does not infer dashboard ports.
+
+The existing local control channel adds `yield-to-vosu`: only standalone accepts
+it, follows the same flush/close path as standalone Exit, and releases ownership.
+Tool instances reject both this request and legacy `quit`; vosu stops them by
+closing stdin. Takeover waits at most five seconds after the bounded control
+reply, never sends signals or kills a peer, and never falls back to blindly
+quitting an unidentified/older peer. An older standalone without this command
+must be exited once before starting the tool. If takeover fails, stderr explains
+why and the tool exits 0: vosu shows `stopped`, detail `exited`, with no restart.
+
+
 
 ## OBS capture boundary
 

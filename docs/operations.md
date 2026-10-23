@@ -160,8 +160,9 @@ Outputs are `vosulay-<v>-windows-x86_64.zip` and
 The [installer](../packaging/windows/vosulay.iss) is per-user, needs no admin
 rights and defaults to `%LOCALAPPDATA%\Programs\Vosulay`. Its Start Menu
 shortcut matches the app's self-registration path. Desktop and Windows-startup
-shortcuts are unchecked options; the final page offers launch. Exit through
-**tray → Exit vosulay** before upgrade/uninstall; the installer checks for a
+shortcuts are unchecked options; the final page offers launch. Stop managed
+instances in vosu, or use standalone **tray → Exit vosulay**, before
+upgrade/uninstall; the installer checks for a
 running instance. Uninstall preserves `%APPDATA%\vosulay\config.json`. The ZIP
 uses the same user config, not portable storage. Unsigned installers may
 trigger SmartScreen.
@@ -235,9 +236,13 @@ install/upgrade/uninstall evidence.
 
 ## Launchers and single instance
 
-Startup registers vosulay in app launchers. Linux writes `$XDG_DATA_HOME/applications/com.vosu.vosulay.desktop` (default `~/.local/share/applications/com.vosu.vosulay.desktop`) with an absolute Exec and installs the matching `icons/hicolor/scalable/apps/com.vosu.vosulay.svg`, unless the desktop entry exists in `$XDG_DATA_DIRS` (default `/usr/local/share:/usr/share`). Windows creates `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Vosulay.lnk`. Registration failures are logged without stopping the host. Registration is separate from refreshing osu shortcuts for injection. A second launch while vosulay runs prints a message and exits rather than creating another instance.
+Standalone startup registers vosulay in app launchers. Linux writes `$XDG_DATA_HOME/applications/com.vosu.vosulay.desktop` (default `~/.local/share/applications/com.vosu.vosulay.desktop`) with an absolute Exec and installs the matching `icons/hicolor/scalable/apps/com.vosu.vosulay.svg`, unless the desktop entry exists in `$XDG_DATA_DIRS` (default `/usr/local/share:/usr/share`). Windows creates `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Vosulay.lnk`. Registration failures are logged without stopping the host. Tool mode suppresses registration/shortcut refresh without deleting existing entries.
 
-Both platforms expose the tray menu **Edit mode** (checkable), **Hide vosulay** (checkable), and **Exit vosulay**. Linux uses a StatusNotifierItem; a desktop needs compatible tray support to display it. Hiding is not quitting. Configure native edit/visibility chords in Settings → Shortcuts; edit defaults to Ctrl+Shift+Space and visibility starts unbound.
+A launcher, autostart entry, or CLI launch checks the current user's vosu broker before claiming ownership. If the running vosu lists an enabled vosulay tool, the launch delegates to its existing authenticated `vosux --open` API and exits 0. Discovery is bounded to 750 ms and editor launch to three seconds; proxies and redirects are disabled. `--server-only` delegates without opening a browser. Missing/unreachable vosu or a disabled tool follows the existing standalone path.
+
+When the tool starts after standalone, it requests `yield-to-vosu` over the existing same-user control channel and waits up to five seconds after the bounded control reply for ownership to release. Standalone flushes and closes normally before the tool imports an empty data directory. A managed peer refuses takeover and legacy `quit`. Older peers without the yield command must be exited manually once. A refusal/timeout prints a reason and exits 0: vosu displays **stopped**, detail **exited**, and does not crash-restart it; fix the conflict and choose Start.
+
+Both platforms retain **Edit mode** and **Hide vosulay** (checkable). Standalone retains **Exit vosulay**. Tool mode instead provides **Open in vosu dashboard**, resolving its actual Tools page through `/api/dashboard`. Use vosu's dashboard **Start / Stop / Restart** controls; exiting vosu stops its tool through stdin EOF. Linux requires StatusNotifierItem support. Hiding is never quitting. Native shortcut configuration is unchanged.
 
 ## Command line and storage
 

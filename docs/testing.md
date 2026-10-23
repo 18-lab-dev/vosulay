@@ -79,6 +79,27 @@ It isolates the game-side cost. Chromium's own rendering and readback, and real 
 
 Tier 4's checklist covers edit/interaction toggles, drag/resize/scale/crop, field wheel stepping, focus loss, tray actions and the remote `/overlay` page on your own machine. The compact inspector, its Advanced placement editor, the native vosu overlay settings modal (including its read-only state and Retry) and cross-profile paste have no automated JavaScript tests; exercise them in the Tier 3 preview with `--vosu-demo` (a fake vosu in the stub host) or on the manage page with a test vosu, which uses the real host requests. Native GPU composition, real game input release, OBS capture, desktop tray integration, and delivered-pixel performance need explicit platform checks. Never label an unsupported/failed game-surface launch as a compositor pass.
 
+### Native lifecycle smoke with vosu
+
+With a real vosu test-harness executable and a verified Linux staged runtime
+(from `vosulay-cef package`), run:
+
+```sh
+python3 tools/test-lifecycle.py \
+  --vosu /absolute/path/to/vosu --runtime /absolute/path/to/runtime \
+  --evidence /absolute/path/to/evidence
+```
+
+The launcher enters `unshare -rn`, brings loopback up, and verifies that its
+network namespace changed before starting applications. It isolates HOME and all XDG roots,
+approves an actual user-root tool installation through vosu's dashboard API, and
+uses the real service with `--server-only` (no tray, CEF view, or game attachment).
+It checks standalone-first takeover, enabled-tool hand-off retaining one host,
+no-vosu and disabled-tool standalone operation, vosu-exit shutdown, and clean
+refusal of an unrelated lock holder without restart. It never changes the user's
+installed app or app data. Tray menu appearance and native CEF shutdown remain
+separate platform checks.
+
 ## Maintainer environment (optional)
 
 The following is additional reviewer/release evidence, not a contributor prerequisite. Maintainers may use an already-running GPU guest matrix with private `windows-vm` host tooling and active-guest Cua. Do not install or imitate that tooling merely to contribute. The `vosulay-windows-live-testing` skill applies only to this environment; otherwise use cross-Clippy, hosted Windows packaging and native manual testing.

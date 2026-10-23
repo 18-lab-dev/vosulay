@@ -30,6 +30,8 @@ use url::Url;
 mod credential;
 
 pub(crate) use credential::BrokerCredential;
+#[cfg(feature = "cef-host")]
+pub(crate) use credential::local_host;
 
 const IO_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_MESSAGE: usize = 4 * 1024 * 1024;
