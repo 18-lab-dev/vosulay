@@ -16,6 +16,9 @@ Both CEF and browser managers embed the same WORKSTATION/DRAFTING CSS and
 base64-embedded OFL font subsets, retaining the vosulay logo and transparent game
 canvas. No font request goes to vosu or a CDN. Native managers follow the OS;
 the tool bootstrap passes vosu's initial `colorScheme` into the manager.
+The editor copies vosu's shared 18-LAB palette, type/spacing scales, control
+sizes, radii and focus treatment; `assets/manager.css` records the source
+revision. Standalone never depends on fetching vosu's `theme.css`.
 
 
 Linux's [entrypoint](../src/main.rs) re-executes Cargo-built binaries beside the retained CEF assets. Windows enters through the pinned CEF sandbox bootstrap and loads the application client DLL.

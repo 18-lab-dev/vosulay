@@ -11,12 +11,12 @@ const FONTS: &[(&str, &[u8])] = &[
         include_bytes!("../assets/fonts/barlow-latin-400-normal.woff2"),
     ),
     (
-        "barlow-latin-600-normal.woff2",
-        include_bytes!("../assets/fonts/barlow-latin-600-normal.woff2"),
+        "barlow-latin-500-normal.woff2",
+        include_bytes!("../assets/fonts/barlow-latin-500-normal.woff2"),
     ),
     (
-        "barlow-condensed-latin-600-normal.woff2",
-        include_bytes!("../assets/fonts/barlow-condensed-latin-600-normal.woff2"),
+        "barlow-latin-600-normal.woff2",
+        include_bytes!("../assets/fonts/barlow-latin-600-normal.woff2"),
     ),
     (
         "ibm-plex-mono-latin-400-normal.woff2",

@@ -40,7 +40,7 @@ SOFTWARE.
 
 ## Editor fonts
 
-Barlow and Barlow Condensed © 2017 The Barlow Project Authors (https://github.com/jpt/barlow); IBM Plex Mono © 2017 IBM Corp. (https://github.com/IBM/plex). Bundled WOFF2 files are unmodified Latin subsets distributed by Fontsource, under SIL Open Font License 1.1.
+Barlow © 2017 The Barlow Project Authors (https://github.com/jpt/barlow); IBM Plex Mono © 2017 IBM Corp. (https://github.com/IBM/plex). Bundled WOFF2 files are unmodified Latin subsets distributed by Fontsource, under SIL Open Font License 1.1.
 
 ```text
 Dashboard fonts embedded in vosu (WOFF2, Latin subsets from Fontsource 5.3.0):

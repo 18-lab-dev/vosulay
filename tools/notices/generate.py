@@ -150,7 +150,7 @@ def render():
     overlay = ROOT / "tools/notices/asdf-overlay-2.1.0-LICENSE-MIT.txt"
     chunks.append("```text\n" + overlay.read_text().rstrip() + "\n```\n\n")
     chunks.append("## Editor fonts\n\n"
-                  "Barlow and Barlow Condensed © 2017 The Barlow Project Authors "
+                  "Barlow © 2017 The Barlow Project Authors "
                   "(https://github.com/jpt/barlow); IBM Plex Mono © 2017 IBM Corp. "
                   "(https://github.com/IBM/plex). Bundled WOFF2 files are unmodified "
                   "Latin subsets distributed by Fontsource, under SIL Open Font License 1.1.\n\n")
