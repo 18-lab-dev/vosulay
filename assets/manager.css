@@ -138,9 +138,10 @@ body.editing:not(.interacting) .overlay.selected:is([data-edge-zone="ne"], [data
 .toolbar button { flex-shrink: 0; white-space: nowrap; }
 .brand { justify-self: start; display: flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
 .brand strong { font: 600 .9375rem/1 var(--font-body); }
-.brand-mark { display: block; width: 24px; height: 24px; flex: 0 0 24px; }
-.brand-mark-circle { fill: none; stroke: var(--fg); stroke-width: 12; }
-.brand-mark-panel { fill: var(--accent); }
+.brand-mark { display: block; width: 27px; height: 27px; flex: 0 0 27px; }
+.brand-mark-frame { fill: none; stroke: var(--accent); stroke-linecap: round; stroke-linejoin: round; }
+.brand-mark-node { fill: var(--signal); }
+.brand-mark-handle { fill: var(--accent); stroke: var(--fg); stroke-width: 1.25; }
 .toolbar-center, .toolbar-end, .profile-actions, .toolbar-group { min-width: 0; display: flex; align-items: center; gap: var(--space-1); }
 .toolbar-center { justify-content: center; }
 .toolbar-end { justify-content: flex-end; }

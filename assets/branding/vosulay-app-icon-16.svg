@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" role="img" aria-labelledby="vosulay-icon-title vosulay-icon-desc">
 <title id="vosulay-icon-title">vosulay app icon</title>
-<desc id="vosulay-icon-desc">The osu! hit circle with an accent overlay panel in front of it, on a graphite tile.</desc>
-<!-- Pixel-fitted 16 px master: strokes and ring edges on whole pixels. -->
+<desc id="vosulay-icon-desc">An overlay-layout frame with corner handles holding the signal V and its node, on a graphite tile.</desc>
+<!-- Pixel-fitted 16 px master. -->
 <rect width="16" height="16" rx="2" fill="#111214"/>
-<mask id="vosulay-gap"><rect x="-1" y="-1" width="200" height="200" fill="#fff"/><path d="M8 1H13A2 2 0 0 1 15 3V7A2 2 0 0 1 13 9H8A2 2 0 0 1 6 7V3A2 2 0 0 1 8 1Z" fill="#000"/></mask><circle cx="6.5" cy="9.5" r="3.5" fill="none" stroke="#ebe8e1" stroke-width="2" mask="url(#vosulay-gap)"/><path fill-rule="evenodd" fill="#ff963f" d="M8 2H13A1 1 0 0 1 14 3V7A1 1 0 0 1 13 8H8A1 1 0 0 1 7 7V3A1 1 0 0 1 8 2ZM9 4H12V6H9Z"/>
+<rect x="3.5" y="1.5" width="11" height="11" rx="0.75" fill="none" stroke="#ff963f" stroke-width="1" opacity="0.34"/><rect x="1.5" y="3.5" width="11" height="11" rx="0.75" fill="none" stroke="#ff963f" stroke-width="1" opacity="0.78"/><path d="M3.5 7 H5 L7 11.5 L9 7 H10.5" fill="none" stroke="#ff963f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path fill-rule="evenodd" fill="#7fa6cf" d="M5.1 11.5a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0 -3.8 0ZM6.2 11.5a0.8 0.8 0 1 0 1.6 0a0.8 0.8 0 1 0 -1.6 0Z"/>
 </svg>

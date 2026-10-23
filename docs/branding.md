@@ -6,23 +6,24 @@ vosulay is an 18-LAB product (stage code 18-02). Its art shares vosu's rules and
 
 <img src="../assets/branding/vosulay-mark.svg" alt="" width="96">
 
-osu!'s hit circle in ink with the product's part in accent in front of it; vosu uses the same rule with a V. For vosulay the part is the overlay panel, laid out like its catalog icon (`vosu-tool-icon.svg`).
+vosulay's 1.x mark in 18-LAB colours: two offset overlay-layout frames with corner handles hold vosu's signal V and its node (vosu `docs/branding.md`).
 
-- Drawn on the 18-LAB mark's 120-unit grid: circle centre (50, 70), radius 28, 12-unit stroke; panel from (58, 16) to (104, 56) with a 12-unit frame, 10-unit outer radius and a 14×6 bar. The circle is cut 6 units around the panel. Outer extents are x and y 16–104.
-- Never recolour beyond the two roles below, outline, rotate, add effects, or separate the panel from the circle. No ppy or osu! logos.
-- 16 and 24 px have pixel-fitted masters (`vosulay-app-icon-16.svg`, `vosulay-app-icon-24.svg`, 2- and 3-pixel strokes, no bar). From 32 px up the master scales.
+- Geometry (original 128-unit coordinates): frames at (14, 6) and (8, 12), 108×104, radius 3, strokes 2.5 at 34 % and 2.75 at 78 % opacity; the V `M18 36 H32 L64 94 L96 36 H110` at 8.5 units with round caps; the node a ring (radius 8, hole 3.2) at (64, 94); 9-unit handles with 1.25-unit outlines on the front frame's corners.
+- Never recolour beyond the roles below, outline, rotate, add effects, or drop the frames, handles or node.
+- 16 and 24 px have pixel-fitted masters (`vosulay-app-icon-16.svg`, `vosulay-app-icon-24.svg`); the handles drop out at 16 px. From 32 px up the master scales.
 
 | Role | Light (DRAFTING) | Dark (WORKSTATION) |
 | --- | --- | --- |
-| Circle, wordmark | `#132030` | `#ebe8e1` |
-| Panel (accent) | `#175fad` | `#ff963f` |
+| Frames, V, handles (accent) | `#175fad` | `#ff963f` |
+| Node (signal) | `#b8621b` | `#7fa6cf` |
+| Handle outline, wordmark | `#132030` | `#ebe8e1` |
 | Rule, endorsement | `#a7b2bd`, `#3b4858` | `#3b3f45`, `#b8b5ad` |
 
-The app icon is the mark at 0.8 scale on a graphite (`#111214`) tile with 12 % corner radius, in both modes. The editor toolbar draws the mark inline with `--fg` and `--accent`.
+The app icon puts the mark on a graphite (`#111214`) tile with 12 % corner radius, at the 1.x icon's size and position. The editor toolbar draws the mark inline with `--accent`, `--signal` and `--fg`.
 
 ## Lockup
 
-`vosulay-logo.svg` (light surfaces) and `vosulay-logo-on-dark.svg`: mark, the lowercase wordmark in Barlow Condensed 600 (x-height 46 units, baseline 90), a hairline rule, and the 18-LAB logotype as endorsement in one ink colour (cap height 20). The 18-LAB logotype's mark stands in for "18"; never set a typed "18" beside it. Keep 16 units of clear space. Use it at 64 px height or more, where the endorsement stays legible; smaller, use the mark alone.
+`vosulay-logo.svg` (light surfaces) and `vosulay-logo-on-dark.svg`: the mark and the geometric lowercase vosulay wordmark from 1.x, a hairline rule, and the 18-LAB logotype as endorsement in one ink colour. The 18-LAB logotype's mark stands in for "18"; never set a typed "18" beside it. Use it at 64 px height or more, where the endorsement stays legible; smaller, use the mark alone.
 
 ## Files
 
@@ -47,4 +48,4 @@ python3 tools/branding/render.py           # needs resvg on PATH (0.48)
 python3 tools/branding/render.py --check   # committed rasters match the masters
 ```
 
-Text in the logos, banners and social preview is outlined, so it renders without fonts on GitHub and in image viewers. It was set in Barlow Condensed 600, Barlow 400 and IBM Plex Mono 500 (Fontsource Latin subsets, as in vosu's `assets/server/`) with HarfBuzz shaping and fontTools outlines. To change a line, outline the new text from the same fonts, keep sizes and positions, and re-render.
+Text in the banners and social preview, and the 18-LAB logotype, is outlined, so it renders without fonts on GitHub and in image viewers. It was set in Barlow Condensed 600, Barlow 400 and IBM Plex Mono 500 (Fontsource Latin subsets, as in vosu's `assets/server/`) with HarfBuzz shaping and fontTools outlines. To change a line, outline the new text from the same fonts, keep sizes and positions, and re-render.
