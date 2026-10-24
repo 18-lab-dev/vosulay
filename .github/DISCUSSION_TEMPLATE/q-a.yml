@@ -3,7 +3,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        The [README](https://github.com/shiruviaa/vosulay#readme) covers installation, launching on Linux and Windows, shortcuts and troubleshooting. If something is clearly broken, a [bug report](https://github.com/shiruviaa/vosulay/issues/new/choose) is the better place.
+        The [README](https://github.com/18-lab-dev/vosulay#readme) covers installation, launching on Linux and Windows, shortcuts and troubleshooting. If something is clearly broken, a [bug report](https://github.com/18-lab-dev/vosulay/issues/new/choose) is the better place.
   - type: textarea
     id: question
     attributes:

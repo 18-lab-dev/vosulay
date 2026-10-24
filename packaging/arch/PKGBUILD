@@ -12,7 +12,7 @@ pkgver=0
 pkgrel=1
 pkgdesc="In-game overlay for vosu and tosu-compatible counters"
 arch=('x86_64')
-url="https://github.com/shiruviaa/vosulay"
+url="https://github.com/18-lab-dev/vosulay"
 license=('MIT' 'BSD-3-Clause' 'CC-BY-4.0')
 depends=(
     'alsa-lib' 'at-spi2-core' 'cairo' 'dbus' 'expat' 'glib2' 'libcups' 'libx11'

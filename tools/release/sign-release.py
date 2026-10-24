@@ -84,7 +84,7 @@ def find_release(repo, tag):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--tag", required=True)
-    parser.add_argument("--repo", default="shiruviaa/vosulay")
+    parser.add_argument("--repo", default="18-lab-dev/vosulay")
     parser.add_argument("--key", default=RELEASE_KEY)
     parser.add_argument("--publish", action="store_true", help="publish the draft release after signing")
     args = parser.parse_args()

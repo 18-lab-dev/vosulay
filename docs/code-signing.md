@@ -141,7 +141,7 @@ release, maintainers must confirm and record:
   with the tag (including acceptance of Inno Setup's padded strings).
 - [ ] All team members have GitHub and SignPath MFA enabled. GitHub reported
   MFA enabled for K4zoku and qt715 on 2026-10-10, but the shiruviaa organization
-  did not require it; the owner must enforce it. SignPath MFA remains unverified.
+  (historical pre-rename observation) did not require it; the owner must enforce it. SignPath MFA remains unverified.
 - [ ] A real signed DLL and installer pass `verify-release.ps1 -RequireSignature`
   on Windows; authorized native install/upgrade/uninstall checks pass.
 - [ ] The unresolved upstream provenance/licensing items in

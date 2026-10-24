@@ -55,7 +55,7 @@ DEMO_SETTINGS = [
      "options": ["Left", "Center", "Right"]},
     {"type": "header", "uniqueID": "behaviour", "title": "Behaviour and commands"},
     {"type": "button", "uniqueID": "help", "title": "Overlay documentation",
-     "value": "https://github.com/shiruviaa/vosulay"},
+     "value": "https://github.com/18-lab-dev/vosulay"},
     {"type": "textarea", "uniqueID": "notes", "title": "Notes", "value": "First line\nSecond line"},
     {"type": "password", "uniqueID": "token", "title": "Demo token", "value": "preview-only"},
     {"type": "commands", "uniqueID": "commands", "title": "Chat commands", "uniqueCheck": "command",

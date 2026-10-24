@@ -8,7 +8,7 @@ section: games
 priority: optional
 maintainer: sxlvia <qt715@proton.me>
 vendor: 18-LAB
-homepage: https://github.com/shiruviaa/vosulay
+homepage: https://github.com/18-lab-dev/vosulay
 license: MIT AND BSD-3-Clause AND CC-BY-4.0
 description: |
   In-game overlay for vosu and tosu-compatible counters.

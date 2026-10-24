@@ -68,7 +68,7 @@ if __name__ == '__main__':
     pack.add_argument('--target', choices=TARGETS, required=True)
     cat = sub.add_parser('catalog')
     cat.add_argument('--directory', type=Path, required=True)
-    cat.add_argument('--repository', default='shiruviaa/vosulay')
+    cat.add_argument('--repository', default='18-lab-dev/vosulay')
     cat.add_argument('--tag', required=True)
     args = parser.parse_args()
     if args.command == 'package':

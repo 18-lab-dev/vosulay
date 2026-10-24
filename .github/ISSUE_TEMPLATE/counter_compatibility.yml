@@ -7,7 +7,7 @@ body:
       value: |
         First open the counter directly from your backend in a normal browser (for example `http://127.0.0.1:24050/<counter folder>/`). If it is broken there too, the problem is in the counter or the backend, not vosulay.
 
-        Note that counters written for vosu-only features (such as `/websocket/v2/subscribe`) cannot work with tosu; see [Backend connections](https://github.com/shiruviaa/vosulay#backend-connections).
+        Note that counters written for vosu-only features (such as `/websocket/v2/subscribe`) cannot work with tosu; see [Backend connections](https://github.com/18-lab-dev/vosulay#backend-connections).
   - type: input
     id: counter
     attributes:

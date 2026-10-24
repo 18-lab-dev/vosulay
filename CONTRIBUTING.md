@@ -2,7 +2,7 @@
 
 You can contribute with one x86_64 Linux or Windows machine. A game install is useful only for in-game checks; no private tools, second machine, or preprovisioned cache is required. Work in this repository, not the ecosystem umbrella. Read the [source map](docs/source-map.md) and [engineering docs](docs/README.md) for the area you change.
 
-Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). For a larger change or a new feature, open a [feature request](https://github.com/shiruviaa/vosulay/issues/new?template=feature_request.yml) or start a [discussion](https://github.com/shiruviaa/vosulay/discussions) first, so the approach can be agreed before you write the code. Issues labelled [`good first issue`](https://github.com/shiruviaa/vosulay/labels/good%20first%20issue) are a good place to start.
+Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). For a larger change or a new feature, open a [feature request](https://github.com/18-lab-dev/vosulay/issues/new?template=feature_request.yml) or start a [discussion](https://github.com/18-lab-dev/vosulay/discussions) first, so the approach can be agreed before you write the code. Issues labelled [`good first issue`](https://github.com/18-lab-dev/vosulay/labels/good%20first%20issue) are a good place to start.
 
 ## Prerequisites
 

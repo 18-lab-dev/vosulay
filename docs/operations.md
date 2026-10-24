@@ -19,6 +19,29 @@ For a source installation, run `cargo install --path . --locked` (`--force` to
 reinstall). Cargo-installed Linux binaries depend on the retained caches above,
 not a redistributable executable alone.
 
+### 1.5.0 repository cutover
+
+The official source is `18-lab-dev/vosulay`; the tool catalog is
+`https://github.com/18-lab-dev/vosulay/releases/latest/download/catalog.json`.
+Published 1.4.0 downloads remain reachable through GitHub's organization-rename
+redirects. vosulay does not persist official repository/catalog URLs: saved URLs
+are the user's backend origin and custom overlay addresses, which this cutover
+does not rewrite.
+
+The Scoop and winget manifests deliberately retain their published 1.4.0
+version/asset/SHA-256 pairs with the new owner URL. After the final signed 1.5.0
+Windows ZIP and installer are produced, calculate their SHA-256 digests, update
+Scoop's version, download URL and hash, and update all three winget
+`PackageVersion` fields, the installer URL/hash and release-notes URL together.
+Never pair the old hashes with 1.5.0 assets. The AUR package tracks Git main;
+Inno Setup and Linux binary-package versions derive from the workspace version.
+Keep the winget package identifier unchanged.
+
+Before enabling signing after the organization rename, check SignPath repository
+registration and permissions. Keep project `vosulay`, policy `release-signing`,
+artifact configurations `client-dll`/`installer`, variable
+`SIGNPATH_ORGANIZATION_ID` and secret `SIGNPATH_API_TOKEN` unchanged.
+
 ### vosu tool packages
 
 The release workflow additionally wraps each verified portable runtime with

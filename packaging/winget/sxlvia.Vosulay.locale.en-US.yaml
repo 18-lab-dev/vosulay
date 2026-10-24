@@ -2,19 +2,19 @@
 PackageIdentifier: sxlvia.Vosulay
 PackageVersion: 1.4.0
 PackageLocale: en-US
-Publisher: sxlvia
-PublisherUrl: https://github.com/shiruviaa
+Publisher: 18-LAB
+PublisherUrl: https://github.com/18-lab-dev
 PackageName: Vosulay
-PackageUrl: https://github.com/shiruviaa/vosulay
+PackageUrl: https://github.com/18-lab-dev/vosulay
 License: MIT
-LicenseUrl: https://github.com/shiruviaa/vosulay/blob/main/LICENSE
-PrivacyUrl: https://github.com/shiruviaa/vosulay/blob/main/docs/code-signing.md#privacy-policy
+LicenseUrl: https://github.com/18-lab-dev/vosulay/blob/main/LICENSE
+PrivacyUrl: https://github.com/18-lab-dev/vosulay/blob/main/docs/code-signing.md#privacy-policy
 ShortDescription: Cross-platform in-game overlay manager for vosu or tosu-compatible backends
 Tags:
   - osu
   - overlay
   - tosu
   - vosu
-ReleaseNotesUrl: https://github.com/shiruviaa/vosulay/releases/tag/v1.4.0
+ReleaseNotesUrl: https://github.com/18-lab-dev/vosulay/releases/tag/v1.4.0
 ManifestType: defaultLocale
 ManifestVersion: 1.9.0

@@ -238,7 +238,7 @@ def render():
     source_asset = f"vosulay-{version}-third-party-sources.tar"
     chunks.append("Corresponding source for the LGPL components and the application's "
                   f"rebuild/relink route: [{source_asset}]"
-                  f"(https://github.com/shiruviaa/vosulay/releases/download/v{version}/{source_asset}), "
+                  f"(https://github.com/18-lab-dev/vosulay/releases/download/v{version}/{source_asset}), "
                   "published alongside every GitHub release. Extract the plain tar and read "
                   "its README.md and SHA256SUMS before rebuilding. It preserves original "
                   "pinned source archives for asdf-overlay, Gum, releng, native components "

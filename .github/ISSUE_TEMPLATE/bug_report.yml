@@ -5,10 +5,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting! Please check the [troubleshooting section](https://github.com/shiruviaa/vosulay#troubleshooting) and [existing issues](https://github.com/shiruviaa/vosulay/issues?q=is%3Aissue) first.
+        Thanks for reporting! Please check the [troubleshooting section](https://github.com/18-lab-dev/vosulay#troubleshooting) and [existing issues](https://github.com/18-lab-dev/vosulay/issues?q=is%3Aissue) first.
 
         - A counter that works on its own but not inside vosulay? Use **Counter or overlay doesn't work** instead.
-        - A security problem? Do not open an issue: [report it privately](https://github.com/shiruviaa/vosulay/security/advisories/new).
+        - A security problem? Do not open an issue: [report it privately](https://github.com/18-lab-dev/vosulay/security/advisories/new).
   - type: input
     id: version
     attributes:
