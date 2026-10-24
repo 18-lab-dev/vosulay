@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add isolated native-traffic and CEF manager benchmarks, optional malloc-family instrumentation, and a queue-barrier regression proving repeated ruleset samples do not save, redraw, or override manual profile selection.
 - Align editor colours, typography, spacing, corner radii and focus treatment with vosu's shared 18-LAB system, preserving vosulay's layout and standalone rendering.
 - Let vosu own an enabled vosulay tool's lifetime. Standalone app-menu, autostart, and CLI launches hand off through vosu's authenticated native tool-launch API when vosu is running; absent/unreachable vosu or a disabled tool retains standalone operation.
 - Ask a compatible standalone host to flush and yield before supervised startup, with bounded waiting and no forced peer termination. Refused takeover exits cleanly and is shown by vosu as stopped instead of crash-restarting.

@@ -66,6 +66,65 @@ Use a fresh output directory. The wrapper isolates PID/IPC/network namespaces an
 
 It isolates the game-side cost. Chromium's own rendering and readback, and real swapchain presentation, are outside it.
 
+### Ruleset and manager cost isolation
+
+Use independent Cargo target directories for every compared revision; never reuse
+incremental artifacts across a baseline and candidate. Build release hosts and
+`cargo build --release --locked --example manager_bench` in each worktree.
+
+`tools/ruleset-bench.py` measures the actual native host in `--server-only` mode,
+with two real broker clients and a stand-in backend publishing selected-field
+`/settings/mode`, `/beatmap`, and `/play` traffic at 150 updates/s. Its normal case
+sends the ruleset only initially/on change; the adversarial case repeats identical
+modes at the traffic rate. It reports host CPU, socket rate, and optional
+malloc-family allocation counts. It always creates a private network namespace,
+isolates HOME/all XDG roots and the control endpoint, copies the executable, and
+does not discover/attach to games, open CEF, or modify an installed runtime.
+
+```sh
+python3 tools/ruleset-bench.py \
+  --binary current="$PWD/target/release/vosulay" \
+  --cef-library "$CEF_DIR/Release/libcef.so" \
+  --output "$PWD/target/autoresearch-vm/rulesets/native"
+```
+
+Install Python's `aiohttp` into your own virtual environment first. `CEF_DIR` is
+the verified pinned minimal SDK directory containing `Release` and `Resources`.
+Repeat `--binary LABEL=PATH` to compare builds; add `--legacy LABEL` for a binary
+predating tool protocol support. The stand-in does not emulate the backend's
+memory-reading/pp cost: check that separately in vosu's state-worker cadence
+fixtures. A low-cost selector such as `/settings/mode` must not accelerate game
+memory capture merely because it has a change-notification subscriber.
+
+`tools/cef/manager-bench.py` runs the real embedded manager assets through CEF OSR
+at 2560×1440 with a requested 60 fps limit, both normally and with editing visible.
+Two distant counters consume the same realistic selected-field traffic. It records
+actual paint delivery intervals/damage, main-process and process-tree CPU per
+paint, pump stalls, manager long tasks, and steady iframe reloads. It fails if
+counters never render or reload during steady traffic. `--check` additionally
+requires fewer than 5% full-frame paints; comparative runs retain that condition
+as `partial_paint_guard` so an expensive baseline can still be measured. The
+wrapper creates private PID/IPC/network/tmp namespaces and Xvfb, strips desktop
+variables, exposes no GPU devices, and explicitly requests SwiftShader for CEF.
+It does not exercise injection, game presentation, or hardware CEF composition.
+
+```sh
+python3 tools/cef/manager-bench.py \
+  --binary current="$PWD/target/release/examples/manager_bench" \
+  --cef-dir "$CEF_DIR" --xvfb /usr/bin/Xvfb \
+  --output "$PWD/target/autoresearch-vm/rulesets/cef"
+```
+
+For allocation evidence on Linux/glibc, compile the optional probe with
+`cc -shared -fPIC -O2 tools/cef/allocation-probe.c -o /absolute/task/path/alloc.so`
+and pass `--allocation-probe /absolute/task/path/alloc.so` to either runner.
+Use the same probe for every compared build. These are malloc-family
+calls/requested bytes, not all Chromium PartitionAlloc, mmap, or GPU allocations.
+Keep raw JSONL/logs and describe measurement domains separately: native broker
+overhead, software CEF painting, and the hardware upload benchmark are not
+interchangeable frame-time or latency measurements.
+
+
 ## Coverage and manual boundaries
 
 - `src/config.rs`, `tests/tosu_migration.rs`: defaults, normalization (including `vosu_profile` pins), persistence, safe/idempotent imports.
@@ -73,6 +132,8 @@ It isolates the game-side cost. Chromium's own rendering and readback, and real 
 - `src/backend/tests.rs`, `src/backend/credential.rs`, `src/remote/tests_broker.rs`, `src/remote/manage.rs`: shared schemas, independent filters/commands, backend key order in filtered projections, precise subscription relays, which sockets carry vosu's broker token and its reread-once/drop handling, token file matching, HTTP snapshot/proxy behavior, manage-host gating.
 - `src/runtime/editor.rs`, `src/runtime/control.rs`, `src/runtime/signals.rs`: manage-page message allowlist, local-file grant checks and broadcasts; control protocol bounds and peer credentials; an exit signal after a foreign handler took over requests a graceful exit and a second one ends the process.
 - `src/ruleset.rs`, `src/runtime/editor/rulesets.rs`, `src/remote.rs::profile_follow_tests`: selected-field subscription, valid/removed/unsupported rulesets, automatic profile persistence without overriding manual selection on repeated or reconnected samples, and URL-selected profile pinning. Browser smoke should also cover binding controls disappearing when the field is absent, both editor themes, embedded fonts, and an open profile picker surviving unchanged state polls.
+  The worker queue-barrier regression also feeds 10,000 identical modes and asserts
+  no UI replies, config writes/revision changes, or loss of a manual selection.
 - `src/remote.rs`, `src/shell_policy.rs`: peer/authority/origin restrictions, pinned counter URLs on the view-only page, local capability/path confinement.
 - `crates/frame-transport/`, `crates/overlay-linux/tests/`: transport ownership and loader/input/late-attach fixtures.
 - `crates/platform-windows/src/target_selection.rs`: focus-driven target selection, including tests available on Linux.
