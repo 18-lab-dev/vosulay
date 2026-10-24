@@ -234,4 +234,65 @@ mod tests {
         }
         worker.join().unwrap();
     }
+
+    #[test]
+    fn identical_samples_do_not_wake_rendering_or_reapply_manual_selection() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.json");
+        let mut config = AppConfig::default();
+        config.profiles.push(Profile {
+            id: "mania".into(),
+            name: "Mania".into(),
+            overlays: vec![],
+            ruleset: Some(Ruleset::Mania),
+        });
+        save_to_path(&config, &path).unwrap();
+        let resources = Arc::new(ProductResources::new(&config).unwrap());
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let backend = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
+        let mut worker =
+            super::super::EditorWorker::start(config, path.clone(), backend, resources).unwrap();
+        // Exercise the actual FIFO task worker deterministically, without racing
+        // WebSocket delivery or requiring the host event loop/CEF to be running.
+        worker.rulesets.take().unwrap().join().unwrap();
+        let sender = worker.tx.lock().unwrap().as_ref().unwrap().clone();
+        let editor = worker.manage_editor();
+        sender.send(Task::Ruleset(Some(Ruleset::Mania))).unwrap();
+        let initial = editor.state().unwrap();
+        assert_eq!(initial["config"]["active_profile"], "mania");
+        assert_eq!(initial["revision"], 1);
+        let mut manual = initial["config"].clone();
+        manual["active_profile"] = json!("default");
+        editor
+            .message(json!({
+                "type":"save-config","save_id":"manual","config":manual,
+                "base_revision":initial["revision"]
+            }))
+            .unwrap();
+        while worker.next_reply().is_some() {}
+        let before = std::fs::metadata(&path).unwrap().modified().unwrap();
+        for _ in 0..10_000 {
+            sender.send(Task::Ruleset(Some(Ruleset::Mania))).unwrap();
+        }
+        // State is a queue barrier: every repeated task has completed before it
+        // replies, so an immediate empty reply queue is a meaningful assertion.
+        let after = editor.state().unwrap();
+        assert_eq!(after["config"]["active_profile"], "default");
+        assert_eq!(after["revision"], 2);
+        assert!(
+            worker.next_reply().is_none(),
+            "identical modes must not publish UI replies"
+        );
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().modified().unwrap(),
+            before
+        );
+        worker.stop();
+        drop(sender);
+        while !worker.finished() {
+            while worker.next_reply().is_some() {}
+            thread::sleep(Duration::from_millis(1));
+        }
+        worker.join().unwrap();
+    }
 }

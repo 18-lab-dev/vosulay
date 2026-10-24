@@ -78,3 +78,7 @@ debug = true
 [profile.release.build-override]
 opt-level = 3
 codegen-units = 16
+
+[[example]]
+name = "manager_bench"
+required-features = ["cef-host"]
