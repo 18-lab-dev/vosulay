@@ -62,6 +62,9 @@ class Fixture:
                     else:
                         await ws.send_json({'settings': {'mode': mode}, 'beatmap': beatmap, 'play': play})
                         self.messages += 1
+                    if self.rate == 0:
+                        await reader
+                        break
                     deadline += 1 / self.rate
                     await asyncio.sleep(max(0, deadline - asyncio.get_running_loop().time()))
             except (ConnectionError, RuntimeError, asyncio.CancelledError):
