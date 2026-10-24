@@ -74,9 +74,27 @@ On Linux, CEF's external message pump runs only Chromium's task queue, so [crate
 
 Production uses CEF's internal damage-driven OSR clock. Automatic FPS follows the selected game display's refresh, divided down to 60-120 fps; a fixed setting or CLI override caps the browser, not game presents. A message-pump wake does not request a repaint. Unchanged pages need not publish continuous frames. Game presentation and browser scheduling are independent clocks; the consumer uses the newest complete frame rather than queueing every produced update.
 
+While the attached game's editor is visible, the browser uses the lower of the
+resolved limit and 30 fps. Leaving edit mode immediately restores the game
+overlay's resolved limit; neither transition changes the saved setting.
+The cap is a maximum, not a repaint timer: an idle editor remains damage-driven.
+
 ### Linux
 
 CEF retains Chromium GPU acceleration, but publishes final CPU BGRA pixels into a sealed persistent three-slot memfd ring in [crates/frame-transport](../crates/frame-transport/). Slots contain complete snapshots; damage accumulates per slot, including dropped paints. Identical successful publications can be skipped. Owned read leases keep the mapping alive through uploads and disconnects. The header also keeps a 64-entry seqlock history of each publication's changed rectangle, so a consumer can combine the damage since the frame its texture holds.
+
+BGRA delivery does not mean software rasterization: the production Linux browser
+keeps Chromium's GPU compositor enabled and reads its final image back for
+`OnPaint`. The benchmark's default forced-SwiftShader path instead models no
+usable GPU. Its explicit hardware mode exercises GPU composition plus the same
+BGRA delivery, without attaching to a game.
+
+The pinned CEF 154 headers also describe Linux native-pixmap planes for
+`OnAcceleratedPaint`, but vosulay does not implement that transport. CEF's pooled
+handles may not be retained after the callback; a safe Linux accelerated path
+would need owned-image copies, synchronization and compatible cross-process
+imports. Merely enabling shared textures would bypass the implemented BGRA
+callback, not provide acceleration.
 
 The injected [compositor](../crates/overlay-linux/) acquires the newest complete frame at present and uploads only the regions changed since the frame its texture holds. Damage stays as separate rectangles end to end: CEF's dirty rectangles (up to eight; beyond that the pair whose bounding box adds least area merges) travel through the frame ring's history as one sequence number per rectangle, so counters far apart no longer upload their bounding box. A compositor or host from before this unions those entries into the bounding box, so a mismatched pair stays correct (GL: the changed rows are copied into a pixel unpack buffer and uploaded from it, since uploads from process memory serialized each large copy into the game's frame on NVIDIA; Vulkan: staging buffer and buffer-to-image region); a new ring generation, lost texture, or a gap beyond the history window uploads the full frame. The transfer is bound by the GPU's PCIe link (about 2 ms for a full 1440p frame on a Gen4 x4 link). For EGL games ([`gl/upload.rs`](../crates/overlay-linux/src/gl/upload.rs)) a thread with its own context, sharing objects with the game's, uploads into a staging texture and fences it; the game's swap polls the fence without waiting and copies only the changed rectangle into the displayed texture on the GPU (`glCopyImageSubData`), so the game's frames no longer wait behind the transfer. GLX games (a share context would need the game's Xlib `Display` from another thread), contexts without `glCopyImageSubData`, and `VOSULAY_OVERLAY_ASYNC_UPLOAD=0` keep the in-stream upload. `tools/overlay-upload-bench.py` measures both (see [testing](testing.md)). It hooks Vulkan presentation and EGL/GLX/SDL swaps. The leading [lookup helper](../crates/overlay-lookup/) handles explicit library symbol lookups. Launch-time preload/layer attachment is available when same-user live injection is restricted. X11 focus comes from a separate XCB connection on its own thread; a surface counts as focused when X focus is on its window or on any window carrying this process's `_NET_WM_PID`, because Wine renders into an offscreen client window while its visible top-level holds focus.
 

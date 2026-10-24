@@ -12,13 +12,42 @@ from pathlib import Path
 import runpy
 import selectors
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
 
-from aiohttp import web
+from aiohttp import ClientError, ClientSession, WSMsgType, web
 
 SUPPORT = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'ruleset-bench.py'))
+
+async def capture_layers(port, destination):
+    async with ClientSession() as client:
+        deadline = asyncio.get_running_loop().time() + 10
+        while True:
+            try:
+                async with client.get(f'http://127.0.0.1:{port}/json/list') as reply:
+                    targets = await reply.json()
+                target = next(t for t in targets if t.get('type') == 'page')
+                break
+            except (ClientError, OSError, ValueError, StopIteration):
+                if asyncio.get_running_loop().time() >= deadline:
+                    raise RuntimeError('CEF DevTools endpoint did not become ready')
+                await asyncio.sleep(.05)
+        layers, paints = [], []
+        async with client.ws_connect(target['webSocketDebuggerUrl']) as ws:
+            await ws.send_json({'id': 1, 'method': 'LayerTree.enable'})
+            async for message in ws:
+                if message.type != WSMsgType.TEXT:
+                    continue
+                event = json.loads(message.data)
+                if event.get('method') == 'LayerTree.layerTreeDidChange':
+                    layers = event['params'].get('layers', [])
+                elif event.get('method') == 'LayerTree.layerPainted':
+                    paints.append(event['params'])
+        if not layers:
+            raise RuntimeError('CEF returned no compositor layer tree')
+        destination.write_text(json.dumps({'layers': layers, 'paints': paints}, indent=2))
 
 
 async def measure(args, label, binary, editing, repetition, display):
@@ -32,10 +61,17 @@ async def measure(args, label, binary, editing, repetition, display):
             directory = root / key.lower()
             directory.mkdir(mode=0o700)
             environment[key] = str(directory)
-        environment.update(DISPLAY=display, XDG_SESSION_TYPE='x11', LIBGL_ALWAYS_SOFTWARE='1',
-                           GALLIUM_DRIVER='llvmpipe', LP_NUM_THREADS='2')
-        environment.update(__EGL_VENDOR_LIBRARY_FILENAMES='/usr/share/glvnd/egl_vendor.d/50_mesa.json',
-                           __GLX_VENDOR_LIBRARY_NAME='mesa')
+        environment.update(DISPLAY=display, XDG_SESSION_TYPE='x11')
+        if args.gpu:
+            for key in ('LIBGL_ALWAYS_SOFTWARE', 'GALLIUM_DRIVER', '__EGL_VENDOR_LIBRARY_FILENAMES', '__GLX_VENDOR_LIBRARY_NAME'):
+                environment.pop(key, None)
+            environment.update(VK_DRIVER_FILES=str(args.vulkan_icd), VK_ICD_FILENAMES=str(args.vulkan_icd))
+        else:
+            environment.update(LIBGL_ALWAYS_SOFTWARE='1', GALLIUM_DRIVER='llvmpipe', LP_NUM_THREADS='2',
+                               __EGL_VENDOR_LIBRARY_FILENAMES='/usr/share/glvnd/egl_vendor.d/50_mesa.json',
+                               __GLX_VENDOR_LIBRARY_NAME='mesa')
+        environment['__GL_SHADER_DISK_CACHE_PATH'] = str(root / 'xdg_cache_home' / 'nvidia')
+        environment['MESA_SHADER_CACHE_DIR'] = str(root / 'xdg_cache_home' / 'mesa')
         allocations = root / 'allocations'
         allocations.mkdir()
         if args.allocation_probe:
@@ -47,7 +83,7 @@ async def measure(args, label, binary, editing, repetition, display):
                 if not (runtime / asset.name).exists():
                     (runtime / asset.name).symlink_to(asset)
         shutil.copy2(binary, runtime / 'manager_bench')
-        fixture = SUPPORT['Fixture'](args.rate, False)
+        fixture = SUPPORT['Fixture'](0 if args.idle else args.rate, False)
         application = web.Application()
         application.router.add_route('*', '/{path:.*}', fixture.handle)
         runner = web.AppRunner(application)
@@ -58,7 +94,30 @@ async def measure(args, label, binary, editing, repetition, display):
         log_path = args.output / f'{label}-{int(editing)}-{repetition}.log'
         command = [str(runtime / 'manager_bench'), '--cef-dir', str(runtime), '--cache', str(root / 'cache'),
                    '--backend', backend, '--seconds', str(args.seconds), '--ozone-platform=x11',
-                   '--use-gl=angle', '--use-angle=swiftshader']
+                   '--use-gl=angle', '--use-angle=vulkan' if args.gpu else '--use-angle=swiftshader']
+        if args.gpu:
+            command += ['--enable-features=Vulkan', '--disable-vulkan-surface']
+        if args.fps:
+            command += ['--fps', str(args.fps)]
+        if args.theme:
+            command += ['--theme', args.theme]
+        if args.css:
+            command += ['--css', str(args.css)]
+        if args.idle:
+            command.append('--idle')
+        if args.screenshot:
+            command += ['--screenshot', str(args.output / f'{label}-{int(editing)}-{repetition}.bgra')]
+        if args.trace:
+            command += ['--trace-startup', '--trace-startup-duration=4',
+                        '--trace-startup-format=json',
+                        f'--trace-startup-file={args.output / f"{label}-{int(editing)}-{repetition}.trace.json"}',
+                        '--trace-startup-categories=cc,gpu,viz,blink,devtools.timeline,disabled-by-default-cc.debug,disabled-by-default-devtools.timeline.layers']
+        debugger_port = None
+        if args.layers:
+            with socket.socket() as listener:
+                listener.bind(('127.0.0.1', 0))
+                debugger_port = listener.getsockname()[1]
+            command.append(f'--remote-debugging-port={debugger_port}')
         if editing:
             command.append('--editing')
         if args.check:
@@ -66,17 +125,28 @@ async def measure(args, label, binary, editing, repetition, display):
         with log_path.open('wb') as log:
             process = await asyncio.create_subprocess_exec(*command, env=environment, cwd=root,
                                                           stdout=log, stderr=log)
+            layers_task = asyncio.create_task(capture_layers(debugger_port, args.output / f'{label}-{int(editing)}-{repetition}.layers.json')) if debugger_port else None
             try:
                 await asyncio.wait_for(process.wait(), timeout=35)
                 if process.returncode:
                     raise RuntimeError(f'manager benchmark failed ({process.returncode}): {log_path.read_text(errors="replace")}')
+                if layers_task:
+                    await asyncio.wait_for(layers_task, timeout=3)
                 record = next(json.loads(line) for line in reversed(log_path.read_text().splitlines()) if line.startswith('{'))
+                if args.gpu:
+                    renderer = (record.get('renderer', {}).get('gpu') or {}).get('renderer', '')
+                    if not renderer or any(name in renderer.lower() for name in ('swiftshader', 'llvmpipe', 'software')):
+                        raise RuntimeError(f'hardware GPU unavailable; refusing software fallback: {renderer!r}')
+                record['gpu_pci'] = args.gpu
                 record.update(revision=label, repetition=repetition, subscriptions=fixture.fields,
                               fixture_socket_messages=fixture.messages)
                 print(json.dumps(record), flush=True)
                 with (args.output / 'cef.jsonl').open('a') as output:
                     output.write(json.dumps(record) + '\n')
             finally:
+                if layers_task and not layers_task.done():
+                    layers_task.cancel()
+                    await asyncio.gather(layers_task, return_exceptions=True)
                 if process.returncode is None:
                     process.terminate()
                     try:
@@ -119,7 +189,7 @@ async def inside(args):
                 display = ':' + number
             os.close(read_fd)
             for repetition in range(args.reps):
-                for editing in (False, True):
+                for editing in ((False, True) if args.mode == 'all' else (args.mode == 'editing',)):
                     for value in args.binary:
                         label, path = value.split('=', 1)
                         await measure(args, label, Path(path), editing, repetition, display)
@@ -140,13 +210,37 @@ if __name__ == '__main__':
     parser.add_argument('--rate', type=float, default=150)
     parser.add_argument('--seconds', type=float, default=6)
     parser.add_argument('--reps', type=int, default=2)
+    parser.add_argument('--mode', choices=('all', 'normal', 'editing'), default='all')
+    parser.add_argument('--idle', action='store_true')
+    parser.add_argument('--fps', type=int)
+    parser.add_argument('--theme', choices=('dark', 'light'))
+    parser.add_argument('--css', type=Path, help='Controlled CSS ablation; not a product setting')
+    parser.add_argument('--screenshot', action='store_true', help='Save one measured 2560x1440 BGRA frame')
+    parser.add_argument('--trace', action='store_true', help='Capture Chromium startup/steady tracing')
+    parser.add_argument('--layers', action='store_true', help='Capture native CEF compositor layers through private DevTools')
+    parser.add_argument('--gpu', help='Explicit PCI BDF; otherwise force SwiftShader with no GPU nodes')
+    parser.add_argument('--vulkan-icd', type=Path, help='Explicit hardware Vulkan ICD, required with --gpu')
     parser.add_argument('--inside', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--outer-netns', help=argparse.SUPPRESS)
     args = parser.parse_args()
-    for key in ('cef_dir', 'xvfb', 'output', 'allocation_probe'):
+    for key in ('cef_dir', 'xvfb', 'output', 'allocation_probe', 'css', 'vulkan_icd'):
         if (path := getattr(args, key)) is not None:
             setattr(args, key, path.resolve())
     args.output.mkdir(parents=True, exist_ok=True)
+    nodes = []
+    if args.gpu:
+        if not args.vulkan_icd:
+            parser.error('--gpu requires --vulkan-icd')
+        device = Path('/sys/bus/pci/devices') / args.gpu
+        render = list((device / 'drm').glob('renderD*'))
+        if len(render) != 1:
+            parser.error('GPU must resolve to exactly one render node')
+        nodes = ['/dev/dri/' + render[0].name]
+        info = Path('/proc/driver/nvidia/gpus') / args.gpu / 'information'
+        if info.exists():
+            minor = next(line.split(':', 1)[1].strip() for line in info.read_text().splitlines() if line.startswith('Device Minor:'))
+            nodes += ['/dev/nvidia' + minor, '/dev/nvidiactl', '/dev/nvidia-uvm', '/dev/nvidia-modeset']
+        (args.output / 'gpu-isolation.json').write_text(json.dumps({'pci': args.gpu, 'nodes': nodes, 'vulkan_icd': str(args.vulkan_icd)}, indent=2))
     if args.inside:
         asyncio.run(inside(args))
     else:
@@ -155,6 +249,9 @@ if __name__ == '__main__':
                    'setpriv', '--inh-caps=-all', '--ambient-caps=-all',
                    'bwrap', '--die-with-parent', '--unshare-pid', '--unshare-ipc',
                    '--ro-bind', '/', '/', '--tmpfs', '/tmp', '--bind', str(args.output.parent), str(args.output.parent),
-                   '--proc', '/proc', '--dev', '/dev', sys.executable, str(Path(__file__).resolve()),
-                   *sys.argv[1:], '--inside', '--outer-netns', os.readlink('/proc/self/ns/net')]
+                   '--proc', '/proc', '--dev', '/dev', '--dir', '/dev/dri']
+        for node in nodes:
+            command += ['--dev-bind', node, node]
+        command += [sys.executable, str(Path(__file__).resolve()),
+                    *sys.argv[1:], '--inside', '--outer-netns', os.readlink('/proc/self/ns/net')]
         subprocess.run(command, check=True, timeout=300)

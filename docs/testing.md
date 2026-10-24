@@ -97,16 +97,42 @@ fixtures. A low-cost selector such as `/settings/mode` must not accelerate game
 memory capture merely because it has a change-notification subscriber.
 
 `tools/cef/manager-bench.py` runs the real embedded manager assets through CEF OSR
-at 2560×1440 with a requested 60 fps limit, both normally and with editing visible.
-Two distant counters consume the same realistic selected-field traffic. It records
-actual paint delivery intervals/damage, main-process and process-tree CPU per
-paint, pump stalls, manager long tasks, and steady iframe reloads. It fails if
-counters never render or reload during steady traffic. `--check` additionally
-requires fewer than 5% full-frame paints; comparative runs retain that condition
-as `partial_paint_guard` so an expensive baseline can still be measured. The
-wrapper creates private PID/IPC/network/tmp namespaces and Xvfb, strips desktop
-variables, exposes no GPU devices, and explicitly requests SwiftShader for CEF.
-It does not exercise injection, game presentation, or hardware CEF composition.
+at 2560×1440: 60 fps normally and the production 30 fps editor maximum when
+editing is visible. `--fps 60` reproduces the former editor policy for a
+single-variable comparison. Two distant counters consume the same realistic
+selected-field traffic. It records actual paint delivery intervals/damage,
+main-process and process-tree CPU per paint and per second, pump stalls, manager
+long tasks and steady iframe reloads. Intervals longer than 1.5 requested periods
+are counted separately; they are delayed **CEF delivery intervals**, not proof
+of dropped game/display frames. It fails if counters never render or reload
+during steady traffic. `--idle` stops counter traffic after the initial state;
+per-paint values become `null` when no paint arrives. `--check` additionally
+requires fewer than 5% full-frame paints and zero idle paints after warmup.
+Comparative runs retain `partial_paint_guard` so an expensive baseline can still
+be measured.
+
+The wrapper creates private network/PID/IPC/tmp namespaces and Xvfb, strips
+desktop variables, isolates HOME/all XDG roots and shader caches, and exposes
+no GPU devices by default. This default explicitly requests SwiftShader: it is
+the **no usable GPU fallback**, not production Linux BGRA rendering.
+
+For the production-shaped Linux GPU-compositor → CPU-BGRA-readback path, pass
+`--gpu <PCI-BDF> --vulkan-icd /absolute/path/to/the/hardware_icd.json`.
+The wrapper exposes only that device's render node and matching NVIDIA nodes
+where applicable. The benchmark explicitly selects ANGLE/Vulkan and refuses a
+missing/software WebGL renderer, instead of silently measuring a fallback.
+Use an authorized spare GPU, never the user's active desktop GPU. Hold the
+shared GPU and constrained-CPU locks used by other benchmarks in the environment;
+constrain CPUs/memory on the outer runner when comparing hardware profiles.
+This private Xvfb run does not exercise injection, game presentation or Windows
+shared-texture OSR. Its CPU numbers are process-time costs, not display latency.
+
+`--trace` saves native Chromium startup/steady traces. `--layers` saves the
+root renderer's compositor layer geometry and paint counts through DevTools
+inside the private namespace; child-renderer raster work is visible in tracing.
+`--css <file>` injects a controlled CSS ablation without changing shipped assets.
+`--screenshot` saves the first measured 2560×1440 BGRA paint; `--theme dark|light`
+selects the editor theme. Keep diagnostic runs separate from timing runs.
 
 ```sh
 python3 tools/cef/manager-bench.py \
@@ -114,6 +140,40 @@ python3 tools/cef/manager-bench.py \
   --cef-dir "$CEF_DIR" --xvfb /usr/bin/Xvfb \
   --output "$PWD/target/autoresearch-vm/rulesets/cef"
 ```
+
+Example measured limits (CEF 154, 2560×1440, two distant 600×200 counters,
+150 updates/s, one six-second active sample per policy, 2026-10-24):
+
+| Renderer / CPU allowance | CPU ms / delivered paint, 60 → 30 fps policy | Delivered paints/s, before → after | Process-tree CPU ms/s, before → after |
+| --- | ---: | ---: | ---: |
+| Spare RTX 5090 / unrestricted | 4.78 → 6.17 | 59.97 → 29.95 | 287 → 185 |
+| Spare RTX 5090 / 2 cores, 4 threads, 8 GiB | 3.89 → 4.94 | 59.97 → 29.96 | 233 → 148 |
+| Radeon 610M / unrestricted | 7.73 → 7.89 | 60.13 → 29.99 | 465 → 237 |
+| Radeon 610M / 2 cores, 4 threads, 8 GiB | 7.69 → 7.83 | 59.98 → 30.00 | 461 → 235 |
+| Forced SwiftShader / unrestricted | 122.96 → 122.22 | 60.15 → 29.98 | 7396 → 3664 |
+| Forced SwiftShader / 6 cores, 12 threads, 16 GiB | 89.72 → 89.72 | 59.90 → 29.95 | 5374 → 2687 |
+| Forced SwiftShader / 2 cores, 4 threads, 8 GiB | 647.50 → 158.15 | 3.33 → 13.50 | 2155 → 2135 |
+
+All seven idle cases delivered zero paints after warmup, before and after.
+The cap reduces work per second, not the cost of composing each paint; the
+constrained no-GPU fallback remains CPU-bound and does **not** sustain 30 fps.
+Do not extrapolate these fixture costs to game/display latency or another CPU.
+The native root-renderer layer dump contained 11 layers: two 2560×1440 content
+layers were cached (paint counts 2 and 1), plus the counter/border/toolbar layers;
+the capture saw no root-renderer repaint events. Grid/background/chrome ablations
+therefore do not justify replacing the editor's visual design.
+
+Linux's accelerated OSR transport remains a known limitation:
+the pinned CEF exposes native-pixmap handles, but vosulay implements CPU BGRA
+delivery, not owned GPU-image imports/copies and synchronization. The example's
+GPU-composed editor cost was roughly 4–8 process-tree CPU ms per paint; a
+diagnostic RTX trace recorded 137 ms across 222 thread-side `CopyOutput` spans
+(0.62 ms/span). Those elapsed trace scopes can include waiting/preemption:
+they are **not** CPU accounting, complete asynchronous readback, or game latency.
+Enabling shared textures alone is not a
+safe fix; see [frame ownership](architecture.md#linux). Windows already uses
+borrowed D3D11 callback textures copied into owned textures and is not measured
+by this Linux harness.
 
 For allocation evidence on Linux/glibc, compile the optional probe with
 `cc -shared -fPIC -O2 tools/cef/allocation-probe.c -o /absolute/task/path/alloc.so`

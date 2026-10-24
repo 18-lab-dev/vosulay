@@ -233,6 +233,13 @@ fn frame_rate(cli: Option<u32>, configured: u32, refresh_hz: f64) -> f64 {
     }
 }
 
+/// Editing is an interaction surface, not a high-refresh game counter. Keep the
+/// resolved game limit intact so leaving edit mode restores it immediately.
+pub fn presentation_frame_rate(resolved_fps: f64, editing: bool) -> u32 {
+    let fps = resolved_fps.ceil() as u32;
+    if editing { fps.min(30) } else { fps }
+}
+
 fn receive(browser: &vosulay_browser::OsrBrowser, envelope: &serde_json::Value) -> Result<()> {
     browser.evaluate(&format!(
         "window.__VOSULAY_RECEIVE__({});",
@@ -268,6 +275,14 @@ pub unsafe extern "C" fn RunWinMain(
 #[cfg(test)]
 mod fps_tests {
     use super::*;
+    #[test]
+    fn editor_cap_preserves_lower_limits_and_restores_game_rate() {
+        assert_eq!(presentation_frame_rate(120.0, false), 120);
+        assert_eq!(presentation_frame_rate(120.0, true), 30);
+        assert_eq!(presentation_frame_rate(20.0, true), 20);
+        assert_eq!(presentation_frame_rate(59.94, false), 60);
+        assert_eq!(presentation_frame_rate(120.0, false), 120);
+    }
     #[test]
     fn control_and_server_only_argument_conflicts() {
         for arguments in [

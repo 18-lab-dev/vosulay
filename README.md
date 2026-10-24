@@ -512,6 +512,12 @@ stored as `settings.fps_limit: 0`) or a **Fixed** integer cap. Saving applies it
 to the active browser immediately; no restart is required. Fixed caps stay fixed
 when the target moves between displays; Automatic follows the target display's refresh, divided as above.
 
+The in-game editor has its own 30 fps maximum while visible (a lower configured
+limit still wins). Closing the editor restores the overlay's normal limit
+immediately without changing your setting. This bounds editor composition and
+Linux pixel readback while leaving the game's frame rate alone. An idle editor
+does not repaint continuously.
+
 Use `--fps-limit auto` (or `--fps-limit 0`) to select automatic mode explicitly,
 or a positive integer to set a fixed cap:
 

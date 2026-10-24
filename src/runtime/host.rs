@@ -357,7 +357,7 @@ impl Host<'_> {
                 width: self.viewport.width,
                 height: self.viewport.height,
                 scale: self.viewport.scale,
-                fps_limit: self.effective_fps.ceil() as u32,
+                fps_limit: super::presentation_frame_rate(self.effective_fps, self.editing),
                 shared_texture: cfg!(windows),
                 shared_array_buffer: self.shared_array_buffer,
             },
@@ -383,7 +383,10 @@ impl Host<'_> {
     }
     fn apply_fps(&mut self) -> Result<()> {
         if let Some(browser) = self.browser.as_ref() {
-            browser.set_frame_rate(self.effective_fps.ceil() as u32)?;
+            browser.set_frame_rate(super::presentation_frame_rate(
+                self.effective_fps,
+                self.editing,
+            ))?;
         }
         Ok(())
     }
@@ -408,6 +411,7 @@ impl Host<'_> {
             self.platform.set_capture(false)?;
         }
         self.editing = enabled;
+        self.apply_fps()?;
         self.capture_suspended = false;
         self.consumed.fill(false);
         self.suppress_character = false;

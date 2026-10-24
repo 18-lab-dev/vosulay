@@ -34,6 +34,8 @@ mod linux {
     }
     struct Paints {
         active: bool,
+        initial_frames: u64,
+        screenshot: Option<PathBuf>,
         frames: u64,
         damage_pixels: u64,
         full_frames: u64,
@@ -57,6 +59,11 @@ mod linux {
                 damage,
             } = frame;
             let mut paints = self.0.borrow_mut();
+            if !paints.active {
+                paints.initial_frames += 1;
+            } else if let Some(path) = paints.screenshot.take() {
+                std::fs::write(path, pixels)?;
+            }
             if !paints.active {
                 return Ok(());
             }
@@ -165,16 +172,44 @@ mod linux {
         let backend = value("--backend").context("--backend required")?;
         let seconds: f64 = value("--seconds").unwrap_or("6").parse()?;
         let editing = args.iter().any(|arg| arg == "--editing");
+        let idle = args.iter().any(|arg| arg == "--idle");
+        let fps = value("--fps")
+            .map(str::parse::<u32>)
+            .transpose()?
+            .unwrap_or_else(|| vosulay::runtime::presentation_frame_rate(60.0, editing));
         let instrumentation = r#"<script>
             window.__bench={loads:0,longTasks:0,longTaskMs:0};
             new PerformanceObserver(list=>{for(const e of list.getEntries()){__bench.longTasks++;__bench.longTaskMs+=e.duration}}).observe({entryTypes:['longtask']});
             document.addEventListener('load',e=>{if(e.target.tagName==='IFRAME')__bench.loads++},true);
+            document.addEventListener('DOMContentLoaded',()=>{
+                const gl=document.createElement('canvas').getContext('webgl2');
+                const ext=gl?.getExtension('WEBGL_debug_renderer_info');
+                window.__bench_gpu=gl?{renderer:gl.getParameter(ext?ext.UNMASKED_RENDERER_WEBGL:gl.RENDERER),version:gl.getParameter(gl.VERSION)}:null;
+            });
         </script>"#;
-        let document = vosulay::ui::manager_document()
+        let mut document = vosulay::ui::manager_document()
             .replace("</head>", &format!("{instrumentation}</head>"));
+        if let Some(theme) = value("--theme") {
+            ensure!(matches!(theme, "dark" | "light"), "invalid theme");
+            document = document.replace(
+                "<head>",
+                &format!(
+                    "<head><script>window.__VOSULAY_COLOR_SCHEME__={};</script>",
+                    json!(theme)
+                ),
+            );
+        }
+        if let Some(path) = value("--css") {
+            document = document.replace(
+                "</body>",
+                &format!("<style>{}</style></body>", std::fs::read_to_string(path)?),
+            );
+        }
         let resources = Arc::new(Resources(Arc::from(document.into_bytes())));
         let paints = Rc::new(RefCell::new(Paints {
             active: false,
+            initial_frames: 0,
+            screenshot: value("--screenshot").map(PathBuf::from),
             frames: 0,
             damage_pixels: 0,
             full_frames: 0,
@@ -198,7 +233,7 @@ mod linux {
                 width: 2560,
                 height: 1440,
                 scale: 1.0,
-                fps_limit: 60,
+                fps_limit: fps,
                 shared_texture: false,
                 shared_array_buffer: false,
             },
@@ -254,7 +289,7 @@ mod linux {
             }
             if started.is_some_and(|at| at.elapsed().as_secs_f64() >= seconds) && !asked {
                 paints.borrow_mut().active = false;
-                browser.evaluate("window.__VOSULAY_POST_MESSAGE__({type:'benchmark',...__bench,iframes:document.querySelectorAll('iframe').length,editing:document.body.classList.contains('editing'),fonts:document.fonts.status});");
+                browser.evaluate("window.__VOSULAY_POST_MESSAGE__({type:'benchmark',...__bench,iframes:document.querySelectorAll('iframe').length,editing:document.body.classList.contains('editing'),fonts:document.fonts.status,gpu:window.__bench_gpu});");
                 asked = true;
             }
             if report.is_some() {
@@ -277,32 +312,51 @@ mod linux {
         let cpu_ms = (cpu() - cpu_start) * 1000.0;
         let total_cpu_ms = (tree_cpu(std::process::id())? - tree_cpu_start) * 1000.0;
         let allocation_end = allocations()?;
+        let allocation_sampled = std::env::var_os("VOSULAY_PERF_ALLOC_DIR").is_some();
         let mut paints = paints.borrow_mut();
         ensure!(
-            paints.frames > 0 && report.as_ref().is_some_and(|r| r["iframes"] == 2),
+            (idle || paints.frames > 0)
+                && paints.initial_frames > 0
+                && report.as_ref().is_some_and(|r| r["iframes"] == 2),
             "counter frames did not render: {report:?}"
         );
         ensure!(
             report.as_ref().is_some_and(|r| r["loads"] == 0),
             "steady traffic reloaded counter frames"
         );
-        let partial_paints = paints.full_frames * 20 < paints.frames;
+        let partial_paints = paints.frames == 0 || paints.full_frames * 20 < paints.frames;
         ensure!(
             !args.iter().any(|arg| arg == "--check") || partial_paints,
             "steady traffic forced full-frame paints: {}/{}",
             paints.full_frames,
             paints.frames
         );
+        ensure!(
+            !args.iter().any(|arg| arg == "--check") || !idle || paints.frames == 0,
+            "idle editor repainted {} times after warmup",
+            paints.frames
+        );
+        let (paint_max_ms, delayed_intervals) = paints.intervals.iter().copied().fold(
+            (0.0_f64, 0_usize),
+            |(maximum, delayed), interval| {
+                (
+                    maximum.max(interval),
+                    delayed + usize::from(interval > 1500.0 / fps as f64),
+                )
+            },
+        );
+        let per_paint = |value: f64| (paints.frames > 0).then(|| value / paints.frames as f64);
         println!(
             "{}",
-            json!({"seconds":elapsed,"editing":editing,"frames":paints.frames,
-            "paints_per_second":paints.frames as f64/elapsed,"host_cpu_ms_per_frame":cpu_ms/paints.frames as f64,
-            "total_cpu_ms_per_frame":total_cpu_ms/paints.frames as f64,
-            "allocations_per_frame":(allocation_end[0]-allocation_start[0]) as f64/paints.frames as f64,
-            "allocated_bytes_per_frame":(allocation_end[1]-allocation_start[1]) as f64/paints.frames as f64,
-            "dirty_pixels_per_frame":paints.damage_pixels as f64/paints.frames as f64,
+            json!({"seconds":elapsed,"editing":editing,"idle":idle,"fps_limit":fps,"initial_frames":paints.initial_frames,"frames":paints.frames,
+            "paints_per_second":paints.frames as f64/elapsed,"host_cpu_ms_per_frame":per_paint(cpu_ms),
+            "total_cpu_ms_per_frame":per_paint(total_cpu_ms),"host_cpu_ms_per_second":cpu_ms/elapsed,"total_cpu_ms_per_second":total_cpu_ms/elapsed,
+            "allocations_per_frame":if allocation_sampled { per_paint((allocation_end[0]-allocation_start[0]) as f64) } else { None },
+            "allocated_bytes_per_frame":if allocation_sampled { per_paint((allocation_end[1]-allocation_start[1]) as f64) } else { None },
+            "dirty_pixels_per_frame":per_paint(paints.damage_pixels as f64),
             "full_frame_paints":paints.full_frames,"partial_paint_guard":partial_paints,"transparent":paints.transparent,
             "paint_p50_ms":percentile(&mut paints.intervals,0.5),"paint_p99_ms":percentile(&mut paints.intervals,0.99),
+            "paint_max_ms":paint_max_ms,"paint_intervals_over_1_5_period":delayed_intervals,
             "pump_calls":pumps,"pump_p99_ms":percentile(&mut pump_ms,0.99),
             "pump_max_ms":percentile(&mut pump_ms,1.0),"renderer":report})
         );
