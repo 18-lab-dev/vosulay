@@ -12,6 +12,8 @@ mod platform;
 mod target_selection;
 #[cfg(windows)]
 mod tray;
+#[cfg(any(windows, test))]
+mod worker_lifecycle;
 #[cfg(windows)]
 pub use platform::WindowsController;
 

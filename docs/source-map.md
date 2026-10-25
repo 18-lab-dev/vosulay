@@ -32,7 +32,7 @@ together.
 | Linux host platform | [`crates/platform-linux`](../crates/platform-linux) | Focus-driven game selection, discovery, explicit live attachment. |
 | Linux in-game compositor | [`crates/overlay-linux`](../crates/overlay-linux) (`hooks.rs`, `gl.rs`, `vulkan/`, `sdl.rs`, `sdl3.rs`, `x11input.rs`, `xfocus.rs`, `late.rs`, `lookup.rs`), [`VkLayer_vosulay_overlay.json`](../crates/overlay-linux/VkLayer_vosulay_overlay.json) | Injected `libvosulay_overlay.so`: Vulkan layer, EGL/GLX/SDL swap hooks, SDL and Xlib input capture, X11 focus observation. |
 | Linux lookup helper | [`crates/overlay-lookup`](../crates/overlay-lookup) | Leading `libvosulay_lookup.so` that routes explicit `dlsym` lookups to the compositor. |
-| Windows host platform | [`crates/platform-windows`](../crates/platform-windows) | asdf-overlay attachment, D3D11 GPU copies, foreground target selection, tray. |
+| Windows host platform | [`crates/platform-windows`](../crates/platform-windows) | asdf-overlay attachment, D3D11 GPU copies, foreground target selection, tray; `worker_lifecycle.rs` retains command ownership across native worker reconnects. |
 | Native build | [`build.rs`](../build.rs), [`Cargo.toml`](../Cargo.toml), [`rust-toolchain.toml`](../rust-toolchain.toml) | Root crate links the retained CEF runtime and embeds retained compositor/lookup paths. |
 | Linux release packaging | [`packaging/linux/`](../packaging/linux/) | Ubuntu 22.04 container/dependencies, runtime build, nfpm DEB/RPM/Arch metadata and system desktop entry. |
 | Arch source packaging | [`packaging/arch/PKGBUILD`](../packaging/arch/PKGBUILD) | `vosulay-git` AUR build of `main`; downloads the CEF archive pinned in `tools/cef/pins.json`; setuid sandbox. |

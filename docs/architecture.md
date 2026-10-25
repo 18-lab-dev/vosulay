@@ -106,6 +106,14 @@ Authenticated nonblocking `SOCK_SEQPACKET` control hands off the memfd and carri
 
 The Windows OpenGL hook has a maintained, revision-marked override in `tools/asdf/` (see [provenance](provenance.md)). Context discovery and D3D interop creation never hold renderer/surface registry write guards while calling native APIs: those APIs can synchronously re-enter the window procedure during startup/resize. Renderers belong to HGLRCs, not reusable HDCs; callbacks skip composition rather than blocking a busy renderer. Context deletion binds the owner before deleting GL objects and restores the caller's context; a failed bind never runs destructors against another context. Successful context destruction releases its registry/surface state. Disconnect cleans up on the next owning-context swap and forwards the original swap, without requiring a startup delay or intercepting `wglMakeCurrent`.
 
+The controller owns its command receiver outside the restartable native worker.
+An unexpected worker error/panic drops the failing IPC connection, clears capture,
+viewport and pending GPU state, reports the full root error, and restarts discovery
+after a one-second delay. Release-input and shutdown commands remain serviceable
+during reconnect; input cannot be enabled before discovery is ready. The existing
+five-second safety watchdog still bounds live input/RPC failures. Initialization
+failure of the Tokio runtime remains fatal.
+
 
 ## Focus, input, tray, and launch
 

@@ -66,6 +66,7 @@ struct Shared {
     safety_stop: AtomicBool,
     capture: AtomicBool,
     capture_generation: AtomicU64,
+    recovering: AtomicBool,
     gpu: Arc<GpuMailbox>,
     events: Mutex<VecDeque<PlatformEvent>>,
     inputs: Mutex<VecDeque<BrowserInput>>,
@@ -158,6 +159,7 @@ impl WindowsController {
             safety_stop: AtomicBool::new(false),
             capture: AtomicBool::new(false),
             capture_generation: AtomicU64::new(0),
+            recovering: AtomicBool::new(true),
             gpu: Arc::new(GpuMailbox::default()),
             events: Mutex::new(VecDeque::with_capacity(32)),
             inputs: Mutex::new(VecDeque::with_capacity(MAX_INPUTS)),
@@ -190,11 +192,20 @@ impl WindowsController {
                     .build()
                 {
                     Ok(runtime) => {
-                        if let Err(error) =
-                            runtime.block_on(worker_main(options, worker_shared.clone(), rx))
-                        {
-                            worker_shared.fail(format!("{error:#}"));
-                        }
+                        super::worker_lifecycle::supervise(
+                            rx,
+                            || worker_shared.stop.load(Ordering::Acquire),
+                            |commands| {
+                                runtime
+                                    .block_on(worker_main(
+                                        &options,
+                                        worker_shared.clone(),
+                                        commands,
+                                    ))
+                                    .map_err(|error| format!("{error:#}"))
+                            },
+                            |cause, commands| recover_worker(cause, commands, &worker_shared),
+                        );
                         runtime.shutdown_timeout(Duration::from_secs(1));
                     }
                     Err(error) => {
@@ -312,6 +323,11 @@ impl WindowsController {
         self.capture_with_timeout(false, until.saturating_duration_since(Instant::now()))
     }
     fn capture_with_timeout(&self, enabled: bool, timeout: Duration) -> Result<()> {
+        if self.shared.recovering.load(Ordering::Acquire) {
+            ensure!(!enabled, "native overlay worker is reconnecting");
+            self.shared.input_capture(false);
+            return Ok(());
+        }
         if enabled {
             ensure!(
                 self.game_focused(),
@@ -665,13 +681,54 @@ async fn disconnect(current: &mut Option<Connection>, shared: &Shared) -> Result
     Ok(())
 }
 
+fn recover_worker(cause: &str, commands: &Receiver<Command>, shared: &Shared) {
+    // worker_main's connection has already dropped: its reader is aborted and its
+    // pipe closes, releasing native input even when the failing RPC had no ACK.
+    shared.recovering.store(true, Ordering::Release);
+    shared.input_capture(false);
+    *shared.gpu.binding.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    shared
+        .gpu
+        .update
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
+    *shared.viewport.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    eprintln!("vosulay native worker restarting: {cause}");
+    shared.emit(PlatformEvent::Detached);
+    shared.emit(PlatformEvent::Warning(format!(
+        "Native overlay connection reset; reconnecting: {cause}"
+    )));
+    let until = Instant::now() + Duration::from_secs(1);
+    while !shared.stop.load(Ordering::Acquire) {
+        let remaining = until.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        match commands.recv_timeout(remaining) {
+            Ok(Command::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                shared.stop.store(true, Ordering::Release);
+            }
+            Ok(Command::Capture(enabled, reply)) => {
+                let _ = reply.send(if enabled {
+                    Err(anyhow!("native overlay worker is reconnecting: {cause}"))
+                } else {
+                    Ok(())
+                });
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => break,
+        }
+    }
+}
+
 async fn worker_main(
-    options: WindowsOptions,
+    options: &WindowsOptions,
     shared: Arc<Shared>,
-    commands: Receiver<Command>,
+    commands: &Receiver<Command>,
 ) -> Result<()> {
     let mut current: Option<Connection> = None;
     let focus = ForegroundEvents::start(options.clone(), shared.gpu.clone())?;
+    shared.recovering.store(false, Ordering::Release);
     let mut generation = 0;
     let mut retry_attach = None;
     let mut last_viewport = None;

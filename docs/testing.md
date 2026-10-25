@@ -196,6 +196,7 @@ interchangeable frame-time or latency measurements.
   The worker queue-barrier regression also feeds 10,000 identical modes and asserts
   no UI replies, config writes/revision changes, or loss of a manual selection.
 - `src/remote.rs`, `src/shell_policy.rs`: peer/authority/origin restrictions, pinned counter URLs on the view-only page, local capability/path confinement.
+- `crates/platform-windows/src/worker_lifecycle.rs`: command-receiver ownership across an error/panic and normal shutdown without restart. These portable tests do not establish native IPC/game recovery; exercise that on authorized Windows.
 - `crates/frame-transport/`, `crates/overlay-linux/tests/`: transport ownership and loader/input/late-attach fixtures.
 - `crates/platform-windows/src/target_selection.rs`: focus-driven target selection, including tests available on Linux.
 
