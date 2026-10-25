@@ -48,7 +48,7 @@ def collect(root=ROOT, targets=TARGETS, include_workspace=False):
 
 
 def collect_asdf():
-    pin = json.loads((ROOT / "tools/notices/overrides.json").read_text())["_asdf_source"]
+    pin = json.loads((ROOT / "tools/notices/overrides.json").read_text(encoding="utf-8"))["_asdf_source"]
     data = urllib.request.urlopen(pin["url"], timeout=120).read()
     if hashlib.sha256(data).hexdigest() != pin["sha256"]:
         raise ValueError("asdf-overlay source archive SHA-256 mismatch")
@@ -61,10 +61,10 @@ def collect_asdf():
                 raise ValueError(f"unsafe upstream archive member: {member.name}")
         archive.extractall(temporary.name)
     root = Path(temporary.name) / ("asdf-overlay-" + pin["commit"])
-    if (root / ".gitmodules").read_text().strip():
+    if (root / ".gitmodules").read_text(encoding="utf-8").strip():
         raise ValueError("asdf-overlay submodules changed; audit their compiled code and licenses")
-    native = json.loads((ROOT / "tools/notices/overrides.json").read_text())["_frida_native"]
-    if (root / "crates/hook/FRIDA_VERSION").read_text().strip() != native["version"]:
+    native = json.loads((ROOT / "tools/notices/overrides.json").read_text(encoding="utf-8"))["_frida_native"]
+    if (root / "crates/hook/FRIDA_VERSION").read_text(encoding="utf-8").strip() != native["version"]:
         raise ValueError("asdf-overlay Frida devkit version changed; refresh native license inventory")
     graphs = {}
     union = {}
@@ -104,7 +104,7 @@ def license_files(package):
     if package["license_file"]:
         files.add(directory / package["license_file"])
     if not files:
-        overrides = json.loads((ROOT / "tools/notices/overrides.json").read_text())
+        overrides = json.loads((ROOT / "tools/notices/overrides.json").read_text(encoding="utf-8"))
         entries = overrides.get(package["name"] + "@" + package["version"], [])
         directory = ROOT / "tools/notices"
         for entry in entries:
@@ -118,10 +118,10 @@ def license_files(package):
 
 
 def render():
-    pins = json.loads((ROOT / "tools/cef/pins.json").read_text())
+    pins = json.loads((ROOT / "tools/cef/pins.json").read_text(encoding="utf-8"))
     if pins["asdf_overlay"]["version"] != "2.1.0":
         raise ValueError("asdf-overlay pin changed; update its vendored license and provenance")
-    overrides = json.loads((ROOT / "tools/notices/overrides.json").read_text())
+    overrides = json.loads((ROOT / "tools/notices/overrides.json").read_text(encoding="utf-8"))
     build_source = pins["asdf_overlay"]["source"]
     if (build_source["commit"], build_source["sha256"]) != (
             overrides["_asdf_source"]["commit"], overrides["_asdf_source"]["sha256"]):
@@ -148,13 +148,13 @@ def render():
               "below are enumerated from its lockfile. Native Frida devkit obligations are "
               "recorded separately in docs/provenance.md.\n\n"]
     overlay = ROOT / "tools/notices/asdf-overlay-2.1.0-LICENSE-MIT.txt"
-    chunks.append("```text\n" + overlay.read_text().rstrip() + "\n```\n\n")
+    chunks.append("```text\n" + overlay.read_text(encoding="utf-8").rstrip() + "\n```\n\n")
     chunks.append("## Editor fonts\n\n"
                   "Barlow © 2017 The Barlow Project Authors "
                   "(https://github.com/jpt/barlow); IBM Plex Mono © 2017 IBM Corp. "
                   "(https://github.com/IBM/plex). Bundled WOFF2 files are unmodified "
                   "Latin subsets distributed by Fontsource, under SIL Open Font License 1.1.\n\n")
-    chunks.append("```text\n" + (ROOT / "assets/fonts/fonts-OFL.txt").read_text().rstrip() + "\n```\n\n")
+    chunks.append("```text\n" + (ROOT / "assets/fonts/fonts-OFL.txt").read_text(encoding="utf-8").rstrip() + "\n```\n\n")
     own_packages = collect()
     upstream_temporary, asdf_packages, asdf_counts = collect_asdf()
     union = {p["id"]: p for p in own_packages + asdf_packages}
@@ -234,7 +234,7 @@ def render():
                   "alone. XZ GPL scripts/build tooling and GLib test/documentation terms "
                   "are preserved conservatively, not asserted to be shipped runtime code.\n\n")
     chunks.append(f"Pinned dependency manifest: {native_pin['manifest_url']}\n\n")
-    version = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["package"]["version"]
+    version = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]["package"]["version"]
     source_asset = f"vosulay-{version}-third-party-sources.tar"
     chunks.append("Corresponding source for the LGPL components and the application's "
                   f"rebuild/relink route: [{source_asset}]"
@@ -269,7 +269,7 @@ def render():
                           f"[source]({source_url(package)}); repository: "
                           f"{package.get('repository') or '(not declared)'}; files: {paths}\n")
         chunks.append("\n````text\n" + text + "````\n\n")
-    toolchain = tomllib.loads((ROOT / "rust-toolchain.toml").read_text())
+    toolchain = tomllib.loads((ROOT / "rust-toolchain.toml").read_text(encoding="utf-8"))
     if toolchain["toolchain"]["channel"] != "1.96.1":
         raise ValueError("Rust toolchain changed; refresh standard-library copyright notices")
     runtime_notices = ROOT / "tools/notices/Rust-1.96.1-COPYRIGHT-library.html"
@@ -277,8 +277,8 @@ def render():
                   "Source: https://github.com/rust-lang/rust/tree/1.96.1/library\n\n"
                   "The following is the toolchain-distributed standard-library attribution "
                   "document, including its embedded dependency licenses.\n\n````html\n"
-                  + runtime_notices.read_text().rstrip() + "\n````\n")
-    workflow = (ROOT / ".github/workflows/release.yml").read_text()
+                  + runtime_notices.read_text(encoding="utf-8").rstrip() + "\n````\n")
+    workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     inno = re.search(r"^\s*INNO_SETUP_VERSION:\s*([0-9.]+)\s*$", workflow, re.M)
     if not inno:
         raise SystemExit("INNO_SETUP_VERSION pin missing from .github/workflows/release.yml")
@@ -288,7 +288,7 @@ def render():
                   "Windows installer and contributes its setup runtime. Source: "
                   f"https://github.com/jrsoftware/issrc/tree/{inno_tag}; license: "
                   f"https://github.com/jrsoftware/issrc/blob/{inno_tag}/license.txt\n\n````text\n"
-                  + (ROOT / "tools/notices/Inno-Setup-LICENSE.txt").read_text().rstrip()
+                  + (ROOT / "tools/notices/Inno-Setup-LICENSE.txt").read_text(encoding="utf-8").rstrip()
                   + "\n````\n")
     upstream_temporary.cleanup()
     return "".join(chunks).encode("utf-8")

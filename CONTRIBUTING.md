@@ -77,6 +77,11 @@ python3 tools/notices/generate.py --check
 
 Use `--workspace`; Cargo's root-only default misses browser, transport, compositor, and tooling tests. Clippy, tests and the notices check are exactly the commands in Linux CI. After changing dependencies, regenerate the shipped `THIRD_PARTY_NOTICES.md` with `python3 tools/notices/generate.py`. Formatting is a recommended local check, not currently a workflow step. On Windows these commands check native Windows code; on Linux they check native Linux code and shared platform-independent tests.
 
+The notices generator decodes text as UTF-8 on every platform. Keep the
+`.gitattributes` LF rules for retained notice inputs and `THIRD_PARTY_NOTICES.md`:
+their byte digests and the generated-file comparison must not change with
+Windows Git's `core.autocrlf` setting.
+
 For the supervised dashboard manager, also run its dependency-free routing
 regression tests with Node.js 22 or newer:
 
