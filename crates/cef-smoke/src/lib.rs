@@ -12,6 +12,8 @@ use vosulay_browser::{
 };
 use vosulay_frame::{BrowserFrame, BrowserFrameBackend};
 
+mod preview;
+
 struct SmokeResources {
     page: Arc<[u8]>,
     counter: Arc<[u8]>,
@@ -112,6 +114,9 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<()> {
     let output = PathBuf::from(value("--output").context("--output is required")?);
     std::fs::create_dir_all(&output)?;
     let output = output.canonicalize()?;
+    if let Some(url) = value("--preview-url") {
+        return unsafe { preview::run(sandbox_info, &runtime, &output, url) };
+    }
     let resources = Arc::new(SmokeResources {
         page: Arc::from(include_bytes!("../../browser-cef/smoke/index.html").as_slice()),
         counter: Arc::from(include_bytes!("../../browser-cef/smoke/counter.html").as_slice()),

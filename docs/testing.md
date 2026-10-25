@@ -191,6 +191,7 @@ interchangeable frame-time or latency measurements.
 - `src/api.rs`, `tests/fixtures/backend/`: supported markup, metadata, deadlines, resolution fallback, the vosu profile registry and write access in the `counters` envelope and its absence on tosu; `src/api/vosu.rs`: the editor's vosu settings requests against a fake vosu (token only on writes, reread after a 401, name validation before any request, button links from the schema only).
 - `src/backend/tests.rs`, `src/backend/credential.rs`, `src/remote/tests_broker.rs`, `src/remote/manage.rs`: shared schemas, independent filters/commands, backend key order in filtered projections, precise subscription relays, which sockets carry vosu's broker token and its reread-once/drop handling, token file matching, HTTP snapshot/proxy behavior, manage-host gating.
 - `tests/manager_restart.mjs`, `tests/tool_runtime.rs`: tool/standalone routing generations, repeated revisions, local-file frame rebinding, outage recovery, expired-session read-only behavior/dashboard reopening, and fresh native process identities after isolated server-only restart.
+- `tools/preview-security-smoke.mjs`: private-network real-service/browser proof using a supplied counter directory (not bundled). It verifies hostile plain/guessed/known-capability authorities, scripts/modules/CSS/fonts and sockets, reserved-route denial, local-root confinement, parent/bridge isolation, live synthetic data, capability rotation and standalone styled/live parity. `--cef-smoke` additionally checks the real CEF resolver, fonts, data and pixels on a private Xvfb. No game or desktop windows are used; fixture broker tokens/capabilities are not retained in evidence.
 - `src/runtime/editor.rs`, `src/runtime/control.rs`, `src/runtime/signals.rs`: manage-page message allowlist, local-file grant checks and broadcasts; control protocol bounds and peer credentials; an exit signal after a foreign handler took over requests a graceful exit and a second one ends the process.
 - `src/ruleset.rs`, `src/runtime/editor/rulesets.rs`, `src/remote.rs::profile_follow_tests`: selected-field subscription, valid/removed/unsupported rulesets, automatic profile persistence without overriding manual selection on repeated or reconnected samples, and URL-selected profile pinning. Browser smoke should also cover binding controls disappearing when the field is absent, both editor themes, embedded fonts, and an open profile picker surviving unchanged state polls.
   The worker queue-barrier regression also feeds 10,000 identical modes and asserts
@@ -199,6 +200,31 @@ interchangeable frame-time or latency measurements.
 - `crates/platform-windows/src/worker_lifecycle.rs`: command-receiver ownership across an error/panic and normal shutdown without restart. These portable tests do not establish native IPC/game recovery; exercise that on authorized Windows.
 - `crates/frame-transport/`, `crates/overlay-linux/tests/`: transport ownership and loader/input/late-attach fixtures.
 - `crates/platform-windows/src/target_selection.rs`: focus-driven target selection, including tests available on Linux.
+
+For that optional Linux preview proof, build `cargo build --locked -p vosulay-cef-smoke`
+and the host first. Supply an installed Chromium executable and a counter directory
+containing the unchanged InGame2 assets (`index.html`, `index.js`, CSS and font/deps);
+the script adds only synthetic-data/isolation instrumentation while serving them.
+It requires Node, Python, util-linux (`unshare`, `setpriv`), iproute2, bubblewrap and
+Xvfb. The wrapper creates a private network namespace, isolates HOME/all XDG roots,
+uses private loopback ports/control endpoint, strips desktop variables and gives
+Chromium/CEF private `/tmp` and no GPU devices. CEF's `--no-sandbox` is confined to
+this isolated test fixture, not production behavior.
+
+```sh
+node tools/preview-security-smoke.mjs \
+  --binary "$PWD/target/debug/vosulay" \
+  --cef-dir "$CEF_DIR" --chromium /absolute/path/to/chromium \
+  --counter-dir /absolute/path/to/InGame2 --output /new/private/evidence \
+  --cef-smoke "$PWD/target/debug/vosulay-cef-smoke" --xvfb /usr/bin/Xvfb
+```
+
+`results.json` records browser assertions (including standalone parity), while
+`preview.png`, `cef-preview-result.json` and `cef-preview.ppm` retain the styled
+counter/pixel evidence. This is not game attachment, GPU composition or Windows
+runtime evidence. On authorized Windows, verify Chrome/CEF resolves the capability
+hostname without hosts-file changes and preserves styled/live counters and the
+standalone editor before claiming native platform compatibility.
 
 Tier 4's checklist covers edit/interaction toggles, drag/resize/scale/crop, field wheel stepping, focus loss, tray actions and the remote `/overlay` page on your own machine. The compact inspector, its Advanced placement editor, the native vosu overlay settings modal (including its read-only state and Retry) and cross-profile paste have no automated JavaScript tests; exercise them in the Tier 3 preview with `--vosu-demo` (a fake vosu in the stub host) or on the manage page with a test vosu, which uses the real host requests. Native GPU composition, real game input release, OBS capture, desktop tray integration, and delivered-pixel performance need explicit platform checks. Never label an unsupported/failed game-surface launch as a compositor pass.
 

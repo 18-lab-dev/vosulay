@@ -1001,6 +1001,7 @@
         // Tool UIs share vosu's overlay origin. Opaque counter frames cannot
         // reach the in-memory dashboard session or manager bridge.
         frame.setAttribute("sandbox", "allow-scripts");
+        frame.setAttribute("referrerpolicy", "no-referrer");
       }
       frame.src = typeof window.__VOSULAY_BACKEND_URL__ === "function"
         ? window.__VOSULAY_BACKEND_URL__(details.url) : details.url;

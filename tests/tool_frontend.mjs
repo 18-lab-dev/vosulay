@@ -29,3 +29,33 @@ test('standalone manager keeps its existing backend fetch rewriting', () => {
   assert.notEqual(window.fetch, nativeFetch);
   assert.equal(window.fetch('http://127.0.0.1:25950/json/v2'), 'http://127.0.0.1:25949/json/v2');
 });
+
+test('tool frames keep an opaque origin for catalog and custom counters', () => {
+  const managerSource = readFileSync(new URL('../assets/manager.js', import.meta.url), 'utf8');
+  const elementSource = managerSource.match(/  function overlayElement\([\s\S]*?\n  }\n/);
+  assert.ok(elementSource, 'exercise the production frame constructor');
+  for (const tool of [true, false]) {
+    for (const custom of [true, false]) {
+      const frames = [];
+      const context = vm.createContext({
+        document: { documentElement: { dataset: { vosulayTool: tool ? '1' : '0' } } },
+        window: { __VOSULAY_BACKEND_URL__: () => 'http://127.0.0.1:25949/counter/' },
+        state: { selected: new Set() },
+        applyOverlayStyle() {},
+        makeElement(tag) {
+          const element = { dataset: {}, attributes: {}, append() {},
+            setAttribute(name, value) { this.attributes[name] = value; } };
+          if (tag === 'iframe') frames.push(element);
+          return element;
+        }
+      });
+      vm.runInContext(`${elementSource[0]}; globalThis.createFrame = overlayElement;`, context);
+      context.createFrame({ counter_id: 'counter', ...(custom ? { url: 'http://127.0.0.1:25950/counter/' } : {}) },
+        { available: true, url: 'http://127.0.0.1:25950/counter/', name: 'Counter', tag: 'Counter' });
+      assert.equal(frames.length, 1);
+      assert.equal(frames[0].src, 'http://127.0.0.1:25949/counter/');
+      assert.equal(frames[0].attributes.sandbox,
+        tool ? 'allow-scripts' : custom ? 'allow-scripts allow-same-origin' : undefined);
+    }
+  }
+});

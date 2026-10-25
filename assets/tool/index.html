@@ -4,6 +4,11 @@ import { vosu } from '/tools/_host/v1/bridge.js';
 try {
   await vosu.ready;
   if (window.top !== window.self || window.opener) throw new Error('Open vosulay in a separate tab without an opener');
+  const host = location.hostname;
+  if (!(host === 'localhost' || host.endsWith('.localhost') || host === '[::1]' ||
+      /^127(?:\.\d{1,3}){3}$/.test(host))) {
+    throw new Error('Preview is available only in a browser on vosu’s computer');
+  }
   const response = await vosu.fetch(vosu.canWrite ? 'v1/manage/document' : `v1/view${location.search}`);
   if (!response.ok) throw new Error(`vosulay returned ${response.status}`);
   const html = await response.text();

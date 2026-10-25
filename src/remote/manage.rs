@@ -360,6 +360,7 @@ mod tests {
             http: ureq::Agent::new_with_defaults(),
             editor: Some(Arc::new(FakeEditor::default())),
             tool_mode: false,
+            preview_url: None,
         };
         assert!(enabled(
             &config,

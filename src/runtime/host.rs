@@ -110,6 +110,7 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
             crate::remote::ToolServer::start(
                 env,
                 remote.browser_url(),
+                remote.preview_url(),
                 options.config.clone(),
                 worker.manage_editor(),
             )

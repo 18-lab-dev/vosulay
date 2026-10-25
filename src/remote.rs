@@ -32,6 +32,7 @@ pub struct RemoteServer {
     threads: Vec<(SocketAddr, JoinHandle<()>)>,
     browser_url: Url,
     browser_secret: String,
+    preview_url: Option<Url>,
 }
 
 struct Backend {
@@ -43,6 +44,7 @@ struct Backend {
     http: ureq::Agent,
     editor: Option<Arc<dyn ManageEditor>>,
     tool_mode: bool,
+    preview_url: Option<Url>,
 }
 
 impl RemoteServer {
@@ -85,6 +87,11 @@ impl RemoteServer {
         &self.browser_url
     }
 
+    /// A browser-preview capability, disclosed only through authenticated manager routes.
+    pub fn preview_url(&self) -> &Url {
+        self.preview_url.as_ref().unwrap_or(&self.browser_url)
+    }
+
     /// The in-game browser's broker secret, handed to its counter frames out of band.
     pub fn browser_secret(&self) -> &str {
         &self.browser_secret
@@ -110,6 +117,20 @@ impl RemoteServer {
         let mut bytes = [0u8; 32];
         getrandom::fill(&mut bytes).context("could not generate the broker secret")?;
         let browser_secret: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+        let tool_mode = crate::tool::Environment::from_env()?.is_some();
+        let preview_url = if tool_mode {
+            getrandom::fill(&mut bytes).context("could not generate preview authority")?;
+            let identity: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+            // Two labels keep each DNS label below its 63-octet limit.
+            Some(Url::parse(&format!(
+                "http://{}.{}.preview.localhost:{}/",
+                &identity[..32],
+                &identity[32..],
+                browser_url.port().expect("broker port")
+            ))?)
+        } else {
+            None
+        };
         let backend = Arc::new(Backend {
             broker: Broker::new(base_url.clone(), credential)?,
             secret: browser_secret.clone(),
@@ -123,13 +144,15 @@ impl RemoteServer {
                     .build(),
             ),
             editor,
-            tool_mode: crate::tool::Environment::from_env()?.is_some(),
+            tool_mode,
+            preview_url: preview_url.clone(),
         });
         let mut server = Self {
             stop: Arc::new(AtomicBool::new(false)),
             threads: Vec::with_capacity(listeners.len()),
             browser_url,
             browser_secret,
+            preview_url,
         };
         let active = Arc::new(AtomicUsize::new(0));
         for listener in listeners {
@@ -273,12 +296,22 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
             .map_err(Into::into);
         }
     };
-    if !request_metadata_is_allowed(
-        &request,
-        local_address,
-        route.starts_with("local/") || request.is_frame_navigation(),
-    ) || !peer_is_allowed(peer.ip(), &config.settings.allowed_ips)
-    {
+    let preview = backend
+        .preview_url
+        .as_ref()
+        .filter(|url| preview_authority_is_allowed(&request, url, peer.ip(), local_address));
+    let resource = preview_resource_route(route);
+    let metadata_allowed = if let Some(preview) = preview {
+        resource && origin_metadata_is_allowed(&request, preview, true)
+    } else {
+        let allow_opaque = if backend.tool_mode {
+            resource && request.is_frame_navigation() && request.origin.as_deref() != Some("null")
+        } else {
+            route.starts_with("local/") || request.is_frame_navigation()
+        };
+        request_metadata_is_allowed(&request, local_address, allow_opaque)
+    };
+    if !metadata_allowed || !peer_is_allowed(peer.ip(), &config.settings.allowed_ips) {
         return Response::plain(403, "Forbidden", "Request is not authorized\n")
             .write(stream, request.method == "HEAD")
             .map_err(Into::into);
@@ -312,6 +345,9 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
     let result = match route {
         "overlay" => overlay_response(&serving_url, &backend.upstream, &config, &request.target),
         "__vosulay/view-state" => Ok(view_state(&config)),
+        route if route.starts_with("local/") && preview.is_some() => {
+            preview_local_response(&config, route, &backend.upstream, &serving_url)
+        }
         route if route.starts_with("local/") => local_response(&config, route),
         "__vosulay/backend.js" => {
             let mut response = Response::bytes(
@@ -330,15 +366,40 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
         }
         _ => proxy_response(backend, &serving_url, &request),
     };
-    let response = match result {
+    let mut response = match result {
         Ok(response) => response,
         Err(error) => Response::plain(error.status, error.reason, &error.message),
     };
+    if preview.is_some() {
+        opaque_counter_resource(&mut response);
+    }
     response
         .write(stream, request.method == "HEAD")
         .map_err(Into::into)
 }
 
+fn preview_resource_route(route: &str) -> bool {
+    !matches!(route, "overlay" | "manage" | "config" | "config.json")
+        && !route.starts_with("__vosulay/")
+        && !route.starts_with("v1/")
+        && !route.starts_with("tools/")
+}
+
+fn preview_authority_is_allowed(
+    request: &Request,
+    preview: &Url,
+    peer: IpAddr,
+    local: SocketAddr,
+) -> bool {
+    normalize_ip(peer).is_loopback()
+        && normalize_ip(local.ip()).is_loopback()
+        && request.host.as_deref().is_some_and(|host| {
+            tool::token_matches(
+                host.as_bytes(),
+                preview[url::Position::BeforeHost..url::Position::AfterPort].as_bytes(),
+            )
+        })
+}
 fn backend_script(upstream: &Url, broker: &Url) -> String {
     let arguments = serde_json::to_string(&[upstream.as_str(), broker.as_str()])
         .expect("URL strings serialize");
@@ -512,32 +573,18 @@ fn proxy_response(
             .limit(32 * 1024 * 1024)
             .read_to_vec()
             .map_err(|_| HttpError::new(502, "Bad Gateway", "Could not read backend HTML\n"))?;
-        let bootstrap = format!(
-            "<script src=\"{}__vosulay/backend.js\"></script>",
-            escape_html(serving_url.as_str())
-        );
-        // Keep a leading doctype/BOM: prepending a script before it would enable quirks mode.
-        let start = if html.starts_with(b"\xef\xbb\xbf") {
-            3
+        let bootstrap = if backend.preview_url.as_ref() == Some(serving_url) {
+            format!(
+                "<script>{}</script>",
+                backend_script(&backend.upstream, serving_url)
+            )
         } else {
-            0
+            format!(
+                "<script src=\"{}__vosulay/backend.js\"></script>",
+                escape_html(serving_url.as_str())
+            )
         };
-        let start = html[start..]
-            .iter()
-            .position(|byte| !byte.is_ascii_whitespace())
-            .map_or(start, |offset| start + offset);
-        let insertion = if html
-            .get(start..start + 9)
-            .is_some_and(|value| value.eq_ignore_ascii_case(b"<!doctype"))
-        {
-            html[start..]
-                .iter()
-                .position(|byte| *byte == b'>')
-                .map_or(start, |offset| start + offset + 1)
-        } else {
-            start
-        };
-        html.splice(insertion..insertion, bootstrap.bytes());
+        insert_bootstrap(&mut html, &bootstrap);
         headers.retain(|(name, _)| {
             !matches!(name.as_str(), "etag" | "last-modified" | "cache-control")
         });
@@ -585,6 +632,22 @@ fn routed_backend_url(
     Ok(routed)
 }
 
+// Tool counter frames deliberately have opaque origins. Their scripts, styles,
+// modules and fonts are public overlay resources, not manager capabilities.
+fn opaque_counter_resource(response: &mut Response) {
+    response.headers.retain(|(name, _)| {
+        !name.eq_ignore_ascii_case("access-control-allow-origin")
+            && !name.eq_ignore_ascii_case("access-control-allow-credentials")
+            && !name.eq_ignore_ascii_case("cross-origin-resource-policy")
+            && !name.eq_ignore_ascii_case("referrer-policy")
+    });
+    response.headers.extend([
+        ("Access-Control-Allow-Origin".into(), "null".into()),
+        ("Cross-Origin-Resource-Policy".into(), "cross-origin".into()),
+        ("Referrer-Policy".into(), "no-referrer".into()),
+    ]);
+}
+
 fn request_metadata_is_allowed(
     request: &Request,
     local_address: SocketAddr,
@@ -597,6 +660,14 @@ fn request_metadata_is_allowed(
     else {
         return false;
     };
+    origin_metadata_is_allowed(request, &authority, allow_opaque_origin)
+}
+
+fn origin_metadata_is_allowed(
+    request: &Request,
+    authority: &Url,
+    allow_opaque_origin: bool,
+) -> bool {
     let fetch_site_allowed = request.fetch_site.as_deref().is_none_or(|site| {
         matches!(site, "none" | "same-origin" | "same-site")
             || (allow_opaque_origin && site == "cross-site")
@@ -1229,6 +1300,62 @@ fn escape_html(value: &str) -> String {
     )
 }
 
+fn insert_bootstrap(html: &mut Vec<u8>, bootstrap: &str) {
+    // Preserve doctype/BOM and standards mode.
+    let start = if html.starts_with(b"\xef\xbb\xbf") {
+        3
+    } else {
+        0
+    };
+    let start = html[start..]
+        .iter()
+        .position(|byte| !byte.is_ascii_whitespace())
+        .map_or(start, |offset| start + offset);
+    let insertion = if html
+        .get(start..start + 9)
+        .is_some_and(|value| value.eq_ignore_ascii_case(b"<!doctype"))
+    {
+        html[start..]
+            .iter()
+            .position(|byte| *byte == b'>')
+            .map_or(start, |offset| start + offset + 1)
+    } else {
+        start
+    };
+    html.splice(insertion..insertion, bootstrap.bytes());
+}
+
+fn preview_local_response(
+    config: &AppConfig,
+    path: &str,
+    upstream: &Url,
+    serving: &Url,
+) -> std::result::Result<Response, HttpError> {
+    let mut response = local_response(config, path)?;
+    if response.mime == "text/html" {
+        let Body::File(file, _) = &mut response.body else {
+            unreachable!("local file response")
+        };
+        let mut html = Vec::new();
+        file.take(32 * 1024 * 1024 + 1)
+            .read_to_end(&mut html)
+            .map_err(|_| HttpError::new(403, "Forbidden", "Local resource is not readable\n"))?;
+        if html.len() > 32 * 1024 * 1024 {
+            return Err(HttpError::new(
+                413,
+                "Payload Too Large",
+                "Local HTML is too large\n",
+            ));
+        }
+        insert_bootstrap(
+            &mut html,
+            &format!("<script>{}</script>", backend_script(upstream, serving)),
+        );
+        response.body = Body::Bytes(html);
+    }
+    Ok(response)
+}
+
 fn local_response(config: &AppConfig, path: &str) -> std::result::Result<Response, HttpError> {
     let resource = resolve_local(config, path)?;
     let file = File::open(&resource.path)
@@ -1628,6 +1755,94 @@ mod tests {
 
     fn base() -> Url {
         Url::parse("http://127.0.0.1:24050/").expect("URL")
+    }
+
+    #[test]
+    fn opaque_resource_policy_replaces_upstream_headers_without_credentials() {
+        let mut response = Response::plain(200, "OK", "counter resource");
+        response.headers.extend([
+            (
+                "ACCESS-CONTROL-ALLOW-ORIGIN".into(),
+                "http://upstream".into(),
+            ),
+            ("access-control-allow-credentials".into(), "true".into()),
+            ("Cross-Origin-Resource-Policy".into(), "same-origin".into()),
+            ("Cache-Control".into(), "no-cache".into()),
+        ]);
+        opaque_counter_resource(&mut response);
+        assert_eq!(
+            response.headers,
+            [
+                ("Cache-Control".into(), "no-cache".into()),
+                ("Access-Control-Allow-Origin".into(), "null".into()),
+                ("Cross-Origin-Resource-Policy".into(), "cross-origin".into()),
+                ("Referrer-Policy".into(), "no-referrer".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn preview_authority_requires_exact_capability_port_and_loopback_peer() {
+        let preview = Url::parse(&format!(
+            "http://{}.{}.preview.localhost:5050/",
+            "1".repeat(32),
+            "2".repeat(32)
+        ))
+        .unwrap();
+        let mut request = Request {
+            method: "GET".into(),
+            target: "/counter/style.css".into(),
+            host: Some(preview[url::Position::BeforeHost..url::Position::AfterPort].into()),
+            origin: Some("null".into()),
+            fetch_site: Some("cross-site".into()),
+            version: http::Version::HTTP_11,
+            headers: vec![],
+            body: vec![],
+            prefetched: vec![],
+        };
+        let local = "127.0.0.1:5050".parse().unwrap();
+        let peer = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        assert!(preview_authority_is_allowed(
+            &request, &preview, peer, local
+        ));
+        assert!(!preview_authority_is_allowed(
+            &request,
+            &preview,
+            "192.0.2.1".parse().unwrap(),
+            local
+        ));
+        assert!(!preview_authority_is_allowed(
+            &request,
+            &preview,
+            peer,
+            "192.0.2.1:5050".parse().unwrap()
+        ));
+        assert!(!request_metadata_is_allowed(&request, local, true));
+        for host in [
+            "127.0.0.1:5050",
+            "guessed.preview.localhost:5050",
+            &format!(
+                "{}.{}.preview.localhost:5051",
+                "1".repeat(32),
+                "2".repeat(32)
+            ),
+        ] {
+            request.host = Some(host.into());
+            assert!(!preview_authority_is_allowed(
+                &request, &preview, peer, local
+            ));
+        }
+        for route in [
+            "overlay",
+            "__vosulay/view-state",
+            "__vosulay/backend.js",
+            "__vosulay/manage/message",
+            "v1/manage/state",
+            "tools/vosulay/api/v1/manage/state",
+            "config.json",
+        ] {
+            assert!(!preview_resource_route(route), "{route}");
+        }
     }
 
     #[test]

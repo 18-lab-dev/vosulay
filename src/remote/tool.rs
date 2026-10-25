@@ -10,6 +10,7 @@ impl ToolServer {
     pub fn start(
         env: &crate::tool::Environment,
         view: &Url,
+        preview: &Url,
         config: PathBuf,
         editor: Arc<dyn ManageEditor>,
     ) -> Result<Self> {
@@ -18,6 +19,7 @@ impl ToolServer {
         let token = env.token.clone();
         let upstream = env.backend.clone();
         let view = view.clone();
+        let preview = preview.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let stopped = stop.clone();
         let thread = thread::Builder::new()
@@ -44,6 +46,7 @@ impl ToolServer {
                                     &request,
                                     &token,
                                     &view,
+                                    &preview,
                                     &upstream,
                                     &config,
                                     editor.as_ref(),
@@ -89,6 +92,7 @@ fn respond(
     request: &Request,
     token: &str,
     view: &Url,
+    preview: &Url,
     upstream: &Url,
     config: &Path,
     editor: &dyn ManageEditor,
@@ -114,7 +118,8 @@ fn respond(
         return Ok(Response::plain(200, "OK", "ok\n"));
     }
     if read && path == "/v1/manage/document" {
-        return manage::page(view, upstream).map_err(|error| anyhow::anyhow!("{}", error.message));
+        return manage::page(preview, upstream)
+            .map_err(|error| anyhow::anyhow!("{}", error.message));
     }
     if read && path == "/v1/view/state" {
         return Ok(view_state(&crate::config::load_from_path(config)?));
@@ -129,7 +134,7 @@ fn respond(
         .map_err(|error| anyhow::anyhow!("{}", error.message));
     }
     let value = match (request.method.as_str(), path) {
-        ("GET" | "HEAD", "/v1/manage/state") => manage::state(editor, view, upstream)?,
+        ("GET" | "HEAD", "/v1/manage/state") => manage::state(editor, preview, upstream)?,
         ("GET" | "HEAD", "/v1/manage/counters") => editor.counters(),
         ("POST", "/v1/manage/message") => {
             let message = match serde_json::from_slice(&request.body) {
@@ -151,7 +156,7 @@ fn respond(
         .push(("Cache-Control".into(), "no-store".into()));
     Ok(response)
 }
-fn token_matches(a: &[u8], b: &[u8]) -> bool {
+pub(super) fn token_matches(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }

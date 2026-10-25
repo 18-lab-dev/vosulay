@@ -123,10 +123,26 @@ test('initial tool document rejection offers the same explicit dashboard action'
     vosu: { ready: Promise.resolve(), canWrite: true, fetch: async () => ({ ok: false, status: 403 }) },
     window: {}, document: { getElementById: () => status, createElement: () => ({}) }, URL,
     fetch: async () => ({ ok: true, json: async () => ({ origin: 'http://127.0.0.1:24052/' }) }),
-    location: { assign: url => navigations.push(url) },
+    location: { hostname: '127.0.0.1', assign: url => navigations.push(url) },
   });
   assert.match(status.textContent, /read-only or unavailable/);
   assert.equal(status.children[0].textContent, 'Open from vosu');
   await status.children[0].onclick();
   assert.deepEqual(navigations, ['http://127.0.0.1:24052/tools']);
+});
+
+test('remote tool viewers do not request a local preview or fall back to an unscoped broker', async () => {
+  const html = readFileSync(new URL('../assets/tool/index.html', import.meta.url), 'utf8');
+  const script = html.split('<script type="module">')[1].split('</script>')[0].replace(/^import .*;$/m, '');
+  for (const canWrite of [true, false]) {
+    const status = { append() {} };
+    let requests = 0;
+    await vm.runInNewContext(`(async () => { ${script} })()`, {
+      vosu: { ready: Promise.resolve(), canWrite, fetch: async () => { requests++; } },
+      window: {}, document: { getElementById: () => status, createElement: () => ({}) },
+      location: { hostname: '192.0.2.10' }, URL,
+    });
+    assert.equal(requests, 0);
+    assert.match(status.textContent, /Preview is available only in a browser on vosu’s computer/);
+  }
 });

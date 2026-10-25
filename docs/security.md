@@ -133,6 +133,31 @@ sandbox, so even counters on vosu's shared origin cannot reach the bridge.
 The editor worker retains its message/capability checks. Existing native game
 attachment, input and CEF sandbox disclosures still apply to this separate tool.
 
+#### Browser preview capability
+
+`Origin: null` is not provenance: any website can create an opaque sandboxed frame.
+Tool previews therefore use an independent per-run 256-bit capability hostname
+(two DNS-safe random hex labels under `.preview.localhost`) on the loopback broker.
+Its exact authority/port is compared without secret-dependent early exit and only
+loopback peers are admitted. Only capability-bearing counter resources receive
+opaque-origin CORS without credentials and cross-origin resource embedding.
+Plain/guessed hosts receive no new access. `/overlay`, `__vosulay/*`, manager and
+tool/config routes stay closed on the preview authority, even if the caller knows
+the capability. A preview socket never receives the native broker credential.
+
+The counter can read its own location and exfiltrate this capability. A recipient
+then gains only the public counter resources/data sockets the counter could load,
+and local files only if it also possesses that file's independently unguessable,
+configured root capability. Canonical-path confinement remains enforced; no root
+enumeration, profiles/configuration, manager session or native write authority is
+granted. This is a read-resource capability, not an editor authentication token.
+
+Only authenticated manager responses disclose it; public view/state responses do
+not. It is generated in memory, regenerated on restart, never persisted or logged
+by the host, and suppressed in Referer by frame/response policy. Remote tool pages
+do not attempt these viewer-local addresses: they show a local-only preview reason
+without an unscoped fallback. Existing native CEF/standalone policies are unchanged.
+
 
 ### How to remove vosulay completely
 

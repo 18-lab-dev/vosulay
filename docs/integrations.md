@@ -89,8 +89,34 @@ Counter data comes from the independent loopback broker. This opaque-origin
 sandbox can limit counters requiring browser storage or privileged browser APIs.
 Standalone browser/CEF frames retain their existing behavior.
 
+Tool previews use a separate per-run capability authority on the loopback broker:
+two random 32-hex DNS labels before `.preview.localhost`, with the broker's exact
+port. The 256-bit value is independent of the native broker secret. Only an exact
+authority match from a loopback peer admits opaque-origin counter resources and
+public data sockets. Those responses allow `Origin: null` without credentials and
+cross-origin resource embedding. Plain/guessed authorities do not gain that access.
+`/overlay`, `__vosulay/*` (including backend.js/view-state/manage), and tool/config
+routes remain closed on the capability authority. Preview HTML carries its public
+backend bootstrap inline; the reserved backend.js route stays closed.
+
+Relative and root-absolute asset paths retain the capability hostname without
+rewriting counter CSS. Existing local-file URLs also need their independently
+unguessable configured root capability; the preview hostname does not enumerate
+or authorize other roots. No manager or credentialed commands are exposed.
+Standalone and native CEF normal-origin routing retain their existing policies.
+Restrictive counter CSP may prevent the injected inline bootstrap; it is not
+weakened. Opaque-origin browser-storage/API restrictions still apply.
+
+Only authenticated manager document/state routes disclose the preview origin,
+never the public view/view-state routes. It stays in memory, changes on restart,
+and is not persisted or logged. The reconnect path picks up the replacement origin.
+Preview frames and responses use no-referrer. Because `.localhost` resolves on the
+viewer's computer, a tool page opened through a non-loopback vosu URL shows a
+local-only preview explanation without loading a broker or falling back to a
+broader origin policy. Use vosu through localhost/127.0.0.1 on that computer.
+
 The authorized manager state includes a public process-generation ID, backend URL,
-and counter-view URL. The HTTP bridge polls that identity independently of config
+and the private preview URL. The HTTP bridge polls that identity independently of config
 revision numbers (which can repeat after restart), updates its routing closure,
 refreshes the catalog and reloads affected counter/local-file frames when the
 existing editor authority still works. Standalone manage pages use the same path.
