@@ -166,6 +166,20 @@ try {{
 }} finally {{ $listener.Close() }}
 ```
 
+Before building, copy the included `vosulay-patches/opengl.rs` over
+`work/asdf-overlay/crates/overlay/src/hook/opengl.rs`, and
+`vosulay-patches/context.rs` to
+`work/asdf-overlay/crates/overlay/src/hook/opengl/context.rs`.
+These maintained Rust overrides fix context ownership and reentrant window
+callbacks; they identify the pinned upstream revision in their source header.
+They do not modify Frida or its native components.
+Also copy `vosulay-patches/proc.rs` over
+`work/asdf-overlay/crates/overlay/src/hook/opengl/proc.rs`; this publishes the
+forwarding window procedure before native callback installation.
+Copy `vosulay-patches/surface.rs` over
+`work/asdf-overlay/crates/overlay/src/surface.rs`; callbacks retain surface
+ownership without holding registry guards across native graphics calls.
+
 In a Windows Rust 1.96.1/MSVC developer terminal in `work/asdf-overlay`
 (ensure the compiler and SDK `rc.exe` are on PATH). Upstream's
 `rust-toolchain.toml` names targets but no channel; with rustup, select the
@@ -189,8 +203,8 @@ set `$ErrorActionPreference = 'Continue'` and explicitly check `$LASTEXITCODE`.
 frida-build 0.17.2 uses reqwest and requests
 `$FRIDA_DOWNLOAD_CDN/17.17.0/frida-gum-devkit-17.17.0-windows-<arch>.tar.xz`.
 file:// is unsupported. A fresh CARGO_TARGET_DIR is important because cached
-build-script downloads would otherwise bypass the replacement server. No
-source modification to asdf's hook or frida-build is needed. Use native Windows:
+build-script downloads would otherwise bypass the replacement server. Apply the
+included vosulay Rust overrides above; no frida-build modification is needed. Use native Windows:
 the attempted Linux cargo-xwin build failed at upstream's resource compilation
 before reaching the devkit download (section (c)).
 
@@ -246,6 +260,8 @@ def main():
         raise FileExistsError('refusing to overwrite ' + str(args.output))
     with ThreadPoolExecutor(max_workers=4) as pool:
         members = dict(pool.map(download, pins))
+    for name in ('opengl.rs', 'context.rs', 'proc.rs', 'surface.rs'):
+        members['vosulay-patches/' + name] = (ROOT / 'tools/asdf' / name).read_bytes()
     members['README.md'] = readme(pins)
     members['SHA256SUMS'] = ''.join(f"{hashlib.sha256(data).hexdigest()}  {name}\n" for name, data in sorted(members.items())).encode()
     args.output.parent.mkdir(parents=True, exist_ok=True)

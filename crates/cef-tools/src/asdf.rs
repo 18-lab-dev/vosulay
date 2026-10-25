@@ -27,6 +27,27 @@ use crate::{AsdfPin, acquire_file, cache_lock, extract_tar, pins, regular_file, 
 /// used nightly; the stable route is the one verified for vosulay.
 const TOOLCHAIN: &str = include_str!("../../../rust-toolchain.toml");
 
+// Maintained Rust overrides of the hash-pinned upstream source, not replacement
+// prebuilt DLLs. Hash their bytes into both source and Cargo cache identities.
+const OPENGL_PATCH: &str = include_str!("../../../tools/asdf/opengl.rs");
+const CONTEXT_PATCH: &str = include_str!("../../../tools/asdf/context.rs");
+const PROC_PATCH: &str = include_str!("../../../tools/asdf/proc.rs");
+const SURFACE_PATCH: &str = include_str!("../../../tools/asdf/surface.rs");
+
+#[cfg(test)]
+#[path = "../../../tools/asdf/context.rs"]
+mod context_tests;
+
+fn patch_identity() -> String {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    hash.update(OPENGL_PATCH);
+    hash.update(CONTEXT_PATCH);
+    hash.update(PROC_PATCH);
+    hash.update(SURFACE_PATCH);
+    format!("{:x}", hash.finalize())
+}
+
 fn toolchain_channel() -> Result<&'static str> {
     TOOLCHAIN
         .lines()
@@ -74,7 +95,8 @@ pub fn build_asdf(cache: &Path) -> Result<PathBuf> {
         )?;
     }
 
-    let source = root.join(source_root(pin));
+    let patch = patch_identity();
+    let source = root.join(format!("{}-vosulay-{}", source_root(pin), &patch[..16]));
     if fs::symlink_metadata(&source).is_err() {
         let staging = tempfile::Builder::new()
             .prefix(".asdf-extract-")
@@ -84,17 +106,37 @@ pub fn build_asdf(cache: &Path) -> Result<PathBuf> {
             staging.path(),
             &source_root(pin),
         )?;
+        let extracted = staging.path().join(source_root(pin));
+        fs::write(
+            extracted.join("crates/overlay/src/hook/opengl.rs"),
+            OPENGL_PATCH,
+        )?;
+        fs::write(
+            extracted.join("crates/overlay/src/hook/opengl/context.rs"),
+            CONTEXT_PATCH,
+        )?;
+        fs::write(
+            extracted.join("crates/overlay/src/hook/opengl/proc.rs"),
+            PROC_PATCH,
+        )?;
+        fs::write(
+            extracted.join("crates/overlay/src/surface.rs"),
+            SURFACE_PATCH,
+        )?;
         fs::rename(staging.path().join(source_root(pin)), &source)
             .context("cannot publish extracted asdf-overlay source")?;
     }
 
     let server = DevkitServer::start(&cdn, pin)?;
-    let target_dir = root.join("target");
+    let target_dir = root.join(format!("target-vosulay-{}", &patch[..16]));
     let channel = toolchain_channel()?;
     for dll in &pin.dlls {
         eprintln!(
-            "Building {} from asdf-overlay {} for {} with Rust {channel}",
-            dll.name, pin.source.commit, dll.target
+            "Building {} from asdf-overlay {} + vosulay OpenGL patch {} for {} with Rust {channel}",
+            dll.name,
+            pin.source.commit,
+            &patch[..16],
+            dll.target
         );
         let status = Command::new("cargo")
             .args([

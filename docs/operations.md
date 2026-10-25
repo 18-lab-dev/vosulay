@@ -281,6 +281,9 @@ Linux refreshes recognized osu shortcuts with absolute injection paths, preservi
 
 For a missing overlay, check game focus, backend reachability, loaded compositor/runtime files, hidden state, enabled placement, and viewport position. Selection follows focus, not process order. On Windows with tosu, confirm tosu's in-game overlay is disabled; it injects its own asdf-overlay into the same game. Do not change ptrace policy or request elevation just to bypass attachment restrictions.
 
+For Windows injected-hook diagnostics, set `VOSULAY_NATIVE_TRACE=1` before starting vosulay (or its supervising vosu) and retain its stderr/tool log. This records native debug/info/warning/error messages, including first-swap context/DC/window identities and context deletion/bind outcomes. `VOSULAY_NATIVE_TRACE=trace` additionally records per-call trace events and can be very noisy; do not use it for performance measurements. CEF's `cef.log` describes the browser, not the game's OpenGL hooks. Restart the game after rebuilding the patched asdf DLLs: an already injected DLL remains loaded even after vosulay disconnects.
+
+
 Input failure releases capture within the five-second safety bound; Windows may exit. Restart the host if needed. If a remote bind fails, the local backend broker remains available. Listener/allowlist changes and remote security are described in [integrations](integrations.md).
 
 ## Maintainer environment (optional)

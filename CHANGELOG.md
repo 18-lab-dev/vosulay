@@ -2,6 +2,7 @@
 
 ## 1.5.0 - Unreleased
 
+- Make early Windows OpenGL attachment safe across startup context replacement and reentrant resize callbacks: perform native setup outside registry write locks, keep renderers context-owned, and clean up only in the owning context. Add optional native hook diagnostics and include the revision-marked asdf Rust overrides in source bundles.
 - Recover browser-editor routing after a vosulay restart even when configuration revisions repeat. Reuse only surviving authority; pause editing during outages and show a read-only explanation plus Open from vosu when a tool session expires, instead of leaving counter frames pointed at a dead broker.
 - Move official repository, catalog, support and package URLs to `18-lab-dev`. Existing published package hashes remain paired with their original versions until release artifacts are available.
 - Attribute the project's own code to 18-LAB, retaining K4zoku's copyright and sxlvia's separate branding/artwork licences.

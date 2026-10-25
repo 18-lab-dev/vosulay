@@ -104,6 +104,9 @@ Authenticated nonblocking `SOCK_SEQPACKET` control hands off the memfd and carri
 
 [crates/platform-windows](../crates/platform-windows/) attaches using pinned asdf-overlay 2.1.0. CEF's accelerated callback texture is borrowed: the host copies it into reusable application-owned D3D11 GPU textures before returning. The normal path has no CPU readback. Consumer leases and completion handling protect reuse; the callback handle must never be retained as application-owned storage.
 
+The Windows OpenGL hook has a maintained, revision-marked override in `tools/asdf/` (see [provenance](provenance.md)). Context discovery and D3D interop creation never hold renderer/surface registry write guards while calling native APIs: those APIs can synchronously re-enter the window procedure during startup/resize. Renderers belong to HGLRCs, not reusable HDCs; callbacks skip composition rather than blocking a busy renderer. Context deletion binds the owner before deleting GL objects and restores the caller's context; a failed bind never runs destructors against another context. Successful context destruction releases its registry/surface state. Disconnect cleans up on the next owning-context swap and forwards the original swap, without requiring a startup delay or intercepting `wglMakeCurrent`.
+
+
 ## Focus, input, tray, and launch
 
 Selection follows supported game focus, not process enumeration order. Unrelated foreground windows retain the selected game; another supported game takes over only after gaining focus. Editing normally ends on focus loss; the persisted setting can retain the editor and resume capture when the game regains focus.

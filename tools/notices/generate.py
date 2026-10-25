@@ -207,6 +207,7 @@ def render():
     chunks.append("## asdf-overlay DLL dependencies\n\n"
                   "Release construction: vosulay's Packages workflow runs "
                   "`cargo build --release --locked -p asdf-overlay-dll` on the pinned source "
+                  "with the revision-marked Rust overrides in tools/asdf/ applied "
                   "for x86_64 and i686 MSVC with default features and no extra feature flags, "
                   "linking hash-pinned stock Frida Gum devkits (see tools/cef/pins.json). "
                   "The pinned .gitmodules is empty: no compiled submodules.\n\n"
@@ -244,7 +245,8 @@ def render():
                   "pinned source archives for asdf-overlay, Gum, releng, native components "
                   "and non-system build tooling. Rust crates resolve via the bundled "
                   "Cargo.lock checksums. vosulay builds the shipped asdf-overlay DLLs from "
-                  "the bundled asdf-overlay archive with Frida's stock Gum devkits; rebuilding "
+                  "the bundled asdf-overlay archive plus the included vosulay Rust overrides "
+                  "with Frida's stock Gum devkits; rebuilding "
                   "those devkits from the bundled native sources remains unverified, and the "
                   "source bundle is not a compliance attestation.\n\n")
     for package in native_packages:

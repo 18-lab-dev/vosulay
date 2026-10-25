@@ -471,7 +471,32 @@ async fn read_events(
     shared: Arc<Shared>,
     pid: u32,
 ) {
+    let native_trace = std::env::var("VOSULAY_NATIVE_TRACE").unwrap_or_default();
     while let Some(event) = events.recv().await {
+        if let OverlayEvent::Tracing(event) = event {
+            use asdf_overlay_common::event::tracing::{LogLevel, TracingEvent};
+            if let TracingEvent::Event {
+                metadata,
+                message: Some(message),
+            } = event
+                && (native_trace == "trace"
+                    || (native_trace == "1" && !matches!(metadata.level, LogLevel::Trace)))
+            {
+                let end = message
+                    .char_indices()
+                    .nth(2048)
+                    .map_or(message.len(), |(index, _)| index);
+                eprintln!(
+                    "vosulay native pid={pid} {:?} {:?} {}:{:?}: {}",
+                    metadata.time,
+                    metadata.level,
+                    metadata.module_path.as_deref().unwrap_or("?"),
+                    metadata.line,
+                    &message[..end]
+                );
+            }
+            continue;
+        }
         let generation = shared.capture_generation.load(Ordering::Acquire);
         if let OverlayEvent::Window {
             id,
