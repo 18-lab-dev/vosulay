@@ -32,7 +32,7 @@ test('standalone manager keeps its existing backend fetch rewriting', () => {
 
 test('tool frames keep an opaque origin for catalog and custom counters', () => {
   const managerSource = readFileSync(new URL('../assets/manager.js', import.meta.url), 'utf8');
-  const elementSource = managerSource.match(/  function overlayElement\([\s\S]*?\n  }\n/);
+  const elementSource = managerSource.match(/  function overlayElement\([\s\S]*?\r?\n  }\r?\n/);
   assert.ok(elementSource, 'exercise the production frame constructor');
   for (const tool of [true, false]) {
     for (const custom of [true, false]) {

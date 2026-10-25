@@ -89,6 +89,9 @@ regression tests with Node.js 22 or newer:
 node --test tests/tool_frontend.mjs tests/manager_restart.mjs
 ```
 
+Production-source extraction in these tests must accept both LF and CRLF
+checkouts; ordinary JavaScript assets may follow Windows Git's `core.autocrlf`.
+
 ### Tier 2 — another platform without another machine
 
 Linux contributors can optionally check Windows source using [cargo-xwin](https://github.com/rust-cross/cargo-xwin). Install Clang and LLVM first (a full LLVM installation is recommended by cargo-xwin; on Ubuntu the packages are `clang`, `llvm`, and `lld`). Read cargo-xwin's notice about the Microsoft SDK/CRT license before installing/using it:
