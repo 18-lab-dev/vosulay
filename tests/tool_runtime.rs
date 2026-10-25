@@ -15,12 +15,13 @@ fn command(root: &std::path::Path) -> Command {
         ("XDG_DATA_HOME", "data"),
         ("XDG_RUNTIME_DIR", "runtime"),
         ("XDG_STATE_HOME", "state"),
+        ("XDG_DATA_DIRS", "system-data"),
+        ("XDG_CONFIG_DIRS", "system-config"),
     ] {
         let path = root.join(folder);
         std::fs::create_dir_all(&path).unwrap();
         command.env(name, path);
     }
-    command.env("XDG_DATA_DIRS", root.join("system-data"));
     command.env(
         "VOSULAY_ENDPOINT",
         format!("@vosulay-tool-test-{}", std::process::id()),
@@ -88,7 +89,14 @@ fn readiness_token_eof_exit_conflict_and_launcher_suppression() {
     assert!(request(port, "/healthz", Some("wrong")).starts_with("HTTP/1.1 401"));
     assert!(request(port, "/healthz", Some(&"a".repeat(64))).starts_with("HTTP/1.1 200"));
     assert!(request(port, "/v1/manage/state", None).starts_with("HTTP/1.1 401"));
-    assert!(request(port, "/v1/manage/state", Some(&"a".repeat(64))).contains("\"config\""));
+    let first_state = request(port, "/v1/manage/state", Some(&"a".repeat(64)));
+    let first_state: serde_json::Value =
+        serde_json::from_str(first_state.split_once("\r\n\r\n").unwrap().1).unwrap();
+    assert!(first_state["config"].is_object());
+    assert_eq!(
+        first_state["routing"]["generation"].as_str().unwrap().len(),
+        32
+    );
     let duplicate = command(root.path()).arg("--server-only").output().unwrap();
     assert_eq!(duplicate.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&duplicate.stderr).contains("vosu owns this instance"));
@@ -112,6 +120,25 @@ fn readiness_token_eof_exit_conflict_and_launcher_suppression() {
     BufReader::new(child.stdout.take().unwrap())
         .read_line(&mut line)
         .unwrap();
+    let replacement_port = line
+        .strip_prefix("vosu-tool-ready ")
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    let replacement = request(replacement_port, "/v1/manage/state", Some(&"a".repeat(64)));
+    let replacement: serde_json::Value =
+        serde_json::from_str(replacement.split_once("\r\n\r\n").unwrap().1).unwrap();
+    assert_ne!(
+        first_state["routing"]["generation"],
+        replacement["routing"]["generation"]
+    );
+    assert!(
+        replacement["routing"]["view"]
+            .as_str()
+            .unwrap()
+            .starts_with("http://127.0.0.1:")
+    );
     let quit = command(root.path()).arg("--quit").output().unwrap();
     assert!(!quit.status.success());
     assert!(String::from_utf8_lossy(&quit.stderr).contains("vosu owns this instance"));

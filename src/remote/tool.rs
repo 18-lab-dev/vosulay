@@ -129,7 +129,7 @@ fn respond(
         .map_err(|error| anyhow::anyhow!("{}", error.message));
     }
     let value = match (request.method.as_str(), path) {
-        ("GET" | "HEAD", "/v1/manage/state") => editor.state()?,
+        ("GET" | "HEAD", "/v1/manage/state") => manage::state(editor, view, upstream)?,
         ("GET" | "HEAD", "/v1/manage/counters") => editor.counters(),
         ("POST", "/v1/manage/message") => {
             let message = match serde_json::from_slice(&request.body) {

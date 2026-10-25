@@ -2,6 +2,7 @@
 
 ## 1.5.0 - Unreleased
 
+- Recover browser-editor routing after a vosulay restart even when configuration revisions repeat. Reuse only surviving authority; pause editing during outages and show a read-only explanation plus Open from vosu when a tool session expires, instead of leaving counter frames pointed at a dead broker.
 - Move official repository, catalog, support and package URLs to `18-lab-dev`. Existing published package hashes remain paired with their original versions until release artifacts are available.
 - Attribute the project's own code to 18-LAB, retaining K4zoku's copyright and sxlvia's separate branding/artwork licences.
 - Cap the attached in-game editor at 30 fps without changing the saved/game overlay limit; lower user limits still win and closing edit mode restores the resolved limit immediately. Keep idle painting damage-driven. Extend the private CEF benchmark with hardware-pinned BGRA OSR, idle checks and compositor diagnostics, distinguishing production GPU composition from the no-GPU SwiftShader fallback.

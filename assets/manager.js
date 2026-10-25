@@ -1004,6 +1004,7 @@
       }
       frame.src = typeof window.__VOSULAY_BACKEND_URL__ === "function"
         ? window.__VOSULAY_BACKEND_URL__(details.url) : details.url;
+      frame.dataset.vosulaySourceUrl = details.url;
       frame.title = details.name;
       frame.setAttribute("allow", "autoplay");
       if (overlay.url && document.documentElement.dataset.vosulayTool !== "1") {

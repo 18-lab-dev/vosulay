@@ -114,6 +114,31 @@ pub(super) fn page(view: &Url, upstream: &Url) -> std::result::Result<Response, 
     Ok(response)
 }
 
+/// Public routing identity, never a broker credential. Revisions can repeat after restart.
+pub(super) fn state(editor: &dyn ManageEditor, view: &Url, upstream: &Url) -> Result<Value> {
+    static GENERATION: std::sync::LazyLock<Result<String>> = std::sync::LazyLock::new(|| {
+        let mut bytes = [0u8; 16];
+        getrandom::fill(&mut bytes)?;
+        let mut identity = String::with_capacity(32);
+        for byte in bytes {
+            std::fmt::Write::write_fmt(&mut identity, format_args!("{byte:02x}"))?;
+        }
+        Ok(identity)
+    });
+    let generation = GENERATION
+        .as_ref()
+        .map_err(|error| anyhow::anyhow!("{error:#}"))?;
+    let mut state = editor.state()?;
+    state
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("invalid manager state"))?
+        .insert(
+            "routing".into(),
+            json!({"generation": generation, "backend": upstream, "view": view}),
+        );
+    Ok(state)
+}
+
 fn api(
     request: &Request,
     backend: &Backend,
@@ -141,7 +166,9 @@ fn api(
     let failed =
         |error: anyhow::Error| HttpError::new(500, "Internal Server Error", format!("{error:#}\n"));
     let value = match (action, post) {
-        ("state", false) => editor.state().map_err(failed)?,
+        ("state", false) => {
+            state(editor, &view_url(local_address)?, &backend.upstream).map_err(failed)?
+        }
         ("counters", false) => editor.counters(),
         ("message", true) => {
             let message: Value = serde_json::from_slice(&request.body)

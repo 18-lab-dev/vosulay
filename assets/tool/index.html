@@ -13,6 +13,23 @@ try {
   document.write(html);
   document.close();
 } catch (error) {
-  document.getElementById('status').textContent = `Cannot open vosulay: ${error.message}. Open from the vosu dashboard for editing.`;
+  const status = document.getElementById('status');
+  status.textContent = `This vosulay page is read-only or unavailable: ${error.message}. `;
+  const open = document.createElement('button');
+  open.textContent = 'Open from vosu';
+  open.onclick = async () => {
+    try {
+      const response = await fetch('/api/dashboard', { cache: 'no-store' });
+      if (!response.ok) throw new Error('dashboard unavailable');
+      const url = new URL((await response.json()).origin);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password)
+        throw new Error('invalid dashboard');
+      location.assign(new URL('/tools', url).href);
+    } catch (_) {
+      status.textContent = 'Open vosu’s Tools page and choose Open for vosulay. ';
+      status.append(open);
+    }
+  };
+  status.append(open);
 }
 </script></body></html>

@@ -1,7 +1,7 @@
 function (configuredBackend, brokerBase, managerPage, brokerSecret) {
   if (typeof window.__VOSULAY_BACKEND_URL__ === 'function') return;
-  const backend = new URL(configuredBackend);
-  const broker = brokerBase ? new URL(brokerBase) : null;
+  let backend = new URL(configuredBackend);
+  let broker = brokerBase ? new URL(brokerBase) : null;
   if (!['http:', 'https:'].includes(backend.protocol) || backend.username || backend.password ||
       (broker && (!['http:', 'https:'].includes(broker.protocol) || broker.username || broker.password))) {
     throw new TypeError('Invalid Vosulay backend routing URL');
@@ -40,6 +40,16 @@ function (configuredBackend, brokerBase, managerPage, brokerSecret) {
     } catch (_) {}
   }
   Object.defineProperty(window, '__VOSULAY_BACKEND_URL__', { value: route, configurable: true });
+  if (managerPage === true) Object.defineProperty(window, '__VOSULAY_UPDATE_ROUTING__', {
+    configurable: true,
+    value: (nextBackend, nextBroker) => {
+      const next = [new URL(nextBackend), new URL(nextBroker)];
+      if (next.some(url => !['http:', 'https:'].includes(url.protocol) || url.username ||
+          url.password || url.search || url.hash)) throw new TypeError('Invalid Vosulay routing update');
+      backend = next[0];
+      broker = next[1];
+    },
+  });
   // The tool manager shares vosu's origin. Its authenticated host fetches must
   // stay on vosu, never be rewritten to the counter broker. Counter frames get
   // their own bootstrap and still route all backend traffic normally.

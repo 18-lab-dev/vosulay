@@ -86,7 +86,7 @@ For the supervised dashboard manager, also run its dependency-free routing
 regression tests with Node.js 22 or newer:
 
 ```sh
-node --test tests/tool_frontend.mjs
+node --test tests/tool_frontend.mjs tests/manager_restart.mjs
 ```
 
 ### Tier 2 — another platform without another machine

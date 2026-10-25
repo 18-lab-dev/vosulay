@@ -88,6 +88,19 @@ authority, including custom URLs; they cannot reach the manager or session.
 Counter data comes from the independent loopback broker. This opaque-origin
 sandbox can limit counters requiring browser storage or privileged browser APIs.
 Standalone browser/CEF frames retain their existing behavior.
+
+The authorized manager state includes a public process-generation ID, backend URL,
+and counter-view URL. The HTTP bridge polls that identity independently of config
+revision numbers (which can repeat after restart), updates its routing closure,
+refreshes the catalog and reloads affected counter/local-file frames when the
+existing editor authority still works. Standalone manage pages use the same path.
+Temporary outages pause editing and hide stale frames until that authority can
+be checked again. A 401/403 instead freezes the editor read-only with an explicit
+**Open from vosu** action (standalone: **Reload editor**); no session is renewed
+or silently replaced. The tool bootstrap offers the same dashboard action if its
+initial document request fails. The generation ID is not the broker secret and
+confers no authority.
+
 The UI refuses framed/opener-bearing launches. Direct/reloaded tool pages fetch
 only `/v1/view`, an open read route rendering the active or selected profile.
 
