@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.5.0 - Unreleased
+## 1.5.0 - 2026-10-25
 
 - Restore styled/live tool-manager counters using independent, per-run 256-bit loopback preview hostnames, not broad `Origin: null` admission. Keep opaque frames and all manager/config/native-command boundaries; disclose capabilities only through authenticated manager routes, rotate them on restart, and show a local-only explanation for remote viewers. Add hostile-origin, local-root, browser/CEF resolver and standalone-parity coverage.
 - Keep the Windows native worker's command receiver alive across connection/display errors and panics, release the failed connection's input, and reconnect with the original failure in the tool log instead of masking it as a closed command channel.
