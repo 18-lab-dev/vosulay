@@ -28,12 +28,12 @@ redirects. vosulay does not persist official repository/catalog URLs: saved URLs
 are the user's backend origin and custom overlay addresses, which this cutover
 does not rewrite.
 
-The Scoop and winget manifests deliberately retain their published 1.4.0
-version/asset/SHA-256 pairs with the new owner URL. After the final signed 1.5.0
-Windows ZIP and installer are produced, calculate their SHA-256 digests, update
+The Scoop and winget manifests deliberately retain their published 1.5.0
+version/asset/SHA-256 pairs during 1.5.1 preparation. After the final 1.5.1
+Windows ZIP and installer are published, calculate their SHA-256 digests, update
 Scoop's version, download URL and hash, and update all three winget
 `PackageVersion` fields, the installer URL/hash and release-notes URL together.
-Never pair the old hashes with 1.5.0 assets. The AUR package tracks Git main;
+Never pair the old hashes with 1.5.1 assets. The AUR package tracks Git main;
 Inno Setup and Linux binary-package versions derive from the workspace version.
 Keep the winget package identifier unchanged.
 
