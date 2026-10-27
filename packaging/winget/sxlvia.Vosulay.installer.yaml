@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.9.0.schema.json
 PackageIdentifier: sxlvia.Vosulay
-PackageVersion: 1.5.1
+PackageVersion: 1.5.2
 InstallerType: inno
 Scope: user
 InstallModes:
@@ -13,7 +13,7 @@ ProductCode: '{D1A97E8C-F65B-44D8-8E1B-25BC7A83E294}_is1'
 ReleaseDate: 2026-10-27
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/18-lab-dev/vosulay/releases/download/v1.5.1/vosulay-1.5.1-windows-x86_64-setup.exe
-    InstallerSha256: 1D8F88BA3BDE30BE961F3CC403D665565FF9669DBC665A0BD4DAB77E4E7C363C
+    InstallerUrl: https://github.com/18-lab-dev/vosulay/releases/download/v1.5.2/vosulay-1.5.2-windows-x86_64-setup.exe
+    InstallerSha256: 8BD3B26C09E0ED36C8C7BAB2BC9FE3F666C6FD759739BEB998DE387E077E77F1
 ManifestType: installer
 ManifestVersion: 1.9.0
