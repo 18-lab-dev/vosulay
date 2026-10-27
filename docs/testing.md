@@ -124,6 +124,8 @@ checks exclusive ownership before shutdown, and immediately rebinds after the
 bounded shutdown. Linux failures include matching `/proc/net/tcp` rows and any
 readable owning PID/process name, distinguishing ownership leaks from foreign
 port reuse. No system port-range setting is changed.
+Its listeners are created in a single-test subprocess so concurrent tests'
+fork/exec children cannot temporarily inherit them before CLOEXEC.
 
 `tools/cef/manager-bench.py` runs the real embedded manager assets through CEF OSR
 at 2560×1440: 60 fps normally and the production 30 fps editor maximum when

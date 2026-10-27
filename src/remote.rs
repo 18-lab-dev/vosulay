@@ -2250,6 +2250,25 @@ mod tests {
 
     #[test]
     fn shutdown_releases_idle_loopback_and_wildcard_listeners() {
+        // Other parallel tests spawn processes. Their transient fork/exec
+        // children can inherit our listeners until CLOEXEC, even after the
+        // server thread joins. Create the listeners only in an isolated runner.
+        const CHILD: &str = "VOSULAY_TEST_LISTENER_SHUTDOWN_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            assert!(
+                std::process::Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        "remote::tests::shutdown_releases_idle_loopback_and_wildcard_listeners",
+                        "--test-threads=1",
+                    ])
+                    .env(CHILD, "1")
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+            return;
+        }
         let bind = |ip| {
             // Keep these ports below Linux/Windows' default ephemeral ranges:
             // bind(0) can be reassigned to another parallel test after shutdown.
