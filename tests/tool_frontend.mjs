@@ -112,3 +112,21 @@ test('native frames wait for renderer acknowledgement and renew tokens after a p
   context.deliver({ type: 'overlay-site-ready', request_id: 'request-2', ready: true });
   assert.equal(frame.src, 'about:blank', 'removed frames ignore late acknowledgements');
 });
+
+test('large native profiles bound allocation requests without losing shared-site fallbacks', () => {
+  const source = readFileSync(new URL('../assets/manager.js', import.meta.url), 'utf8');
+  const helpers = source.match(/  const overlaySiteFrames = new Map\(\);[\s\S]*?(?=  function overlayElement)/)[0];
+  const receiver = source.match(/  function receive\(message\) \{[\s\S]*?\r?\n  }\r?\n/)[0];
+  const messages = [];
+  let sequence = 0;
+  const context = vm.createContext({ crypto: { randomUUID: () => `request-${++sequence}` }, ipc: message => messages.push(message) });
+  vm.runInContext(`${helpers}\n${receiver}\nglobalThis.prepare=prepareOverlaySite;globalThis.deliver=receive;`, context);
+  for (let index = 0; index < 70; index++) context.prepare({ dataset: {} }, `http://127.0.0.1:24050/counter-${index}/`);
+  assert.equal(messages.length, 8);
+  for (let index = 1; index <= 70; index++) {
+    context.deliver({ type: 'overlay-site', request_id: `request-${index}`, direct: true,
+      url: `http://127.0.0.1:41203/counter-${index - 1}/`, prepare: 'unused' });
+    assert.equal(messages.length, Math.min(70, index + 8));
+  }
+  assert.equal(new Set(messages.map(message => message.request_id)).size, 70);
+});

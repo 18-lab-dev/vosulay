@@ -994,12 +994,31 @@
   }
 
   const overlaySiteFrames = new Map();
+  const overlaySiteQueue = [];
+  const overlaySiteInFlight = new Set();
+  let overlaySiteHead = 0;
+  function dispatchOverlaySites() {
+    // Stay below the native bridge's bounded inbox, including large profiles
+    // that exhaust dedicated listeners and use the shared-site fallback.
+    while (overlaySiteInFlight.size < 8 && overlaySiteHead < overlaySiteQueue.length) {
+      const request_id = overlaySiteQueue[overlaySiteHead++];
+      const site = overlaySiteFrames.get(request_id);
+      if (!site) continue;
+      overlaySiteInFlight.add(request_id);
+      ipc({ type: "prepare-overlay-site", request_id, url: site.source });
+    }
+    if (overlaySiteHead === overlaySiteQueue.length) {
+      overlaySiteQueue.length = 0;
+      overlaySiteHead = 0;
+    }
+  }
   function prepareOverlaySite(frame, source) {
     const request_id = crypto.randomUUID();
     frame.name = `vosulay-site-${request_id}`;
     frame.dataset.vosulaySiteRequest = request_id;
     overlaySiteFrames.set(request_id, { frame, source, target: null, prepare: null });
-    ipc({ type: "prepare-overlay-site", request_id, url: source });
+    overlaySiteQueue.push(request_id);
+    dispatchOverlaySites();
   }
   function releaseOverlaySite(root) {
     const frame = root.querySelector(".overlay-frame");
@@ -3893,6 +3912,10 @@
       const envelope = typeof message === "string" ? JSON.parse(message) : message;
       if (!envelope || typeof envelope !== "object") throw new Error("Invalid message from overlay host");
       if (envelope.type === "overlay-site" || envelope.type === "overlay-site-ready") {
+        if (envelope.type === "overlay-site") {
+          overlaySiteInFlight.delete(envelope.request_id);
+          dispatchOverlaySites();
+        }
         const site = overlaySiteFrames.get(envelope.request_id);
         if (!site) return;
         if (envelope.type === "overlay-site") {

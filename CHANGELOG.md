@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Isolate native backend overlay sources on separate loopback sites, keeping Chromium site isolation, so sibling animation widgets no longer multiply each other's requestAnimationFrame callbacks and canvas flushes. Use an acknowledged native bootstrap before granting broker routing; retain bounded listeners to prevent origin takeover. Same-source instances keep shared storage, and remote viewers/preview capabilities remain unchanged.
+- Bound native site allocation to eight in-flight requests so large profiles reach the shared-site fallback without overflowing the bridge inbox.
 
 ## 1.5.1 - 2026-10-27
 
