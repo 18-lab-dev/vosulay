@@ -2250,9 +2250,89 @@ mod tests {
 
     #[test]
     fn shutdown_releases_idle_loopback_and_wildcard_listeners() {
+        let bind = |ip| {
+            // Keep these ports below Linux/Windows' default ephemeral ranges:
+            // bind(0) can be reassigned to another parallel test after shutdown.
+            // Random candidates also keep concurrent test processes independent.
+            for _ in 0..32 {
+                let mut random = [0; 2];
+                getrandom::fill(&mut random).expect("random test port");
+                let port = 20_000 + u16::from_ne_bytes(random) % 12_001;
+                if (24050..=24052).contains(&port)
+                    || [
+                        crate::config::DEFAULT_REMOTE_LISTEN_PORT,
+                        crate::config::DEFAULT_DEVTOOLS_PORT,
+                    ]
+                    .contains(&port)
+                {
+                    continue;
+                }
+                match TcpListener::bind((ip, port)) {
+                    // Keep the successfully probed socket; never release it
+                    // between candidate selection and handing it to the server.
+                    Ok(listener) => return Ok(listener),
+                    Err(error) if error.kind() == io::ErrorKind::AddrInUse => continue,
+                    Err(error) => return Err(error),
+                }
+            }
+            Err(io::Error::new(
+                io::ErrorKind::AddrInUse,
+                "no free test port in 20000-32000 after 32 attempts",
+            ))
+        };
+        fn occupant(address: SocketAddr) -> String {
+            #[cfg(target_os = "linux")]
+            {
+                let table = fs::read_to_string("/proc/net/tcp").unwrap_or_default();
+                let suffix = format!(":{:04X}", address.port());
+                let mut evidence = String::new();
+                for row in table.lines().skip(1) {
+                    let fields: Vec<_> = row.split_whitespace().collect();
+                    if fields.len() < 10 || !fields[1].ends_with(&suffix) {
+                        continue;
+                    }
+                    evidence.push_str(row);
+                    evidence.push('\n');
+                    let inode = format!("socket:[{}]", fields[9]);
+                    for process in fs::read_dir("/proc").into_iter().flatten().flatten() {
+                        if !process
+                            .file_name()
+                            .to_string_lossy()
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit())
+                        {
+                            continue;
+                        }
+                        for fd in fs::read_dir(process.path().join("fd"))
+                            .into_iter()
+                            .flatten()
+                            .flatten()
+                        {
+                            if fs::read_link(fd.path())
+                                .is_ok_and(|link| link.as_os_str() == inode.as_str())
+                            {
+                                let name = fs::read_to_string(process.path().join("comm"))
+                                    .unwrap_or_default();
+                                evidence.push_str(&format!(
+                                    "pid={} name={}",
+                                    process.file_name().to_string_lossy(),
+                                    name
+                                ));
+                                break;
+                            }
+                        }
+                    }
+                }
+                evidence
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                format!("occupant diagnostics unavailable for {address}")
+            }
+        }
         let listeners = vec![
-            TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("local listener"),
-            TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).expect("LAN listener"),
+            bind(Ipv4Addr::LOCALHOST).expect("local listener"),
+            bind(Ipv4Addr::UNSPECIFIED).expect("LAN listener"),
         ];
         let addresses: Vec<_> = listeners
             .iter()
@@ -2266,6 +2346,14 @@ mod tests {
             None,
         )
         .expect("server");
+        for address in &addresses {
+            assert_eq!(
+                TcpListener::bind(address)
+                    .expect_err("server still owns its listener")
+                    .kind(),
+                io::ErrorKind::AddrInUse
+            );
+        }
         let (stopped, completion) = std::sync::mpsc::channel();
         thread::spawn(move || {
             drop(server);
@@ -2276,7 +2364,14 @@ mod tests {
             .expect("idle listener shutdown must not wait for an HTTP request");
         let _rebound: Vec<_> = addresses
             .into_iter()
-            .map(|address| TcpListener::bind(address).expect("listener port released"))
+            .map(|address| {
+                TcpListener::bind(address).unwrap_or_else(|error| {
+                    panic!(
+                        "listener {address} not released: {error}; occupant:\n{}",
+                        occupant(address)
+                    )
+                })
+            })
             .collect();
     }
 

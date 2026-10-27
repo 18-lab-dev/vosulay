@@ -115,6 +115,14 @@ The benchmark fixture persists through the production config serializer, but
 does not exercise game attachment, the production host's port-conflict status,
 the vosu dashboard, Windows, or GPU performance.
 
+The listener-shutdown regression reserves random available ports in 20000–32000,
+outside the default Linux/Windows ephemeral ranges, excluding vosu/vosulay's
+service defaults. It holds each successfully bound socket through server setup,
+checks exclusive ownership before shutdown, and immediately rebinds after the
+bounded shutdown. Linux failures include matching `/proc/net/tcp` rows and any
+readable owning PID/process name, distinguishing ownership leaks from foreign
+port reuse. No system port-range setting is changed.
+
 `tools/cef/manager-bench.py` runs the real embedded manager assets through CEF OSR
 at 2560×1440: 60 fps normally and the production 30 fps editor maximum when
 editing is visible. `--fps 60` reproduces the former editor policy for a
