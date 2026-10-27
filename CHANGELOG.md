@@ -3,7 +3,7 @@
 ## 1.5.1 - Unreleased
 
 - Add off-by-default, loopback-only DevTools debugging in Advanced settings, with a configurable port, restart notice, active endpoint indicator and port-conflict reporting.
-- Stabilize the listener-shutdown regression test against parallel ephemeral-port reuse while retaining its strict shutdown deadline and immediate rebind check.
+- Stabilize listener-shutdown and ruleset-worker regression tests against parallel port allocation and asynchronous save broadcasts, retaining strict shutdown, rebind and no-redundant-render assertions.
 
 ## 1.5.0 - 2026-10-25
 

@@ -269,6 +269,9 @@ mod tests {
                 "base_revision":initial["revision"]
             }))
             .unwrap();
+        // Remote saves acknowledge before queuing their host broadcast. A FIFO
+        // state call ensures that broadcast is queued before draining it.
+        let _ = editor.state().unwrap();
         while worker.next_reply().is_some() {}
         let before = std::fs::metadata(&path).unwrap().modified().unwrap();
         for _ in 0..10_000 {
