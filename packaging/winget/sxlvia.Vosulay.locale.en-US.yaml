@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
 PackageIdentifier: sxlvia.Vosulay
-PackageVersion: 1.5.0
+PackageVersion: 1.5.1
 PackageLocale: en-US
 Publisher: 18-LAB
 PublisherUrl: https://github.com/18-lab-dev
@@ -15,6 +15,6 @@ Tags:
   - overlay
   - tosu
   - vosu
-ReleaseNotesUrl: https://github.com/18-lab-dev/vosulay/releases/tag/v1.5.0
+ReleaseNotesUrl: https://github.com/18-lab-dev/vosulay/releases/tag/v1.5.1
 ManifestType: defaultLocale
 ManifestVersion: 1.9.0
