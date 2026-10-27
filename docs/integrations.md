@@ -38,6 +38,18 @@ The broker's upstream sockets carry no browser `Origin`, and vosulay never forge
 
 Only downstream sockets that `broker_upgrade_target` in [src/remote.rs](../src/remote.rs) accepts use the token. Each run, the remote server generates a 256-bit broker secret that reaches only the in-game browser: [src/runtime/host.rs](../src/runtime/host.rs) passes it to CEF's renderer extra info with the broker URL, and the renderer gives it to [assets/backend.js](../assets/backend.js) for frames at the broker's origin, which appends `__vosulay_broker=<secret>` to their WebSocket URLs that target the broker. It is never served over HTTP (`/__vosulay/backend.js` has none), so reaching the port is not enough. A socket qualifies when it presents exactly one matching secret (compared in constant time), its peer is loopback, `Origin` is present and exactly the listener's origin, and `Sec-Fetch-Site` is absent or `same-origin`, on top of the listener's usual Host checks. The parameter is removed before forwarding, so vosu never sees it and the counter's own query (`l`) is unchanged byte for byte. Counters in OBS, a browser or the manage page load through the remote listener without the secret, so their own saves stay refused; edit their settings in game or on vosu's settings page. Counter frames can read the secret from their own socket URLs; they are trusted code under vosu ADR 0013 and could already save through those sockets. The vosu token itself never reaches page JavaScript and is not logged.
 
+Native CEF placements additionally use bound, per-source loopback sites to keep
+their animation widgets in separate renderer processes. The same secret is
+available only after the native prepare/renderer-acknowledgement handshake for
+that exact owned origin; arbitrary `127.0.0.N` hosts are not trusted. The
+WebSocket's `Origin` must still equal its listener's own origin. Backend paths,
+precise subscriptions, settings-profile queries and upstream broker sharing are
+unchanged. Same-source instances retain shared localStorage/IndexedDB within a
+run; different source folders are isolated. The broker port was already
+ephemeral, so storage origins still change across runs. Browser/remote viewers
+and opaque capability previews keep their previous routing and storage behavior.
+
+
 Counters keep public backend API paths. [assets/backend.js](../assets/backend.js) routes matching fetch, XMLHttpRequest, and WebSocket calls through vosulay. [src/backend.rs](../src/backend.rs) shares one upstream telemetry socket per active schema (`/ws`, `/tokens`, `/websocket/v2`, `/websocket/v2/precise`). Filters stay client-local; projections keep the backend's object key order (serde_json `preserve_order`), because counters that iterate keys render rows in that order. Matching HTTP JSON can reuse the newest snapshot, with backend HTTP fallback when unavailable. Slow consumers skip stale telemetry instead of queueing it.
 
 `/websocket/v2/subscribe` is relayed per client to preserve backend precise cadence; it is not projected from the slower shared V2 stream. Settings and command channels remain separate with original query/identity because authorization and replies are client-specific. The loopback broker is independent of the remote listener, so a busy remote port does not break in-game counters.

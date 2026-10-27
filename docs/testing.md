@@ -47,6 +47,35 @@ python3 tools/cef/private-smoke.py \
 
 Use a fresh output directory. The wrapper isolates PID/IPC/network namespaces and temporary directories, creates its own X display, strips interactive desktop variables, and bounds process lifetime. Never substitute a smoke window on the user's working desktop. Smoke checks OSR transparency, JavaScript/secure scheme, manager bridge, iframe pixels, WebGL, resize, and shutdown; WebGPU compute depends on adapter availability. A software smoke does not prove hardware/game composition or input behavior.
 
+The same binary and wrapper also exercise native per-source site bootstrap and
+seven simultaneously animating 2D-canvas overlays:
+
+```sh
+python3 tools/cef/private-smoke.py \
+  --binary target/debug/vosulay-cef-smoke --cef-dir "$runtime" \
+  --xvfb /usr/bin/Xvfb --output target/private-site-pacing \
+  --site-pacing --fps 60
+```
+
+Repeat with `--fps 180` to check a fixed high cap. A `--shared-site` run is the
+deliberately broken same-site sibling-OOPIF baseline, not a supported product
+setting. `pacing.json` records per-document callback timestamps and native
+bootstrap exposure; the normal test rejects repeated timestamps, rates outside
+the configured tolerance, and native routing on a never-authorized foreign
+loopback origin. `processes.json` records private process-tree CPU, process count
+and summed RSS/PSS/private memory; shared mappings are counted in each process's RSS. The wrapper
+also gives the fixture fresh HOME and every XDG directory. These software
+measurements do not establish native game upload, GPU delivery or scanout timing.
+
+Add `--site-security` (requires Bun) to crash one fixture iframe through its
+private loopback DevTools target, reload it, and require a new renderer identity,
+no native routing before preparing, and a successful fresh handshake afterward.
+It also checks a retired origin's socket cannot be claimed by another process
+and a fresh, unauthorized frame there receives no native routing. Debugging is
+enabled only for this explicit fixture option, inside the private namespace.
+
+
+
 ### Overlay upload cost (Linux GL, headless)
 
 `python3 tools/overlay-upload-bench.py` measures what overlay updates cost a GL game, on any Linux machine with a GPU and its EGL driver. It builds the compositor library and lookup helper with `--lib` (building only the example does not refresh the preloaded `.so`) and the [`upload_bench`](../crates/overlay-linux/examples/upload_bench.rs) example into `target/overlay-upload-bench/`, prints the libraries' hashes, then runs a synthetic surfaceless-EGL game: a 2560x1440 pbuffer drawn uncapped with two frames in flight, with the compositor preloaded. A fake host in the same process attaches over the real control protocol and publishes into a real frame ring. No window, display connection or input is involved, but the GPU is shared, so keep runs short on a machine someone is using.

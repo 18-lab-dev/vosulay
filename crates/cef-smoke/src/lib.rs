@@ -12,6 +12,7 @@ use vosulay_browser::{
 };
 use vosulay_frame::{BrowserFrame, BrowserFrameBackend};
 
+mod pacing;
 mod preview;
 
 struct SmokeResources {
@@ -114,6 +115,15 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<()> {
     let output = PathBuf::from(value("--output").context("--output is required")?);
     std::fs::create_dir_all(&output)?;
     let output = output.canonicalize()?;
+    if arguments.iter().any(|arg| arg == "--site-pacing") {
+        let fps = value("--fps")
+            .unwrap_or("60")
+            .parse()
+            .context("invalid pacing FPS")?;
+        let shared = arguments.iter().any(|arg| arg == "--shared-site");
+        let security = arguments.iter().any(|arg| arg == "--site-security");
+        return unsafe { pacing::run(&runtime, &output, sandbox_info, fps, shared, security) };
+    }
     if let Some(url) = value("--preview-url") {
         return unsafe { preview::run(sandbox_info, &runtime, &output, url) };
     }

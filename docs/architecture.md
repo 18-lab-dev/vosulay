@@ -74,6 +74,36 @@ On Linux, CEF's external message pump runs only Chromium's task queue, so [crate
 
 Production uses CEF's internal damage-driven OSR clock. Automatic FPS follows the selected game display's refresh, divided down to 60-120 fps; a fixed setting or CLI override caps the browser, not game presents. A message-pump wake does not request a repaint. Unchanged pages need not publish continuous frames. Game presentation and browser scheduling are independent clocks; the consumer uses the newest complete frame rather than queueing every produced update.
 
+Native backend overlays use one loopback site per source URL (query/fragment
+excluded), assigned in first-request order and retained for the run. Different
+folders use different `127.0.0.N` addresses on the broker's existing ephemeral
+port; instances of the same source share their site and storage. This avoids
+Blink servicing all same-process sibling OOPIF documents once per animating
+widget, which otherwise multiplies rAF callbacks and canvas flushes. Chromium
+site isolation remains enabled. Same-source duplicates can still multiply work.
+
+`src/remote.rs` binds at most 64 site addresses, skipping occupied addresses.
+Exhaustion or unavailable loopback binds logs a fallback to the original shared
+broker. Successfully bound listeners remain reserved until shutdown, even after
+their placements disappear, preventing another process taking over an old
+authorized origin. Remote/LAN viewers and preview capability authorities do not
+use these sites.
+
+Before an overlay runs, its frame loads an inert, script-free
+`/__vosulay_prepare` document available only on an owned site listener. The host
+authorizes that exact origin, sends renderer IPC, and waits for acknowledgement
+before loading the real URL. `crates/browser-cef/src/sites.rs` checks the renderer
+identity acknowledged by the prepare document against the loaded renderer's
+native acknowledgement. Each renderer generates its own random 256-bit identity
+after the Linux zygote fork; it never reaches page script. Load-end explicitly
+checks the renderer over IPC rather than racing a context-created notification.
+RenderDocument may change frame identifiers within one process,
+so grants are process-local and keyed by a fresh placement-cycle token plus exact
+origin, not an assumed stable frame ID. A new renderer has no grant and triggers
+a fresh prepare cycle with a new token. The native manager bridge remains
+restricted to the exact manager main-frame URL.
+
+
 While the attached game's editor is visible, the browser uses the lower of the
 resolved limit and 30 fps. Leaving edit mode immediately restores the game
 overlay's resolved limit; neither transition changes the saved setting.

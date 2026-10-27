@@ -130,15 +130,27 @@ pub fn renderer_extra_info(
 /// Return from App::render_process_handler in BOTH the browser application and
 /// the App passed to execute_process before product CLI parsing.
 pub fn renderer_handler() -> RenderProcessHandler {
-    RendererBridge::new(Shared::new(RefCell::new(HashMap::new())))
+    RendererBridge::new(
+        Shared::new(RefCell::new(HashMap::new())),
+        Shared::new(RefCell::new(HashMap::new())),
+        Shared::new(RefCell::new(String::new())),
+    )
 }
 
 /// Backend URL, and the broker URL with its session secret.
 type RendererState = Shared<RefCell<HashMap<i32, (String, Option<(String, String)>)>>>;
+type RendererSites = Shared<RefCell<HashMap<(i32, String), String>>>;
 
 wrap_render_process_handler! {
-    struct RendererBridge { state: RendererState }
+    struct RendererBridge { state: RendererState, sites: RendererSites, identity: Shared<RefCell<String>> }
     impl RenderProcessHandler {
+        fn on_web_kit_initialized(&self) {
+            // Linux renderer children fork from CEF's zygote. Generate here,
+            // after that fork, not while constructing the application's handler.
+            let mut identity = [0u8; 32];
+            getrandom::fill(&mut identity).expect("renderer identity entropy unavailable");
+            *self.identity.borrow_mut() = identity.iter().map(|byte| format!("{byte:02x}")).collect();
+        }
         fn on_browser_created(&self, browser: Option<&mut Browser>, extra_info: Option<&mut DictionaryValue>) {
             let (Some(browser), Some(info)) = (browser, extra_info) else { return };
             let key: CefString = BACKEND_KEY.into();
@@ -157,7 +169,38 @@ wrap_render_process_handler! {
             self.state.borrow_mut().insert(browser.identifier(), (backend, broker));
         }
         fn on_browser_destroyed(&self, browser: Option<&mut Browser>) {
-            if let Some(browser) = browser { self.state.borrow_mut().remove(&browser.identifier()); }
+            if let Some(browser) = browser {
+                self.state.borrow_mut().remove(&browser.identifier());
+                self.sites.borrow_mut().retain(|(id, _), _| *id != browser.identifier());
+            }
+        }
+        fn on_process_message_received(&self, browser: Option<&mut Browser>, frame: Option<&mut Frame>, source_process: ProcessId, message: Option<&mut ProcessMessage>) -> i32 {
+            let (Some(browser), Some(frame), Some(message)) = (browser, frame, message) else { return 0 };
+            let register = crate::strings::equals(&message.name(), crate::sites::REGISTER);
+            let revoke = crate::strings::equals(&message.name(), crate::sites::REVOKE);
+            let check = crate::strings::equals(&message.name(), crate::sites::CHECK);
+            if !register && !revoke && !check { return 0; }
+            if source_process != ProcessId::BROWSER || frame.is_main() != 0 { return 1; }
+            let Some(id) = crate::strings::decode(&frame.identifier(), 256) else { return 1 };
+            if revoke {
+                if let Some(values) = crate::sites::values(message, 1) {
+                    self.sites.borrow_mut().remove(&(browser.identifier(), values[0].clone()));
+                }
+                return 1;
+            }
+            let Some(values) = crate::sites::values(message, 3) else { return 1 };
+            let Some(url) = crate::strings::decode(&frame.url(), 8192).and_then(|u| Url::parse(&u).ok()) else { return 1 };
+            let Some(name) = crate::strings::decode(&frame.name(), 256) else { return 1 };
+            if name.strip_prefix(crate::sites::NAME_PREFIX) != Some(values[0].as_str()) || values[2] != id || url.origin().ascii_serialization() != values[1] { return 1; }
+            if check {
+                let approved = self.sites.borrow().get(&(browser.identifier(), values[0].clone())) == Some(&values[1]);
+                crate::sites::send(frame, crate::sites::ACTIVE, &[&values[0], &values[1], &id, self.identity.borrow().as_str(), if approved { "1" } else { "0" }]);
+                return 1;
+            }
+            if url.path() != crate::sites::PREPARE { return 1; }
+            self.sites.borrow_mut().insert((browser.identifier(), values[0].clone()), values[1].clone());
+            crate::sites::send(frame, crate::sites::ACK, &[&values[0], &values[1], &id, self.identity.borrow().as_str()]);
+            1
         }
         fn on_context_created(&self, browser: Option<&mut Browser>, frame: Option<&mut Frame>, context: Option<&mut V8Context>) {
             let (Some(browser), Some(frame), Some(context)) = (browser, frame, context) else { return };
@@ -175,7 +218,14 @@ wrap_render_process_handler! {
                 if global.set_value_bykey(Some(&"__VOSULAY_NATIVE_POST__".into()), Some(&mut function), V8Propertyattribute::default()) == 0 { return; }
                 context.eval(Some(&MANAGER_SCRIPT.into()), Some(&MANAGER_URL.into()), 1, Some(&mut retval), Some(&mut exception));
             } else if let Some((backend, Some((broker, secret)))) = self.state.borrow().get(&browser.identifier()) {
-                let script = backend_routing_script(backend, broker, secret);
+                let name = crate::strings::decode(&frame.name(), 256).unwrap_or_default();
+                let request = name.strip_prefix(crate::sites::NAME_PREFIX).unwrap_or("");
+                let sites = self.sites.borrow();
+                let site = sites.get(&(browser.identifier(), request.to_owned()));
+                let url = crate::strings::decode(&frame.url(), 8192).and_then(|u| Url::parse(&u).ok());
+                let approved = site.filter(|origin| url.as_ref().is_some_and(|url| url.origin().ascii_serialization() == **origin));
+                let selected = approved.map_or(broker.as_str(), |origin| origin.as_str());
+                let script = backend_routing_script(backend, selected, secret);
                 context.eval(Some(&script.as_str().into()), None, 1, Some(&mut retval), Some(&mut exception));
             }
         }
@@ -233,6 +283,7 @@ const MANAGER_SCRIPT: &str = r#"(() => {
     nativePost(encoded);
   };
   window.__VOSULAY_POST_MESSAGE__ = post;
+  Object.defineProperty(window, '__VOSULAY_NATIVE_SITES__', { value: true });
   window.ipc = { postMessage: post };
   window.dispatchEvent(new Event('vosulay-bridge-ready'));
 })();"#;

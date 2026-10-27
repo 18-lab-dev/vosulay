@@ -2928,6 +2928,7 @@ version = "1.5.1"
 dependencies = [
  "anyhow",
  "cef",
+ "getrandom 0.4.3",
  "libc",
  "serde_json",
  "url",

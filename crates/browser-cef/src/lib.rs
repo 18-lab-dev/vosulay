@@ -2,6 +2,7 @@ pub mod bridge;
 #[cfg(target_os = "linux")]
 mod glib;
 pub mod scheme;
+mod sites;
 mod strings;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -445,7 +446,7 @@ fn console_origin(source: &str, line: i32) -> Option<String> {
 }
 
 wrap_client! {
-    struct ClientHandlers { state: ViewState, inbox: bridge::BridgeInbox }
+    struct ClientHandlers { state: ViewState, inbox: bridge::BridgeInbox, sites: sites::Sites }
     impl Client {
         fn render_handler(&self) -> Option<RenderHandler> { Some(Painting::new(self.state.clone())) }
         fn life_span_handler(&self) -> Option<LifeSpanHandler> { Some(Lifetime::new(self.state.clone())) }
@@ -453,8 +454,12 @@ wrap_client! {
         fn request_handler(&self) -> Option<RequestHandler> { Some(FailureHandler::new(self.state.clone())) }
         fn permission_handler(&self) -> Option<PermissionHandler> { Some(NetworkAccess::new()) }
         fn context_menu_handler(&self) -> Option<ContextMenuHandler> { Some(NoContextMenu::new()) }
+        fn load_handler(&self) -> Option<LoadHandler> { Some(sites::SiteLoading::new(self.sites.clone())) }
         fn on_process_message_received(&self, browser: Option<&mut Browser>, frame: Option<&mut Frame>, source_process: ProcessId, message: Option<&mut ProcessMessage>) -> i32 {
+            let mut frame = frame;
+            let mut message = message;
             if self.state.borrow().closed { return 1; }
+            if self.sites.dispatch(frame.as_deref_mut(), source_process, message.as_deref_mut()) != 0 { return 1; }
             self.inbox.dispatch(browser, frame, source_process, message)
         }
     }
@@ -714,7 +719,8 @@ impl CefRuntime {
             backend: Some(backend),
         }));
         let inbox = bridge::BridgeInbox::new();
-        let mut client = ClientHandlers::new(state.clone(), inbox.clone());
+        let sites = sites::Sites::default();
+        let mut client = ClientHandlers::new(state.clone(), inbox.clone(), sites.clone());
         let window = WindowInfo {
             windowless_rendering_enabled: 1,
             shared_texture_enabled: i32::from(options.shared_texture),
@@ -745,6 +751,7 @@ impl CefRuntime {
             browser: Some(browser),
             state,
             inbox,
+            sites,
             runtime: self.state.clone(),
             _client: client,
         })
@@ -755,6 +762,7 @@ pub struct OsrBrowser {
     browser: Option<Browser>,
     state: ViewState,
     inbox: bridge::BridgeInbox,
+    sites: sites::Sites,
     _client: Client,
     runtime: Shared<RuntimeState>,
 }
@@ -766,6 +774,25 @@ impl OsrBrowser {
 
     pub fn next_message(&self) -> Option<String> {
         self.inbox.next_message()
+    }
+
+    /// Authorize only an origin backed by a socket owned by the embedding host.
+    /// The iframe must first load the inert prepare page and acknowledge its renderer.
+    pub fn authorize_overlay_site(&self, request: &str, origin: &str) -> bool {
+        self.sites.authorize(request, origin)
+    }
+
+    pub fn release_overlay_site(&self, request: &str) {
+        self.sites.release(request);
+    }
+
+    pub fn reset_overlay_sites(&self) {
+        self.sites.clear();
+    }
+
+    /// `(request_id, ready, renderer_identity)`: false requests a fresh prepare cycle.
+    pub fn next_overlay_site_event(&self) -> Option<(String, bool, String)> {
+        self.sites.next()
     }
 
     pub fn send_input(&self, input: BrowserInput) {

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
@@ -25,6 +26,7 @@ pub use manage::ManageEditor;
 const TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_REQUEST: usize = 16 * 1024;
 const MAX_CONNECTIONS: usize = 32;
+const MAX_OVERLAY_SITES: u8 = 64;
 type ConfigLoader = dyn Fn() -> Result<AppConfig> + Send + Sync;
 
 pub struct RemoteServer {
@@ -33,6 +35,11 @@ pub struct RemoteServer {
     browser_url: Url,
     browser_secret: String,
     preview_url: Option<Url>,
+    backend: Arc<Backend>,
+    loader: Arc<ConfigLoader>,
+    active: Arc<AtomicUsize>,
+    sites: HashMap<String, Url>,
+    next_site: u8,
 }
 
 struct Backend {
@@ -153,8 +160,13 @@ impl RemoteServer {
             browser_url,
             browser_secret,
             preview_url,
+            backend: backend.clone(),
+            loader: loader.clone(),
+            active: Arc::new(AtomicUsize::new(0)),
+            sites: HashMap::new(),
+            next_site: 2,
         };
-        let active = Arc::new(AtomicUsize::new(0));
+        let active = server.active.clone();
         for listener in listeners {
             listener.set_nonblocking(false)?;
             let mut wake_address = listener.local_addr()?;
@@ -173,10 +185,66 @@ impl RemoteServer {
                 wake_address,
                 thread::Builder::new()
                     .name("vosulay-overlay-listener".to_owned())
-                    .spawn(move || serve(listener, backend, loader, stop, active))?,
+                    .spawn(move || serve(listener, backend, loader, stop, active, false))?,
             ));
         }
         Ok(server)
+    }
+
+    /// Separate native overlay sources into different Chromium sites, without weakening
+    /// site isolation. Keep every successfully bound socket until browser shutdown:
+    /// a retired origin must never become available for another local process to claim.
+    pub fn overlay_site(&mut self, source: &Url) -> Result<Url> {
+        let routed = routed_backend_url(source, &self.browser_url, &self.backend.upstream)
+            .map_err(|error| anyhow::anyhow!(error.message))?;
+        if routed.origin() != self.browser_url.origin() {
+            return Ok(source.clone());
+        }
+        let mut identity = source.clone();
+        identity.set_query(None);
+        identity.set_fragment(None);
+        let key = identity.to_string();
+        if !self.sites.contains_key(&key) {
+            let mut origin = self.browser_url.clone();
+            let mut bound = false;
+            while self.next_site < MAX_OVERLAY_SITES + 2 {
+                let last = self.next_site;
+                self.next_site += 1;
+                let address = SocketAddr::from((
+                    Ipv4Addr::new(127, 0, 0, last),
+                    self.browser_url.port().expect("local broker port"),
+                ));
+                let listener = match TcpListener::bind(address) {
+                    Ok(listener) => listener,
+                    Err(error) => {
+                        eprintln!(
+                            "Overlay site {address} unavailable: {error}; trying another site"
+                        );
+                        continue;
+                    }
+                };
+                let backend = self.backend.clone();
+                let loader = self.loader.clone();
+                let stop = self.stop.clone();
+                let active = self.active.clone();
+                let thread = thread::Builder::new()
+                    .name("vosulay-overlay-site".to_owned())
+                    .spawn(move || serve(listener, backend, loader, stop, active, true))?;
+                self.threads.push((address, thread));
+                origin.set_ip_host(address.ip()).expect("IPv4 site");
+                bound = true;
+                break;
+            }
+            if !bound {
+                eprintln!(
+                    "Overlay site limit reached or loopback binds unavailable; {identity} shares the default site (animation pacing may be reduced)"
+                );
+            }
+            self.sites.insert(key.clone(), origin);
+        }
+        let mut target = routed;
+        target.set_host(self.sites[&key].host_str())?;
+        Ok(target)
     }
 }
 
@@ -207,6 +275,7 @@ fn serve(
     loader: Arc<ConfigLoader>,
     stop: Arc<AtomicBool>,
     active: Arc<AtomicUsize>,
+    overlay_site: bool,
 ) {
     while !stop.load(Ordering::Acquire) {
         match listener.accept() {
@@ -228,7 +297,7 @@ fn serve(
                     .name("vosulay-remote-request".to_owned())
                     .spawn(move || {
                         let _active_request = ActiveRequest(request_active);
-                        if let Err(error) = handle(&mut stream, &backend, &loader) {
+                        if let Err(error) = handle(&mut stream, &backend, &loader, overlay_site) {
                             eprintln!("Remote overlay request failed: {error}");
                         }
                     })
@@ -256,7 +325,12 @@ impl Drop for ActiveRequest {
     }
 }
 
-fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>) -> Result<()> {
+fn handle(
+    stream: &mut TcpStream,
+    backend: &Backend,
+    loader: &Arc<ConfigLoader>,
+    overlay_site: bool,
+) -> Result<()> {
     stream.set_read_timeout(Some(TIMEOUT))?;
     stream.set_write_timeout(Some(TIMEOUT))?;
     let request = match read_request(stream) {
@@ -313,6 +387,25 @@ fn handle(stream: &mut TcpStream, backend: &Backend, loader: &Arc<ConfigLoader>)
     };
     if !metadata_allowed || !peer_is_allowed(peer.ip(), &config.settings.allowed_ips) {
         return Response::plain(403, "Forbidden", "Request is not authorized\n")
+            .write(stream, request.method == "HEAD")
+            .map_err(Into::into);
+    }
+    if route == "__vosulay_prepare" {
+        let mut response =
+            if overlay_site && peer.ip().is_loopback() && request.header("upgrade").is_none() {
+                Response::plain(200, "OK", "<!doctype html><title>Preparing overlay</title>")
+            } else {
+                Response::plain(404, "Not Found", "Not Found\n")
+            };
+        response.mime = "text/html; charset=utf-8".to_owned();
+        response.headers.extend([
+            ("Cache-Control".into(), "no-store".into()),
+            (
+                "Content-Security-Policy".into(),
+                "default-src 'none'; frame-ancestors vosulay://manager".into(),
+            ),
+        ]);
+        return response
             .write(stream, request.method == "HEAD")
             .map_err(Into::into);
     }
@@ -2424,6 +2517,9 @@ mod tests {
 
 #[cfg(test)]
 mod tests_broker;
+
+#[cfg(test)]
+mod tests_overlay_sites;
 
 #[cfg(test)]
 mod profile_follow_tests {

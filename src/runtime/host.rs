@@ -3,7 +3,7 @@ use super::{
     editor::{EditorWorker, Work},
     receive,
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 use std::{
     sync::Arc,
@@ -98,7 +98,7 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         backend.clone(),
         resources.clone(),
     )?;
-    let remote = crate::remote::RemoteServer::start_from_path(
+    let mut remote = crate::remote::RemoteServer::start_from_path(
         backend.clone(),
         options.config.clone(),
         Some(worker.manage_editor()),
@@ -200,6 +200,7 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
         resources,
         broker_url: remote.browser_url().to_string(),
         broker_secret: remote.browser_secret().to_owned(),
+        remote: &mut remote,
         backend,
         platform: &mut platform,
         worker: &mut worker,
@@ -291,6 +292,7 @@ struct Host<'a> {
     resources: Arc<ProductResources>,
     broker_url: String,
     broker_secret: String,
+    remote: &'a mut crate::remote::RemoteServer,
     backend: url::Url,
     platform: &'a mut PlatformController,
     worker: &'a mut EditorWorker,
@@ -644,6 +646,15 @@ impl Host<'_> {
                     PlatformEvent::Fatal(error) => bail!("{error}"),
                 }
             }
+            while let Some((request_id, ready, _)) = self
+                .browser
+                .as_ref()
+                .and_then(OsrBrowser::next_overlay_site_event)
+            {
+                self.receive(
+                    &json!({"type":"overlay-site-ready", "request_id":request_id, "ready":ready}),
+                )?;
+            }
             while let Some(raw) = self.browser.as_ref().and_then(OsrBrowser::next_message) {
                 let message: Value =
                     serde_json::from_str(&raw).context("invalid manager bridge message")?;
@@ -658,6 +669,9 @@ impl Host<'_> {
                 if kind == "ready" {
                     if document.is_empty() || document.len() > 128 {
                         bail!("invalid manager document identity");
+                    }
+                    if let Some(browser) = self.browser.as_ref() {
+                        browser.reset_overlay_sites();
                     }
                     self.document = document.to_owned();
                     self.ready = true;
@@ -694,6 +708,45 @@ impl Host<'_> {
                     continue;
                 }
                 match kind {
+                    "prepare-overlay-site" => {
+                        let request_id = message
+                            .get("request_id")
+                            .and_then(Value::as_str)
+                            .context("missing overlay site request")?;
+                        let source = message
+                            .get("url")
+                            .and_then(Value::as_str)
+                            .context("missing overlay source")?;
+                        let source = url::Url::parse(source).context("invalid overlay source")?;
+                        let target = self.remote.overlay_site(&source)?;
+                        let direct = target.origin().ascii_serialization()
+                            == url::Url::parse(&self.broker_url)?
+                                .origin()
+                                .ascii_serialization()
+                            || target.origin() == source.origin();
+                        let mut prepare = target.clone();
+                        prepare.set_path("/__vosulay_prepare");
+                        prepare.set_query(None);
+                        prepare.set_fragment(None);
+                        if !direct {
+                            ensure!(
+                                self.browser.as_ref().is_some_and(|browser| browser
+                                    .authorize_overlay_site(
+                                        request_id,
+                                        &target.origin().ascii_serialization()
+                                    )),
+                                "overlay site authorization limit reached"
+                            );
+                        }
+                        self.receive(&json!({"type":"overlay-site", "request_id":request_id, "url":target.as_str(), "prepare":prepare.as_str(), "direct":direct}))?;
+                    }
+                    "release-overlay-site" => {
+                        if let Some(request_id) = message.get("request_id").and_then(Value::as_str)
+                            && let Some(browser) = self.browser.as_ref()
+                        {
+                            browser.release_overlay_site(request_id);
+                        }
+                    }
                     "heartbeat" => {
                         if self.pending_ping.is_some()
                             && message.get("nonce").and_then(Value::as_u64) == self.pending_ping

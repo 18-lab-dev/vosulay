@@ -335,6 +335,16 @@ The host attempts a remote HTTP listener at `127.0.0.1:5050` by default, plus a
 separate loopback listener on an OS-assigned port for the in-game broker. The
 remote listener starts with the host even without a viewer; failure to bind its
 port does not disable the local broker. Settings can expose it to LAN interfaces.
+Native CEF overlays also bind up to 64 additional `127.0.0.N` addresses on that
+same ephemeral broker port, one per backend source, preserving Chromium site
+isolation and separating animation widgets. These addresses are loopback-only;
+remote/LAN viewers and preview capability hosts keep their existing routing.
+An inert, strict-CSP prepare page and native renderer acknowledgement precede
+broker-secret routing. Grants are exact-origin and process-local, never inferred
+from membership in `127.0.0.0/8`. Successfully bound sockets remain reserved until
+shutdown even after source removal, preventing another process taking over a
+previously authorized address. See [architecture](architecture.md#frame-ownership-and-scheduling).
+
 There is **no authentication token for viewers and no listener TLS**. Loopback peers are
 always allowed; other peers must match configured comma-separated exact IPs or
 four-component IPv4 wildcard patterns. Host/Origin and Sec-Fetch-Site validation

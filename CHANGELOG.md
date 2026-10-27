@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Isolate native backend overlay sources on separate loopback sites, keeping Chromium site isolation, so sibling animation widgets no longer multiply each other's requestAnimationFrame callbacks and canvas flushes. Use an acknowledged native bootstrap before granting broker routing; retain bounded listeners to prevent origin takeover. Same-source instances keep shared storage, and remote viewers/preview capabilities remain unchanged.
+
 ## 1.5.1 - 2026-10-27
 
 - Add off-by-default, loopback-only DevTools debugging in Advanced settings, with a configurable port, restart notice, active endpoint indicator and port-conflict reporting.

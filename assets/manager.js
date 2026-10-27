@@ -993,6 +993,22 @@
     };
   }
 
+  const overlaySiteFrames = new Map();
+  function prepareOverlaySite(frame, source) {
+    const request_id = crypto.randomUUID();
+    frame.name = `vosulay-site-${request_id}`;
+    frame.dataset.vosulaySiteRequest = request_id;
+    overlaySiteFrames.set(request_id, { frame, source, target: null, prepare: null });
+    ipc({ type: "prepare-overlay-site", request_id, url: source });
+  }
+  function releaseOverlaySite(root) {
+    const frame = root.querySelector(".overlay-frame");
+    const request_id = frame?.dataset.vosulaySiteRequest;
+    if (!request_id) return;
+    overlaySiteFrames.delete(request_id);
+    ipc({ type: "release-overlay-site", request_id });
+  }
+
   function overlayElement(overlay, details = overlayDetails(overlay)) {
     const enabled = overlay.enabled !== false;
     const root = makeElement("div", `overlay${details.available && enabled ? "" : " missing"}${enabled ? "" : " disabled"}${state.selected.has(overlay) ? " selected" : ""}`);
@@ -1009,8 +1025,12 @@
         frame.setAttribute("sandbox", "allow-scripts");
         frame.setAttribute("referrerpolicy", "no-referrer");
       }
-      frame.src = typeof window.__VOSULAY_BACKEND_URL__ === "function"
-        ? window.__VOSULAY_BACKEND_URL__(details.url) : details.url;
+      if (window.__VOSULAY_NATIVE_SITES__ === true) {
+        prepareOverlaySite(frame, details.url);
+      } else {
+        frame.src = typeof window.__VOSULAY_BACKEND_URL__ === "function"
+          ? window.__VOSULAY_BACKEND_URL__(details.url) : details.url;
+      }
       frame.dataset.vosulaySourceUrl = details.url;
       frame.title = details.name;
       frame.setAttribute("allow", "autoplay");
@@ -1046,6 +1066,7 @@
     if (structureDirty) {
       for (const [overlay, root] of overlayRoots) {
         if (!expectedOverlays.has(overlay)) {
+          releaseOverlaySite(root);
           root.remove();
           overlayRoots.delete(overlay);
         }
@@ -1057,6 +1078,7 @@
         let root = overlayRoots.get(overlay);
         if (root && root._vosulaySourceIdentity !== identity) {
           const replacement = overlayElement(overlay, details);
+          releaseOverlaySite(root);
           root.replaceWith(replacement);
           root = replacement;
           overlayRoots.set(overlay, root);
@@ -3870,6 +3892,29 @@
     try {
       const envelope = typeof message === "string" ? JSON.parse(message) : message;
       if (!envelope || typeof envelope !== "object") throw new Error("Invalid message from overlay host");
+      if (envelope.type === "overlay-site" || envelope.type === "overlay-site-ready") {
+        const site = overlaySiteFrames.get(envelope.request_id);
+        if (!site) return;
+        if (envelope.type === "overlay-site") {
+          site.target = envelope.url;
+          site.prepare = envelope.prepare;
+          site.frame.src = envelope.direct ? site.target : site.prepare;
+        } else if (site.target && site.prepare) {
+          if (envelope.ready) {
+            site.frame.src = site.target;
+          } else {
+            overlaySiteFrames.delete(envelope.request_id);
+            ipc({ type: "release-overlay-site", request_id: envelope.request_id });
+            // CEF's unique frame name is fixed at frame creation, not updated
+            // by changing an existing iframe's name attribute.
+            const replacement = site.frame.cloneNode(false);
+            replacement.removeAttribute("src");
+            prepareOverlaySite(replacement, site.source);
+            site.frame.replaceWith(replacement);
+          }
+        }
+        return;
+      }
       if (envelope.type === "devtools-status") {
         const indicator = $("devtools-status");
         indicator.textContent = envelope.endpoint ? `DevTools on: ${envelope.endpoint}` : "";

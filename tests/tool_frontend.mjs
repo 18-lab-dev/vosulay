@@ -59,3 +59,56 @@ test('tool frames keep an opaque origin for catalog and custom counters', () => 
     }
   }
 });
+
+test('native frames wait for renderer acknowledgement and renew tokens after a process swap', () => {
+  const source = readFileSync(new URL('../assets/manager.js', import.meta.url), 'utf8');
+  const helpers = source.match(/  const overlaySiteFrames = new Map\(\);[\s\S]*?(?=  function overlayElement)/)[0];
+  const constructor = source.match(/  function overlayElement\([\s\S]*?\r?\n  }\r?\n/)[0];
+  const receiver = source.match(/  function receive\(message\) \{[\s\S]*?\r?\n  }\r?\n/)[0];
+  const frames = [], messages = [];
+  let sequence = 0;
+  const context = vm.createContext({
+    document: { documentElement: { dataset: {} } },
+    window: { __VOSULAY_NATIVE_SITES__: true },
+    crypto: { randomUUID: () => `request-${++sequence}` },
+    state: { selected: new Set() },
+    ipc: message => messages.push(message),
+    applyOverlayStyle() {},
+    makeElement(tag) {
+      const element = { dataset: {}, append() {}, setAttribute() {},
+        removeAttribute(name) { delete this[name]; },
+        replaceWith() {},
+        cloneNode() { const clone = { ...this, dataset: { ...this.dataset } }; frames.push(clone); return clone; }
+      };
+      if (tag === 'iframe') frames.push(element);
+      return element;
+    }
+  });
+  vm.runInContext(`${helpers}\n${constructor}\n${receiver}\nglobalThis.createFrame=overlayElement;globalThis.deliver=receive;globalThis.release=releaseOverlaySite;`, context);
+  context.createFrame({ counter_id: 'counter' },
+    { available: true, url: 'http://127.0.0.1:24050/counter/', name: 'Counter', tag: 'Counter' });
+  let frame = frames[0];
+  assert.equal(frame.src, undefined, 'no overlay navigation before native site allocation');
+  assert.equal(messages[0].type, 'prepare-overlay-site');
+  const allocated = { type: 'overlay-site', request_id: 'request-1',
+    url: 'http://127.0.0.2:41203/counter/', prepare: 'http://127.0.0.2:41203/__vosulay_prepare', direct: false };
+  context.deliver(allocated);
+  assert.equal(frame.src, allocated.prepare);
+  context.deliver({ type: 'overlay-site-ready', request_id: 'request-1', ready: true });
+  assert.equal(frame.src, allocated.url);
+  context.deliver({ type: 'overlay-site-ready', request_id: 'request-1', ready: false });
+  frame = frames.at(-1);
+  assert.equal(frame.name, 'vosulay-site-request-2');
+  assert.equal(messages.at(-2).type, 'release-overlay-site');
+  assert.equal(messages.at(-1).type, 'prepare-overlay-site');
+  context.deliver({ type: 'overlay-site-ready', request_id: 'request-1', ready: true });
+  context.deliver({ ...allocated, request_id: 'request-2' });
+  assert.equal(frame.src, allocated.prepare, 'old acknowledgement cannot navigate the replacement cycle');
+  context.deliver({ type: 'overlay-site-ready', request_id: 'request-2', ready: true });
+  assert.equal(frame.src, allocated.url);
+  context.release({ querySelector: () => frame });
+  assert.equal(messages.at(-1).type, 'release-overlay-site');
+  frame.src = 'about:blank';
+  context.deliver({ type: 'overlay-site-ready', request_id: 'request-2', ready: true });
+  assert.equal(frame.src, 'about:blank', 'removed frames ignore late acknowledgements');
+});
