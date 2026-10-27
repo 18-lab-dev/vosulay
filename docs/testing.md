@@ -110,7 +110,9 @@ The fixture uses the real manager assets and CEF startup options with isolated
 HOME/XDG roots, network/PID/IPC namespaces and display. It checks default-off,
 IPv4-only loopback listening, target enumeration, foreign Host and Origin
 refusal (including an actual page-origin WebSocket), screenshots both themes,
-and saving the unchecked setting before restarting with debugging off.
+and saving the unchecked setting before restarting with debugging off. It waits
+for the manager document/editor to become ready before DOM-based checks;
+DevTools target discovery alone does not imply that navigation has completed.
 The benchmark fixture persists through the production config serializer, but
 does not exercise game attachment, the production host's port-conflict status,
 the vosu dashboard, Windows, or GPU performance.

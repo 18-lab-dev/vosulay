@@ -107,6 +107,13 @@ async def check(args, display):
                                 assert 'error' not in message, message
                                 assert 'exceptionDetails' not in message.get('result', {}), message
                                 return message.get('result', {})
+                    for _ in range(100):
+                        ready = await cdp('Runtime.evaluate', {'expression': 'document.readyState === "complete" && Boolean(window.__VOSULAY_RECEIVE__) && document.getElementById("editor")?.hidden === false', 'returnByValue': True})
+                        if ready['result'].get('value') is True:
+                            break
+                        await asyncio.sleep(.05)
+                    else:
+                        raise AssertionError('manager document did not become ready')
                     await cdp('Runtime.evaluate', {'expression': '(()=>{const f=document.createElement("iframe");f.src=' + json.dumps(origin + '/?ws=' + target['webSocketDebuggerUrl']) + ';document.body.append(f)})()'})
                     for _ in range(100):
                         if outcomes:
