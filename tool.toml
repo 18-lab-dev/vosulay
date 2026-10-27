@@ -1,7 +1,7 @@
 manifest_version = 1
 id = "vosulay"
 name = "vosulay"
-version = "1.5.1"
+version = "1.5.2"
 description = "In-game overlay host and profile editor for vosu"
 author = "18-LAB"
 homepage = "https://github.com/18-lab-dev/vosulay"

@@ -2890,7 +2890,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vosulay"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2924,7 +2924,7 @@ dependencies = [
 
 [[package]]
 name = "vosulay-browser"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "anyhow",
  "cef",
@@ -2938,7 +2938,7 @@ dependencies = [
 
 [[package]]
 name = "vosulay-cef-smoke"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "anyhow",
  "serde_json",
@@ -2948,7 +2948,7 @@ dependencies = [
 
 [[package]]
 name = "vosulay-cef-tools"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "anyhow",
  "bzip2",
@@ -2966,14 +2966,14 @@ dependencies = [
 
 [[package]]
 name = "vosulay-frame"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "vosulay-linux"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "anyhow",
  "ksni",
@@ -2984,14 +2984,14 @@ dependencies = [
 
 [[package]]
 name = "vosulay-lookup"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "libc",
 ]
 
 [[package]]
 name = "vosulay-overlay"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "ash",
  "libc",
@@ -3005,7 +3005,7 @@ dependencies = [
 
 [[package]]
 name = "vosulay-transport"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "anyhow",
  "libc",
@@ -3014,7 +3014,7 @@ dependencies = [
 
 [[package]]
 name = "vosulay-windows"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "anyhow",
  "asdf-overlay-client",

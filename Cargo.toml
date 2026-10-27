@@ -4,7 +4,7 @@ default-members = ["."]
 resolver = "3"
 
 [workspace.package]
-version = "1.5.1"
+version = "1.5.2"
 
 [package]
 name = "vosulay"
