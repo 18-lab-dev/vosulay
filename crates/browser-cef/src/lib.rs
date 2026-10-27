@@ -38,6 +38,8 @@ pub struct RuntimeOptions<'a> {
     pub sandbox_info: *mut u8,
     pub cache: &'a Path,
     pub resources: Arc<dyn scheme::ResourceService>,
+    /// Explicit user opt-in. Chromium's DevTools server binds IPv4 loopback.
+    pub devtools_port: Option<u16>,
 }
 
 pub struct BrowserOptions<'a> {
@@ -217,10 +219,18 @@ wrap_browser_process_handler! {
 }
 
 wrap_app! {
-    struct Application { renderer: RenderProcessHandler, shared_array_buffer: Option<Arc<AtomicBool>>, schedule: Option<Arc<PumpSchedule>> }
+    struct Application { renderer: RenderProcessHandler, shared_array_buffer: Option<Arc<AtomicBool>>, schedule: Option<Arc<PumpSchedule>>, devtools_port: Option<u16> }
     impl App {
         fn on_before_command_line_processing(&self, _process_type: Option<&CefString>, command_line: Option<&mut CommandLine>) {
             if let Some(command_line) = command_line {
+                // Never let CLI flags bypass saved opt-in or weaken Origin checks.
+                for switch in ["remote-debugging-port", "remote-debugging-address", "remote-allow-origins"] {
+                    command_line.remove_switch(Some(&switch.into()));
+                }
+                if let Some(port) = self.devtools_port {
+                    command_line.append_switch_with_value(Some(&"remote-debugging-port".into()), Some(&port.to_string().as_str().into()));
+                    command_line.append_switch_with_value(Some(&"remote-debugging-address".into()), Some(&"127.0.0.1".into()));
+                }
                 if command_line.has_switch(Some(&"benchmark-uncapped".into())) != 0 {
                     command_line.append_switch(Some(&"disable-frame-rate-limit".into()));
                     command_line.append_switch(Some(&"disable-gpu-vsync".into()));
@@ -519,7 +529,7 @@ wrap_request_handler! {
 pub unsafe fn execute_subprocess(sandbox_info: *mut u8) -> Option<i32> {
     configure_api();
     let args = Args::new();
-    let mut app = Application::new(bridge::renderer_handler(), None, None);
+    let mut app = Application::new(bridge::renderer_handler(), None, None, None);
     let code = execute_process(Some(args.as_main_args()), Some(&mut app), sandbox_info);
     (code >= 0).then_some(code)
 }
@@ -605,6 +615,7 @@ impl CefRuntime {
             bridge::renderer_handler(),
             Some(shared_array_buffer.clone()),
             Some(schedule.clone()),
+            options.devtools_port,
         );
         let args = Args::new();
         let settings = Settings {
@@ -1104,5 +1115,45 @@ mod paint_damage_tests {
             paint_damage(Some(&[cef_rect(0, 0, 10, 0)]), 1920, 1080),
             None
         );
+    }
+}
+
+#[cfg(test)]
+mod devtools_tests {
+    use super::*;
+
+    #[test]
+    fn debugging_is_explicit_loopback_and_origin_checks_are_preserved() {
+        configure_api();
+        for port in [None, Some(39229)] {
+            let app = Application::new(bridge::renderer_handler(), None, None, port);
+            let mut command = cef::command_line_create().unwrap();
+            command.append_switch_with_value(
+                Some(&"remote-debugging-port".into()),
+                Some(&"9222".into()),
+            );
+            command
+                .append_switch_with_value(Some(&"remote-allow-origins".into()), Some(&"*".into()));
+            app.on_before_command_line_processing(None, Some(&mut command));
+            assert_eq!(
+                command.has_switch(Some(&"remote-debugging-port".into())) != 0,
+                port.is_some()
+            );
+            assert_eq!(command.has_switch(Some(&"remote-allow-origins".into())), 0);
+            if port.is_some() {
+                assert_eq!(
+                    CefString::from(&command.switch_value(Some(&"remote-debugging-port".into())))
+                        .to_string(),
+                    "39229"
+                );
+                assert_eq!(
+                    CefString::from(
+                        &command.switch_value(Some(&"remote-debugging-address".into()))
+                    )
+                    .to_string(),
+                    "127.0.0.1"
+                );
+            }
+        }
     }
 }

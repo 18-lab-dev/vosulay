@@ -231,6 +231,12 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<i32> {
             refresh_hz: 60.0,
         },
         shared_array_buffer: config.settings.allow_unrestricted_shared_array_buffer,
+        devtools_port: config
+            .settings
+            .devtools_enabled
+            .then_some(config.settings.devtools_port),
+        devtools_error: None,
+        devtools_logged: false,
         pending_detach: false,
         flushed: None,
     };
@@ -311,6 +317,9 @@ struct Host<'a> {
     interaction_hotkey: NativeHotkey,
     viewport: Viewport,
     shared_array_buffer: bool,
+    devtools_port: Option<u16>,
+    devtools_error: Option<String>,
+    devtools_logged: bool,
     pending_detach: bool,
     flushed: Option<Closing>,
 }
@@ -327,6 +336,15 @@ impl Host<'_> {
             return Ok(());
         }
         if self.runtime.is_none() {
+            if let Some(port) = self.devtools_port {
+                if port == 0 {
+                    self.devtools_error = Some("DevTools port must be from 1 to 65535".to_owned());
+                } else if let Err(error) = std::net::TcpListener::bind(("127.0.0.1", port)) {
+                    self.devtools_error = Some(format!(
+                        "DevTools unavailable on 127.0.0.1:{port}: {error}. Choose another port and restart vosulay."
+                    ));
+                }
+            }
             let parent = self
                 .options
                 .config
@@ -341,6 +359,7 @@ impl Host<'_> {
                         .map(|env| env.cache.join("cef-cache"))
                         .unwrap_or_else(|| parent.join("cef-cache")),
                     resources: self.resources.clone(),
+                    devtools_port: self.devtools_port.filter(|_| self.devtools_error.is_none()),
                 })
             }?);
             // CEF replaced the exit signal handlers with Chromium's, which vosulay never hears.
@@ -642,6 +661,27 @@ impl Host<'_> {
                     }
                     self.document = document.to_owned();
                     self.ready = true;
+                    let endpoint = self
+                        .devtools_port
+                        .filter(|_| self.devtools_error.is_none())
+                        .and_then(|port| {
+                            std::net::TcpStream::connect(("127.0.0.1", port))
+                                .ok()
+                                .map(|_| format!("127.0.0.1:{port}"))
+                        });
+                    if self.devtools_port.is_some()
+                        && endpoint.is_none()
+                        && self.devtools_error.is_none()
+                    {
+                        self.devtools_error = Some("DevTools failed to listen; see cef.log. Restart vosulay after resolving the port conflict.".to_owned());
+                    }
+                    if let Some(endpoint) = endpoint.as_ref()
+                        && !self.devtools_logged
+                    {
+                        eprintln!("vosulay DevTools on: {endpoint}");
+                        self.devtools_logged = true;
+                    }
+                    self.receive(&json!({"type":"devtools-status", "endpoint":endpoint, "error":self.devtools_error}))?;
                     self.apply_fps()?;
                     self.next_ping = Instant::now();
                     self.worker.submit(Work {

@@ -18,6 +18,7 @@ pub const DEFAULT_ALLOWED_IPS: &str = "127.0.0.1,localhost,absolute";
 
 pub const DEFAULT_REMOTE_LISTEN_HOST: &str = "127.0.0.1";
 pub const DEFAULT_REMOTE_LISTEN_PORT: u16 = 5050;
+pub const DEFAULT_DEVTOOLS_PORT: u16 = 39229;
 pub const DEFAULT_VOSU_URL: &str = "http://127.0.0.1:24050/";
 
 const DEFAULT_WIDTH: f64 = 500.0;
@@ -51,6 +52,9 @@ pub struct AppSettings {
     pub exit_edit_mode_on_focus_loss: bool,
     pub fps_limit: u32,
     pub allow_unrestricted_shared_array_buffer: bool,
+    pub devtools_enabled: bool,
+    #[serde(deserialize_with = "deserialize_devtools_port")]
+    pub devtools_port: u16,
     pub allowed_ips: String,
     /// Serves the full editor at `manage.localhost:<port>/overlay` to this machine only.
     pub allow_local_profile_editing: bool,
@@ -142,6 +146,18 @@ impl Default for AppConfig {
     }
 }
 
+fn deserialize_devtools_port<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u16, D::Error> {
+    let port = u16::deserialize(deserializer)?;
+    if port == 0 {
+        return Err(serde::de::Error::custom(
+            "DevTools port must be from 1 to 65535",
+        ));
+    }
+    Ok(port)
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -149,6 +165,8 @@ impl Default for AppSettings {
             exit_edit_mode_on_focus_loss: true,
             fps_limit: 0,
             allow_unrestricted_shared_array_buffer: false,
+            devtools_enabled: false,
+            devtools_port: DEFAULT_DEVTOOLS_PORT,
             allowed_ips: DEFAULT_ALLOWED_IPS.to_owned(),
             allow_local_profile_editing: false,
 
@@ -540,6 +558,29 @@ mod tests {
         hotkeys.normalize();
         assert!(hotkeys.toggle_visibility.is_empty());
     }
+    #[test]
+    fn devtools_migration_roundtrip_and_port_validation() {
+        let legacy: AppSettings = serde_json::from_str("{}").unwrap();
+        assert!(!legacy.devtools_enabled);
+        assert_eq!(legacy.devtools_port, DEFAULT_DEVTOOLS_PORT);
+        let enabled = AppSettings {
+            devtools_enabled: true,
+            devtools_port: 39230,
+            ..Default::default()
+        };
+        let encoded = serde_json::to_string(&enabled).unwrap();
+        assert_eq!(
+            serde_json::from_str::<AppSettings>(&encoded).unwrap(),
+            enabled
+        );
+        for value in ["0", "-1", "65536", "1.5", "\"9229\""] {
+            assert!(
+                serde_json::from_str::<AppSettings>(&format!("{{\"devtools_port\":{value}}}"))
+                    .is_err()
+            );
+        }
+    }
+
     #[test]
     fn default_has_one_active_profile() {
         let config = AppConfig::default();

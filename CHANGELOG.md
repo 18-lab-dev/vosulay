@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1 - Unreleased
+
+- Add off-by-default, loopback-only DevTools debugging in Advanced settings, with a configurable port, restart notice, active endpoint indicator and port-conflict reporting.
+
 ## 1.5.0 - 2026-10-25
 
 - Restore styled/live tool-manager counters using independent, per-run 256-bit loopback preview hostnames, not broad `Origin: null` admission. Keep opaque frames and all manager/config/native-command boundaries; disclose capabilities only through authenticated manager routes, rotate them on restart, and show a local-only explanation for remote viewers. Add hostile-origin, local-root, browser/CEF resolver and standalone-parity coverage.

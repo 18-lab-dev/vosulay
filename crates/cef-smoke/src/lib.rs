@@ -129,6 +129,7 @@ pub unsafe fn run(sandbox_info: *mut u8) -> Result<()> {
             sandbox_info,
             cache: &output.join("cache"),
             resources,
+            devtools_port: None,
         })
     }?;
     let browser = cef.open(

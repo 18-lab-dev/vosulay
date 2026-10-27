@@ -173,6 +173,22 @@ mod linux {
         let seconds: f64 = value("--seconds").unwrap_or("6").parse()?;
         let editing = args.iter().any(|arg| arg == "--editing");
         let idle = args.iter().any(|arg| arg == "--idle");
+        let config_path = value("--config").map(PathBuf::from);
+        let saved_config = config_path
+            .as_ref()
+            .map(|path| vosulay::config::load_from_path(path))
+            .transpose()?;
+        let devtools_port = args
+            .iter()
+            .find_map(|arg| arg.strip_prefix("--remote-debugging-port="))
+            .map(str::parse::<u16>)
+            .transpose()?;
+        let devtools_port = saved_config.as_ref().map_or(devtools_port, |config| {
+            config
+                .settings
+                .devtools_enabled
+                .then_some(config.settings.devtools_port)
+        });
         let fps = value("--fps")
             .map(str::parse::<u32>)
             .transpose()?
@@ -223,6 +239,7 @@ mod linux {
                 sandbox_info: std::ptr::null_mut(),
                 cache: &cache,
                 resources,
+                devtools_port,
             })
         }?;
         let browser = runtime.open(
@@ -243,7 +260,10 @@ mod linux {
             "counter_id":format!("custom:{i}"),"url":format!("{backend}counter/{i}"),"name":format!("Fixture {i}"),
             "left":left,"top":top,"width":600.0,"height":200.0,"scale":1.0,"opacity":1.0,"rotation":0.0,"enabled":true,"z_index":i
         })).collect();
-        let config = json!({"version":1,"active_profile":"default","profiles":[{"id":"default","name":"Default","overlays":overlays}],"settings":{}});
+        let config = saved_config.map_or_else(
+            || json!({"version":1,"active_profile":"default","profiles":[{"id":"default","name":"Default","overlays":overlays}],"settings":{"devtools_enabled":devtools_port.is_some(),"devtools_port":devtools_port.unwrap_or(39229)}}),
+            |config| serde_json::to_value(config).unwrap(),
+        );
         let ready_deadline = Instant::now() + Duration::from_secs(20);
         let mut ready_at = None;
         let mut started = None;
@@ -269,10 +289,17 @@ mod linux {
                         json!({"type":"counters","counters":[]}),
                         json!({"type":"editing","editing":editing}),
                         json!({"type":"ruleset","ruleset":"mania"}),
+                        json!({"type":"devtools-status","endpoint":devtools_port.map(|port|format!("127.0.0.1:{port}"))}),
                     ] {
                         browser.evaluate(&format!("window.__VOSULAY_RECEIVE__({envelope});"));
                     }
                     ready_at = Some(Instant::now());
+                } else if message["type"] == "save-config"
+                    && let Some(path) = config_path.as_ref()
+                {
+                    let config: vosulay::config::AppConfig =
+                        serde_json::from_value(message["config"].clone())?;
+                    vosulay::config::save_to_path(&config, path)?;
                 } else if message["type"] == "benchmark" {
                     report = Some(message);
                 }

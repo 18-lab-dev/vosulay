@@ -507,6 +507,24 @@ while OBS captured it (game capture plus desktop capture). Without OBS, 360 cost
 nothing visible. Weaker GPUs may tip over at lower rates; lower the limit if the
 game or the capture stutters.
 
+### DevTools diagnostics
+
+**Settings → Advanced → Enable DevTools debugging (CDP)** is off by default.
+It lets local programs control the overlay browser; keep it off for normal play.
+The configurable port defaults to **39229** and is restricted to `127.0.0.1`.
+Both enabling/disabling and port changes take effect after restarting vosulay.
+The editor toolbar shows **DevTools on: 127.0.0.1:&lt;port&gt;** while active;
+startup failures (including a port already in use) appear in Advanced settings.
+No alternate port or non-loopback listener is selected.
+
+In Chrome, open `chrome://inspect`, choose **Configure**, and add
+`127.0.0.1:39229`, then inspect the vosulay target. Or enumerate targets with
+`curl http://127.0.0.1:39229/json/list` and attach a native CDP client to its
+`webSocketDebuggerUrl`. Do not add an Origin override or allow-origins wildcard.
+Standalone and vosu-tool mode use the same persisted settings; tool mode keeps
+them in the dashboard-managed tool data directory's `config.json`.
+See [operations](docs/operations.md#devtools-security) before enabling.
+
 Settings → General → **FPS limit** persists either **Automatic** (the default,
 stored as `settings.fps_limit: 0`) or a **Fixed** integer cap. Saving applies it
 to the active browser immediately; no restart is required. Fixed caps stay fixed

@@ -72,6 +72,7 @@ frame.src={source};
             sandbox_info,
             cache: &output.join("cache"),
             resources,
+            devtools_port: None,
         })
     }?;
     let capture = Rc::new(RefCell::new(Capture::default()));

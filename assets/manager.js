@@ -112,6 +112,8 @@
   const fpsLimitModes = settingsForm.querySelectorAll('input[name="fps-limit-mode"]');
   const fpsLimit = $("fps-limit");
   const allowUnrestrictedSharedArrayBuffer = $("allow-unrestricted-shared-array-buffer");
+  const devtoolsEnabled = $("devtools-enabled");
+  const devtoolsPort = $("devtools-port");
   const allowLocalProfileEditing = $("allow-local-profile-editing");
   const allowedIps = $("allowed-ips");
   const remoteListenHost = $("remote-listen-host");
@@ -435,6 +437,10 @@
         always_keep_overlays_in_view: Boolean(sourceSettings.always_keep_overlays_in_view),
         exit_edit_mode_on_focus_loss: sourceSettings.exit_edit_mode_on_focus_loss !== false,
         allow_unrestricted_shared_array_buffer: Boolean(sourceSettings.allow_unrestricted_shared_array_buffer),
+        devtools_enabled: Boolean(sourceSettings.devtools_enabled),
+        devtools_port: Number.isInteger(sourceSettings.devtools_port)
+          && sourceSettings.devtools_port >= 1 && sourceSettings.devtools_port <= 65535
+          ? sourceSettings.devtools_port : 39229,
         allow_local_profile_editing: Boolean(sourceSettings.allow_local_profile_editing),
         allowed_ips: typeof sourceSettings.allowed_ips === "string" ? sourceSettings.allowed_ips : DEFAULT_ALLOWED_IPS,
         remote_listen_host: typeof sourceSettings.remote_listen_host === "string"
@@ -3124,6 +3130,9 @@
     keepOverlaysInView.checked = state.settingsDraft.always_keep_overlays_in_view;
     exitEditOnFocusLoss.checked = state.settingsDraft.exit_edit_mode_on_focus_loss;
     allowUnrestrictedSharedArrayBuffer.checked = state.settingsDraft.allow_unrestricted_shared_array_buffer;
+    devtoolsEnabled.checked = state.settingsDraft.devtools_enabled;
+    devtoolsPort.value = state.settingsDraft.devtools_port;
+    devtoolsPort.disabled = !state.settingsDraft.devtools_enabled;
     allowLocalProfileEditing.checked = state.settingsDraft.allow_local_profile_editing;
     for (const radio of fpsLimitModes) radio.checked = radio.value === state.settingsDraft.fps_mode;
     if (fpsLimit.value !== state.settingsDraft.fps_value) fpsLimit.value = state.settingsDraft.fps_value;
@@ -3208,6 +3217,8 @@
       fps_mode: settings.fps_limit === 0 ? "auto" : "fixed",
       fps_value: settings.fps_limit ? String(settings.fps_limit) : "",
       allow_unrestricted_shared_array_buffer: settings.allow_unrestricted_shared_array_buffer,
+      devtools_enabled: settings.devtools_enabled,
+      devtools_port: String(settings.devtools_port),
       allow_local_profile_editing: settings.allow_local_profile_editing,
       allowed_ips: settings.allowed_ips,
       remote_listen_host: settings.remote_listen_host,
@@ -3304,6 +3315,14 @@
   });
   allowUnrestrictedSharedArrayBuffer.addEventListener("change", () => {
     if (state.settingsDraft) state.settingsDraft.allow_unrestricted_shared_array_buffer = allowUnrestrictedSharedArrayBuffer.checked;
+  });
+  devtoolsEnabled.addEventListener("change", () => {
+    if (state.settingsDraft) state.settingsDraft.devtools_enabled = devtoolsEnabled.checked;
+    devtoolsPort.disabled = !devtoolsEnabled.checked;
+  });
+  devtoolsPort.addEventListener("input", () => {
+    if (state.settingsDraft) state.settingsDraft.devtools_port = devtoolsPort.value;
+    devtoolsPort.removeAttribute("aria-invalid");
   });
   allowLocalProfileEditing.addEventListener("change", () => {
     if (state.settingsDraft) state.settingsDraft.allow_local_profile_editing = allowLocalProfileEditing.checked;
@@ -3432,6 +3451,11 @@
       rejectSettingsField(remoteListenHost, "Listener address must be an IPv4 or IPv6 address, such as 127.0.0.1 or 0.0.0.0.");
       return;
     }
+    const debuggingPort = normalizedRemoteListenPort(draft.devtools_port);
+    if (debuggingPort === null) {
+      rejectSettingsField(devtoolsPort, "DevTools port must be a whole number from 1 to 65535.");
+      return;
+    }
     const listenPort = normalizedRemoteListenPort(draft.remote_listen_port);
     if (listenPort === null) {
       rejectSettingsField(remoteListenPort, "Listener port must be a whole number from 1 to 65535.");
@@ -3459,6 +3483,8 @@
       exit_edit_mode_on_focus_loss: draft.exit_edit_mode_on_focus_loss,
       fps_limit: fpsValue,
       allow_unrestricted_shared_array_buffer: draft.allow_unrestricted_shared_array_buffer,
+      devtools_enabled: draft.devtools_enabled,
+      devtools_port: debuggingPort,
       allow_local_profile_editing: draft.allow_local_profile_editing,
       allowed_ips: draft.allowed_ips,
       remote_listen_host: listenHost,
@@ -3844,6 +3870,15 @@
     try {
       const envelope = typeof message === "string" ? JSON.parse(message) : message;
       if (!envelope || typeof envelope !== "object") throw new Error("Invalid message from overlay host");
+      if (envelope.type === "devtools-status") {
+        const indicator = $("devtools-status");
+        indicator.textContent = envelope.endpoint ? `DevTools on: ${envelope.endpoint}` : "";
+        indicator.hidden = !envelope.endpoint;
+        const error = $("devtools-error");
+        error.textContent = envelope.error || "";
+        error.hidden = !envelope.error;
+        return;
+      }
       if (envelope.type === "config") {
         const revision = Number.isSafeInteger(envelope.revision) && envelope.revision >= 0
           ? envelope.revision

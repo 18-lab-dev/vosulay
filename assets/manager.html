@@ -22,6 +22,7 @@
           <rect class="brand-mark-handle" x="111.5" y="111.5" width="9" height="9" rx="1.5"/>
         </svg>
         <strong>vosulay</strong>
+        <span id="devtools-status" role="status" hidden></span>
       </div>
       <div class="toolbar-center">
         <div class="profile-field">
@@ -339,6 +340,15 @@
 
             <fieldset id="settings-section-advanced" class="settings-section" tabindex="-1">
               <legend>Advanced</legend>
+              <label class="checkbox-row danger-row" for="devtools-enabled" title="Lets local programs control the overlay browser. Keep off for normal play.">
+                <span><strong>Enable DevTools debugging (CDP)</strong><small>Lets local programs control the overlay browser. Keep off for normal play. Takes effect after restarting vosulay.</small></span>
+                <input id="devtools-enabled" type="checkbox">
+              </label>
+              <label class="settings-field" for="devtools-port">
+                <span><strong>DevTools port</strong><small>Loopback only (127.0.0.1). Default 39229. Takes effect after restarting vosulay.</small></span>
+                <input id="devtools-port" type="number" min="1" max="65535" step="1">
+              </label>
+              <p id="devtools-error" role="status" hidden></p>
               <label class="settings-field" for="vosu-url">
                 <span>
                   <strong>vosu URL</strong>

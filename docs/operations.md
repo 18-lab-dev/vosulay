@@ -294,3 +294,30 @@ Input failure releases capture within the five-second safety bound; Windows may 
 ## Maintainer environment (optional)
 
 Guest deployments and offline performance caches are additional maintainer tooling, not installation prerequisites. See [testing](testing.md#maintainer-environment-optional) for authorized guest safety and benchmark boundaries. Contributors can package locally and request a manual [Packages](../.github/workflows/release.yml) Actions run with `publish=false` instead; it uploads Linux packages and the Windows ZIP/installer. Never publish a release as part of routine verification.
+
+## DevTools security
+
+The explicit, off-by-default **Enable DevTools debugging (CDP)** setting opens
+an unauthenticated Chromium debugger on IPv4 loopback, default port 39229.
+Local programs can inspect and change overlay DOM, execute JavaScript, read
+page data and network activity, and drive the embedded browser. This includes
+privileged manager functionality: treat access as control of vosulay, not as
+read-only performance telemetry. Loopback is not an authentication boundary
+against other local users or compromised local programs. Do not forward this
+port, expose it through a proxy, or leave it enabled for normal play.
+
+Vosulay never sets `remote-allow-origins`; Chromium's default WebSocket Origin
+and HTTP Host-header protections must remain enabled. Changing saved settings
+requires restarting the process (closing just the editor does not restart CEF).
+The endpoint starts only when the in-game CEF browser initializes, not in
+`--server-only` mode or while waiting for attachment. Its actual endpoint is
+logged once and displayed in the editor toolbar. A busy port is reported in
+Advanced settings and disables debugging for that process; no fallback is used.
+
+The pinned Chromium 154.0.8037.98
+[`DevToolsHttpHandler`](https://github.com/chromium/chromium/blob/154.0.8037.98/content/browser/devtools/devtools_http_handler.cc)
+rejects a WebSocket carrying an Origin unless explicitly allowlisted (HTTP 403),
+and rejects HTTP and WebSocket requests with a foreign DNS Host name (HTTP 500).
+Numeric IP and localhost Host values are accepted; this is DNS-rebinding
+protection, not a local-client authentication mechanism.
+

@@ -138,6 +138,7 @@ body.editing:not(.interacting) .overlay.selected:is([data-edge-zone="ne"], [data
 .toolbar button { flex-shrink: 0; white-space: nowrap; }
 .brand { justify-self: start; display: flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
 .brand strong { font: 600 .9375rem/1 var(--font-body); }
+#devtools-status { color: var(--danger); font: 600 11px/1.2 var(--mono); white-space: nowrap; }
 .brand-mark { display: block; width: 27px; height: 27px; flex: 0 0 27px; }
 .brand-mark-frame { fill: none; stroke: var(--accent); stroke-linecap: round; stroke-linejoin: round; }
 .brand-mark-node { fill: var(--signal); }

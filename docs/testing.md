@@ -96,6 +96,25 @@ memory-reading/pp cost: check that separately in vosu's state-worker cadence
 fixtures. A low-cost selector such as `/settings/mode` must not accelerate game
 memory capture merely because it has a change-notification subscriber.
 
+### Opt-in DevTools security smoke
+
+Build `cargo build --locked --example manager_bench`, then run:
+
+```sh
+python3 tools/cef/devtools-check.py --binary target/debug/examples/manager_bench \
+  --cef-dir /absolute/path/to/retained/runtime --output /new/private/evidence
+```
+
+Requires aiohttp, bubblewrap and Xvfb (`--xvfb` accepts a private executable).
+The fixture uses the real manager assets and CEF startup options with isolated
+HOME/XDG roots, network/PID/IPC namespaces and display. It checks default-off,
+IPv4-only loopback listening, target enumeration, foreign Host and Origin
+refusal (including an actual page-origin WebSocket), screenshots both themes,
+and saving the unchecked setting before restarting with debugging off.
+The benchmark fixture persists through the production config serializer, but
+does not exercise game attachment, the production host's port-conflict status,
+the vosu dashboard, Windows, or GPU performance.
+
 `tools/cef/manager-bench.py` runs the real embedded manager assets through CEF OSR
 at 2560×1440: 60 fps normally and the production 30 fps editor maximum when
 editing is visible. `--fps 60` reproduces the former editor policy for a

@@ -54,7 +54,7 @@ Exercise:
 - game focus transitions/restart, FPS settings persistence, and heartbeat-failure recovery using only task-owned renderer processes;
 - remote profile allowlist behavior when explicitly in scope.
 
-Do not add persistent remote-debugging instrumentation or infer GPU/capture correctness from source compilation. Screenshot evidence must come from the actual guest; producer counters and DXGI Present timings are not delivered frames or display/input latency.
+Do not add persistent hidden remote-debugging instrumentation. The user-facing **Enable DevTools debugging (CDP)** setting is an explicitly approved exception: off by default, loopback only, with a visible indicator, and enabled only for authorized diagnostics. Disable it and restart after testing. Never infer GPU/capture correctness from source compilation. Screenshot evidence must come from the actual guest; producer counters and DXGI Present timings are not delivered frames or display/input latency.
 
 ## Cleanup and report
 
